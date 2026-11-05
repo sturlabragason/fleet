@@ -107,7 +107,7 @@ flowchart LR
 
 - **Admiral** (left, 90 columns, 64 below 220 columns wide). `Alt+s` hides it, `Alt+S` moves it to the other side, `Alt+R` resets it, `Alt+P` swaps its profile.
 - **Overview** (top right, 14 rows). Tiles for as many agents as fit, one-line chips for the rest. `Alt+c` switches to chips only.
-- **Wall** (below). Live agent panes. Each pane border shows the agent's name and status in its status colour.
+- **Wall** (below). Live agent panes. Each pane border shows the agent's name and status in its status colour. `fleet up` starts `fleet watch`, which keeps those borders, `fleet ls`, the board and the admiral's view agreeing within about a second whether or not the overview is open.
 - Agents not on the wall live in hidden windows `ag-<name>`.
 
 All geometry is in [`internal/layout`](internal/layout/config.go).
@@ -177,7 +177,7 @@ Agents start through `bash -lc`, so shell aliases don't apply; make a profile in
 | `fleet_status` | All agents: status, wall, age, spend so far, what it waits for; ends with the fleet total |
 | `fleet_peek` | Last N lines (default 20, max 80) of one agent's screen |
 | `fleet_send` | Send a prompt to an agent |
-| `fleet_answer` | Answer a y/n prompt. Needs `confirmed=true` |
+| `fleet_answer` | Answer a y/n prompt, a numbered option or an option by `label`. Needs `confirmed=true` |
 | `fleet_spawn` | Start an agent from a profile |
 | `fleet_profiles` | List profiles |
 | `fleet_close` | Stop an agent. Needs `confirmed=true` |
@@ -203,6 +203,8 @@ The admiral must ask you before it answers a prompt, closes an agent or changes 
 | `~/.fleet/` | State dir. Override with `FLEET_HOME`. |
 | `~/.fleet/board.json` | One entry per agent: profile, dir, pane, status, last line |
 | `~/.fleet/events.jsonl` | Status transitions |
+| `~/.fleet/status/<name>.json` | What an agent's own hooks last said about it (Claude: `Stop`, `Notification`, …) |
+| `~/.fleet/watch.json` | Heartbeat of `fleet watch`, the process that keeps status live |
 | `~/.fleet/tools.toml` | Your profiles |
 | `~/.fleet/patterns.toml` | Your status patterns |
 | `~/.fleet/decisions.log` | Notes the admiral kept for you |

@@ -35,14 +35,20 @@ func (s *Server) waitingFor(a *board.Agent) string {
 	return status.Cut(wf+MenuCell(m), 200)
 }
 
-// MenuCell renders menu options compactly: " [1 Yes | 2 No, and …]".
+// MenuCell renders menu options compactly: " [1 Yes | 2 No, and …]". An
+// unnumbered ❯ list says so, because those numbers are ours and the user
+// cannot see them on screen; answer it by label or option index.
 func MenuCell(m status.Menu) string {
 	var opts []string
 	for _, o := range m.Options {
 		n, l, _ := strings.Cut(o, ". ")
 		opts = append(opts, n+" "+status.Cut(l, 30))
 	}
-	return " [" + strings.Join(opts, " | ") + "]"
+	out := " [" + strings.Join(opts, " | ") + "]"
+	if !m.Numbered {
+		out += " (unnumbered: answer by label)"
+	}
+	return out
 }
 
 // send runs fleet_send: text and/or keys to name, names or a team.
@@ -108,13 +114,20 @@ func (s *Server) sendOne(a args, name string) error {
 	return s.F.SendKeys(name, a.Text, a.Keys)
 }
 
-// answer runs fleet_answer: y/n or a numbered option.
+// answer runs fleet_answer: y/n, a numbered option, or an option picked by
+// its label (menus whose options are not numbered on screen).
 func (s *Server) answer(a args) (string, error) {
 	if a.Name == "" {
 		return "", fmt.Errorf("name is required")
 	}
-	if (a.Answer == "") == (a.Option == 0) {
-		return "", fmt.Errorf(`pass exactly one of answer ("y" or "n") or option (1-9)`)
+	given := 0
+	for _, b := range []bool{a.Answer != "", a.Option != 0, a.Label != ""} {
+		if b {
+			given++
+		}
+	}
+	if given != 1 {
+		return "", fmt.Errorf(`pass exactly one of answer ("y" or "n"), option (1-9) or label`)
 	}
 	if a.Answer != "" && a.Answer != "y" && a.Answer != "n" {
 		return "", fmt.Errorf(`answer must be "y" or "n"`)
@@ -127,9 +140,12 @@ func (s *Server) answer(a args) (string, error) {
 	}
 	var c fleet.Choice
 	var err error
-	if a.Option != 0 {
+	switch {
+	case a.Option != 0:
 		c, err = s.F.Choose(a.Name, a.Option, a.Expect)
-	} else {
+	case a.Label != "":
+		c, err = s.F.ChooseLabel(a.Name, a.Label, a.Expect)
+	default:
 		c, err = s.F.Answer(a.Name, a.Answer, a.Expect)
 	}
 	if err != nil {

@@ -121,6 +121,15 @@ const usage = `usage:
                                             --notify: the result goes to a tmux message, not stdout)
   fleet keys [--markdown]                   list every hotkey (Alt-? in tmux, ? in the overview)
   fleet changes [--json]                    what's new in fleet: its latest features, newest first (Alt-g)
+  fleet watch [--interval 1s] [--tick 200ms]
+                                            run the status watcher in the foreground: it keeps the board,
+                                            the pane border titles, fleet ls and the overview agreeing even
+                                            with no window open. fleet up starts one in the background
+  fleet watch --once | --stop               refresh every status once / stop the running watcher
+  fleet hook <event> [--agent NAME] [--waiting-for TEXT]
+                                            record what a tool's own hook just said (stop, notification,
+                                            pretooluse, …) in ~/.fleet/status/<name>.json; fleet wires this
+                                            into Claude per agent at spawn, never into your own settings
 
 local preferences (never committed): ~/.config/fleet/config.toml ($FLEET_CONFIG overrides)
   sets the starting mode (e.g. copilot autopilot), extra args, prompt auto-submit,
@@ -244,6 +253,10 @@ func run(args []string) error {
 		return cmdWall(f, rest)
 	case "snap":
 		return cmdSnap(f, rest)
+	case "watch":
+		return cmdWatch(f, rest)
+	case "hook":
+		return cmdHook(f, rest)
 	case "help", "-h", "--help":
 		fmt.Println(usage)
 		return nil

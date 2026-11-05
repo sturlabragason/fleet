@@ -81,10 +81,12 @@ Use only the `fleet` MCP tools: `fleet_status`, `fleet_info`, `fleet_peek`, `fle
 
 ## Confirmation
 
-- `fleet_answer` (y/n or a numbered `option` of an agent's prompt), `fleet_close` and `fleet_team` `close`: ask the user one line first,
+- `fleet_answer` (y/n, a numbered `option`, or `label` for a menu with no numbers on screen), `fleet_close` and `fleet_team` `close`: ask the user one line first,
   for example "Answer y to web-nav (run `make test`)?". After an explicit yes, call with `confirmed=true`.
-- `waiting_for` lists a numbered prompt's options (`[1 Yes | 2 Yes, and add these directories… | 3 No…]`). Ask with the option text,
+- `waiting_for` lists a prompt's options (`[1 Yes | 2 Yes, and add these directories… | 3 No…]`). Ask with the option text,
   for example "Answer web-nav '2. Yes, and add these directories'?", then `fleet_answer` with `option=2`.
+  Some dialogs (Claude's trust and import checks) show no numbers; the options are still listed, but ask by label and answer with
+  `label="Yes, I trust"` rather than quoting a number the user cannot see.
 - Pass `expect` to `fleet_answer`: the question the user confirmed (e.g. "allow this"). If the prompt changed meanwhile, the answer is refused; ask again.
 - `fleet_send` (text or `keys`, also to `names`/`team`, and `fleet_team` `send`) to an agent on a prompt can answer it, so it needs the same yes and `confirmed=true`.
 - `fleet_close` replies with a note when the agent's dir has uncommitted or unmerged work: tell the user before asking to confirm. Also check the agent's unread reports and inbox before closing: a hand-off that arrives after a close is lost.

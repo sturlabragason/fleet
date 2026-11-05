@@ -197,6 +197,15 @@ func (f *Fleet) classify(a *board.Agent, alive, dead bool, pane string, now time
 		// waiting_for: the prompt, not the footer under it.
 		a.LastLine = line
 	}
+	// A menu on screen is a question for the user whatever the patterns
+	// made of the rest of the pane: a picker nobody answers is waiting, not
+	// working, and its own question is the thing to answer (DESIGN §4).
+	if m, mok := f.Patterns[a.Patterns].Menu(text); mok {
+		st, ok = status.Waiting, true
+		if m.Question != "" {
+			a.LastLine = m.Question
+		}
+	}
 	switch {
 	case !ok && changed:
 		st = status.Working
@@ -211,6 +220,12 @@ func (f *Fleet) classify(a *board.Agent, alive, dead bool, pane string, now time
 	errLine := line
 	if st == status.Error && errLine == "" {
 		errLine = a.LastLine
+	}
+	// A hook the tool fired itself beats a guess from the screen, and beats
+	// the screen outright when it happened after the pane last changed
+	// (DESIGN §18 #3, ADR-49).
+	if hs, hok := f.hookState(a, ok); hok {
+		st = applyHook(a, hs)
 	}
 	st, a.Stuck = status.NextStuck(a.Stuck, status.StuckIn{
 		Status:  st,

@@ -92,6 +92,8 @@ type Fleet struct {
 	summarizer   *summary.Summarizer
 	summaryMu    sync.Mutex
 	lastCap      map[string]time.Time
+	globs        map[string]string // agent -> resolved session log (WatchPaths)
+	globMu       sync.Mutex
 	sweep        doneSweep
 	dead         deadReaper
 }
@@ -487,6 +489,7 @@ func (f *Fleet) Close(name string) error {
 	}
 	logx.For("fleet").Info("closed", "agent", name)
 	f.forgetMail(name)
+	f.forgetHook(name)
 	if f.Teams != nil {
 		if err := f.Teams.DropAgent(name); err != nil {
 			logx.For("fleet").Warn("drop team membership", "agent", name, "err", err)

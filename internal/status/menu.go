@@ -6,12 +6,19 @@ import (
 	"strings"
 )
 
-// Menu is a numbered picker on screen (Copilot/Claude approval boxes:
-// "❯ 1. Yes", "  2. Yes, and …", "  3. No, …").
+// Menu is a picker on screen: numbered (Copilot/Claude approval boxes:
+// "❯ 1. Yes", "  2. Yes, and …", "  3. No, …") or an unnumbered ❯ list
+// (Claude's folder-trust check, agy's: "❯ No, exit" / "  Yes, I trust this
+// folder"). Both are answered the same way, with Up/Down and Enter, so
+// unnumbered options are numbered here too and Options always reads
+// "N. label".
 type Menu struct {
 	Question string   // closest line above the first option ending in "?"
 	Options  []string // "N. label", label cut to LabelMax runes
 	Selected int      // 1-based option under the ❯ cursor
+	// Numbered is false when the options were not numbered on screen, so a
+	// caller can say so instead of quoting numbers the user cannot see.
+	Numbered bool
 }
 
 // LabelMax caps an option label.
@@ -19,13 +26,13 @@ const LabelMax = 60
 
 var optionRe = regexp.MustCompile(`^\s*([❯>])?\s*(\d)\.\s+(.+)$`)
 
-// ParseMenu finds a numbered menu in the bottom Window lines of text; see
-// Set.Menu.
+// ParseMenu finds a menu in the bottom Window lines of text; see Set.Menu.
 func ParseMenu(text string) (Menu, bool) { return Set{}.Menu(text) }
 
 // Menu finds the bottom-most run of options numbered 1, 2, … with a cursor
 // on one of them, skipping transcript lines so a numbered list the agent
-// wrote is not taken for a prompt.
+// wrote is not taken for a prompt. When there is no numbered menu it looks
+// for an unnumbered ❯ list instead (plainMenu).
 func (s Set) Menu(text string) (Menu, bool) {
 	lines := Tail(text, Window)
 	var best Menu
@@ -36,7 +43,10 @@ func (s Set) Menu(text string) (Menu, bool) {
 			best, found, i = m, true, end
 		}
 	}
-	return best, found
+	if found {
+		return best, true
+	}
+	return s.plainMenu(tailRaw(text, 2*Window))
 }
 
 // menuAt reads a run of options starting at lines[i] ("1. …").
@@ -65,6 +75,7 @@ func (s Set) menuAt(lines []string, i int) (Menu, int, bool) {
 			break
 		}
 	}
+	m.Numbered = true
 	return m, j - 1, true
 }
 

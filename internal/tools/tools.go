@@ -45,6 +45,11 @@ type Profile struct {
 	// PeerArgs wire the agent-scoped fleet MCP server (DESIGN §6.6), with
 	// {peer_mcp} / {peer_mcp_claude}. Inserted straight after the command.
 	PeerArgs []string
+	// HookArgs wire the tool's own status hooks to `fleet hook`, with
+	// {hooks} (ADR-49). They are per-agent settings passed on the command
+	// line, so the user's own settings file is never written to. Left out
+	// when the vars carry no hook config.
+	HookArgs []string
 }
 
 // HasMode reports whether the profile knows the named starting mode.
@@ -58,7 +63,8 @@ func (p Profile) HasMode(mode string) bool {
 }
 
 // Defaults are the built-in profiles. {fleet} is the fleet executable, {name}
-// the agent name, {peer_mcp}/{peer_mcp_claude} the agent's peer MCP config.
+// the agent name, {peer_mcp}/{peer_mcp_claude} the agent's peer MCP config and
+// {hooks} its status-hook settings.
 const Defaults = `
 [copilot]
 command = "copilot"
@@ -91,6 +97,7 @@ launch_id = ["--session-id", "{id}"]
 resume = ["--resume", "{id}"]
 session_path = "~/.claude/projects/*/{id}.jsonl"
 peer_args = ["--mcp-config", "{peer_mcp_claude}"]
+hook_args = ["--settings", "{hooks}"]
 patterns = "claude"
 
 [agy]
@@ -196,6 +203,9 @@ func apply(p *Profile, sec map[string]conf.Value) {
 	if v, ok := sec["peer_args"]; ok {
 		p.PeerArgs, _ = v.([]string)
 	}
+	if v, ok := sec["hook_args"]; ok {
+		p.HookArgs, _ = v.([]string)
+	}
 }
 
 // splitModes turns an inline table of mode -> "a b c" into mode -> ["a","b","c"].
@@ -222,12 +232,34 @@ func Names(ps map[string]Profile) []string {
 }
 
 // Vars are substituted into command and args. PeerMCP and PeerMCPClaude are
-// the peer MCP configs (see PeerMCP); when both are empty PeerArgs are left out.
-type Vars struct{ Fleet, Name, ID, PeerMCP, PeerMCPClaude string }
+// the peer MCP configs (see PeerMCP); when both are empty PeerArgs are left
+// out. Hooks is the status-hook settings (see ClaudeHooks); when empty
+// HookArgs are left out.
+type Vars struct{ Fleet, Name, ID, PeerMCP, PeerMCPClaude, Hooks string }
 
 func (v Vars) expand(s string) string {
 	return strings.NewReplacer("{fleet}", v.Fleet, "{name}", v.Name, "{id}", v.ID,
-		"{peer_mcp_claude}", v.PeerMCPClaude, "{peer_mcp}", v.PeerMCP).Replace(s)
+		"{peer_mcp_claude}", v.PeerMCPClaude, "{peer_mcp}", v.PeerMCP, "{hooks}", v.Hooks).Replace(s)
+}
+
+// hookEvents are the Claude Code events worth a status update: the turn
+// ending, a prompt or idle nudge, and the start of work. More would only
+// repeat "working".
+var hookEvents = []string{"Stop", "Notification", "UserPromptSubmit", "PreToolUse", "SessionStart"}
+
+// ClaudeHooks is a Claude Code settings document that calls
+// `exe hook <event> --agent name` on each of hookEvents. It is passed to
+// `claude --settings`, which merges it over the user's own settings for that
+// one process only (ADR-49): fleet never edits ~/.claude/settings.json.
+func ClaudeHooks(exe, name string) string {
+	hooks := map[string]any{}
+	for _, e := range hookEvents {
+		cmd := map[string]any{"type": "command",
+			"command": Quote(exe) + " hook " + strings.ToLower(e) + " --agent " + Quote(name)}
+		hooks[e] = []any{map[string]any{"hooks": []any{cmd}}}
+	}
+	b, _ := json.Marshal(map[string]any{"hooks": hooks})
+	return string(b)
 }
 
 // PeerMCP returns the one-server MCP configs that run `exe mcp --agent name`
@@ -241,10 +273,11 @@ func PeerMCP(exe, name string) (copilot, claude string) {
 	return string(cp), string(cl)
 }
 
-// AgentVars are the Vars for launching agent name: fleet exe, id and peer MCP.
+// AgentVars are the Vars for launching agent name: fleet exe, id, peer MCP
+// and status hooks.
 func AgentVars(exe, name, id string) Vars {
 	cp, cl := PeerMCP(exe, name)
-	return Vars{Fleet: exe, Name: name, ID: id, PeerMCP: cp, PeerMCPClaude: cl}
+	return Vars{Fleet: exe, Name: name, ID: id, PeerMCP: cp, PeerMCPClaude: cl, Hooks: ClaudeHooks(exe, name)}
 }
 
 // Launch describes everything beyond the profile that shapes one command line.
@@ -267,6 +300,11 @@ func (p Profile) Argv(v Vars, l Launch) (argv []string, embedded bool) {
 	argv = []string{v.expand(p.Command)}
 	if v.PeerMCP != "" || v.PeerMCPClaude != "" {
 		for _, a := range p.PeerArgs {
+			argv = append(argv, v.expand(a))
+		}
+	}
+	if v.Hooks != "" {
+		for _, a := range p.HookArgs {
 			argv = append(argv, v.expand(a))
 		}
 	}
