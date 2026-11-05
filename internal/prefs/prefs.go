@@ -88,6 +88,7 @@ type Prefs struct {
 	admiral    string
 	agentMail  string
 	summary    Summary
+	memory     Memory
 }
 
 // AdmiralProfile is [admiral] profile: the admiral's tool profile when no
@@ -114,7 +115,7 @@ func Load() (*Prefs, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	p := &Prefs{Path: path, defaults: Neutral(), profiles: map[string]map[string]conf.Value{}, maxWorking: DefaultMaxWorking, summary: DefaultSummary()}
+	p := &Prefs{Path: path, defaults: Neutral(), profiles: map[string]map[string]conf.Value{}, maxWorking: DefaultMaxWorking, summary: DefaultSummary(), memory: DefaultMemory()}
 	if sec, ok := d["defaults"]; ok {
 		p.defaults = applySpawn(p.defaults, sec)
 		if v := conf.Str(sec, "max_working"); v != "" {
@@ -130,6 +131,11 @@ func Load() (*Prefs, error) {
 	}
 	if sec, ok := d["summary"]; ok {
 		p.summary = applySummary(p.summary, sec)
+	}
+	if sec, ok := d["memory"]; ok {
+		if p.memory, err = applyMemory(p.memory, sec, path); err != nil {
+			return nil, err
+		}
 	}
 	if sec, ok := d["admiral"]; ok {
 		p.admiral = strings.TrimSpace(conf.Str(sec, "profile"))

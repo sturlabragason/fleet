@@ -55,6 +55,11 @@ const usage = `usage:
   fleet peek --live <name>                  live colour view of the agent's pane, 4x a second (Space in
                                             the overview opens it in a popup; Enter puts it in ▶)
   fleet close <name>                        stop an agent and remove it from the board
+  fleet park <name>                         stop an idle agent's process to free RAM, keep it on the board
+                                            as "parked" with its session id (refused while it works,
+                                            waits, or sits on a prompt)
+  fleet wake <name> [--force]               resume a parked agent: the same session, dir and name
+                                            (--force: wake even while memory is still low)
   fleet team ls [--json]                    teams with colour and members (running members marked)
   fleet team create <team> [colour]         new empty team; colour: blue, pink, teal, mauve, sky, sapphire or #rrggbb
   fleet team delete <team>                  remove the team; its agents keep running
@@ -104,6 +109,8 @@ local preferences (never committed): ~/.config/fleet/config.toml ($FLEET_CONFIG 
   sets the starting mode (e.g. copilot autopilot), extra args, prompt auto-submit,
   the worker playbook (playbook = false turns it off) and the per-agent git
   worktree (worktree = false turns it off);
+  [defaults] max_working and the [memory] RAM guard (guard, min_free, check_every)
+  are re-read live, so a change takes effect without restarting fleet;
   see examples/config.toml.example`
 
 func run(args []string) error {
@@ -161,6 +168,29 @@ func run(args []string) error {
 			return fmt.Errorf("usage: fleet close <name>")
 		}
 		return f.Close(rest[0])
+	case "park":
+		if len(rest) != 1 {
+			return fmt.Errorf("usage: fleet park <name>")
+		}
+		if err := f.Park(rest[0], ""); err != nil {
+			return err
+		}
+		fmt.Printf("parked %s · fleet wake %s resumes it\n", rest[0], rest[0])
+		return nil
+	case "wake":
+		force := false
+		if n := len(rest); n > 0 && rest[n-1] == "--force" {
+			force, rest = true, rest[:n-1]
+		}
+		if len(rest) != 1 {
+			return fmt.Errorf("usage: fleet wake <name> [--force]")
+		}
+		ag, err := f.Wake(rest[0], force)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("woke %s (%s) session %s in %s pane %s\n", ag.Name, ag.Profile, ag.SessionID, ag.Dir, ag.PaneID)
+		return nil
 	case "team":
 		return cmdTeam(f, rest)
 	case "mcp":
@@ -254,7 +284,10 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 		return err
 	}
 	if ag.Status == string(status.Queued) {
-		fmt.Printf("queued %s (%d busy, max_working %d)\n", ag.Name, f.Busy(), f.Prefs.MaxWorking())
+		fmt.Printf("queued %s (%d busy, max_working %d)\n", ag.Name, f.Busy(), f.MaxWorking())
+		if ag.LastLine != "" {
+			fmt.Println(ag.LastLine)
+		}
 		return nil
 	}
 	fmt.Printf("spawned %s (%s) in %s pane %s\n", ag.Name, ag.Profile, ag.Dir, ag.PaneID)
@@ -349,6 +382,10 @@ func parseInterleaved(fs *flag.FlagSet, args []string) ([]string, error) {
 }
 
 func cmdLs(f *fleet.Fleet, args []string) error {
+	// `fleet ls` drains the queue and runs the memory guard too, so neither
+	// waits for the overview TUI (§7, §7a). The launch runs in this
+	// process: a goroutine would die with it.
+	f.DrainQueue, f.DrainSync = true, true
 	as, err := f.Refresh()
 	if err != nil {
 		return err

@@ -28,6 +28,8 @@ func queueFleet(t *testing.T, maxWorking int) *Fleet {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The memory guard must never read this machine's RAM in a test.
+	f.FreeMem = func() (uint64, error) { return 64 << 30, nil }
 	if f.Prefs.MaxWorking() != maxWorking {
 		t.Fatalf("max_working %d", f.Prefs.MaxWorking())
 	}

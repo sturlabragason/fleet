@@ -37,7 +37,10 @@ patterns = "fake"
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.DrainQueue = true // only the queue-draining process reports (ADR-45)
+	// Only the overview reports stuck episodes (ADR-45); since ADR-44 the
+	// MCP server and `fleet ls` drain the queue too, so the flag that says
+	// "this is the overview" is Housekeeping.
+	f.DrainQueue, f.Housekeeping = true, true
 	var mu sync.Mutex
 	var keyed []string
 	f.PressKeys = func(pane string, keys ...string) error {
@@ -136,10 +139,11 @@ func TestRefreshStuckInterruptOptIn(t *testing.T) {
 }
 
 // A one-shot `fleet ls` neither wakes the admiral nor burns the episode's
-// one notification: only the queue-draining process reports.
+// one notification, even though it drains the queue (ADR-44): only the
+// overview reports.
 func TestRefreshStuckOnlyReportsWhenDraining(t *testing.T) {
 	f, _ := stuckFleet(t, "stuck_after = \"300ms\"\n")
-	f.DrainQueue = false
+	f.DrainQueue, f.Housekeeping = true, false
 	for i := 0; i < 40; i++ {
 		as, _ := f.Refresh()
 		if len(as) == 1 && as[0].Status == "stuck" {

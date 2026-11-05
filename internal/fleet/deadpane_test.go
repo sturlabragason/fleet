@@ -27,7 +27,7 @@ func (r *deadRec) get() (closed, pasted []string) {
 }
 
 // deadFleet spawns d1 in dir running `sh -c script` as the overview would
-// see it (DrainQueue on, idle admiral). cfg is the config.toml body ("" =
+// see it (drain and housekeeping on, idle admiral). cfg is the config.toml body ("" =
 // none).
 func deadFleet(t *testing.T, script, cfg, dir string) (*Fleet, *deadRec) {
 	t.Helper()
@@ -45,8 +45,10 @@ func deadFleet(t *testing.T, script, cfg, dir string) (*Fleet, *deadRec) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The memory guard must never read this machine's RAM in a test.
+	f.FreeMem = func() (uint64, error) { return 64 << 30, nil }
 	r := &deadRec{}
-	f.DrainQueue = true
+	f.DrainQueue, f.Housekeeping = true, true
 	adm := fakeAdm(f, nil, ptr(true))
 	adm.onSubmit = func(text string) {
 		r.mu.Lock()

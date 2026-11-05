@@ -70,8 +70,22 @@ type Fleet struct {
 	// on the wall; 0 = every Refresh. The overview TUI sets it (DESIGN §7a).
 	OffWallEvery time.Duration
 	// DrainQueue lets Refresh start the oldest queued agent when a working
-	// slot is free. Only the overview TUI sets it (DESIGN §7a).
+	// slot is free, and lets the memory guard park an idle agent when RAM
+	// runs low (DESIGN §7, §7a). The overview TUI, the admiral's MCP
+	// server and `fleet ls` set it; the board lock keeps two of them from
+	// starting the same agent twice.
 	DrainQueue bool
+	// DrainSync launches a claimed queued agent in this goroutine instead
+	// of a background one. One-shot commands (`fleet ls`) set it: their
+	// process exits before a goroutine could finish the launch.
+	DrainSync bool
+	// Housekeeping runs the once-a-poll jobs that belong to a resident
+	// fleet: admiral wakes, the done sweep and dead-pane reaping. Only the
+	// overview TUI sets it.
+	Housekeeping bool
+	// FreeMem reads free memory for the guard; nil = /proc/meminfo (tests
+	// replace it).
+	FreeMem func() (uint64, error)
 	// SummaryModel replaces the model behind PeekSummary; nil builds the
 	// CLI backend from the [summary] section of config.toml. Tests set it.
 	SummaryModel summary.Model
@@ -152,6 +166,9 @@ func (f *Fleet) SpawnWith(o SpawnOpts, name, profile, dir, prompt string) (*boar
 		return nil, fmt.Errorf("unknown profile %q (have %v)", profile, tools.Names(f.Profiles))
 	}
 	if old, exists := f.Store.Load().Agents[name]; exists {
+		if old.Status == string(status.Parked) {
+			return nil, fmt.Errorf("agent %q is parked; resume it with fleet wake %s, or close it first", name, name)
+		}
 		if pending(old.Status) || f.paneOf(name) != "" {
 			return nil, fmt.Errorf("agent %q already exists", name)
 		}
@@ -372,8 +389,13 @@ func (f *Fleet) Pane(name string) (string, error) {
 	if p := f.paneOf(name); p != "" {
 		return p, nil
 	}
-	if a, ok := f.Store.Load().Agents[name]; ok && pending(a.Status) {
-		return "", fmt.Errorf("agent %q is %s, not started yet", name, a.Status)
+	if a, ok := f.Store.Load().Agents[name]; ok {
+		if pending(a.Status) {
+			return "", fmt.Errorf("agent %q is %s, not started yet", name, a.Status)
+		}
+		if a.Status == string(status.Parked) {
+			return "", fmt.Errorf("agent %q is parked; fleet wake %s resumes it", name, name)
+		}
 	}
 	return "", fmt.Errorf("agent %q not running", name)
 }

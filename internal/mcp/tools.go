@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/sessions"
 	"github.com/sturlabragason/fleet/internal/spend"
@@ -70,6 +71,9 @@ var toolDefs = []tool{
 	{"fleet_profiles", "List tool profiles that fleet_spawn accepts.", obj(nil, map[string]any{})},
 	{"fleet_close", "Stop an agent and remove it from the board. Ask the user first; set confirmed=true only after an explicit yes. The reply notes uncommitted or unmerged work in its dir.", obj([]string{"name", "confirmed"}, map[string]any{
 		"name": str("agent name"), "confirmed": confirmedProp})},
+	{"fleet_park", "Free RAM without losing work: park stops an idle agent's process but keeps it on the board with its session id; wake resumes that same session in the same directory. Only an idle agent can be parked - working, waiting, prompted and pinned agents are refused. The memory guard parks the longest-idle agent by itself when free RAM runs low and reports it here.", obj([]string{"name"}, map[string]any{
+		"name": str("agent name"), "action": map[string]any{"type": "string", "enum": []string{"park", "wake"}, "description": "park (default) or wake"},
+		"force": map[string]any{"type": "boolean", "description": "wake even while free memory is still under the guard's floor"}})},
 	{"fleet_wall", "Change the live wall: show or hide an agent pane, or set the layout preset (1,2,4,6,9,m).", obj([]string{"action"}, map[string]any{
 		"action": map[string]any{"type": "string", "enum": []string{"show", "hide", "preset"}}, "name": str("agent name for show/hide"), "preset": str("1, 2, 4, 6, 9 or m")})},
 	{"fleet_team", "Teams: named, coloured groups of agents (one team per agent). list; create (team, optional color); delete; add/remove (team, agents; add moves agents from another team and creates the team if missing); color (team, color); send (team, text) to every running member (members on a prompt are skipped unless confirmed=true); show/hide (team) on the wall; close (team) every member - ask the user first, confirmed=true only after an explicit yes.", obj([]string{"action"}, map[string]any{
@@ -99,7 +103,7 @@ type args struct {
 	To, From, Reason, Decision, A, B, State string
 	SessionID                               string `json:"session_id"`
 	Lines, Limit, Option                    int
-	Confirmed, All, Raw                     bool
+	Confirmed, All, Raw, Force              bool
 	LastMessage                             bool `json:"last_message"`
 	Team, Color                             string
 	Agents, Names, Keys                     []string
@@ -146,8 +150,8 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 			return "", err
 		}
 		if ag.Status == string(status.Queued) {
-			return fmt.Sprintf("queued %s (%s) in %s: %d agents busy, max_working %d; it starts when a slot frees while the overview TUI runs",
-				ag.Name, ag.Profile, ag.Dir, s.F.Busy(), s.F.Prefs.MaxWorking()) + cardNote(ag), nil
+			return fmt.Sprintf("queued %s (%s) in %s: %d agents busy, max_working %d%s; it starts when a slot frees",
+				ag.Name, ag.Profile, ag.Dir, s.F.Busy(), s.F.MaxWorking(), queueNote(ag)) + cardNote(ag), nil
 		}
 		if w := ag.Worktree; w != nil {
 			return fmt.Sprintf("spawned %s (%s) in its own worktree %s on branch %s (of %s)", ag.Name, ag.Profile, w.Path, w.Branch, w.Repo) + cardNote(ag), nil
@@ -196,6 +200,24 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		return b.String(), nil
 	case "fleet_close":
 		return s.close(a)
+	case "fleet_park":
+		if err := need(a.Name, "name"); err != nil {
+			return "", err
+		}
+		switch a.Action {
+		case "wake":
+			ag, err := s.F.Wake(a.Name, a.Force)
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("woke %s (%s), session %s, in %s", ag.Name, ag.Profile, ag.SessionID, ag.Dir), nil
+		case "", "park":
+			if err := s.F.Park(a.Name, ""); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("parked %s; fleet_park name=%s action=wake resumes it", a.Name, a.Name), nil
+		}
+		return "", fmt.Errorf("action must be park or wake")
 	case "fleet_wall":
 		switch a.Action {
 		case "preset":
@@ -259,6 +281,15 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		return "handoff saved; a fresh admiral takes over in a few seconds. Stop here.", nil
 	}
 	return "", fmt.Errorf("unknown tool %q", name)
+}
+
+// queueNote adds the memory guard's reason to a "queued" reply when that is
+// what held the spawn back, not the working cap.
+func queueNote(ag *board.Agent) string {
+	if ag.LastLine == "" {
+		return ""
+	}
+	return " (" + ag.LastLine + ")"
 }
 
 func (s *Server) status() (string, error) {
