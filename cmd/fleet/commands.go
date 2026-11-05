@@ -27,7 +27,7 @@ const usage = `usage:
                                             run the admiral under profile NAME (alone: fleet up); default
                                             $FLEET_ADMIRAL_PROFILE, last choice, [admiral] profile, copilot
   fleet ui                                  run the overview TUI in this terminal
-  fleet spawn [--worktree|--no-worktree] <name> <profile> [dir] ["prompt"]
+  fleet spawn [--worktree|--no-worktree] [--leader] <name> <profile> [dir] ["prompt"]
              [--goal "one line"] [--check "cmd"] [--check-exit N] [--result FILE]
                                             in a git repo the agent gets its own worktree,
                                             <repo>.wt/<name> on branch fleet/<name> (worktree in
@@ -36,6 +36,9 @@ const usage = `usage:
                                             the check in its dir when it reports done and tells the
                                             admiral pass or fail, and the agent is told to write the
                                             result file (default result.md);
+                                            --leader makes it a leader: it gets squad tools, spawns a
+                                            squad of its own and its agents report to it, not to the
+                                            admiral ([squad] max_members, max_depth in config.toml);
                                             queued instead when max_working agents are busy;
                                             the overview TUI starts it when a slot frees
   fleet spawn --fake <name> [dir]           shorthand for profile "fake"
@@ -54,7 +57,9 @@ const usage = `usage:
                                             waits for, any error (cached per screen; [summary] in config.toml)
   fleet peek --live <name>                  live colour view of the agent's pane, 4x a second (Space in
                                             the overview opens it in a popup; Enter puts it in ▶)
-  fleet close <name>                        stop an agent and remove it from the board
+  fleet close <name> [--squad]              stop an agent and remove it from the board
+                                            (--squad: a leader's agents go with it; without it they
+                                            keep running and report to the admiral)
   fleet park <name>                         stop an idle agent's process to free RAM, keep it on the board
                                             as "parked" with its session id (refused while it works,
                                             waits, or sits on a prompt)
@@ -194,8 +199,32 @@ func run(args []string) error {
 	case "peek":
 		return cmdPeek(f, rest)
 	case "close", "kill": // "kill" kept as a hidden alias
+		squad := false
+		if n := len(rest); n > 0 && rest[n-1] == "--squad" {
+			squad, rest = true, rest[:n-1]
+		}
 		if len(rest) != 1 {
-			return fmt.Errorf("usage: fleet close <name>")
+			return fmt.Errorf("usage: fleet close <name> [--squad]")
+		}
+		if squad {
+			bad := 0
+			for _, r := range f.SquadCloseAll(rest[0]) {
+				if r.OK {
+					n := ""
+					if r.Note != "" {
+						n = ". " + r.Note
+					}
+					fmt.Println("closed " + r.Agent + n)
+					continue
+				}
+				bad++
+				fmt.Fprintln(os.Stderr, r.Agent+": "+r.Note)
+			}
+			if bad > 0 {
+				return fmt.Errorf("%d squad agent(s) not closed", bad)
+			}
+		} else if note := fleet.SquadNote(rest[0], f.Squad(rest[0])); note != "" {
+			fmt.Println(note)
 		}
 		return f.Close(rest[0])
 	case "park":
@@ -273,10 +302,12 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 	check := fs.String("check", "", "task card: done-check command, run in the agent's dir when it reports done")
 	checkExit := fs.Int("check-exit", 0, "task card: exit code the done-check must return")
 	result := fs.String("result", "", "task card: result file the agent writes, relative to its dir (default "+fleet.DefaultResult+")")
+	leader := fs.Bool("leader", false, "make it a leader: it may spawn a squad of its own and its agents report to it")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	var o fleet.SpawnOpts
+	o.Role = fleet.Role{Leader: *leader}
 	o.Card = fleet.NormalizeCard(&board.Card{Goal: *goal, Check: *check, Want: *checkExit, Result: *result})
 	var set []string
 	// Read which flag was passed, not just its value, so --worktree=false and
@@ -329,6 +360,9 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 	fmt.Printf("spawned %s (%s) in %s pane %s%s\n", ag.Name, ag.Profile, ag.Dir, ag.PaneID, dirNote(f, ag.Dir))
 	if w := ag.Worktree; w != nil {
 		fmt.Printf("worktree %s on branch %s (of %s)\n", w.Path, w.Branch, w.Repo)
+	}
+	if ag.Leader {
+		fmt.Printf("leader: it has squad tools, and its agents' reports go to it\n")
 	}
 	if c := ag.Card; c != nil {
 		fmt.Printf("task card: result file %s\n", c.Result)

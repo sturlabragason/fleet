@@ -232,13 +232,27 @@ func (s *Server) close(a args) (string, error) {
 	if note != "" {
 		note = ". " + note
 	}
+	// A leader's squad keeps running unless the close says otherwise, so
+	// the warning comes before the confirmation (ADR-53).
+	if sq := fleet.SquadNote(a.Name, s.F.Squad(a.Name)); sq != "" && !a.Squad {
+		note += ". " + sq
+		if !a.Confirmed {
+			note += ", or close again with squad=true"
+		}
+	}
 	if !a.Confirmed {
 		return "", fmt.Errorf("not confirmed: ask the user, then call again with confirmed=true%s", note)
+	}
+	closed := ""
+	if a.Squad {
+		if rs := s.F.SquadCloseAll(a.Name); len(rs) > 0 {
+			closed = ". squad: " + fleet.FormatResults("closed", rs)
+		}
 	}
 	if err := s.F.Close(a.Name); err != nil {
 		return "", err
 	}
-	return "closed " + a.Name + note, nil
+	return "closed " + a.Name + note + closed, nil
 }
 
 // info runs fleet_info.

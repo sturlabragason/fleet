@@ -13,7 +13,7 @@ import (
 // Report tools (DESIGN §6.7): fleet_report for agents, fleet_reports for
 // the admiral.
 
-var reportToolDef = tool{"fleet_report", "Report to the admiral: state done, blocked, question or progress, and a summary. Start with a one-line headline (shown on your tile); add detail on later lines if useful (kept in full, up to 8000 chars). Needs no access grant.", obj([]string{"state", "summary"}, map[string]any{
+var reportToolDef = tool{"fleet_report", "Report upward -- to the admiral, or to your leader if you are in a squad: state done, blocked, question or progress, and a summary. Start with a one-line headline (shown on your tile); add detail on later lines if useful (kept in full, up to 8000 chars). Needs no access grant.", obj([]string{"state", "summary"}, map[string]any{
 	"state": map[string]any{"type": "string", "enum": mail.ReportStates}, "summary": str("headline first (what changed, branch/commit, or what you need), then optional detail lines")})}
 
 var reportsToolDef = tool{"fleet_reports", "Read agent reports (done, blocked, question, progress): unread ones, oldest first, and mark them read; all=true shows the last N without marking. It ends with the task cards: fleet's own done-check verdict per agent and the result file to read.", obj(nil, map[string]any{
@@ -25,7 +25,11 @@ func (s *Server) report(me string, a args) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	out := "reported " + a.State + " to the admiral"
+	to := "the admiral"
+	if up := s.F.ReportsTo(me); up != "" {
+		to = "your leader " + up
+	}
+	out := "reported " + a.State + " to " + to
 	if note != "" {
 		out += " (" + note + ")"
 	}

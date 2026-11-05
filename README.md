@@ -33,6 +33,7 @@ Session switchers make moving between agents faster, but you still do all the su
 - **Cheap summaries**: `fleet peek --summary <name>` returns about five lines (what the agent is doing, what it waits for, any error) from a small model instead of a screenful of text.
 - **Teams**: group agents (`fleet team create frontend teal`), then send to, show or close a whole team at once. Members are marked with a coloured `◆`.
 - **Agent mail**: agents message each other with `fleet mail` or peer MCP tools. Free inside a team or a repo, otherwise one agent asks and you decide.
+- **Squads**: `fleet spawn --leader <name> <profile>` makes an agent a leader, with its own tools to spawn, watch, message and close up to four agents of its own. Their reports wake the leader, which sends the admiral one summary; leaders are marked `▲` and never answer prompts, merge or push for you.
 - **CLI** for scripting: `spawn`, `adopt`, `sessions`, `ls`, `send`, `peek`, `close`, `team`, `mail`, `access`, `report`, `spend`, `admiral`, `note`, `playbook`, `touching`, `merge`, `profiles`, `keys`, `changes`, `snap`, `wall`.
 - **Spend**: `fleet spend` shows what each agent has cost so far and the fleet total — AI credits for Copilot agents, tokens for Claude — read from the agents' own session files, never from a model.
 - **Fake agents** that cycle through states and print scripted work (reads, edits, test runs), so you can try everything without spending tokens. `fleet send <name> "!wait"` (or `!work`, `!error`, `!done`) holds one in a chosen state, which is how the screenshot above is composed.
@@ -191,6 +192,8 @@ Agents start through `bash -lc`, so shell aliases don't apply; make a profile in
 | `fleet_access_decide` | Grant, deny or revoke that. Needs `confirmed=true` |
 | `fleet_admiral_profile` | Show or swap the admiral's own tool profile |
 | `fleet_info` | One agent's facts: status, git state, session, context fill, spend so far |
+
+A leader agent (`fleet_spawn` with `leader=true`, or `fleet spawn --leader`) gets a squad-scoped set of its own: `fleet_squad_spawn`, `fleet_squad_profiles`, `fleet_squad_status`, `fleet_squad_info`, `fleet_squad_peek`, `fleet_squad_send`, `fleet_squad_reports` and `fleet_squad_close`. Each refuses any agent the leader did not spawn, and none of them can answer a prompt: that escalates to the admiral and to you. `[squad] max_members` (4) and `max_depth` (1) cap it.
 
 The admiral must ask you before it answers a prompt, closes an agent or changes who may message whom. See [docs/admiral.md](docs/admiral.md).
 

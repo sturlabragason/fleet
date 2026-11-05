@@ -122,6 +122,12 @@ func (f *Fleet) Info(name string) (string, error) {
 	kv("name", a.Name)
 	kv("profile", a.Profile)
 	kv("team", tm)
+	if a.Leader {
+		kv("squad", "leader of "+squadNames(f.Squad(name)))
+	}
+	if a.LeadBy != "" {
+		kv("squad", "member of "+a.LeadBy+"'s squad; its reports go to "+a.LeadBy)
+	}
 	kv("status", fmt.Sprintf("%s (for %s)", a.Status, now.Sub(a.StatusSince).Round(time.Second)))
 	kv("last activity", now.Sub(a.LastChange).Round(time.Second).String()+" ago")
 	kv("dir", a.Dir)

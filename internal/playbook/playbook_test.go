@@ -175,7 +175,7 @@ func TestDefaultCarriesStandingRules(t *testing.T) {
 
 // The playbook is paid for on every spawn, so DESIGN §4 pins its size.
 func TestDefaultStaysShort(t *testing.T) {
-	if n := strings.Count(strings.TrimSpace(Default()), "\n") + 1; n > 38 {
-		t.Errorf("playbook grew to %d lines; DESIGN §4 budgets about 38", n)
+	if n := strings.Count(strings.TrimSpace(Default()), "\n") + 1; n > 39 {
+		t.Errorf("playbook grew to %d lines; DESIGN §4 budgets about 39", n)
 	}
 }

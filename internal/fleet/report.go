@@ -19,7 +19,10 @@ func (f *Fleet) Report(me, state, summary string) (note string, err error) {
 	if err := f.onBoard(me); err != nil {
 		return "", err
 	}
-	m, err := f.Mail().Report(me, state, summary)
+	// A squad member reports to its leader, everyone else to the admiral
+	// (ADR-53). The leader's own reports still go up to the admiral.
+	up := f.ReportsTo(me)
+	m, err := f.Mail().ReportTo(me, up, state, summary)
 	if err != nil {
 		return "", err
 	}
@@ -60,11 +63,11 @@ func (f *Fleet) Report(me, state, summary string) (note string, err error) {
 		}
 	}
 	if state == "done" || state == "blocked" || state == "question" {
-		line := ReportLine(me, state, sum)
+		line := ReportLineTo(boxOf(up), me, state, sum)
 		if note != "" {
 			line += " (" + note + ")"
 		}
-		f.wakeSupervisor(m.ID, me, state, line)
+		f.wakeBox(boxOf(up), m.ID, me, state, line)
 	}
 	return note, nil
 }
@@ -170,11 +173,11 @@ func (f *Fleet) doneCheck(job checkJob, msgID, sum string) string {
 	case f.Prefs.For(job.profile).AutoCloseDone:
 		note = "not auto-closed: done-check failed"
 	}
-	line := ReportLine(job.name, "done", sum) + " Done-check: " + res.Verdict() + "."
+	line := ReportLineTo(boxOf(f.ReportsTo(job.name)), job.name, "done", sum) + " Done-check: " + res.Verdict() + "."
 	if note != "" {
 		line += " (" + note + ")"
 	}
-	f.wakeSupervisor(msgID, job.name, "done", line)
+	f.wakeBox(boxOf(f.ReportsTo(job.name)), msgID, job.name, "done", line)
 	return note
 }
 
@@ -235,10 +238,25 @@ const wakeHeadline = 100
 // ReportLine is the line typed into an idle admiral pane: a short headline
 // and where the full text is (fleet_reports keeps it after the agent closes).
 func ReportLine(from, state, summary string) string {
+	return ReportLineTo(mail.Supervisor, from, state, summary)
+}
+
+// ReportLineTo is ReportLine for one mailbox. A leader has no fleet_reports
+// — its tool is fleet_squad_reports — so the line names the tool its reader
+// actually has (DESIGN §6.11, ADR-53).
+func ReportLineTo(box, from, state, summary string) string {
 	if r := []rune(summary); len(r) > wakeHeadline {
 		summary = string(r[:wakeHeadline-1]) + "…"
 	}
-	return fmt.Sprintf("[fleet] report from %s: %s: %s. Full text: call fleet_reports.", from, state, summary)
+	return fmt.Sprintf("[fleet] report from %s: %s: %s. Full text: call %s.", from, state, summary, reportsTool(box))
+}
+
+// reportsTool is the tool the owner of box reads its reports with.
+func reportsTool(box string) string {
+	if box == mail.Supervisor {
+		return "fleet_reports"
+	}
+	return "fleet_squad_reports"
 }
 
 // autoClose closes a done agent when its profile opts in and it left no

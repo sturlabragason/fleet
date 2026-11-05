@@ -91,11 +91,12 @@ func (f *Fleet) reportDead(a *board.Agent, p tmux.PaneInfo) {
 	grace := f.Prefs.For(a.Profile).DeadPaneGrace
 	state, text, line := deadReport(a.Name, e, screen, AgentBlocker(a), grace)
 	log.Info("dead pane", "agent", a.Name, "state", state, "exit", exitHow(e))
-	if m, err := f.Mail().Report(a.Name, state, text); err != nil {
+	up := f.ReportsTo(a.Name)
+	if m, err := f.Mail().ReportTo(a.Name, up, state, text); err != nil {
 		// No unread mail: ClaimNudge would drop the wake line anyway.
 		log.Error("dead pane report failed", "agent", a.Name, "err", err)
 	} else {
-		f.wakeSupervisor(m.ID, a.Name, state, line)
+		f.wakeBox(boxOf(up), m.ID, a.Name, state, line)
 	}
 	if closeDue(e, grace, e.At) {
 		f.closeDead(a.Name)

@@ -23,6 +23,9 @@ func NewAgent(f *fleet.Fleet, name string) *Server {
 
 func (s *Server) instructions() string {
 	if s.Agent != "" {
+		if s.isLeader() {
+			return AgentInstructions + LeaderInstructions
+		}
 		return AgentInstructions
 	}
 	return Instructions
@@ -62,12 +65,15 @@ func (s *Server) agentCall(name string, raw json.RawMessage) (string, error) {
 	for _, t := range agentToolDefs {
 		isAgentTool = isAgentTool || t.Name == name
 	}
-	if !isAgentTool {
+	if !isAgentTool && !isSquadTool(name) {
 		return "", fmt.Errorf("unknown tool %q", name)
 	}
 	me, err := s.F.Me(s.Agent)
 	if err != nil {
 		return "", err
+	}
+	if isSquadTool(name) {
+		return s.squadCall(me, name, raw)
 	}
 	m := s.F.Mail()
 	switch name {

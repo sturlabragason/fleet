@@ -56,6 +56,11 @@ func (f *Fleet) mailReason(policy, a, b string, repos map[string]string) string 
 	if !okA || !okB || a == b {
 		return ""
 	}
+	// A leader and its own agents, and two agents of one squad, always
+	// reach each other: the hierarchy is the grant (ADR-53).
+	if f.SameSquad(a, b) {
+		return "squad"
+	}
 	switch policy {
 	case prefs.MailOpen:
 		return "open"

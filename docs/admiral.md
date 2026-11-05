@@ -27,11 +27,11 @@ To use a tool fleet doesn't start itself, register `fleet mcp` as a stdio MCP se
 | `fleet_peek` | `name`, `lines` (max 80), `raw`, `last_message` | Last lines of the agent's screen, or its last reply from the session log |
 | `fleet_send` | `name` / `names` / `team`, `text`, `keys`, `confirmed` | Paste a prompt and press Enter, or press keys |
 | `fleet_answer` | `name`, `answer` (`y`/`n`) or `option` N, `expect`, `confirmed` | Answer a y/n prompt or a numbered menu |
-| `fleet_spawn` | `name`, `profile`, `dir`, `prompt`, `worktree` | Start an agent; in a git repo it gets its own worktree `<repo>.wt/<name>` on branch `fleet/<name>` (`worktree: false` spawns straight into `dir`) |
+| `fleet_spawn` | `name`, `profile`, `dir`, `prompt`, `worktree`, `leader` | Start an agent; in a git repo it gets its own worktree `<repo>.wt/<name>` on branch `fleet/<name>` (`worktree: false` spawns straight into `dir`). `leader: true` lets it run its own squad |
 | `fleet_adopt` | `session_id` or `query`, optional `profile`, `dir`, `name` | Resume a session started outside fleet |
 | `fleet_sessions` | `query`, `limit` | Copilot/Claude sessions started outside fleet, newest first |
 | `fleet_profiles` | none | Profiles and their command lines |
-| `fleet_close` | `name`, `confirmed` | Stop the agent and remove it from the board |
+| `fleet_close` | `name`, `confirmed`, `squad` | Stop the agent and remove it from the board; for a leader, `squad: true` closes its agents too |
 | `fleet_wall` | `action`, `name` or `preset` | Change the wall |
 | `fleet_team` | `action`, `team`, `agents`, `color`, `text`, `confirmed` | Teams: list, create, delete, add, remove, color, send, show, hide, close |
 | `fleet_reports` | `all`, `limit` | What agents reported (done, blocked, question, progress); unread first, marked read |
@@ -42,9 +42,28 @@ To use a tool fleet doesn't start itself, register `fleet mcp` as a stdio MCP se
 | `fleet_handoff` | `summary` | Write a handoff and get replaced by a fresh admiral |
 | `fleet_admiral_profile` | `profile`, `summary` | Switch the admiral to another tool profile |
 
+## Squads
+
+A leader is an ordinary agent with one extra right: it runs a small squad of its own (DESIGN §6.11, ADR-53). Spawn one with `fleet_spawn(..., leader: true)` or `fleet spawn --leader`.
+
+| Tool | Arguments | What it does |
+|---|---|---|
+| `fleet_squad_spawn` | `name`, `profile`, `dir`, `prompt`, `worktree`, `card` | Start an agent of the leader's own squad, with the same worktrees, task cards and playbook as an admiral spawn |
+| `fleet_squad_profiles` | none | Profiles the leader may spawn from |
+| `fleet_squad_status` | none | The leader's agents: status, age, what each waits for, last report |
+| `fleet_squad_info` | `name` | One of its agents in detail |
+| `fleet_squad_peek` | `name`, `lines`, `raw` | Last lines of one of its agents' screens |
+| `fleet_squad_send` | `name` (or `*`), `text` | Prompt one of its agents. Refused when that agent sits on a permission prompt |
+| `fleet_squad_reports` | `all`, `limit` | Its agents' reports, without marking them read (`fleet_inbox` does that) |
+| `fleet_squad_close` | `name` (or `*`), `confirmed` | Stop one of its agents; the first call is refused and names any uncommitted or unmerged work |
+
+Every tool that names an agent refuses a name outside the squad. A squad agent's `fleet_report` lands in the leader's inbox and wakes the leader's pane the way reports wake the admiral; the admiral sees the leader's summary, not the squad's. `fleet_status` has a `squad` column, and the overview marks a leader `▲`. Caps: `[squad] max_members` (4) and `max_depth` (1, so a squad agent cannot itself lead); `max_working`, spend and the memory guard count squad agents like any other agent.
+
+A leader may not answer a permission prompt, merge, push or apply infrastructure: those escalate squad → leader → admiral → you.
+
 ## Confirmation rule
 
-`fleet_answer`, `fleet_close`, `fleet_access_decide`, `fleet_team` `close`, and any `fleet_send` to an agent already sitting on a prompt refuse to run unless `confirmed=true`. The instructions tell the admiral to ask you in one line first, for example "Answer y to web-nav (run `make test`)?", and to set the flag only after an explicit yes. `fleet_answer` also takes `expect`, the question you confirmed: if the prompt on screen has changed, the call is refused.
+`fleet_answer`, `fleet_close`, `fleet_squad_close`, `fleet_access_decide`, `fleet_team` `close`, and any `fleet_send` to an agent already sitting on a prompt refuse to run unless `confirmed=true`. The instructions tell the admiral to ask you in one line first, for example "Answer y to web-nav (run `make test`)?", and to set the flag only after an explicit yes. `fleet_answer` also takes `expect`, the question you confirmed: if the prompt on screen has changed, the call is refused.
 
 Beyond `expect`, this is enforced in code only to the extent that the flag has to be set. The model sets it, so the real safeguard is the instruction plus your reply. Ordinary prompts through `fleet_send` need no confirmation. The instructions also tell the admiral to ask before telling any agent to merge, push to a shared branch or apply infrastructure.
 

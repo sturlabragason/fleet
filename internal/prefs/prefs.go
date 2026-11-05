@@ -93,6 +93,7 @@ type Prefs struct {
 	agentMail  string
 	summary    Summary
 	memory     Memory
+	squad      Squad
 }
 
 // AdmiralProfile is [admiral] profile: the admiral's tool profile when no
@@ -119,7 +120,7 @@ func Load() (*Prefs, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	p := &Prefs{Path: path, defaults: Neutral(), profiles: map[string]map[string]conf.Value{}, maxWorking: DefaultMaxWorking, summary: DefaultSummary(), memory: DefaultMemory()}
+	p := &Prefs{Path: path, defaults: Neutral(), profiles: map[string]map[string]conf.Value{}, maxWorking: DefaultMaxWorking, summary: DefaultSummary(), memory: DefaultMemory(), squad: DefaultSquad()}
 	if sec, ok := d["defaults"]; ok {
 		p.defaults = applySpawn(p.defaults, sec)
 		if v := conf.Str(sec, "max_working"); v != "" {
@@ -138,6 +139,11 @@ func Load() (*Prefs, error) {
 	}
 	if sec, ok := d["memory"]; ok {
 		if p.memory, err = applyMemory(p.memory, sec, path); err != nil {
+			return nil, err
+		}
+	}
+	if sec, ok := d["squad"]; ok {
+		if p.squad, err = applySquad(p.squad, sec, path); err != nil {
 			return nil, err
 		}
 	}

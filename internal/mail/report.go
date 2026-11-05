@@ -93,7 +93,21 @@ func CleanReport(s string) string {
 // no grant. The message text is "<state>: <full report>" (CleanReport); the
 // one-line headline is FoldSummary of it.
 func (s *Store) Report(from, st, summary string) (Msg, error) {
+	return s.ReportTo(from, Admiral, st, summary)
+}
+
+// ReportTo is Report into a mailbox of fleet's choosing: the admiral's, or
+// a leader's when the reporter is in its squad (ADR-53). The message is a
+// report either way, so the badge, fleet_reports and the board treat it the
+// same wherever it lands.
+func (s *Store) ReportTo(from, to, st, summary string) (Msg, error) {
 	if err := checkName(from); err != nil {
+		return Msg{}, err
+	}
+	if to == "" {
+		to = Admiral
+	}
+	if err := checkBox(to); err != nil {
 		return Msg{}, err
 	}
 	if !ValidState(st) {
@@ -106,13 +120,13 @@ func (s *Store) Report(from, st, summary string) (Msg, error) {
 	var m Msg
 	err := s.update(func(x *state) error {
 		id := x.nextID()
-		m = Msg{ID: id, From: from, To: Admiral, Kind: KindReport, Text: st + ": " + summary, T: time.Now()}
-		return x.deliver(Admiral, id, from, Admiral, KindReport, m.Text)
+		m = Msg{ID: id, From: from, To: to, Kind: KindReport, Text: st + ": " + summary, T: time.Now()}
+		return x.deliver(to, id, from, to, KindReport, m.Text)
 	})
 	if err != nil {
 		return Msg{}, err
 	}
-	logx.For("mail").Info("report", "from", from, "state", st)
+	logx.For("mail").Info("report", "from", from, "to", to, "state", st)
 	return m, nil
 }
 

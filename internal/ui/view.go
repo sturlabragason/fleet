@@ -269,6 +269,9 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 	if a.Name == m.target {
 		tgt, tw2 = tgt+targetStyle.Render(" "+targetMark), tw2+2
 	}
+	if a.Leader {
+		tgt, tw2 = tgt+leadStyle.Render(" "+leadMark), tw2+2
+	}
 	inner := w - 4
 	st1 := cursorStyle(lipgloss.NewStyle().Foreground(col).Bold(true), a.Name == m.sel)
 	if a.Name == m.sel {
@@ -326,6 +329,9 @@ func (m *Model) chips(rest []*board.Agent, all bool) string {
 		if a.Name == m.target {
 			c += targetStyle.Render(" " + targetMark)
 		}
+		if a.Leader {
+			c += leadStyle.Render(" " + leadMark)
+		}
 		if ti, ok := m.teams[a.Name]; ok && ti.Team != "" {
 			c += " " + lipgloss.NewStyle().Foreground(lipgloss.Color(ti.Color)).Render(teamMark)
 		}
@@ -381,6 +387,14 @@ const targetMark = "▶"
 // pinMark follows the name of a pinned agent (DESIGN.md §5e), before ▶ and
 // the team mark; one cell wide.
 const pinMark = "⚑"
+
+// leadMark follows the name of a squad leader (ADR-53), after ⚑ and ▶ and
+// before the team ◆; one cell wide. Its members need no mark of their own:
+// a squad is a team, so they already carry ◆ in the squad colour.
+const leadMark = "▲"
+
+// leadStyle draws leadMark: Overlay1, like ⚑, so no new colour role.
+var leadStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Overlay1))
 
 // pinStyle draws pinMark: Overlay1, never the select colour.
 var pinStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Overlay1))

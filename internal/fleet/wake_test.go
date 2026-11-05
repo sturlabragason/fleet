@@ -328,11 +328,11 @@ func TestWakeGivesUpAfterMaxTries(t *testing.T) {
 func TestWakeOneTyperAtATime(t *testing.T) {
 	f, pasted := mailFleet(t)
 	a := fakeAdm(f, pasted, ptr(true))
-	release, ok := f.lockWake()
+	release, ok := f.lockWake(mail.Supervisor)
 	if !ok {
 		t.Fatal("lock not taken")
 	}
-	if _, held := f.lockWake(); held {
+	if _, held := f.lockWake(mail.Supervisor); held {
 		release()
 		t.Fatal("lock taken twice")
 	}
@@ -378,12 +378,12 @@ func TestParseWakeFormats(t *testing.T) {
 func TestWakeTriesPersistAcrossProcesses(t *testing.T) {
 	f, _ := mailFleet(t)
 	es := []wakeEntry{{id: "001", from: "a", state: "done", tries: 2, line: "x"}}
-	f.writeTries(es)
-	if got := f.readTries()["001"]; got != 2 {
+	f.writeTries(mail.Supervisor, es)
+	if got := f.readTries(mail.Supervisor)["001"]; got != 2 {
 		t.Fatalf("tries = %d, want 2", got)
 	}
-	f.writeTries(nil)
-	if _, err := os.Stat(f.triesPath()); !os.IsNotExist(err) {
+	f.writeTries(mail.Supervisor, nil)
+	if _, err := os.Stat(f.triesPath(mail.Supervisor)); !os.IsNotExist(err) {
 		t.Fatalf("counter file outlived the queue: %v", err)
 	}
 }

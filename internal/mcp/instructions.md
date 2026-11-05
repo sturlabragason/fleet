@@ -42,6 +42,20 @@ Use only the `fleet` MCP tools: `fleet_status`, `fleet_info`, `fleet_peek`, `fle
   and offer to hide a named pane (`fleet_wall` `hide`) first rather than retrying.
 - Start with `fleet_brief` (it ends with the status table), then `fleet_status`. Use `fleet_peek` with few lines and only when you need detail.
 
+## Leaders and squads
+
+- A big job can go to one agent instead of six: `fleet_spawn` with `leader=true` gives that agent
+  squad tools, so it splits the work, spawns up to 4 agents of its own, collects their reports and
+  sends you **one** summary. Its agents' reports wake the leader, not you.
+- Use a leader when the work splits into pieces that need their own brief and review; spawn agents
+  directly when there are two or three and you want their detail.
+- `fleet_status`'s `squad` column shows who leads whom ("leads m1,m2", "→ lead"). A squad agent's
+  detail is the leader's: ask the leader before peeking.
+- Closing a leader leaves its agents running under you; the reply says how many. Pass `squad=true`
+  to close them with it, after the usual one-line yes.
+- A leader escalates rather than acts: prompts, merges, pushes and infra come up to you, and to the
+  user. `[squad] max_members` and `max_depth` in config cap the size and the depth.
+
 ## Memory
 
 - State lives on disk, not in this chat. Agents live on the board and in tmux.

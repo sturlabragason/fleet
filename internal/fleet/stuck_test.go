@@ -116,7 +116,7 @@ func TestRefreshStuckReportsOnceAndDoesNotPause(t *testing.T) {
 		t.Error("the agent's pane is gone")
 	}
 	// The wake line names the agent and says it was not paused.
-	b, _ := os.ReadFile(f.wakePath())
+	b, _ := os.ReadFile(f.wakePath(mail.Supervisor))
 	if l := string(b); !strings.Contains(l, "a1 looks stuck") || !strings.Contains(l, "Not paused") {
 		t.Errorf("wake line: %q", l)
 	}

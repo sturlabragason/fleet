@@ -153,6 +153,9 @@ type SpawnOpts struct {
 	// Card is the task card: goal, done-check and result file (ADR-43).
 	// nil = no card, and the spawn behaves as it did before cards.
 	Card *board.Card
+	// Role is the agent's place in the hierarchy (ADR-53): a leader of its
+	// own squad, a member of one, or neither (the zero value).
+	Role Role
 }
 
 // Spawn starts an agent in its own hidden window, with the config file's
@@ -192,13 +195,19 @@ func (f *Fleet) SpawnWith(o SpawnOpts, name, profile, dir, prompt string) (*boar
 		wt = *o.Worktree
 	}
 	card := NormalizeCard(o.Card)
-	if a, err := f.enqueue(name, profile, dir, prompt, wt, card); a != nil || err != nil {
+	if err := f.checkRole(name, o.Role); err != nil {
+		return nil, err
+	}
+	if o.Role.Leader {
+		f.MakeLeader(name)
+	}
+	if a, err := f.enqueue(name, profile, dir, prompt, wt, card, o.Role); a != nil || err != nil {
 		return a, err
 	}
 	// The busy count and the launch are not one critical section, so two
 	// concurrent spawns can both see the last free slot: the cap is
 	// best-effort and may be exceeded by one per racing spawn.
-	return f.launch(name, profile, dir, prompt, false, wt, card)
+	return f.launch(name, profile, dir, prompt, false, wt, card, o.Role)
 }
 
 // agentWorktree gives the agent its own worktree and branch for a spawn into
@@ -227,12 +236,12 @@ func (f *Fleet) agentWorktree(name, dir string) *board.Worktree {
 // for the agent's own git worktree; the playbook and the baseline are then
 // read from that worktree, not from the spawn dir. card is the task card
 // (ADR-43): it goes on the board and its block is appended to the prompt.
-func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, card *board.Card) (*board.Agent, error) {
+func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, card *board.Card, role Role) (*board.Agent, error) {
 	p, ok := f.Profiles[profile]
 	if !ok {
 		return nil, fmt.Errorf("unknown profile %q (have %v)", profile, tools.Names(f.Profiles))
 	}
-	ex := startExtra{NoWorktree: !wantWT, Card: card}
+	ex := startExtra{NoWorktree: !wantWT, Card: card, Role: role}
 	if wantWT {
 		ex.Worktree = f.agentWorktree(name, dir)
 		if ex.Worktree != nil {
@@ -354,7 +363,8 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 	now := time.Now()
 	a := &board.Agent{Name: name, Profile: profile, Patterns: p.Patterns, Dir: dir, Goal: goal, SessionID: id,
 		PaneID: pane, Status: string(status.Unknown), Created: now, StatusSince: now, LastChange: now,
-		Baseline: ex.Base, Worktree: ex.Worktree, NoWorktree: ex.NoWorktree, Card: ex.Card}
+		Baseline: ex.Base, Worktree: ex.Worktree, NoWorktree: ex.NoWorktree, Card: ex.Card,
+		Leader: ex.Role.Leader, LeadBy: ex.Role.LeadBy}
 	if err := f.Store.Update(func(b *board.Board) error {
 		old, ok := b.Agents[name]
 		if claimed {
@@ -383,6 +393,7 @@ type startExtra struct {
 	Worktree   *board.Worktree
 	NoWorktree bool
 	Card       *board.Card
+	Role       Role
 }
 
 // afterTag, when set by a test, runs between tagging a new pane and the
@@ -494,8 +505,10 @@ func (f *Fleet) Peek(name string, n int) (string, error) {
 	return f.T.Capture(p, n)
 }
 
-// Close stops the agent and drops it from the board.
+// Close stops the agent and drops it from the board. Closing a leader
+// leaves its members running and hands them back to the admiral (ADR-53).
 func (f *Fleet) Close(name string) error {
+	f.disband(name)
 	if p := f.paneOf(name); p != "" {
 		if err := f.T.KillPane(p); err != nil {
 			return err

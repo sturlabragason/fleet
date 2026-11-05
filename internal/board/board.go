@@ -61,6 +61,12 @@ type Agent struct {
 	// Card is the task card the spawn attached (DESIGN §18 #5/#6, ADR-43).
 	// nil: the spawn had no card and the agent behaves as it always did.
 	Card *Card `json:"card,omitempty"`
+	// Leader marks an agent that runs a squad of its own: it gets the squad
+	// peer tools and its members' reports (DESIGN §6.11, ADR-53).
+	Leader bool `json:"leader,omitempty"`
+	// LeadBy is the leader this agent reports to. "" is the admiral, which
+	// is where every agent reported before ADR-53.
+	LeadBy string `json:"lead_by,omitempty"`
 }
 
 // Card is a spawn's task card: what the task is, how fleet checks it is

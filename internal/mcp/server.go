@@ -195,7 +195,7 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		return map[string]any{}, nil
 	case "tools/list":
 		if s.Agent != "" {
-			return map[string]any{"tools": agentToolDefs}, nil
+			return map[string]any{"tools": s.agentTools()}, nil
 		}
 		return map[string]any{"tools": toolDefs}, nil
 	case "tools/call":

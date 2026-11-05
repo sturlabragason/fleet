@@ -63,15 +63,17 @@ var toolDefs = []tool{
 		"goal":       str("task card: the goal in one line (shown on the tile and in fleet_info)"),
 		"check":      str("task card: done-check shell command, run in the agent's dir when it reports done, e.g. \"go build ./... && go test ./...\""),
 		"check_exit": map[string]any{"type": "integer", "description": "exit code the done-check must return to pass (default 0)"},
-		"result":     str("task card: result file the agent must write, relative to its dir (default result.md)")})},
+		"result":     str("task card: result file the agent must write, relative to its dir (default result.md)"),
+		"leader":     map[string]any{"type": "boolean", "description": "make it a leader: it gets squad tools and may spawn a squad of its own, whose reports come to it instead of you. Use for a job you want planned, split and summarised by one agent."}})},
 	{"fleet_sessions", "Find copilot/claude sessions the user started outside fleet, newest first: id | age | profile | dir | title | flags. Use before fleet_adopt.", obj(nil, map[string]any{
 		"query": str("optional words; every word must appear in title, dir, branch or id"), "limit": map[string]any{"type": "integer", "description": "max sessions (default 15)"}})},
 	{"fleet_adopt", "Resume an existing session the user started outside fleet as a fleet agent. Pass session_id (full id or unique 8+ char prefix) or query (words that match exactly one session), not both. Refuses if the session is missing or still open elsewhere.", obj(nil, map[string]any{
 		"session_id": str("session id from fleet_sessions"), "query": str("words matching exactly one session"), "profile": str("optional tool profile; default the suggested one"),
 		"dir": str("optional working directory (absolute); default from the session"), "name": str("optional agent name; default base name of dir")})},
 	{"fleet_profiles", "List tool profiles that fleet_spawn accepts.", obj(nil, map[string]any{})},
-	{"fleet_close", "Stop an agent and remove it from the board. Ask the user first; set confirmed=true only after an explicit yes. The reply notes uncommitted or unmerged work in its dir.", obj([]string{"name", "confirmed"}, map[string]any{
-		"name": str("agent name"), "confirmed": confirmedProp})},
+	{"fleet_close", "Stop an agent and remove it from the board. Ask the user first; set confirmed=true only after an explicit yes. The reply notes uncommitted or unmerged work in its dir. Closing a leader leaves its squad running and hands it back to you; squad=true closes its agents too.", obj([]string{"name", "confirmed"}, map[string]any{
+		"name": str("agent name"), "confirmed": confirmedProp,
+		"squad": map[string]any{"type": "boolean", "description": "for a leader: close its squad agents with it"}})},
 	{"fleet_park", "Free RAM without losing work: park stops an idle agent's process but keeps it on the board with its session id; wake resumes that same session in the same directory. Only an idle agent can be parked - working, waiting, prompted and pinned agents are refused. The memory guard parks the longest-idle agent by itself when free RAM runs low and reports it here.", obj([]string{"name"}, map[string]any{
 		"name": str("agent name"), "action": map[string]any{"type": "string", "enum": []string{"park", "wake"}, "description": "park (default) or wake"},
 		"force": map[string]any{"type": "boolean", "description": "wake even while free memory is still under the guard's floor"}})},
@@ -105,14 +107,17 @@ type args struct {
 	To, From, Reason, Decision, A, B, State string
 	// Label picks a menu option by its text, for menus whose options are
 	// not numbered on screen (fleet_answer).
-	Label string
-	SessionID                               string `json:"session_id"`
-	Lines, Limit, Option                    int
-	Number                                  int
-	Confirmed, All, Raw, Force              bool
-	LastMessage                             bool `json:"last_message"`
-	Team, Color                             string
-	Agents, Names, Keys                     []string
+	Label                      string
+	SessionID                  string `json:"session_id"`
+	Lines, Limit, Option       int
+	Number                     int
+	Confirmed, All, Raw, Force bool
+	// Leader makes a fleet_spawn a squad leader; Squad closes a leader's
+	// squad with it (ADR-53).
+	Leader, Squad       bool
+	LastMessage         bool `json:"last_message"`
+	Team, Color         string
+	Agents, Names, Keys []string
 	// Worktree is fleet_spawn's opt-out; nil means "whatever config says".
 	Worktree *bool
 	// Task card arguments of fleet_spawn (ADR-43).
@@ -151,7 +156,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 				return "", err
 			}
 		}
-		ag, err := s.F.SpawnWith(fleet.SpawnOpts{Worktree: a.Worktree, Card: a.card()}, a.Name, a.Profile, a.Dir, a.Prompt)
+		ag, err := s.F.SpawnWith(fleet.SpawnOpts{Worktree: a.Worktree, Card: a.card(), Role: fleet.Role{Leader: a.Leader}}, a.Name, a.Profile, a.Dir, a.Prompt)
 		if err != nil {
 			return "", err
 		}
@@ -160,9 +165,9 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 				ag.Name, ag.Profile, ag.Dir, s.F.Busy(), s.F.MaxWorking(), queueNote(ag)) + cardNote(ag), nil
 		}
 		if w := ag.Worktree; w != nil {
-			return fmt.Sprintf("spawned %s (%s) in its own worktree %s on branch %s (of %s)", ag.Name, ag.Profile, w.Path, w.Branch, w.Repo) + cardNote(ag), nil
+			return fmt.Sprintf("spawned %s (%s) in its own worktree %s on branch %s (of %s)", ag.Name, ag.Profile, w.Path, w.Branch, w.Repo) + cardNote(ag) + leaderNote(ag), nil
 		}
-		return fmt.Sprintf("spawned %s (%s) in %s%s", ag.Name, ag.Profile, ag.Dir, s.dirNote(ag.Dir)) + cardNote(ag), nil
+		return fmt.Sprintf("spawned %s (%s) in %s%s", ag.Name, ag.Profile, ag.Dir, s.dirNote(ag.Dir)) + cardNote(ag) + leaderNote(ag), nil
 	case "fleet_sessions":
 		return s.sessions(a.Query, a.Limit)
 	case "fleet_adopt":
@@ -197,13 +202,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		}
 		return fmt.Sprintf("adopted %s (%s) session %s in %s%s", ag.Name, ag.Profile, ag.SessionID, ag.Dir, s.dirNote(ag.Dir)), nil
 	case "fleet_profiles":
-		var b strings.Builder
-		for _, n := range tools.Names(s.F.Profiles) {
-			p := s.F.Profiles[n]
-			argv, _ := p.Argv(tools.Vars{Fleet: "fleet", Name: "<name>", PeerMCP: "<peer-mcp>", PeerMCPClaude: "<peer-mcp>"}, tools.Launch{})
-			fmt.Fprintf(&b, "%s: %s\n", n, strings.Join(argv, " "))
-		}
-		return b.String(), nil
+		return s.profiles(), nil
 	case "fleet_close":
 		return s.close(a)
 	case "fleet_park":
@@ -300,6 +299,17 @@ func queueNote(ag *board.Agent) string {
 	return " (" + ag.LastLine + ")"
 }
 
+// profiles lists the tool profiles a spawn accepts, one line each.
+func (s *Server) profiles() string {
+	var b strings.Builder
+	for _, n := range tools.Names(s.F.Profiles) {
+		p := s.F.Profiles[n]
+		argv, _ := p.Argv(tools.Vars{Fleet: "fleet", Name: "<name>", PeerMCP: "<peer-mcp>", PeerMCPClaude: "<peer-mcp>"}, tools.Launch{})
+		fmt.Fprintf(&b, "%s: %s\n", n, strings.Join(argv, " "))
+	}
+	return b.String()
+}
+
 func (s *Server) status() (string, error) {
 	as, err := s.F.Refresh()
 	if err != nil {
@@ -311,7 +321,7 @@ func (s *Server) status() (string, error) {
 	on := s.W.OnWall()
 	var b strings.Builder
 	teams := s.F.Teams.ByAgent()
-	b.WriteString("name | team | profile | status | subagents | wall | age | spend | waiting_for | report\n")
+	b.WriteString("name | team | squad | profile | status | subagents | wall | age | spend | waiting_for | report\n")
 	var total spend.Spend
 	for _, a := range as {
 		wf := ""
@@ -331,7 +341,7 @@ func (s *Server) status() (string, error) {
 			sp = x.Short()
 			total.Add(x)
 		}
-		fmt.Fprintf(&b, "%s | %s | %s | %s | %s | %s | %s | %s | %s | %s\n", a.Name, teams[a.Name].Team, a.Profile, a.Status, sub, w, time.Since(a.StatusSince).Round(time.Second), sp, wf, reportCell(a))
+		fmt.Fprintf(&b, "%s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s\n", a.Name, teams[a.Name].Team, squadCell(s.F, a), a.Profile, a.Status, sub, w, time.Since(a.StatusSince).Round(time.Second), sp, wf, reportCell(a))
 	}
 	if total.Any() {
 		fmt.Fprintf(&b, "fleet spend so far: %s over %d model calls (%s); %s\n",

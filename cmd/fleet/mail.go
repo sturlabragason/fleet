@@ -156,16 +156,36 @@ func writeReports(w io.Writer, f *fleet.Fleet, as string, all bool, limit int) e
 	if err != nil {
 		return err
 	}
+	// A leader's squad reports land in its own mailbox, so that is the box
+	// it reads; everyone else reads the admiral's (ADR-53).
+	box := mail.Admiral
+	if me != "" && f.IsLeader(me) {
+		box = me
+	}
 	var ms []mail.Msg
 	if all || me == "" {
-		if ms, err = f.Mail().Inbox(mail.Admiral, all, limit); err != nil {
+		if ms, err = f.Mail().Inbox(box, all, limit); err != nil {
 			return err
 		}
+	} else if box == me {
+		ms = reportsOnly(f.Mail().Peek(box))
 	} else {
-		ms = f.Mail().Peek(mail.Admiral)
+		ms = f.Mail().Peek(box)
 	}
 	_, err = fmt.Fprintln(w, mcp.RenderReports(ms, all))
 	return err
+}
+
+// reportsOnly keeps the report messages of a mailbox: a leader's inbox
+// holds ordinary peer mail too.
+func reportsOnly(ms []mail.Msg) []mail.Msg {
+	var out []mail.Msg
+	for _, m := range ms {
+		if m.Kind == mail.KindReport {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // cmdAccess is the user's view and decisions on agent access pairs.
