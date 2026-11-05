@@ -35,7 +35,8 @@ Session switchers make moving between agents faster, but you still do all the su
 - **Cheap summaries**: `fleet peek --summary <name>` returns about five lines (what the agent is doing, what it waits for, any error) from a small model instead of a screenful of text.
 - **Teams**: group agents (`fleet team create frontend teal`), then send to, show or close a whole team at once. Members are marked with a coloured `◆`.
 - **Agent mail**: agents message each other with `fleet mail` or peer MCP tools. Free inside a team or a repo, otherwise one agent asks and you decide.
-- **CLI** for scripting: `spawn`, `adopt`, `sessions`, `ls`, `send`, `peek`, `close`, `team`, `mail`, `access`, `report`, `admiral`, `note`, `playbook`, `touching`, `profiles`, `keys`, `changes`, `snap`, `wall`.
+- **CLI** for scripting: `spawn`, `adopt`, `sessions`, `ls`, `send`, `peek`, `close`, `team`, `mail`, `access`, `report`, `spend`, `admiral`, `note`, `playbook`, `touching`, `profiles`, `keys`, `changes`, `snap`, `wall`.
+- **Spend**: `fleet spend` shows what each agent has cost so far and the fleet total — AI credits for Copilot agents, tokens for Claude — read from the agents' own session files, never from a model.
 - **Fake agents** that cycle through states, so you can try everything without spending tokens.
 
 Planned, not built yet: park/wake to save RAM, tool hooks instead of screen scraping, a spawn wizard, approve/reject keys in the TUI, notifications. See [Roadmap](#roadmap).
@@ -173,7 +174,7 @@ Agents start through `bash -lc`, so shell aliases don't apply; make a profile in
 
 | Tool | What it does |
 |---|---|
-| `fleet_status` | All agents: status, wall, age, what it waits for |
+| `fleet_status` | All agents: status, wall, age, spend so far, what it waits for; ends with the fleet total |
 | `fleet_peek` | Last N lines (default 20, max 80) of one agent's screen |
 | `fleet_send` | Send a prompt to an agent |
 | `fleet_answer` | Answer a y/n prompt. Needs `confirmed=true` |
@@ -191,7 +192,7 @@ Agents start through `bash -lc`, so shell aliases don't apply; make a profile in
 | `fleet_access` | Who may message whom |
 | `fleet_access_decide` | Grant, deny or revoke that. Needs `confirmed=true` |
 | `fleet_admiral_profile` | Show or swap the admiral's own tool profile |
-| `fleet_info` | Version, uptime, context fill |
+| `fleet_info` | One agent's facts: status, git state, session, context fill, spend so far |
 
 The admiral must ask you before it answers a prompt, closes an agent or changes who may message whom. See [docs/admiral.md](docs/admiral.md).
 

@@ -40,6 +40,9 @@ const usage = `usage:
   fleet sessions [--all] [--json] [-n 20] [words...]
                                             list copilot/claude sessions to adopt, newest first
   fleet ls [--json]
+  fleet spend [--json]                      what each agent has cost so far and the fleet total, read from
+                                            the agents' own session files (AI credits for copilot, tokens
+                                            for claude); no model is called
   fleet send <name> "text"
   fleet peek <name> [--raw] [-n 200]
   fleet peek --summary <name>               about 5 lines from a cheap model: what it is doing, what it
@@ -139,6 +142,8 @@ func run(args []string) error {
 		return cmdSessions(f, rest)
 	case "ls":
 		return cmdLs(f, rest)
+	case "spend":
+		return cmdSpend(f, rest)
 	case "send":
 		if len(rest) < 2 {
 			return fmt.Errorf("usage: fleet send <name> \"text\"")
