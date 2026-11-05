@@ -17,8 +17,9 @@ import (
 	"github.com/sturlabragason/fleet/internal/theme"
 )
 
-// View renders the header, a card per agent wrapped to the pane, and, only
-// when the cards don't all fit, one line of chips for the agents left out.
+// View renders the header and a card per agent wrapped to the pane. When the
+// cards don't all fit it switches to tiers (tiers.go); a pane too short for
+// a card row gets one line of chips instead.
 func (m *Model) View() (out string) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -36,18 +37,20 @@ func (m *Model) View() (out string) {
 		b.WriteString(m.helpOverlay())
 		return zone.Scan(b.String())
 	}
+	if tv, ok := m.tiers(); ok { // past one screen of cards (ADR-32)
+		b.WriteString(strings.Join(m.tierLines(tv), "\n"))
+		return zone.Scan(b.String())
+	}
 	g := m.grid()
-	first, last := m.window(g)
 	var lines []string
-	for i := first; i < last; i += g.Cols {
+	for i := 0; i < g.Cards; i += g.Cols {
 		var row []string
-		for j := i; j < min(i+g.Cols, last); j++ {
+		for j := i; j < min(i+g.Cols, g.Cards); j++ {
 			row = append(row, m.tile(m.agents[j], g.TileW))
 		}
 		lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Top, row...))
 	}
-	hidden := append(append([]*board.Agent{}, m.agents[:first]...), m.agents[last:]...)
-	if c := m.chips(hidden, first == last); c != "" {
+	if c := m.chips(m.agents[g.Cards:], g.Cards == 0); c != "" {
 		lines = append(lines, c)
 	}
 	// no trailing newline: a full pane would push the header off the top
@@ -148,18 +151,6 @@ func line3(a *board.Agent, w int) string {
 // grid is the card layout for the current pane and agent count.
 func (m *Model) grid() layout.TileGrid {
 	return m.cfg.Tiles(m.w, m.h-1, len(m.agents))
-}
-
-// window is the range of agents drawn as cards. On overflow it scrolls so
-// the selected agent keeps its card, and keeps the window full at the end.
-func (m *Model) window(g layout.TileGrid) (first, last int) {
-	if g.Cards == 0 {
-		return 0, 0
-	}
-	if i := m.index(); i >= g.Cards {
-		first = min((i/g.Cols-g.Rows+1)*g.Cols, len(m.agents)-g.Cards)
-	}
-	return first, min(first+g.Cards, len(m.agents))
 }
 
 func (m *Model) tile(a *board.Agent, tw int) string {

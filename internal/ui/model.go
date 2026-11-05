@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"sort"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -23,7 +22,11 @@ import (
 // Model is the overview state.
 type Model struct {
 	be        Backend
-	agents    []*board.Agent // attention-sorted
+	agents    []*board.Agent // display order: by tier, stable within a tier (tiers.go)
+	tierOf    map[string]int // agent -> tier at the last arrange
+	touched   time.Time      // last key, mouse event, wheel or fold toggle; the order holds still for freezeFor
+	rowOff    int            // first row line shown in tier mode
+	unfold    bool           // idle agents shown instead of behind the fold chip
 	queuePos  map[string]int // queued agent -> 1-based start position
 	onWall    map[string]bool
 	pinned    map[string]bool
@@ -129,15 +132,16 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
+		m.reveal()
 	case agentsMsg:
 		if msg.err != nil {
 			m.msg = msg.err.Error()
 		}
-		m.setAgents(msg.agents)
 		m.onWall = msg.onWall
 		m.pinned = msg.pinned
 		m.teams = msg.teams
 		m.target = msg.target
+		m.setAgents(msg.agents) // tiers need the wall and teams
 		return m, tea.Batch(pollLater(), m.syncSupCtx(msg.supCtx))
 	case pollMsg:
 		return m, m.poll()
@@ -157,10 +161,13 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 				m.sel = msg.sel
 			}
 			m.saveCursor()
+			m.reveal()
 		}
 	case tea.KeyMsg:
+		m.touch()
 		return m, m.key(msg.String())
 	case tea.MouseMsg:
+		m.touch() // the pointer is over the overview: hold the order still
 		if m.help && msg.Action == tea.MouseActionPress {
 			switch msg.Button {
 			case tea.MouseButtonWheelUp:
@@ -169,6 +176,16 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 				m.scrollHelp(1)
 			}
 			return m, nil
+		}
+		if tv, ok := m.tiers(); ok && msg.Action == tea.MouseActionPress && msg.Y > tv.g.Top {
+			switch msg.Button { // over the row area (below the header and cards)
+			case tea.MouseButtonWheelUp:
+				m.scrollRows(tv, -1)
+				return m, nil
+			case tea.MouseButtonWheelDown:
+				m.scrollRows(tv, 1)
+				return m, nil
+			}
 		}
 		// The menu opens on the right button's release: opened on the press,
 		// the release that follows would land outside its items and close it.
@@ -191,6 +208,10 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 		if !m.help && msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
+			if zone.Get("fold").InBounds(msg) {
+				m.toggleFold()
+				return m, nil
+			}
 			for _, a := range m.agents {
 				if zone.Get("tile-" + a.Name).InBounds(msg) {
 					m.sel = a.Name
@@ -204,23 +225,18 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 }
 
 func (m *Model) setAgents(as []*board.Agent) {
-	sort.SliceStable(as, func(i, j int) bool {
-		ri, rj := rank(as[i].Status), rank(as[j].Status)
-		if ri != rj {
-			return ri < rj
-		}
-		if as[i].Status == "waiting" && !as[i].StatusSince.Equal(as[j].StatusSince) {
-			return as[i].StatusSince.Before(as[j].StatusSince) // longest wait first
-		}
-		return as[i].Name < as[j].Name
-	})
+	first := len(m.agents) == 0
+	as = m.arrange(as)
 	m.agents = as
 	m.queuePos = map[string]int{}
 	for i, a := range fleet.QueueOrder(as) {
 		m.queuePos[a.Name] = i + 1
 	}
-	if m.index() < 0 && len(as) > 0 {
+	if m.index() < 0 && len(as) > 0 && (m.sel != foldSel || !m.hasFold()) {
 		m.sel = as[0].Name
+	}
+	if first { // the cursor restored from ui.json starts in view
+		m.reveal()
 	}
 }
 
@@ -268,6 +284,18 @@ func (m *Model) key(k string) tea.Cmd {
 		}
 		return nil
 	}
+	if tv, ok := m.tiers(); ok {
+		switch k {
+		case "left", "h", "right", "l", "up", "k", "down", "j":
+			m.tierMove(tv, k)
+			return nil
+		case "enter":
+			if ri := m.cellOf(tv); m.sel == foldSel || (ri >= 0 && ri < len(tv.cells) && tv.cells[ri] == foldSel) {
+				m.toggleFold()
+				return nil
+			}
+		}
+	}
 	switch k {
 	case "q", "ctrl+c":
 		return tea.Quit
@@ -309,6 +337,7 @@ func (m *Model) key(k string) tea.Cmd {
 		}
 		m.sel = waiting[j]
 		m.saveCursor()
+		m.reveal()
 	case "enter":
 		return m.show()
 	case "a", "+":
@@ -371,7 +400,7 @@ func (m *Model) key(k string) tea.Cmd {
 			return nil
 		}
 	case "x":
-		name, be := m.sel, m.be
+		name, be := m.selName(), m.be
 		if name == "" || !m.onWall[name] {
 			m.msg = "x: " + name + " is not on the wall"
 			return nil
@@ -407,7 +436,7 @@ func (m *Model) wallReady() bool {
 // show puts the selected agent into the ▶ slot, or onto the wall when there
 // is no target (the wall decides, DESIGN.md §5e).
 func (m *Model) show() tea.Cmd {
-	name, be := m.sel, m.be
+	name, be := m.selName(), m.be
 	if name == "" || !m.wallReady() {
 		return nil
 	}
@@ -441,7 +470,7 @@ func shownMsg(be Backend, name, before string, wasOn bool) wallMsg {
 
 // add puts the selected agent onto the wall as a new pane.
 func (m *Model) add() tea.Cmd {
-	name, be := m.sel, m.be
+	name, be := m.selName(), m.be
 	if name == "" || !m.wallReady() {
 		return nil
 	}
@@ -501,7 +530,7 @@ func (m *Model) undo() tea.Cmd {
 
 // pin toggles the pin on the selected agent's pane (p).
 func (m *Model) pin() tea.Cmd {
-	name, be := m.sel, m.be
+	name, be := m.selName(), m.be
 	if name == "" || !m.wallReady() {
 		return nil
 	}
@@ -520,7 +549,7 @@ func (m *Model) pin() tea.Cmd {
 
 // preview opens the live preview popup for the selected agent (Space).
 func (m *Model) preview() tea.Cmd {
-	name, be := m.sel, m.be
+	name, be := m.selName(), m.be
 	if name == "" || !m.wallReady() {
 		return nil
 	}

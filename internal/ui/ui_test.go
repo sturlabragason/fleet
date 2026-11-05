@@ -134,20 +134,22 @@ func TestOrderAndKeys(t *testing.T) {
 	_ = out
 }
 
-func TestViewTilesThenChips(t *testing.T) {
+// Too many cards for a 60x9 pane: the agents that need you get cards, the
+// rest rows, and what doesn't fit is counted.
+func TestViewTilesThenRows(t *testing.T) {
 	zone.NewGlobal()
 	m := New(&fakeBE{}, "")
-	m.Update(tea.WindowSizeMsg{Width: 60, Height: 9}) // 2 cols x 1 row of tiles
+	m.Update(tea.WindowSizeMsg{Width: 60, Height: 9}) // 2 cards, 2 row lines
 	as, _ := (&fakeBE{}).Refresh()
 	m.setAgents(as)
-	v := m.View()
-	for _, want := range []string{"delta", "bravo", "charlie", "alpha", "echo", "5 agents"} {
+	v := ansi.Strip(m.View())
+	for _, want := range []string{"delta", "bravo", "✖ charlie", "↓ 2 more", "5 agents"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("view missing %q:\n%s", want, v)
 		}
 	}
 	if strings.Count(v, "╭")+strings.Count(v, "┏") != 2 {
-		t.Errorf("want 2 tiles then chips:\n%s", v)
+		t.Errorf("want 2 tiles then rows:\n%s", v)
 	}
 }
 

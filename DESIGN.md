@@ -558,7 +558,7 @@ Reviewing the agents' commits and diffs (use git or the agent's pane), release t
 
 ## 5e. Clicking around: a target slot on the wall (ADR-31)
 
-Status: the target slot, `a`, `Tab`/`Alt-n`, `Esc`, the right-click menu, `Space` preview, `u` undo and `p` pin are built. The overview tiers are planned (below).
+Status: the target slot, `a`, `Tab`/`Alt-n`, `Esc`, the right-click menu, `Space` preview, `u` undo, `p` pin and the overview tiers are built.
 
 The problem and the options weighed are in `docs/ux-interaction.md`. In short: "click a pane, then click a card" replaced the pane only on a full wall, nothing showed which pane a card would replace, clicking a pane resized it, and cards moved under the mouse.
 
@@ -591,7 +591,8 @@ Every key above is in the key registry (`internal/keys`), so it shows in `?`, `A
 
 - The strip height stays fixed (§5a; wall geometry is worth more than overview rows).
 - Agents that need you or are on the wall (waiting, error, stuck, on the wall) get **full cards**. Everyone else gets a **one-line row** (glyph, name, team mark, status age) in columns of at least 30 cells. A click on a row does the same as on a card.
-- If the rows still overflow, idle and done agents fold into one clickable `N idle ▸` chip that unfolds them in place, and the wheel scrolls the row area. Nothing is ever unreachable.
+- In tier mode there is at most one row of cards, in order waiting (longest first), error, stuck, on the wall; the rest of the strip is a row area of one-line rows (glyph, name, `⚑ ▶ ◆` marks, age) in columns of at least 30 cells. Urgent agents that don't fit as cards become the first rows. Arrow keys move one cell or one line; the selected row is drawn reversed.
+- If the rows still overflow, idle and gone agents fold into one clickable `+N idle` chip that unfolds them in place (`− fold idle` folds again), and the wheel scrolls the row area, with `↑ N more` / `↓ N more` on the edge lines. Nothing is ever unreachable.
 - **Stable order:** within a tier, agents keep their position. Re-sorting waits while the mouse was over the overview or a key was pressed in the last 3 seconds, so nothing moves under the pointer. Within a tier, team members sit together.
 - With every agent fitting as a full card (the common case), the overview looks as before.
 
@@ -1136,7 +1137,7 @@ Why: clicking around moved panes the user had not touched. The user's model is "
 Rejected: pick a card, then click a pane (arms a mode that eats a click meant for the agent, and is the reverse order); only showing today's rules (with room on the wall a card still appends); Shift+click to add (terminals keep it for selection, it never reaches tmux); drag and drop (tmux delivers the release to the starting pane).
 
 **ADR-32: the overview keeps its height and gives full cards only to agents that need you** (R4, R9)
-Decision: full cards for waiting, failing and on-wall agents; one-line rows for the rest; idle and done fold into a chip when even rows overflow; order is stable within a tier and frozen while the user interacts.
+Decision: full cards for waiting, failing and on-wall agents; one-line rows for the rest; idle and gone agents fold into a chip when even rows overflow; order is stable within a tier and frozen while the user interacts.
 Why: past about 14 agents the second card row filled and the rest became an unclickable `+k`. Growing the strip resizes every wall pane and repaints every agent TUI; scrolling hides exactly what you want to click.
 Rejected: one-line rows for everyone (loses the context meter and subagents on the agents that need you); growing the strip; grouping by team as the main fix (only helps when teams are used).
 

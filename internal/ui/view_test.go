@@ -26,6 +26,7 @@ func overview(w, h, n int) (*Model, string) {
 	}
 	m.setAgents(as)
 	m.sel = as[n-1].Name
+	m.reveal()
 	return m, ansi.Strip(m.View())
 }
 
@@ -50,6 +51,18 @@ func TestOverviewFitsEveryPane(t *testing.T) {
 				}
 			}
 			g := m.grid()
+			if tv, ok := m.tiers(); ok { // past one screen of cards: rows (ADR-32)
+				if got := cards(v); got != tv.g.Cards {
+					t.Errorf("%dx%d n=%d: %d cards, tiers say %d:\n%s", w, h, n, got, tv.g.Cards, v)
+				}
+				if !strings.Contains(v, "⠋ "+m.sel) || strings.Contains(v, "hidden") {
+					t.Errorf("%dx%d n=%d: selected %s not shown as a row, or a chips line:\n%s", w, h, n, m.sel, v)
+				}
+				if strings.Count(v, "agent-") < n && !strings.Contains(v, "more") {
+					t.Errorf("%dx%d n=%d: agents missing without a hint:\n%s", w, h, n, v)
+				}
+				continue
+			}
 			if got := cards(v); got != g.Cards {
 				t.Errorf("%dx%d n=%d: %d cards, grid says %d:\n%s", w, h, n, got, g.Cards, v)
 			}
@@ -86,21 +99,6 @@ func TestOverviewNineAgentsAllCards(t *testing.T) {
 		if !strings.Contains(v, want) {
 			t.Errorf("missing %q:\n%s", want, v)
 		}
-	}
-}
-
-func TestOverviewScrollsToSelection(t *testing.T) {
-	zone.NewGlobal()
-	m, v := overview(80, 13, 20) // 3 cards across, one row, the rest overflow
-	if !strings.Contains(v, "┃ ⠋ agent-19") || !strings.Contains(v, "agent-17") || cards(v) != 3 {
-		t.Errorf("the window should end on the selected agent and stay full:\n%s", v)
-	}
-	if !strings.Contains(v, "+17 hidden:") || !strings.Contains(v, "agent-00") {
-		t.Errorf("overflow line:\n%s", v)
-	}
-	m.sel = "agent-00"
-	if v := ansi.Strip(m.View()); !strings.Contains(v, "┃ ⠋ agent-00") {
-		t.Errorf("selecting the first agent scrolls back:\n%s", v)
 	}
 }
 
