@@ -172,3 +172,41 @@ func TestLastMessage(t *testing.T) {
 		t.Error("missing file: want error")
 	}
 }
+
+func TestInputBox(t *testing.T) {
+	sets := Load(t.TempDir())
+	cp := sets["copilot"]
+	for name, want := range map[string]string{"idle.txt": "", "idle-autopilot.txt": "", "waiting-pasted.txt": "[Paste #1 - 13 lines]"} {
+		if got, ok := cp.InputBox(screen(t, name)); !ok || got != want {
+			t.Errorf("%s: got %q %v, want %q", name, got, ok, want)
+		}
+	}
+	// Half-typed text wrapped over two box lines.
+	typed := strings.Replace(screen(t, "idle.txt"), "\n┃\n", "\n┃ can we review active fleet\n┃ session please ? wha\n", 1)
+	if got, ok := cp.InputBox(typed); !ok || got != "can we review active fleet session please ? wha" {
+		t.Errorf("typed: got %q %v", got, ok)
+	}
+	if _, ok := cp.InputBox(screen(t, "working.txt")); !ok {
+		t.Error("working screen: box not found")
+	}
+	// Copilot's other layout: ❯ between rules, wrapped onto an indented row.
+	rule := strings.Repeat("─", 40)
+	alt := " ~/x [⎇ main]\n" + rule + "\n❯ [fleet] report from a: blocked: need a decision on the\n  queue format. Full text: call fleet_reports.\n" + rule + "\n Interactive · Manual Approval · @ files · # issues · space hold to record\n"
+	if got, ok := cp.InputBox(alt); !ok || got != "[fleet] report from a: blocked: need a decision on the queue format. Full text: call fleet_reports." {
+		t.Errorf("❯ layout: got %q %v", got, ok)
+	}
+	if got, ok := cp.InputBox(strings.Replace(alt, "❯ [fleet] report from a: blocked: need a decision on the\n  queue format. Full text: call fleet_reports.", "❯", 1)); !ok || got != "" {
+		t.Errorf("❯ layout empty: got %q %v", got, ok)
+	}
+	cl := sets["claude"]
+	claude := "> earlier question\n\n● answer\n\n────────\n> on the agent sum\n  mary it needs\n────────\n  ? for shortcuts\n"
+	if got, ok := cl.InputBox(claude); !ok || got != "on the agent sum mary it needs" {
+		t.Errorf("claude: got %q %v", got, ok)
+	}
+	if got, ok := cl.InputBox(strings.Replace(claude, "> on the agent sum\n  mary it needs", ">", 1)); !ok || got != "" {
+		t.Errorf("claude empty: got %q %v", got, ok)
+	}
+	if _, ok := sets["vibe"].InputBox("> hi\n"); ok {
+		t.Error("a set without an input pattern must not claim a box")
+	}
+}

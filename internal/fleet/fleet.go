@@ -50,9 +50,14 @@ type Fleet struct {
 	// Paste types a mail nudge into a pane and presses Enter; nil = tmux
 	// paste (tests replace it).
 	Paste func(pane, text string) error
-	// SupPane finds the admiral pane and whether it looks idle; nil =
+	// SupPane reads the admiral pane: idle or not and its input box; nil =
 	// tmux and the admiral profile's patterns (tests replace it).
-	SupPane func() (pane string, idle bool)
+	SupPane func() AdmiralView
+	// TypeText pastes text into a pane without Enter and PressKeys sends tmux
+	// key names; nil = tmux (tests replace them). Report wakes use them so
+	// Enter is pressed only after the input box is checked (ADR-36).
+	TypeText  func(pane, text string) error
+	PressKeys func(pane string, keys ...string) error
 	// CloseLater schedules closing an agent after its report returns; nil =
 	// tmux run-shell (tests replace it).
 	CloseLater func(name string) error

@@ -47,12 +47,11 @@ func deadFleet(t *testing.T, script, cfg, dir string) (*Fleet, *deadRec) {
 	}
 	r := &deadRec{}
 	f.DrainQueue = true
-	f.SupPane = func() (string, bool) { return "%sup", true }
-	f.Paste = func(pane, text string) error {
+	adm := fakeAdm(f, nil, ptr(true))
+	adm.onSubmit = func(text string) {
 		r.mu.Lock()
 		r.pasted = append(r.pasted, text)
 		r.mu.Unlock()
-		return nil
 	}
 	f.CloseLater = func(name string) error { r.mu.Lock(); r.closed = append(r.closed, name); r.mu.Unlock(); return nil }
 	if dir == "" {

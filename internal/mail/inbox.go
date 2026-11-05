@@ -181,3 +181,17 @@ func (s *Store) ClaimNudge(agent string) (unread int, ok bool, err error) {
 	})
 	return unread, ok, err
 }
+
+// UnclaimNudge undoes ClaimNudge when the nudge could not be typed, so the
+// same unread batch may be nudged again.
+func (s *Store) UnclaimNudge(agent string) error {
+	if err := checkBox(agent); err != nil {
+		return err
+	}
+	return s.update(func(st *state) error {
+		if err := os.Remove(s.nudgePath(agent)); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	})
+}

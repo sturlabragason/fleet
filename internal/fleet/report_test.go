@@ -17,7 +17,7 @@ import (
 func TestReportWakesIdleSupervisorOncePerBatch(t *testing.T) {
 	f, pasted := mailFleet(t)
 	idle := false
-	f.SupPane = func() (string, bool) { return "%sup", idle }
+	fakeAdm(f, pasted, &idle)
 	if _, err := f.Report("a", "done", "first"); err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,6 @@ func TestReportWakesIdleSupervisorOncePerBatch(t *testing.T) {
 
 func TestReportSurvivesRefresh(t *testing.T) {
 	f, _ := mailFleet(t)
-	f.SupPane = func() (string, bool) { return "", false }
 	if _, err := f.Report("a", "done", "shipped\nit"); err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +116,7 @@ func TestCloseBlocker(t *testing.T) {
 
 func TestAutoCloseDone(t *testing.T) {
 	f, pasted := mailFleet(t)
-	f.SupPane = func() (string, bool) { return "%sup", true }
+	fakeAdm(f, pasted, ptr(true))
 	var closed []string
 	f.CloseLater = func(n string) error { closed = append(closed, n); return nil }
 	clean, dirty := repo(t), repo(t)
@@ -160,8 +159,8 @@ func TestAutoCloseDone(t *testing.T) {
 // with the admiral profile's patterns.
 func TestSupPaneIdleByPatterns(t *testing.T) {
 	f, _ := mailFleet(t)
-	if p, _ := f.supPane(); p != "" {
-		t.Fatalf("no main window, got pane %q", p)
+	if v := f.supPane(); v.Pane != "" {
+		t.Fatalf("no main window, got pane %q", v.Pane)
 	}
 	supervisor.Save(f.Home, supervisor.Session{Profile: "cat"}) // patterns "fake"
 	pane, err := f.T.Spawn(Session, "main", f.Home, nil, "sh -c 'printf \"> \"; cat'")
@@ -172,10 +171,10 @@ func TestSupPaneIdleByPatterns(t *testing.T) {
 	var idle bool
 	for i := 0; i < 50 && !idle; i++ {
 		time.Sleep(50 * time.Millisecond)
-		_, idle = f.supPane()
+		idle = f.supPane().Idle
 	}
-	if p, _ := f.supPane(); p != pane || !idle {
-		t.Fatalf("sup pane %q idle %v, want %q idle", p, idle, pane)
+	if v := f.supPane(); v.Pane != pane || !v.Idle || !v.Box || v.Input != "" {
+		t.Fatalf("sup pane %+v, want %q idle with an empty box", v, pane)
 	}
 }
 
@@ -183,7 +182,7 @@ func TestSupPaneIdleByPatterns(t *testing.T) {
 // closed; the board and the wake line carry only a short headline.
 func TestLongReportSurvivesClose(t *testing.T) {
 	f, pasted := mailFleet(t)
-	f.SupPane = func() (string, bool) { return "%sup", true }
+	fakeAdm(f, pasted, ptr(true))
 	full := "Heads-up: " + strings.Repeat("overlap detail ", 30) + "\nsecond line: branch slice/x"
 	raw := full + "\x1b[2J\x03"
 	if _, err := f.Report("a", "done", raw); err != nil {
@@ -265,7 +264,7 @@ func TestAgentBlockerBaseline(t *testing.T) {
 
 func TestAutoCloseReadOnlyAndNonGit(t *testing.T) {
 	f, pasted := mailFleet(t)
-	f.SupPane = func() (string, bool) { return "%sup", true }
+	fakeAdm(f, pasted, ptr(true))
 	var closed []string
 	f.CloseLater = func(n string) error { closed = append(closed, n); return nil }
 	cfg := filepath.Join(t.TempDir(), "config.toml")
@@ -302,7 +301,7 @@ func TestAutoCloseReadOnlyAndNonGit(t *testing.T) {
 func TestWakeQueuedWhileAdmiralBusy(t *testing.T) {
 	f, pasted := mailFleet(t)
 	idle := false
-	f.SupPane = func() (string, bool) { return "%sup", idle }
+	fakeAdm(f, pasted, &idle)
 	f.Report("a", "done", "first")
 	f.DeliverWake()
 	if len(*pasted) != 0 {
@@ -312,7 +311,7 @@ func TestWakeQueuedWhileAdmiralBusy(t *testing.T) {
 	idle = true
 	f.DeliverWake()
 	f.DeliverWake()
-	if want := "%sup " + ReportLine("b", "question", "which db?"); len(*pasted) != 1 || (*pasted)[0] != want {
+	if want := "%sup [fleet] 2 new reports: a (done), b (question). Full text: call fleet_reports."; len(*pasted) != 1 || (*pasted)[0] != want {
 		t.Fatalf("pasted %q, want one %q", *pasted, want)
 	}
 	// Read before the admiral went idle: nothing stale is typed.

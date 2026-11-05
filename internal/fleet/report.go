@@ -2,16 +2,12 @@ package fleet
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/mail"
-	"github.com/sturlabragason/fleet/internal/status"
-	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/tools"
 )
 
@@ -45,7 +41,7 @@ func (f *Fleet) Report(me, state, summary string) (note string, err error) {
 		if note != "" {
 			line += " (" + note + ")"
 		}
-		f.wakeSupervisor(me, line)
+		f.wakeSupervisor(m.ID, me, state, line)
 	}
 	return note, nil
 }
@@ -61,79 +57,6 @@ func ReportLine(from, state, summary string) string {
 		summary = string(r[:wakeHeadline-1]) + "…"
 	}
 	return fmt.Sprintf("[fleet] report from %s: %s: %s. Full text: call fleet_reports.", from, state, summary)
-}
-
-// wakeSupervisor queues line for the admiral pane and delivers it now if
-// the pane looks idle. A busy or missing admiral keeps it queued until the
-// fleet UI's poll sees the pane idle (DeliverWake), so a report that lands
-// mid-turn is not lost. One line per unread batch.
-func (f *Fleet) wakeSupervisor(from, line string) {
-	p := f.wakePath()
-	os.MkdirAll(filepath.Dir(p), 0o755)
-	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, []byte(line), 0o644); err == nil {
-		os.Rename(tmp, p)
-	}
-	f.DeliverWake()
-}
-
-func (f *Fleet) wakePath() string {
-	return filepath.Join(f.Home, "mail", mail.Supervisor, "wake-pending")
-}
-
-// DeliverWake types the queued report line into the admiral pane when it
-// looks idle. The line is dropped once the admiral has read its reports or
-// was already woken for this unread batch.
-func (f *Fleet) DeliverWake() {
-	p := f.wakePath()
-	b, err := os.ReadFile(p)
-	if err != nil {
-		return
-	}
-	pane, idle := f.supPane()
-	if pane == "" || !idle {
-		return
-	}
-	_, ok, err := f.Mail().ClaimNudge(mail.Supervisor)
-	if err != nil {
-		return
-	}
-	os.Remove(p)
-	if !ok {
-		return
-	}
-	log := logx.For("mail")
-	if err := f.paste(pane, string(b)); err != nil {
-		log.Warn("admiral wake failed", "err", err)
-		return
-	}
-	log.Info("woke admiral", "line", string(b))
-}
-
-// supPane finds the @role=sup pane in fleet:main and classifies it with the
-// admiral profile's status patterns (default copilot).
-func (f *Fleet) supPane() (string, bool) {
-	if f.SupPane != nil {
-		return f.SupPane()
-	}
-	pane, err := supervisor.FindPane(f.T, Session+":main")
-	if err != nil {
-		return "", false
-	}
-	prof := supervisor.Current(f.Home, f.T, Session+":main").Profile
-	if prof == "" {
-		prof = "copilot"
-	}
-	set := prof
-	if p, ok := f.Profiles[prof]; ok && p.Patterns != "" {
-		set = p.Patterns
-	}
-	text, err := f.T.Capture(pane, 0)
-	if err != nil {
-		return pane, false
-	}
-	st, ok := f.Patterns[set].Detect(text)
-	return pane, ok && st == status.Idle
 }
 
 // autoClose closes a done agent when its profile opts in and it left no

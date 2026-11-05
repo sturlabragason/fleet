@@ -11,8 +11,10 @@ import (
 func TestReportRoundTrip(t *testing.T) {
 	f := mailHome(t)
 	var pasted []string
-	f.SupPane = func() (string, bool) { return "%sup", true }
-	f.Paste = func(pane, text string) error { pasted = append(pasted, text); return nil }
+	box := ""
+	f.SupPane = func() fleet.AdmiralView { return fleet.AdmiralView{Pane: "%sup", Idle: true, Box: true, Input: box} }
+	f.TypeText = func(pane, text string) error { box += text; return nil }
+	f.PressKeys = func(pane string, keys ...string) error { pasted = append(pasted, box); box = ""; return nil }
 	ra := startRPC(t, NewAgent(f, "a"))
 	sup := startRPC(t, New(f, wall.New(f.T, fleet.Session)))
 	sup.call("initialize", map[string]any{"protocolVersion": ProtocolVersion})

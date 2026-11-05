@@ -45,12 +45,19 @@ const (
 //     decides (within one line: error > working > idle). That is normally the
 //     tool's footer, so text quoted in the transcript above it doesn't count.
 //
+// `input` matches a line of the prompt box; its first capture group is the
+// text typed there (InputBox). Copilot draws the box as "┃ <text>" lines
+// (or "❯ <text>" between rules, like Claude's "> <text>"), wrapped text
+// continuing on indented rows. Fleet types report wakes only into an empty
+// box.
+//
 // Copilot CLI (newer UI): busy = "● Working · … esc esc interrupt" in the
 // footer; idle = the mode footer ("Interactive · Allow All · / commands ·
 // space hold to record") with no "Working". Picker hints like "esc to cancel"
 // mean waiting, never working.
 const DefaultPatterns = `
 [fake]
+input = ['^>\s?(.*)$']
 waiting = ['\[y/n\]\s*$']
 error = ['^✖ Error']
 working = ['\(esc to interrupt\)', '^● Task:']
@@ -59,12 +66,14 @@ idle = ['^>\s*$', '^✔ Done']
 [copilot]
 transcript = ['^[^┃].*┃\s*$']
 pending = ['^┃ \[Paste #\d+']
+input = ['^┃(?: (.*))?$', '^❯(?: (.*))?$']
 waiting = ['needs information\.', 'Do you want to', '\[y/n\]', 'Allow .* to run', '❯ 1\. Yes', '○ Asking user', '↑/↓ (to )?(select|navigate) · enter']
 error = ['^✖', '(?i)^error:']
 working = ['(?i)esc (esc )?(to )?interrupt', '(?i)^\s*(\S+ · )*\S? ?working · ', '[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]', '(?i)^\s*\S? ?thinking']
 idle = ['^\s*[>❯]\s*$', '(?i)type @ to mention', '(?i)hold to record', '(?i)^\s*(← open sidebar · )?(interactive|autopilot|plan) · ']
 
 [claude]
+input = ['^\s*[>❯]\s(.*)$', '^\s*[>❯]()$']
 waiting = ['Do you want to', '❯ 1\. Yes', '\[y/n\]']
 error = ['(?i)^\s*(⎿\s*)?error', 'API Error']
 working = ['(?i)esc to interrupt', '[✻✽✶✳✢·] \w+…']
@@ -88,6 +97,7 @@ type Set struct {
 	Waiting, Error, Working, Idle []*regexp.Regexp
 	Transcript                    []*regexp.Regexp // lines of the scrolling conversation
 	Pending                       []*regexp.Regexp // unsubmitted input in the prompt box
+	Input                         []*regexp.Regexp // a prompt-box line; group 1 = its text
 }
 
 // Sets maps pattern-set name to Set.
@@ -108,7 +118,7 @@ func Load(home string) Sets {
 				continue
 			}
 			s := out[name]
-			for k, dst := range map[string]*[]*regexp.Regexp{"waiting": &s.Waiting, "error": &s.Error, "working": &s.Working, "idle": &s.Idle, "transcript": &s.Transcript, "pending": &s.Pending} {
+			for k, dst := range map[string]*[]*regexp.Regexp{"waiting": &s.Waiting, "error": &s.Error, "working": &s.Working, "idle": &s.Idle, "transcript": &s.Transcript, "pending": &s.Pending, "input": &s.Input} {
 				if l, ok := sec[k].([]string); ok {
 					*dst = compile(name, l)
 				}
@@ -216,6 +226,56 @@ func (s Set) Unsubmitted(text string) (string, bool) {
 		skip[i] = matchAny(s.Transcript, l)
 	}
 	return s.pending(lines, skip)
+}
+
+// InputBox returns the text in the prompt box: the bottom-most run of
+// lines matching `input` plus the indented rows a wrapped entry continues
+// on below it (up to a rule), their text joined by spaces. ok=false when
+// the set has no input pattern or no box is on screen.
+func (s Set) InputBox(text string) (string, bool) {
+	if len(s.Input) == 0 {
+		return "", false
+	}
+	lines := Tail(text, Window)
+	top, bot := -1, -1
+	for i := len(lines) - 1; i >= 0; i-- {
+		if _, ok := inputLine(s.Input, lines[i]); ok {
+			if bot < 0 {
+				bot = i
+			}
+			top = i
+		} else if bot >= 0 {
+			break
+		}
+	}
+	if bot < 0 {
+		return "", false
+	}
+	var parts []string
+	for i := top; i <= bot; i++ {
+		t, _ := inputLine(s.Input, lines[i])
+		parts = append(parts, t)
+	}
+	for i := bot + 1; i < len(lines); i++ {
+		l := lines[i]
+		if !strings.HasPrefix(l, " ") || strings.Trim(l, boxChars+" ") == "" {
+			break
+		}
+		parts = append(parts, strings.TrimSpace(l))
+	}
+	return strings.TrimSpace(strings.Join(parts, " ")), true
+}
+
+func inputLine(rs []*regexp.Regexp, l string) (string, bool) {
+	for _, r := range rs {
+		if m := r.FindStringSubmatch(l); m != nil {
+			if len(m) > 1 {
+				return strings.TrimSpace(m[1]), true
+			}
+			return "", true
+		}
+	}
+	return "", false
 }
 
 func (s Set) pending(lines []string, skip []bool) (string, bool) {
