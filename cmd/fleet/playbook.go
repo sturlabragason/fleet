@@ -17,16 +17,28 @@ type exitCode int
 
 func (e exitCode) Error() string { return fmt.Sprintf("exit %d", int(e)) }
 
-// cmdPlaybook prints the worker playbook an agent spawned in dir would get.
+// cmdPlaybook prints the worker playbook text for a directory at one effort
+// level (ADR-57). The level is the flag's, not the one a spawn into that dir
+// would pick: --effort shows any of them, and the default is pro.
 func cmdPlaybook(args []string) error {
-	if len(args) > 1 {
-		return fmt.Errorf("usage: fleet playbook [dir]")
+	fs := flag.NewFlagSet("playbook", flag.ContinueOnError)
+	effort := fs.String("effort", string(playbook.Pro), "effort level: light, standard or pro")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	lvl, err := playbook.ParseLevel(*effort)
+	if err != nil {
+		return err
+	}
+	rest := fs.Args()
+	if len(rest) > 1 {
+		return fmt.Errorf("usage: fleet playbook [--effort light|standard|pro] [dir]")
 	}
 	dir := "."
-	if len(args) == 1 {
-		dir = args[0]
+	if len(rest) == 1 {
+		dir = rest[0]
 	}
-	text, src := playbook.Resolve(logx.Home(), dir)
+	text, src := playbook.Resolve(lvl, logx.Home(), dir)
 	fmt.Fprintf(os.Stderr, "# sources: %s\n", strings.Join(src, ", "))
 	fmt.Print(text)
 	if text != "" && !strings.HasSuffix(text, "\n") {

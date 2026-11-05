@@ -9,6 +9,12 @@ to every spawn prompt) and `internal/mcp/instructions.md` (the admiral). Both st
 playbook costs tokens on every spawn, so a rule earns a line there only if a worker would act
 differently without it. The reasons live here instead.
 
+Everything below describes the `pro` level, which is what professional code work in a repo gets.
+A spawn can ask for less — `light` for an errand or a quick read-only question, `standard` for a
+contained change — and then the agent gets `internal/playbook/light.md` or `standard.md` instead
+(ADR-57). The practices are the same; the lighter levels simply stop at the point where the
+ceremony costs more than it saves.
+
 ## The mapping
 
 | Practice | What it means for an agent fleet | Fleet mechanism | Where it is written |

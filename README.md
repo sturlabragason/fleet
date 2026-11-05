@@ -177,7 +177,7 @@ Agents start through `bash -lc`, so shell aliases don't apply; make a profile in
 | `fleet_peek` | Last N lines (default 20, max 80) of one agent's screen |
 | `fleet_send` | Send a prompt to an agent |
 | `fleet_answer` | Answer a y/n prompt, a numbered option or an option by `label`. Needs `confirmed=true` |
-| `fleet_spawn` | Start an agent from a profile |
+| `fleet_spawn` | Start an agent from a profile (`effort` sizes its playbook: `light`, `standard`, `pro`) |
 | `fleet_profiles` | List profiles |
 | `fleet_close` | Stop an agent. Needs `confirmed=true` |
 | `fleet_wall` | Show/hide an agent on the wall, or set the layout |
@@ -209,7 +209,7 @@ The admiral must ask you before it answers a prompt, closes an agent or changes 
 | `~/.fleet/tools.toml` | Your profiles |
 | `~/.fleet/patterns.toml` | Your status patterns |
 | `~/.fleet/decisions.log` | Notes the admiral kept for you |
-| `~/.fleet/worker.md` | Extra playbook text prepended to every spawn prompt (`fleet playbook`) |
+| `~/.fleet/worker.md` | Extra playbook text prepended to every spawn prompt, at every effort level (`fleet playbook [--effort light\|standard\|pro]`) |
 | `~/.config/fleet/config.toml` | Local preferences, never committed: starting mode (`mode = "auto"` runs every agent without permission prompts, whatever its tool), extra tool args, prompt auto-submit, `theme` (`catppuccin`, `stealth`, `neon-drive`, `phosphor`, `graphite`: set it, run `fleet up` again, agents keep running). `$FLEET_CONFIG` overrides the path; see [`examples/config.toml.example`](examples/config.toml.example). |
 | `~/.fleet/logs/fleet.log` | Everything fleet does, one `component=` per line |
 

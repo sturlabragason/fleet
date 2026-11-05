@@ -38,8 +38,8 @@ func TestDefaultIsEmbedded(t *testing.T) {
 
 func TestResolveBuiltInOnly(t *testing.T) {
 	home, _, repo := fixture(t)
-	text, src := Resolve(home, repo)
-	if text != Default() || !reflect.DeepEqual(src, []string{BuiltIn}) {
+	text, src := Resolve(Pro, home, repo)
+	if text != Default() || !reflect.DeepEqual(src, []string{BuiltIn + " (pro)"}) {
 		t.Fatalf("got %v", src)
 	}
 }
@@ -49,19 +49,19 @@ func TestResolveHomeAndRepoAppend(t *testing.T) {
 	hf := filepath.Join(home, "worker.md")
 	rf := filepath.Join(repo, ".fleet", "worker.md")
 	put(t, hf, "HOME RULE\n")
-	text, src := Resolve(home, repo)
+	text, src := Resolve(Pro, home, repo)
 	if !strings.HasPrefix(text, Default()[:20]) || !strings.HasSuffix(text, "\n\nHOME RULE") {
 		t.Fatalf("home append: %q", text[len(text)-30:])
 	}
-	if !reflect.DeepEqual(src, []string{BuiltIn, hf}) {
+	if !reflect.DeepEqual(src, []string{BuiltIn + " (pro)", hf}) {
 		t.Fatalf("sources %v", src)
 	}
 	put(t, rf, "REPO RULE")
-	text, src = Resolve(home, repo)
+	text, src = Resolve(Pro, home, repo)
 	if !strings.HasSuffix(text, "HOME RULE\n\nREPO RULE") || !strings.Contains(text, "Fleet worker playbook") {
 		t.Fatalf("repo append: %q", text)
 	}
-	if !reflect.DeepEqual(src, []string{BuiltIn, hf, rf}) {
+	if !reflect.DeepEqual(src, []string{BuiltIn + " (pro)", hf, rf}) {
 		t.Fatalf("sources %v", src)
 	}
 }
@@ -69,7 +69,7 @@ func TestResolveHomeAndRepoAppend(t *testing.T) {
 func TestResolveEmptyHomeIgnored(t *testing.T) {
 	home, _, repo := fixture(t)
 	put(t, filepath.Join(home, "worker.md"), "  \n\n")
-	if _, src := Resolve(home, repo); len(src) != 1 {
+	if _, src := Resolve(Pro, home, repo); len(src) != 1 {
 		t.Fatalf("sources %v", src)
 	}
 }
@@ -78,7 +78,7 @@ func TestResolveRepoReplace(t *testing.T) {
 	home, _, repo := fixture(t)
 	put(t, filepath.Join(home, "worker.md"), "HOME RULE")
 	put(t, filepath.Join(repo, ".fleet", "worker.md"), ReplaceMarker+"\nONLY THIS\n")
-	text, _ := Resolve(home, repo)
+	text, _ := Resolve(Pro, home, repo)
 	if text != "ONLY THIS" {
 		t.Fatalf("replace: %q", text)
 	}
@@ -87,7 +87,7 @@ func TestResolveRepoReplace(t *testing.T) {
 func TestResolveRepoOptOut(t *testing.T) {
 	home, _, repo := fixture(t)
 	put(t, filepath.Join(repo, ".fleet", "worker.md"), "  "+ReplaceMarker+"  \n\n")
-	text, src := Resolve(home, repo)
+	text, src := Resolve(Pro, home, repo)
 	if text != "" || len(src) != 2 {
 		t.Fatalf("opt-out: %q %v", text, src)
 	}
@@ -100,7 +100,7 @@ func TestResolveWalksUpFromSubdir(t *testing.T) {
 	home, _, repo := fixture(t)
 	rf := filepath.Join(repo, ".fleet", "worker.md")
 	put(t, rf, "REPO RULE")
-	text, src := Resolve(home, filepath.Join(repo, "src", "sub"))
+	text, src := Resolve(Pro, home, filepath.Join(repo, "src", "sub"))
 	if !strings.HasSuffix(text, "REPO RULE") || src[len(src)-1] != rf {
 		t.Fatalf("walk-up: %v", src)
 	}
@@ -109,7 +109,7 @@ func TestResolveWalksUpFromSubdir(t *testing.T) {
 func TestResolveStopsAtGitBoundary(t *testing.T) {
 	home, root, repo := fixture(t)
 	put(t, filepath.Join(root, ".fleet", "worker.md"), "ABOVE THE REPO")
-	text, src := Resolve(home, filepath.Join(repo, "src"))
+	text, src := Resolve(Pro, home, filepath.Join(repo, "src"))
 	if strings.Contains(text, "ABOVE") || len(src) != 1 {
 		t.Fatalf("crossed .git dir: %v", src)
 	}
@@ -117,7 +117,7 @@ func TestResolveStopsAtGitBoundary(t *testing.T) {
 	wt := filepath.Join(root, "wt")
 	put(t, filepath.Join(wt, ".git"), "gitdir: /elsewhere\n")
 	os.MkdirAll(filepath.Join(wt, "pkg"), 0o755)
-	text, src = Resolve(home, filepath.Join(wt, "pkg"))
+	text, src = Resolve(Pro, home, filepath.Join(wt, "pkg"))
 	if strings.Contains(text, "ABOVE") || len(src) != 1 {
 		t.Fatalf("crossed .git file: %v", src)
 	}
@@ -177,5 +177,106 @@ func TestDefaultCarriesStandingRules(t *testing.T) {
 func TestDefaultStaysShort(t *testing.T) {
 	if n := strings.Count(strings.TrimSpace(Default()), "\n") + 1; n > 39 {
 		t.Errorf("playbook grew to %d lines; DESIGN §4 budgets about 39", n)
+	}
+}
+
+// ADR-57: the level decides how much process a spawn pays for.
+func TestParseLevel(t *testing.T) {
+	for _, in := range []string{"light", "LIGHT", " standard ", "pro"} {
+		l, err := ParseLevel(in)
+		if err != nil || l != Level(strings.ToLower(strings.TrimSpace(in))) {
+			t.Errorf("ParseLevel(%q) = %q, %v", in, l, err)
+		}
+	}
+	for _, in := range []string{"", "full", "medium", "pro-max"} {
+		if l, err := ParseLevel(in); err == nil {
+			t.Errorf("ParseLevel(%q) = %q, want an error", in, l)
+		}
+	}
+}
+
+// A git worktree means professional code work; anything else is an errand
+// until the spawn says otherwise.
+func TestDefaultLevel(t *testing.T) {
+	if got := DefaultLevel(true); got != Pro {
+		t.Errorf("with a worktree: %q", got)
+	}
+	if got := DefaultLevel(false); got != Light {
+		t.Errorf("without a worktree: %q", got)
+	}
+}
+
+func TestTextPerLevel(t *testing.T) {
+	seen := map[string]Level{}
+	for _, l := range Levels {
+		txt := Text(l)
+		if !strings.HasPrefix(txt, "# Fleet worker playbook") {
+			t.Fatalf("%s: %.40q", l, txt)
+		}
+		if other, dup := seen[txt]; dup {
+			t.Fatalf("%s and %s are the same text", l, other)
+		}
+		seen[txt] = l
+	}
+	if Text(Pro) != Default() {
+		t.Error("pro must be the full built-in playbook")
+	}
+	if Text(Level("nonsense")) != Default() {
+		t.Error("an unknown level must fall back to pro")
+	}
+}
+
+// Each level gets the rules it is for, and not the ceremony of the one above.
+func TestLevelsCarryTheirOwnRules(t *testing.T) {
+	light, std, pro := Text(Light), Text(Standard), Text(Pro)
+	for _, l := range []string{light, std, pro} {
+		if !strings.Contains(l, "fleet_report") || !strings.Contains(l, "Time matters here") {
+			t.Error("every level must keep the report rule and the time rule")
+		}
+	}
+	for _, want := range []string{"secrets", "fleet report done"} {
+		if !strings.Contains(light, want) {
+			t.Errorf("light lost %q", want)
+		}
+	}
+	for _, unwanted := range []string{"Pre-merge checklist", "subagent", "ADR", "fleet touching"} {
+		if strings.Contains(light, unwanted) {
+			t.Errorf("light must not carry %q", unwanted)
+		}
+		if strings.Contains(std, unwanted) {
+			t.Errorf("standard must not carry %q", unwanted)
+		}
+	}
+	for _, want := range []string{"Assisted-by:", "Never push", "Plan in two or three lines"} {
+		if !strings.Contains(std, want) {
+			t.Errorf("standard lost %q", want)
+		}
+	}
+}
+
+// The playbook is paid for on every spawn; the lighter levels exist to be
+// small, so their size is pinned too (DESIGN §4, ADR-57).
+func TestLightAndStandardStayShort(t *testing.T) {
+	for _, c := range []struct {
+		level Level
+		max   int
+	}{{Light, 12}, {Standard, 24}} {
+		if n := strings.Count(strings.TrimSpace(Text(c.level)), "\n") + 1; n > c.max {
+			t.Errorf("%s playbook grew to %d lines; DESIGN §4 budgets about %d", c.level, n, c.max)
+		}
+	}
+}
+
+func TestResolveLayersOntoEveryLevel(t *testing.T) {
+	home, _, repo := fixture(t)
+	put(t, filepath.Join(home, "worker.md"), "HOME RULE")
+	for _, l := range Levels {
+		text, src := Resolve(l, home, repo)
+		if !strings.HasSuffix(text, "HOME RULE") || !strings.HasPrefix(text, Text(l)[:20]) {
+			t.Errorf("%s: %q", l, text)
+		}
+		if src[0] != BuiltIn+" ("+string(l)+")" {
+			t.Errorf("%s: sources %v", l, src)
+		}
 	}
 }

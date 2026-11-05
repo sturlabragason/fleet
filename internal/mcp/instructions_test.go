@@ -27,3 +27,27 @@ func TestInstructionsCarryProcessRules(t *testing.T) {
 		}
 	}
 }
+
+// ADR-57: the admiral chooses the effort level, so its instructions and the
+// fleet_spawn schema must both offer it.
+func TestSpawnOffersEffortLevels(t *testing.T) {
+	if !strings.Contains(Instructions, "`effort` sizes it per task") {
+		t.Error("admiral instructions don't tell the admiral to pick an effort level")
+	}
+	for _, def := range toolDefs {
+		if def.Name != "fleet_spawn" {
+			continue
+		}
+		props, _ := def.InputSchema["properties"].(map[string]any)
+		e, ok := props["effort"].(map[string]any)
+		if !ok {
+			t.Fatal("fleet_spawn has no effort argument")
+		}
+		levels, _ := e["enum"].([]string)
+		if len(levels) != 3 || levels[0] != "light" || levels[2] != "pro" {
+			t.Fatalf("effort enum %v", levels)
+		}
+		return
+	}
+	t.Fatal("no fleet_spawn tool")
+}

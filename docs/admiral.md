@@ -27,7 +27,7 @@ To use a tool fleet doesn't start itself, register `fleet mcp` as a stdio MCP se
 | `fleet_peek` | `name`, `lines` (max 80), `raw`, `last_message` | Last lines of the agent's screen, or its last reply from the session log |
 | `fleet_send` | `name` / `names` / `team`, `text`, `keys`, `confirmed` | Paste a prompt and press Enter, or press keys |
 | `fleet_answer` | `name`, `answer` (`y`/`n`) or `option` N, `expect`, `confirmed` | Answer a y/n prompt or a numbered menu |
-| `fleet_spawn` | `name`, `profile`, `dir`, `prompt`, `worktree`, `leader` | Start an agent; in a git repo it gets its own worktree `<repo>.wt/<name>` on branch `fleet/<name>` (`worktree: false` spawns straight into `dir`). `leader: true` lets it run its own squad |
+| `fleet_spawn` | `name`, `profile`, `dir`, `prompt`, `worktree`, `effort`, `leader` | Start an agent; in a git repo it gets its own worktree `<repo>.wt/<name>` on branch `fleet/<name>` (`worktree: false` spawns straight into `dir`). `effort` sizes the worker playbook: `light` (errand), `standard` (contained change), `pro` (full process); default `pro` with a worktree, `light` without. `leader: true` lets it run its own squad |
 | `fleet_adopt` | `session_id` or `query`, optional `profile`, `dir`, `name` | Resume a session started outside fleet |
 | `fleet_sessions` | `query`, `limit` | Copilot/Claude sessions started outside fleet, newest first |
 | `fleet_profiles` | none | Profiles and their command lines |
@@ -48,7 +48,7 @@ A leader is an ordinary agent with one extra right: it runs a small squad of its
 
 | Tool | Arguments | What it does |
 |---|---|---|
-| `fleet_squad_spawn` | `name`, `profile`, `dir`, `prompt`, `worktree`, `card` | Start an agent of the leader's own squad, with the same worktrees, task cards and playbook as an admiral spawn |
+| `fleet_squad_spawn` | `name`, `profile`, `dir`, `prompt`, `worktree`, `effort`, `card` | Start an agent of the leader's own squad, with the same worktrees, task cards and playbook as an admiral spawn |
 | `fleet_squad_profiles` | none | Profiles the leader may spawn from |
 | `fleet_squad_status` | none | The leader's agents: status, age, what each waits for, last report |
 | `fleet_squad_info` | `name` | One of its agents in detail |

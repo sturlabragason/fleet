@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/playbook"
 	"github.com/sturlabragason/fleet/internal/tmux"
@@ -55,6 +56,8 @@ func readArg(t *testing.T, path string) string {
 	return ""
 }
 
+// A dir outside any git repo gets no worktree, so the default effort is
+// light (ADR-57).
 func TestSpawnPrependsPlaybook(t *testing.T) {
 	f, out := argvFleet(t, "")
 	dir := t.TempDir() // no .fleet/worker.md here, and f.Home has no worker.md
@@ -62,7 +65,7 @@ func TestSpawnPrependsPlaybook(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := readArg(t, out)
-	want := playbook.Compose(playbook.Default(), "fix the bug")
+	want := playbook.Compose(playbook.Text(playbook.Light), "fix the bug")
 	if got != want {
 		t.Fatalf("launch prompt:\n%.200q\nwant\n%.200q", got, want)
 	}
@@ -142,5 +145,112 @@ func TestSpawnLongPromptViaPaste(t *testing.T) {
 	long := strings.Repeat("z", 20000)
 	if _, err := f.Spawn("pb4", "pa", t.TempDir(), long); err != nil {
 		t.Fatalf("spawn with a 20KB prompt: %v", err)
+	}
+}
+
+// ADR-57: the spawn's effort picks the playbook level, and an unknown one is
+// refused before anything is started.
+func TestSpawnEffortLevel(t *testing.T) {
+	f, out := argvFleet(t, "")
+	if _, err := f.SpawnWith(SpawnOpts{Effort: "pro"}, "pb5", "pa", t.TempDir(), "fix the bug"); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := readArg(t, out), playbook.Compose(playbook.Text(playbook.Pro), "fix the bug"); got != want {
+		t.Fatalf("effort=pro prompt:\n%.120q\nwant\n%.120q", got, want)
+	}
+	if _, err := f.SpawnWith(SpawnOpts{Effort: " PRO "}, "pb9", "pa", t.TempDir(), "fix the bug"); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.Store.Load().Agents["pb9"].Effort; got != "pro" {
+		t.Errorf("board kept effort %q, want the canonical name", got)
+	}
+	if _, err := f.SpawnWith(SpawnOpts{Effort: "full"}, "pb6", "pa", t.TempDir(), "x"); err == nil {
+		t.Fatal("effort=full was accepted")
+	}
+	if _, ok := f.Store.Load().Agents["pb6"]; ok {
+		t.Error("a refused effort still put the agent on the board")
+	}
+}
+
+// Without a worktree the default is light; with one it is pro.
+func TestEffortLevel(t *testing.T) {
+	cases := []struct {
+		effort   string
+		worktree bool
+		want     playbook.Level
+	}{
+		{"", false, playbook.Light},
+		{"", true, playbook.Pro},
+		{"standard", true, playbook.Standard},
+		{"light", true, playbook.Light},
+		{"nonsense", true, playbook.Pro},
+		{"nonsense", false, playbook.Light},
+	}
+	for _, c := range cases {
+		if got := effortLevel(c.effort, c.worktree); got != c.want {
+			t.Errorf("effortLevel(%q, %v) = %q, want %q", c.effort, c.worktree, got, c.want)
+		}
+	}
+}
+
+// A queued agent carries its effort to the drain, the way it carries the
+// worktree choice and the card (ADR-57).
+func TestQueuedAgentKeepsEffort(t *testing.T) {
+	f, out := argvFleet(t, "[defaults]\nmax_working = 1\n")
+	if _, err := f.Spawn("pb7", "pa", t.TempDir(), "first"); err != nil {
+		t.Fatal(err)
+	}
+	readArg(t, out)
+	q, err := f.SpawnWith(SpawnOpts{Effort: "standard"}, "pb8", "pa", t.TempDir(), "second")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.Status != "queued" {
+		t.Fatalf("queued entry: status %q", q.Status)
+	}
+	if got := f.Store.Load().Agents["pb8"].Effort; got != "standard" {
+		t.Fatalf("board kept effort %q", got)
+	}
+	os.Remove(out)
+	var claimed *board.Agent
+	f.Store.Update(func(b *board.Board) error { // what claimQueued does under the board lock
+		b.Agents["pb8"].Status = "starting"
+		c := *b.Agents["pb8"] // the drain launches from the reloaded entry
+		claimed = &c
+		return nil
+	})
+	f.startQueued(claimed)
+	if got, want := readArg(t, out), playbook.Compose(playbook.Text(playbook.Standard), "second"); got != want {
+		t.Fatalf("drained prompt:\n%.120q\nwant\n%.120q", got, want)
+	}
+}
+
+// The default with a worktree is the full pro text, and a worktree git
+// refused keeps it: that shared checkout is where the process matters most
+// (ADR-57).
+func TestSpawnDefaultsToProInARepo(t *testing.T) {
+	f, out := argvFleet(t, "")
+	if _, err := f.Spawn("pb10", "pa", repo(t), "fix the bug"); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := readArg(t, out), playbook.Compose(playbook.Text(playbook.Pro), "fix the bug"); got != want {
+		t.Fatalf("repo spawn prompt:\n%.120q\nwant\n%.120q", got, want)
+	}
+	if w := f.Store.Load().Agents["pb10"].Worktree; w == nil {
+		t.Fatal("no worktree, so this did not test the worktree default")
+	}
+	// A repo git refuses a worktree in (the branch is checked out there) is
+	// still a code task, and that shared checkout needs the full process.
+	taken := repo(t)
+	git(t, taken, "checkout", "-q", "-b", "fleet/pb11")
+	os.Remove(out)
+	if _, err := f.Spawn("pb11", "pa", taken, "fix the bug"); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := readArg(t, out), playbook.Compose(playbook.Text(playbook.Pro), "fix the bug"); got != want {
+		t.Fatalf("worktree fallback prompt:\n%.120q\nwant\n%.120q", got, want)
+	}
+	if w := f.Store.Load().Agents["pb11"].Worktree; w != nil {
+		t.Fatalf("expected the worktree to be refused, got %+v", w)
 	}
 }

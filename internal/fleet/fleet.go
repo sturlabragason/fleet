@@ -156,6 +156,10 @@ type SpawnOpts struct {
 	// Role is the agent's place in the hierarchy (ADR-53): a leader of its
 	// own squad, a member of one, or neither (the zero value).
 	Role Role
+	// Effort is the worker playbook's level: light, standard or pro
+	// (ADR-57). "" picks the default for the spawn: pro with a worktree,
+	// light without one.
+	Effort string
 }
 
 // Spawn starts an agent in its own hidden window, with the config file's
@@ -194,6 +198,13 @@ func (f *Fleet) SpawnWith(o SpawnOpts, name, profile, dir, prompt string) (*boar
 	if o.Worktree != nil {
 		wt = *o.Worktree
 	}
+	if o.Effort != "" {
+		l, err := playbook.ParseLevel(o.Effort)
+		if err != nil {
+			return nil, err
+		}
+		o.Effort = string(l) // the board keeps the canonical name, not "PRO"
+	}
 	card := NormalizeCard(o.Card)
 	if err := f.checkRole(name, o.Role); err != nil {
 		return nil, err
@@ -201,33 +212,49 @@ func (f *Fleet) SpawnWith(o SpawnOpts, name, profile, dir, prompt string) (*boar
 	if o.Role.Leader {
 		f.MakeLeader(name)
 	}
-	if a, err := f.enqueue(name, profile, dir, prompt, wt, card, o.Role); a != nil || err != nil {
+	if a, err := f.enqueue(name, profile, dir, prompt, wt, card, o.Role, o.Effort); a != nil || err != nil {
 		return a, err
 	}
 	// The busy count and the launch are not one critical section, so two
 	// concurrent spawns can both see the last free slot: the cap is
 	// best-effort and may be exceeded by one per racing spawn.
-	return f.launch(name, profile, dir, prompt, false, wt, card, o.Role)
+	return f.launch(name, profile, dir, prompt, false, wt, card, o.Role, o.Effort)
 }
 
 // agentWorktree gives the agent its own worktree and branch for a spawn into
 // a git repo (DESIGN §4, ADR-39). A dir outside git simply has none. When git
 // refuses (no commit yet, the branch is checked out elsewhere), the spawn
 // falls back to dir with a logged warning rather than failing: a usable agent
-// in a shared checkout beats no agent at all.
-func (f *Fleet) agentWorktree(name, dir string) *board.Worktree {
+// in a shared checkout beats no agent at all. inRepo says the dir was a git
+// repo whatever came of the worktree, which is what makes it a code task for
+// the playbook level (ADR-57).
+func (f *Fleet) agentWorktree(name, dir string) (w *board.Worktree, inRepo bool) {
 	log := logx.For("fleet")
-	w, err := worktree.Create(dir, name)
+	got, err := worktree.Create(dir, name)
 	switch {
 	case errors.Is(err, worktree.ErrNoRepo):
 		log.Debug("no worktree: not a git repo", "agent", name, "dir", dir)
-		return nil
+		return nil, false
 	case err != nil:
 		log.Warn("worktree failed; spawning in the dir itself", "agent", name, "dir", dir, "err", err)
-		return nil
+		return nil, true
 	}
-	log.Info("worktree", "agent", name, "path", w.Path, "branch", w.Branch)
-	return &board.Worktree{Path: w.Path, Branch: w.Branch, Repo: w.Repo}
+	log.Info("worktree", "agent", name, "path", got.Path, "branch", got.Branch)
+	return &board.Worktree{Path: got.Path, Branch: got.Branch, Repo: got.Repo}, true
+}
+
+// effortLevel resolves a spawn's effort argument to a playbook level: what
+// the spawn asked for, else the default for whether this is a code task with
+// a worktree of its own (ADR-57). An unparseable value cannot reach here from
+// SpawnWith, so a stale board entry simply falls back to the default.
+func effortLevel(effort string, code bool) playbook.Level {
+	if effort != "" {
+		if l, err := playbook.ParseLevel(effort); err == nil {
+			return l
+		}
+		logx.For("fleet").Warn("unknown effort; using the default", "effort", effort)
+	}
+	return playbook.DefaultLevel(code)
 }
 
 // launch builds the argv for a profile and starts it: the real start behind
@@ -236,14 +263,21 @@ func (f *Fleet) agentWorktree(name, dir string) *board.Worktree {
 // for the agent's own git worktree; the playbook and the baseline are then
 // read from that worktree, not from the spawn dir. card is the task card
 // (ADR-43): it goes on the board and its block is appended to the prompt.
-func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, card *board.Card, role Role) (*board.Agent, error) {
+func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, card *board.Card, role Role, effort string) (*board.Agent, error) {
 	p, ok := f.Profiles[profile]
 	if !ok {
 		return nil, fmt.Errorf("unknown profile %q (have %v)", profile, tools.Names(f.Profiles))
 	}
-	ex := startExtra{NoWorktree: !wantWT, Card: card, Role: role}
+	ex := startExtra{NoWorktree: !wantWT, Card: card, Role: role, Effort: effort}
+	// code is "the agent works on a git repo of its own": a worktree was
+	// asked for and the dir is one. It is what picks the playbook level when
+	// the spawn did not (ADR-57), so a worktree git refused still gets the
+	// full process — that is the shared checkout where it matters most.
+	code := false
 	if wantWT {
-		ex.Worktree = f.agentWorktree(name, dir)
+		var inRepo bool
+		ex.Worktree, inRepo = f.agentWorktree(name, dir)
+		code = inRepo
 		if ex.Worktree != nil {
 			dir = ex.Worktree.Path
 		}
@@ -262,9 +296,10 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	// playbook.
 	full := prompt
 	if pr.Playbook && prompt != "" {
-		text, src := playbook.Resolve(f.Home, dir)
+		lvl := effortLevel(effort, code)
+		text, src := playbook.Resolve(lvl, f.Home, dir)
 		full = playbook.Compose(text, prompt)
-		logx.For("fleet").Info("playbook", "agent", name, "sources", src, "bytes", len(full)-len(prompt))
+		logx.For("fleet").Info("playbook", "agent", name, "effort", lvl, "sources", src, "bytes", len(full)-len(prompt))
 	}
 	// The task card goes last, so it is the final thing the agent reads
 	// (ADR-43). A card with no prompt is still worth telling the agent.
@@ -374,7 +409,7 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 	now := time.Now()
 	a := &board.Agent{Name: name, Profile: profile, Patterns: p.Patterns, Dir: dir, Goal: goal, SessionID: id,
 		PaneID: pane, Status: string(status.Unknown), Created: now, StatusSince: now, LastChange: now,
-		Baseline: ex.Base, Worktree: ex.Worktree, NoWorktree: ex.NoWorktree, Card: ex.Card,
+		Baseline: ex.Base, Worktree: ex.Worktree, NoWorktree: ex.NoWorktree, Card: ex.Card, Effort: ex.Effort,
 		Leader: ex.Role.Leader, LeadBy: ex.Role.LeadBy}
 	if err := f.Store.Update(func(b *board.Board) error {
 		old, ok := b.Agents[name]
@@ -405,6 +440,7 @@ type startExtra struct {
 	NoWorktree bool
 	Card       *board.Card
 	Role       Role
+	Effort     string
 }
 
 // afterTag, when set by a test, runs between tagging a new pane and the

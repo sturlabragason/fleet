@@ -67,6 +67,10 @@ type Agent struct {
 	// LeadBy is the leader this agent reports to. "" is the admiral, which
 	// is where every agent reported before ADR-53.
 	LeadBy string `json:"lead_by,omitempty"`
+	// Effort is the worker playbook level the spawn asked for: light,
+	// standard or pro (DESIGN §4, ADR-57). "" is the default for the spawn,
+	// and keeps a queued agent on that default when the drain starts it.
+	Effort string `json:"effort,omitempty"`
 }
 
 // Card is a spawn's task card: what the task is, how fleet checks it is

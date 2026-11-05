@@ -39,7 +39,7 @@ const usage = `usage:
                                             run the admiral under profile NAME (alone: fleet up); default
                                             $FLEET_ADMIRAL_PROFILE, last choice, [admiral] profile, copilot
   fleet ui                                  run the overview TUI in this terminal
-  fleet spawn [--worktree|--no-worktree] [--leader] <name> <profile> [dir] ["prompt"]
+  fleet spawn [--worktree|--no-worktree] [--leader] [--effort LEVEL] <name> <profile> [dir] ["prompt"]
              [--goal "one line"] [--check "cmd"] [--check-exit N] [--result FILE]
                                             in a git repo the agent gets its own worktree,
                                             <repo>.wt/<name> on branch fleet/<name> (worktree in
@@ -48,6 +48,8 @@ const usage = `usage:
                                             the check in its dir when it reports done and tells the
                                             admiral pass or fail, and the agent is told to write the
                                             result file (default result.md);
+                                            --effort light|standard|pro sizes the worker playbook
+                                            (default: pro with a worktree, light without one);
                                             --leader makes it a leader: it gets squad tools, spawns a
                                             squad of its own and its agents report to it, not to the
                                             admiral ([squad] max_members, max_depth in config.toml);
@@ -107,8 +109,9 @@ const usage = `usage:
   fleet admiral restart                     restart the admiral, resuming the same session
                                             ("fleet supervisor ..." still works: deprecated alias)
   fleet note [--agent NAME] "text"          append a note to ~/.fleet/decisions.log
-  fleet playbook [dir]                      print the worker playbook prepended to a spawn prompt in dir
-                                            (built-in + ~/.fleet/worker.md + the repo's .fleet/worker.md)
+  fleet playbook [--effort LEVEL] [dir]     print the worker playbook prepended to a spawn prompt in dir
+                                            (built-in + ~/.fleet/worker.md + the repo's .fleet/worker.md;
+                                            --effort light|standard|pro, default pro)
   fleet touching [-C dir] [--json] [file...]
                                             files other worktrees of this repo change; with files, only
                                             the overlaps (exit 0 none, 1 overlap, 2 error)
@@ -321,11 +324,13 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 	checkExit := fs.Int("check-exit", 0, "task card: exit code the done-check must return")
 	result := fs.String("result", "", "task card: result file the agent writes, relative to its dir (default "+fleet.DefaultResult+")")
 	leader := fs.Bool("leader", false, "make it a leader: it may spawn a squad of its own and its agents report to it")
+	effort := fs.String("effort", "", "worker playbook level: light, standard or pro (default: pro with a worktree, light without)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	var o fleet.SpawnOpts
 	o.Role = fleet.Role{Leader: *leader}
+	o.Effort = *effort
 	o.Card = fleet.NormalizeCard(&board.Card{Goal: *goal, Check: *check, Want: *checkExit, Result: *result})
 	var set []string
 	// Read which flag was passed, not just its value, so --worktree=false and
