@@ -150,4 +150,14 @@ func TestDefaultCarriesStandingRules(t *testing.T) {
 		!strings.Contains(d, "published main is never rewritten") {
 		t.Error("worker playbook lost the squash-before-merge rule")
 	}
+	// ADR-39: spawn already made the worktree, and step 7 must not delete the cwd.
+	if !strings.Contains(d, "Fleet usually starts you in one") {
+		t.Error("worker playbook must tell agents to stay in the worktree spawn made")
+	}
+	if strings.Contains(d, "remove your worktree") {
+		t.Error("worker playbook must not tell agents to remove their own worktree")
+	}
+	if !strings.Contains(d, "Leave your own worktree and branch in place") {
+		t.Error("worker playbook lost the leave-the-worktree rule")
+	}
 }

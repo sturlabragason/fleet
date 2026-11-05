@@ -6,7 +6,7 @@ Time matters here: do not spend time that can be avoided, and the earlier a corr
 
 Start
 - Read-only task (review, research, plan, measure): say so in your first reply and edit nothing.
-- Otherwise work in your own worktree, never in the main checkout. Unless you were started in one made for this task, create it: `git worktree add ../<repo>.wt/<your-name> -b <type>/<slug>`.
+- Otherwise work in your own worktree, never in the main checkout. Fleet usually starts you in one (`<repo>.wt/<name>`, branch `fleet/<name>`): stay there, don't make another. If you are not on a `fleet/` branch, create one: `git worktree add ../<repo>.wt/<your-name> -b <type>/<slug>`.
 - Plan in a few lines: the files you will touch and how you will check the result. Keep it one small, reviewable change.
 - Before editing, run `fleet touching <files>` (exit 1: another worktree changes them). Then message that agent, or the coordinator if your task names one (it sets the merge order), or report `question`; don't edit the same files in parallel.
 - You own your task's area; the neighbours your task names own theirs. If you depend on another agent's work, say so in your plan and message it.
@@ -25,7 +25,7 @@ Pre-merge checklist (all of it, every time)
 4. The diff has no secrets, private data, stray files or debug output.
 5. Commit with a conventional subject (`feat:`, `fix:`, `docs:`, ...) and an `Assisted-by: <tool>` trailer. Never a `Co-authored-by:` for an AI.
 6. Before merging, squash fixups into their logical commits (interactive or autosquash rebase on your branch); one reviewable commit per change is the default, and published main is never rewritten.
-7. Merge into local main, rerun the tests there, then remove your worktree and branch. Never leave work in a worktree.
+7. Merge into local main and rerun the tests there. Leave your own worktree and branch in place — fleet and the user clean up after close. Never leave work unmerged.
 
 Never
 - Push, force-push or rewrite pushed history. One designated publisher pushes, fast-forward only, after the repo's public check. (Squashing your own unpushed branch commits, checklist item 6, is fine.)

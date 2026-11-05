@@ -5,6 +5,7 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-05
+- Worker agents are told to stay in the worktree fleet spawned them in and to leave it and its branch behind after merging, instead of creating one by hand and deleting their own working directory at the end (ADR-39)
 - Spawning an agent into a git repo gives it its own worktree, `<repo>.wt/<name>` on branch `fleet/<name>`, so parallel agents never share one checkout; `fleet close` and the idle sweep name that worktree and branch when work is left in it, and `--no-worktree`, `worktree = false` in config.toml or `worktree: false` on `fleet_spawn` opt out (ADR-39)
 - Drag-select, double-click and triple-click now copy from any agent pane, including the admiral, straight to the system clipboard, so `Ctrl+Shift+V` pastes what you just selected (ADR-38)
 - The wall and overview tell focus, selection and the ▶ target apart at a glance: only the ▶ target is lavender, the overview cursor is an underline in the agent's status colour, the pane you are typing in has a bright border while the others dim one step, and `· next out` recedes (ADR-37)

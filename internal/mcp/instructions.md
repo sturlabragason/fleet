@@ -50,9 +50,10 @@ Use only the `fleet` MCP tools: `fleet_status`, `fleet_info`, `fleet_peek`, `fle
 
 ## Spawning work
 
-- Every agent spawned with a prompt automatically gets the fleet worker playbook before its task: own worktree,
-  plan and overlap check, subagent review, build/vet/tests, conventional commit with `Assisted-by:`, merge into
-  local main, no push, report with `fleet_report`. Don't repeat these rules in prompts.
+- Every agent spawned with a prompt automatically gets the fleet worker playbook before its task: work in the
+  worktree it was started in, plan and overlap check, subagent review, build/vet/tests, conventional commit with
+  `Assisted-by:`, merge into local main, leave the worktree in place, no push, report with `fleet_report`. Don't
+  repeat these rules in prompts.
 - A spawn prompt is ready when it says: the task, what is done when, which agent owns neighbouring areas (don't touch),
   what it depends on, and exceptions to the playbook (for example "read-only", "you are the publisher", "use best judgment").
 - Always spawn with the task as the prompt: an agent spawned without one gets no playbook.
