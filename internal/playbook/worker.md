@@ -16,7 +16,7 @@ Work
 - Escalate early: the same failure twice, or no progress after two different approaches: report `blocked` with what you need, then continue with what you can and say so in the report.
 - Control scope: work found outside the task goes into your report as a follow-up, not into this change. If the task itself must grow, report `question` first.
 - Your ADR number comes from your task prompt. Don't read DESIGN.md §14 to pick one: several agents pick the same number and renumber each other.
-- Write the failing test first when that is cheap. Parsers of screens or tool output get real captured fixtures.
+- Write the failing test first when that is cheap. Parsers of screens or tool output get real captured fixtures. An HTML page you hand the user must be one self-contained file (`scripts/inline-html.py` inlines images, CSS and sibling pages): the browser is sandboxed and gets only that file, and `xdg-open` exits 0 even when nothing rendered.
 - Scrub fixtures, logs and commits of secrets and private data: tokens, emails, names, hostnames, customer data, home paths.
 - If your tools include `fleet_squad_*` you lead a squad: split the task, spawn one agent per piece, collect their reports and send **one** summary upward. A prompt, merge, push or infra apply escalates; you never answer it for them.
 
