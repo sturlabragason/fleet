@@ -16,6 +16,11 @@
 # theme = "catppuccin"
 # Starting mode, looked up in the profile's mode_args / mode_keys.
 # "" (or omitted) leaves the tool alone. An unknown mode is logged and ignored.
+# "auto" is defined by every built-in profile and means "run every tool call
+# without asking", in that tool's own words: Copilot --allow-all --autopilot,
+# Claude Code --permission-mode bypassPermissions, agy
+# --dangerously-skip-permissions, vibe --auto-approve (ADR-56).
+# WARNING: with mode = "auto" every agent runs every command unattended.
 mode = ""
 # Press Enter after a pasted first prompt. Setting this to false also turns off
 # launch-time delivery (`copilot -i <prompt>` submits the prompt itself), so the

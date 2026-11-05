@@ -14,11 +14,13 @@ import (
 	"github.com/sturlabragason/fleet/internal/tmux"
 )
 
-// resumable prints "mode=<arg>" so a captured pane shows whether the
-// process was launched fresh or resumed, then waits like a real agent.
+// resumable prints "mode=<arg> <arg>" so a captured pane shows whether the
+// process was launched fresh or resumed, and whether the starting mode's
+// args came with it, then waits like a real agent.
 const resumable = `[res]
 command = "sh"
-args = ["-c", "echo mode=${1:-none}; echo '\u2714 Done'; cat", "sh"]
+args = ["-c", "echo mode=${1:-none} ${2:-none}; echo '\u2714 Done'; cat", "sh"]
+mode_args = { auto = "--auto" }
 launch_id = ["started-{id}"]
 resume = ["resumed-{id}"]
 patterns = "fake"
@@ -157,6 +159,39 @@ func TestParkKeepsSessionAndWakeResumesIt(t *testing.T) {
 	if _, err := f.Wake("p1", false); err == nil {
 		t.Error("waking a running agent must fail")
 	}
+}
+
+// A woken agent is a fresh process, so it needs the starting mode again:
+// without it an agy agent comes back asking for permission (ADR-56).
+func TestWakeResumesInTheConfiguredMode(t *testing.T) {
+	f, _ := parkFleet(t, "[defaults]\nmode = \"auto\"\n")
+	a, err := f.Spawn("m1", "res", f.Home, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := a.SessionID
+	waitFor(t, f, "m1", "mode=--auto started-"+id)
+	setState(t, f, "m1", "idle", time.Now())
+	if err := f.Park("m1", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Wake("m1", false); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, f, "m1", "mode=--auto resumed-"+id)
+}
+
+// waitFor fails unless the agent's pane shows want within a few seconds.
+func waitFor(t *testing.T, f *Fleet, name, want string) {
+	t.Helper()
+	pane, out := waitPane(t, f, name), ""
+	for i := 0; i < 50; i++ {
+		if out, _ = f.T.Capture(pane, 10); strings.Contains(out, want) {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("%s: pane never showed %q: %q", name, want, out)
 }
 
 func TestParkRefusesAgentsThatAreNotIdle(t *testing.T) {

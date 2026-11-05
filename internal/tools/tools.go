@@ -52,6 +52,14 @@ type Profile struct {
 	HookArgs []string
 }
 
+// AutoMode is the canonical starting mode that means "run every tool call
+// without asking". Each tool spells it differently (`--allow-all --autopilot`,
+// `--permission-mode bypassPermissions`, `--dangerously-skip-permissions`,
+// `--auto-approve`), so every built-in profile maps this one name to its own
+// flag and `mode = "auto"` in the local preferences covers the whole fleet
+// (ADR-56).
+const AutoMode = "auto"
+
 // HasMode reports whether the profile knows the named starting mode.
 func (p Profile) HasMode(mode string) bool {
 	if mode == "" {
@@ -65,11 +73,13 @@ func (p Profile) HasMode(mode string) bool {
 // Defaults are the built-in profiles. {fleet} is the fleet executable, {name}
 // the agent name, {peer_mcp}/{peer_mcp_claude} the agent's peer MCP config and
 // {hooks} its status-hook settings.
+//
+// Every profile defines the AutoMode ("auto") mode; see its documentation.
 const Defaults = `
 [copilot]
 command = "copilot"
 prompt_args = ["-i", "{prompt}"]
-mode_args = { autopilot = "--allow-all --autopilot", plan = "--plan", interactive = "--mode interactive" }
+mode_args = { auto = "--allow-all --autopilot", autopilot = "--allow-all --autopilot", plan = "--plan", interactive = "--mode interactive" }
 launch_id = ["--session-id", "{id}"]
 resume = ["--resume", "{id}"]
 session_path = "~/.copilot/session-state/{id}"
@@ -81,7 +91,7 @@ peer_args = ["--additional-mcp-config", "{peer_mcp}"]
 command = "copilot"
 args = ["--model", "claude-opus-5", "--allow-all"]
 prompt_args = ["-i", "{prompt}"]
-mode_args = { autopilot = "--allow-all --autopilot", plan = "--plan", interactive = "--mode interactive" }
+mode_args = { auto = "--allow-all --autopilot", autopilot = "--allow-all --autopilot", plan = "--plan", interactive = "--mode interactive" }
 launch_id = ["--session-id", "{id}"]
 resume = ["--resume", "{id}"]
 session_path = "~/.copilot/session-state/{id}"
@@ -92,7 +102,7 @@ peer_args = ["--additional-mcp-config", "{peer_mcp}"]
 [claude]
 command = "claude"
 prompt_args = ["{prompt}"]
-mode_args = { accept-edits = "--permission-mode acceptEdits", plan = "--permission-mode plan", bypass = "--permission-mode bypassPermissions" }
+mode_args = { auto = "--permission-mode bypassPermissions", accept-edits = "--permission-mode acceptEdits", plan = "--permission-mode plan", bypass = "--permission-mode bypassPermissions" }
 launch_id = ["--session-id", "{id}"]
 resume = ["--resume", "{id}"]
 session_path = "~/.claude/projects/*/{id}.jsonl"
@@ -102,17 +112,20 @@ patterns = "claude"
 
 [agy]
 command = "agy"
+mode_args = { auto = "--dangerously-skip-permissions", accept-edits = "--mode accept-edits", plan = "--mode plan" }
 resume = ["--conversation", "{id}"]
 patterns = "agy"
 
 [vibe]
 command = "vibe"
+mode_args = { auto = "--auto-approve", smart-approve = "--smart-approve", ask = "--agent ask" }
 resume = ["--resume", "{id}"]
 patterns = "vibe"
 
 [fake]
 command = "{fleet}"
 args = ["fakeagent", "{name}"]
+mode_args = { auto = "" }
 patterns = "fake"
 ready = "fakeagent .+ ready"
 `

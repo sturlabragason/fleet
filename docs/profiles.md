@@ -25,6 +25,8 @@ Each `[section]` is a profile. A section with a built-in name overrides only the
 | `env` | Environment for the agent, as an inline table. `$VAR` and `${VAR}` are expanded from fleet's environment. |
 | `launch_id` | Arguments that set a session ID at launch. fleet generates a UUID for `{id}` and stores it on the board. |
 | `resume` | Arguments that resume a session by `{id}` (for park/wake, planned) |
+| `mode_args` | Starting modes, as an inline table of space-separated flags. Give every profile an `auto` key holding that tool's allow-all flag, or `mode = "auto"` in `config.toml` cannot reach it and your agents keep asking for permission (ADR-56). |
+| `prompt_args` | Arguments that carry the first prompt, with `{prompt}`, so the tool submits it itself instead of fleet pasting it |
 | `patterns` | Status pattern set: `copilot`, `claude`, `agy`, `vibe`, `fake` or your own. Defaults to the profile name. |
 
 Placeholders in `command` and `args`: `{fleet}` is the fleet binary, `{name}` the agent name, `{id}` the session ID.
@@ -49,6 +51,7 @@ Two Claude Code accounts, kept apart by `CLAUDE_CONFIG_DIR`:
 ```toml
 [claude-personal]
 command = "claude"
+mode_args = { auto = "--permission-mode bypassPermissions" }
 env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-personal" }
 launch_id = ["--session-id", "{id}"]
 resume = ["--resume", "{id}"]
@@ -57,6 +60,7 @@ patterns = "claude"
 [claude-work]
 command = "claude"
 args = ["--model", "claude-sonnet-5"]
+mode_args = { auto = "--permission-mode bypassPermissions" }
 env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-work" }
 launch_id = ["--session-id", "{id}"]
 resume = ["--resume", "{id}"]
@@ -69,6 +73,7 @@ agy or vibe with extra flags (no `launch_id`, since neither sets a session ID at
 [vibe-fast]
 command = "vibe"
 args = ["--your-flag"]
+mode_args = { auto = "--auto-approve" }
 resume = ["--resume", "{id}"]
 patterns = "vibe"
 ```

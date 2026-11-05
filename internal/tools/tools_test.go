@@ -169,6 +169,78 @@ func TestModeArgsAndPrompt(t *testing.T) {
 	}
 }
 
+// Every built-in profile answers to the one canonical "auto" mode, so a single
+// mode = "auto" in the local preferences makes the whole fleet unattended
+// (ADR-56). A profile missing it would silently keep prompting.
+func TestEveryProfileHasAutoMode(t *testing.T) {
+	ps, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][]string{
+		"copilot":        {"--allow-all", "--autopilot"},
+		"claude-copilot": {"--allow-all", "--autopilot"},
+		"claude":         {"--permission-mode", "bypassPermissions"},
+		"agy":            {"--dangerously-skip-permissions"},
+		"vibe":           {"--auto-approve"},
+		"fake":           nil, // the fake agent never asks for permission
+	}
+	if len(ps) != len(want) {
+		t.Errorf("built-in profiles %v; a new one needs an auto mode too", Names(ps))
+	}
+	for name, flags := range want {
+		p, ok := ps[name]
+		if !ok {
+			t.Errorf("no profile %q", name)
+			continue
+		}
+		if !p.HasMode(AutoMode) {
+			t.Errorf("%s: no %q mode", name, AutoMode)
+			continue
+		}
+		got, _ := p.Argv(Vars{}, Launch{Mode: AutoMode})
+		if !containsAll(got, flags) {
+			t.Errorf("%s auto argv %v, want it to carry %v", name, got, flags)
+		}
+	}
+}
+
+// agy and vibe gained mode_args with ADR-56, so their other modes are worth
+// pinning too: a typo in one of these flags is silent at spawn.
+func TestAgyAndVibeModes(t *testing.T) {
+	ps, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		profile, mode string
+		want          []string
+	}{
+		{"agy", "accept-edits", []string{"agy", "--mode", "accept-edits"}},
+		{"agy", "plan", []string{"agy", "--mode", "plan"}},
+		{"vibe", "smart-approve", []string{"vibe", "--smart-approve"}},
+		{"vibe", "ask", []string{"vibe", "--agent", "ask"}},
+	} {
+		got, _ := ps[c.profile].Argv(Vars{}, Launch{Mode: c.mode})
+		if !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s %s argv %v want %v", c.profile, c.mode, got, c.want)
+		}
+	}
+}
+
+func containsAll(argv, want []string) bool {
+	have := map[string]bool{}
+	for _, a := range argv {
+		have[a] = true
+	}
+	for _, w := range want {
+		if !have[w] {
+			return false
+		}
+	}
+	return true
+}
+
 func TestLocalProfileLayer(t *testing.T) {
 	home := t.TempDir()
 	os.WriteFile(filepath.Join(home, "tools.toml"), []byte("[copilot]\nargs = [\"--from-tools\"]\n"), 0o644)

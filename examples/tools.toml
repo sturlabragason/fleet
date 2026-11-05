@@ -10,6 +10,9 @@
 #   resume     arguments that resume a session ({id}); used by park/wake (planned)
 #   prompt_args, mode_args, session_path, subagent_log, peer_args: see internal/tools/tools.go
 #   patterns   status pattern set: copilot, claude, agy, vibe or fake
+# Give every profile you define a mode_args "auto" key with that tool's
+# allow-all flag, or `mode = "auto"` in config.toml cannot reach it and the
+# agent keeps asking for permission (ADR-56).
 # Placeholders: {fleet} = fleet binary, {name} = agent name, {id} = session id.
 
 # Claude model through the Copilot CLI.
@@ -24,7 +27,7 @@ patterns = "copilot"
 [claude-personal]
 command = "claude"
 prompt_args = ["{prompt}"]
-mode_args = { accept-edits = "--permission-mode acceptEdits", plan = "--permission-mode plan", bypass = "--permission-mode bypassPermissions" }
+mode_args = { auto = "--permission-mode bypassPermissions", accept-edits = "--permission-mode acceptEdits", plan = "--permission-mode plan", bypass = "--permission-mode bypassPermissions" }
 env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-personal" }
 launch_id = ["--session-id", "{id}"]
 resume = ["--resume", "{id}"]
@@ -36,7 +39,7 @@ patterns = "claude"
 command = "claude"
 args = ["--model", "claude-sonnet-5"]
 prompt_args = ["{prompt}"]
-mode_args = { accept-edits = "--permission-mode acceptEdits", plan = "--permission-mode plan", bypass = "--permission-mode bypassPermissions" }
+mode_args = { auto = "--permission-mode bypassPermissions", accept-edits = "--permission-mode acceptEdits", plan = "--permission-mode plan", bypass = "--permission-mode bypassPermissions" }
 env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-work" }
 launch_id = ["--session-id", "{id}"]
 resume = ["--resume", "{id}"]

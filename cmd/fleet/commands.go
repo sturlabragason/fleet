@@ -149,7 +149,8 @@ const usage = `usage:
                                             into Claude per agent at spawn, never into your own settings
 
 local preferences (never committed): ~/.config/fleet/config.toml ($FLEET_CONFIG overrides)
-  sets the starting mode (e.g. copilot autopilot), extra args, prompt auto-submit,
+  sets the starting mode (mode = "auto": no permission prompts, any tool),
+  extra args, prompt auto-submit,
   the worker playbook (playbook = false turns it off) and the per-agent git
   worktree (worktree = false turns it off);
   [defaults] max_working and the [memory] RAM guard (guard, min_free, check_every)

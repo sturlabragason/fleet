@@ -256,10 +256,7 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 		id = tools.NewUUID()
 	}
 	pr := f.Prefs.For(profile)
-	if !p.HasMode(pr.Mode) {
-		logx.For("fleet").Warn("unknown mode for profile; ignoring", "agent", name, "profile", profile, "mode", pr.Mode)
-		pr.Mode = ""
-	}
+	pr.Mode = f.modeFor(name, profile, p, pr.Mode)
 	// The worker playbook goes in front of the first prompt only; the board
 	// keeps the user's prompt as the goal (DESIGN §4, ADR-22). No prompt, no
 	// playbook.
@@ -291,6 +288,20 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	}
 	f.autostart(f.T, time.Sleep, a.PaneID, p, pr, full, embedded)
 	return a, nil
+}
+
+// modeFor returns the starting mode to launch an agent with: the configured
+// one when the profile knows it, "" otherwise. An unknown mode is logged and
+// ignored rather than failing the launch, so a typo costs the mode, not the
+// agent. Resume paths use it too, so a woken or adopted agent comes back in
+// the same mode it started in (ADR-56).
+func (f *Fleet) modeFor(name, profile string, p tools.Profile, mode string) string {
+	if p.HasMode(mode) {
+		return mode
+	}
+	logx.For("fleet").Warn("unknown mode for profile; ignoring",
+		"agent", name, "profile", profile, "mode", mode)
+	return ""
 }
 
 // MaxLaunchCmd caps the shell command a spawn hands to tmux new-window with

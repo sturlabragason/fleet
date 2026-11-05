@@ -62,7 +62,11 @@ func (f *Fleet) Adopt(o AdoptOpts) (*board.Agent, error) {
 	// (ADR-47): the session keeps its history, it just gets a dir of its own.
 	dir, _ = f.safeDir(name, dir)
 	f.TrustDir(o.Profile, p, dir)
-	argv, _ := p.Argv(tools.AgentVars(f.Exe, name, id), tools.Launch{Resume: true})
+	// An adopted session is a fresh process, so it needs the permission mode
+	// a spawn would have given it (ADR-56).
+	apr := f.Prefs.For(o.Profile)
+	argv, _ := p.Argv(tools.AgentVars(f.Exe, name, id),
+		tools.Launch{Resume: true, Mode: f.modeFor(name, o.Profile, p, apr.Mode), Extra: apr.ExtraArgs})
 	// Adopt resumes a session that already has a dir, so it never makes a
 	// worktree; when that dir is one, the board records it so close and
 	// sweep can name the work left there (DESIGN §4, ADR-39).

@@ -145,7 +145,11 @@ func (f *Fleet) Wake(name string, force bool) (*board.Agent, error) {
 	}); err != nil {
 		return nil, err
 	}
-	argv, _ := p.Argv(tools.AgentVars(f.Exe, name, old.SessionID), tools.Launch{Resume: true})
+	// A woken agent comes back in the mode it was spawned in: the tool is
+	// started fresh, so its permission mode has to be asked for again (ADR-56).
+	wpr := f.Prefs.For(old.Profile)
+	argv, _ := p.Argv(tools.AgentVars(f.Exe, name, old.SessionID),
+		tools.Launch{Resume: true, Mode: f.modeFor(name, old.Profile, p, wpr.Mode), Extra: wpr.ExtraArgs})
 	a, err := f.start(name, old.Profile, p, old.Dir, old.Goal, "", old.SessionID, argv, true,
 		startExtra{Base: old.Baseline, Worktree: old.Worktree, NoWorktree: old.NoWorktree})
 	if err != nil {
