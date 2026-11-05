@@ -60,6 +60,15 @@ const (
 // Claude's empty box is "❯" plus a non-breaking space, which `\s` does not
 // match, so its box patterns spell out \x{a0}.
 //
+// `error` must match failures only, never a warning the tool leaves on screen:
+// vibe's "⚠ WARNING: You are in the home directory" sits there all session, so
+// the ⚠ patterns are narrowed to ⚠ failed/error (as agy's already were).
+// A banner that is permanently on screen would otherwise make the agent read
+// as error for good, and stuck on its next screen (ADR-45). vibe's ⚠ failure
+// form has never been captured (its offline retry backs off for minutes
+// before giving up), so that half mirrors agy's shipped pattern and is
+// untested until someone snaps one — ADR-42's accepted cost.
+//
 // Copilot CLI (newer UI): busy = "● Working · … esc esc interrupt" in the
 // footer; idle = the mode footer ("Interactive · Allow All · / commands ·
 // space hold to record") with no "Working". Picker hints like "esc to cancel"
@@ -104,7 +113,7 @@ scan = 'window'
 input = ['^[\s\x{a0}]*>[\s\x{a0}](.*)$', '^[\s\x{a0}]*>()[\s\x{a0}]*$']
 placeholder = ['(?i)^ask anything']
 waiting = ['(?i)permission for the ', '(?i)allow once', '\[y/n\]', '(?i)approve', '(?i)allow']
-error = ['(?i)^\s*[⎣⎿]?\s*error: failed to', '(?i)^\s*⚠ ']
+error = ['(?i)^\s*[⎣⎿]?\s*error: failed to', '(?i)^\s*⚠ (failed|error)']
 working = ['(?i)esc(/ctrl\+c)? to (interrupt|cancel)', '[\x{2800}-\x{28ff}]\s+\w+(…|\.\.\.)']
 idle = ['^[\s\x{a0}]*>[\s\x{a0}]*$', '(?i)/\d+k tokens \(']
 `

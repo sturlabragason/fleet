@@ -88,7 +88,7 @@ Shell aliases and functions are not available in that shell. If you use `alias c
 
 ## Status patterns: `~/.fleet/patterns.toml`
 
-Status is read from the last six non-empty lines of the pane. The lowest line that matches any pattern decides; within one line the order is waiting, error, working, idle. If nothing matches but the pane changed, the agent counts as working. A working agent whose pane hasn't changed for 10 minutes is stuck.
+Status is read from the last six non-empty lines of the pane. The lowest line that matches any pattern decides; within one line the order is waiting, error, working, idle. If nothing matches but the pane changed, the agent counts as working. An agent is stuck when the same error banner shows twice in a row, or when it is working and its pane has not changed for `stuck_after` (default 10 minutes; see `config.toml`).
 
 Built-in sets are in [`internal/status/status.go`](../internal/status/status.go). Override a list or add a set:
 

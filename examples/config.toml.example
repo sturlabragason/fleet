@@ -31,6 +31,14 @@ ready_timeout = "15s"
 # (non-zero exit or a signal) is reported to the admiral and closed after this
 # long: "0" closes at once, "off" never. Its dir and session stay on disk.
 # dead_pane_grace = "5m"
+# An agent counts as stuck when the same error banner shows twice in a row, or
+# when it is working and its screen has not changed for this long. A stuck
+# agent goes red and the admiral is told once; nothing is paused or killed.
+# "off" (or "0") turns off the no-progress half; the same-error half stays on.
+# stuck_after = "10m"
+# What else to do with a stuck agent: "none" (the default, just tell the
+# admiral) or "interrupt", which also sends one Escape to its pane.
+# stuck_action = "none"
 # playbook = true  # prepend the fleet worker playbook to the first prompt (DESIGN §4)
 # Give each agent spawned into a git repo its own worktree, <repo>.wt/<name> on
 # branch fleet/<name>, and run it there instead of in your checkout, so parallel

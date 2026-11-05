@@ -5,6 +5,8 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-05
+- Agents that grind are called out: an agent goes **stuck** (red) when the same error banner comes back twice in a row, or when it has been working with no screen change for `stuck_after` (default 10m), and the admiral is told once per episode. Nothing is paused or killed; `stuck_action = "interrupt"` in config.toml opts into sending one Escape (ADR-45)
+- vibe agents started in your home directory no longer read as `error` forever: its "WARNING: You are in the home directory" startup banner is a warning, not a failure (ADR-45)
 - Fleet reads claude, agy and vibe properly: they now show working and error instead of looking idle while they think, and a report wake can type into their prompt box like it already could into Copilot's (ADR-42)
 - `fleet snap <agent> <state>` saves an agent's pane as a status fixture, so teaching fleet a new tool's screens is a capture rather than a hand-written one (ADR-42)
 - The overview header shows unread agent reports as a `✉ N reports` badge, so you can see reports are waiting without looking at the status line; it clears when you read them (ADR-36)

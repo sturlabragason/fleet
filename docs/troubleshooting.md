@@ -35,9 +35,9 @@ tmux -L fleet list-panes -a -F '#{pane_id} #{@role} #{@fleet_agent} #{pane_dead}
 
 - Tool UIs change; a new prompt or spinner may not match the built-in patterns. Run `fleet peek <name>`, then add a pattern in `~/.fleet/patterns.toml`.
 - With no match, any change in the pane counts as working, and no change keeps the previous status. A tool that redraws a clock or cursor can look busy forever.
-- Stuck means "working but the screen hasn't changed for 10 minutes". Long silent builds show as stuck.
+- Stuck means the agent is grinding: the same error banner twice in a row, or working with no screen change for `stuck_after` (default 10m, per profile in `config.toml`). A build that prints output is progressing and never counts; a long *silent* one does show as stuck. Set `stuck_after = "off"` for a profile that runs silent jobs. Nothing is paused for it — the tile goes red and the admiral gets one report.
 - `waiting` patterns such as `(?i)approve` can match ordinary output that happens to be on the bottom lines.
-- Only the fake agent has recorded test captures (`internal/status/testdata`). The copilot, claude, agy and vibe patterns are not yet checked against recorded screens; agy and vibe least of all.
+- Every pattern set has recorded test captures in `internal/status/testdata`. When a status is wrong, `fleet snap <name> <state>` adds the screen as a fixture so the fix is a test case.
 
 **`unknown profile`.** Run `fleet profiles`. Check the section name in `~/.fleet/tools.toml`; a parse error there is reported as `tools.toml: …`.
 
