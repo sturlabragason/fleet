@@ -1,0 +1,30 @@
+
+ ⢠⢢    ⡔⢄⠔⡄   Mistral Vibe v3.0.3
+ ⢸⢸⣀⡔⢉⠱⣃⡢⣂⡣   Mistral Medium 3.5[high] · [Subscription] Pro
+ ⠈⠒⠒⠣⠤⠵⠤⠬⠮⠆   Type /help for more information
+
+Hello Dev, how can I help you?   
+
+
+
+> run the shell command: date
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+
+
+
+
+
+
+
+⣆  Generating… (3s Esc/Ctrl+C to interrupt)
+───────────────────────────────────────────────────────────────────────────────────── accept edits ─
+>
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+/tmp/snapwork                                          Mistral Medium 3.5[high] · 0/202k tokens (0%)

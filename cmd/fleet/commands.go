@@ -78,6 +78,12 @@ const usage = `usage:
                                             files other worktrees of this repo change; with files, only
                                             the overlaps (exit 0 none, 1 overlap, 2 error)
   fleet profiles                            list tool profiles (~/.fleet/tools.toml)
+  fleet snap [-C dir] [--set NAME] [--socket S] <agent | pane-id> <state>
+                                            save the agent's pane as a status fixture in
+                                            internal/status/testdata/<tool>/<state>.txt, so the table test
+                                            picks it up; state is working, waiting, idle, error or stuck
+                                            (optionally <state>-<variant>). A tmux pane id needs --set, and
+                                            --socket (fleet-test-*) to read a scratch tmux server
   fleet wall <apply|refresh|preset N|show NAME|emphasis>   wall control (used by tmux key bindings)
   fleet wall <add NAME|next|prev|untarget>  add a pane, next/previous waiting agent into the ▶ pane, clear ▶
   fleet wall <undo|pin NAME>                undo the last ▶ replace (again: redo); pin/unpin a pane
@@ -173,6 +179,8 @@ func run(args []string) error {
 		return cmdUp(f, rest)
 	case "wall":
 		return cmdWall(f, rest)
+	case "snap":
+		return cmdSnap(f, rest)
 	case "help", "-h", "--help":
 		fmt.Println(usage)
 		return nil

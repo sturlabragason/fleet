@@ -1,0 +1,10 @@
+ ▐▛███▛█   Claude Code v2.1.318
+▝▜██████▀  Opus 5.5 · API Usage Billing
+ ▝▝   ▝▝   /tmp/snapwork
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Try "edit <filepath> to..."
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts
+  tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tra…

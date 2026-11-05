@@ -1,0 +1,30 @@
+
+  ⡠⣒⠄  ⡔⢄⠔⡄   Mistral Vibe v3.0.3
+ ⢸⠸⣀⡔⢉⠱⣃⡢⣂⡣   Mistral Medium 3.5[high] · [Subscription] Pro
+  ⠉⠒⠣⠤⠵⠤⠬⠮⠆   Type /help for more information
+
+  ⎣ Resuming session…
+  ⎣ Error: Failed to resume session: Session not found: 00000000-0000-0000-0000-000000000000
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+───────────────────────────────────────────────────────────────────────────────────── accept edits ─
+>
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+/tmp/snapwork                                          Mistral Medium 3.5[high] · 0/202k tokens (0%)

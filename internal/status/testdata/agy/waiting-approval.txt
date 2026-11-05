@@ -1,0 +1,26 @@
+
+      ▄▀▀▄        Antigravity CLI 1.5.1
+     ▀▀▀▀▀▀       dev@example.com      (Google AI Pro)
+    ▀▀▀▀▀▀▀▀      Gemini 4 Argon (Medium)
+   ▄▀▀    ▀▀▄     /tmp/snapwork
+  ▄▀▀      ▀▀▄
+
+────────────────────────────────────────────────────────────
+> run the shell command: date
+
+● Ran (date) (ctrl+o to expand)
+
+Command
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+Requesting permission for:
+   date
+
+Run this command?
+> 1. Yes, run command
+  2. Yes, and always allow in this conversation for commands that start with 'date'
+  3. Yes, and always allow for commands that start with 'date' (Persist to settings.json)
+  4. No, cancel
+
+  ↑/↓ Navigate · tab Amend · ctrl+g edit/expand command
+5h ░░░░░░░░ 100% left (4h59m)  7d ░░░░░░░░ 99% left (3d)  ctx ░░░░░░ 2%  Gemini 4 Argon (Medium)

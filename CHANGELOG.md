@@ -5,6 +5,8 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-05
+- Fleet reads claude, agy and vibe properly: they now show working and error instead of looking idle while they think, and a report wake can type into their prompt box like it already could into Copilot's (ADR-42)
+- `fleet snap <agent> <state>` saves an agent's pane as a status fixture, so teaching fleet a new tool's screens is a capture rather than a hand-written one (ADR-42)
 - The overview header shows unread agent reports as a `✉ N reports` badge, so you can see reports are waiting without looking at the status line; it clears when you read them (ADR-36)
 - Wall panes never shrink past readable: the minimum pane size scales with your terminal, so `M-9` on a laptop puts up four panes instead of nine, an add that would not fit says so, and resizing the terminal sheds panes rather than crushing them — pinned and waiting panes are never the ones to go (ADR-41)
 - `fleet peek --summary <name>` and the admiral's `fleet_peek(summary=true)` give about 5 lines from a cheap model — what the agent is doing, what it waits for, any error — instead of screen text. It runs on the Copilot CLI you are already signed in to (no API key), caches per screen, calls at most once per agent per 30s and fails open; `[summary]` in config.toml picks the model (default Haiku 5.5) or turns it off (ADR-40)

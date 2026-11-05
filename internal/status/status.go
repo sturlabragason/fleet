@@ -49,7 +49,16 @@ const (
 // text typed there (InputBox). Copilot draws the box as "┃ <text>" lines
 // (or "❯ <text>" between rules, like Claude's "> <text>"), wrapped text
 // continuing on indented rows. Fleet types report wakes only into an empty
-// box.
+// box. `placeholder` matches the hint an empty box shows instead (Claude's
+// `Try "refactor <filepath>"`), which is not typed text.
+//
+// `scan = 'window'` is for tools that draw their state above the prompt box
+// rather than in a footer under it (Claude, agy, vibe): working, then error,
+// wins anywhere in the window, like waiting. Without it only the bottom-most
+// line decides, which for those tools is a mode footer that never changes.
+//
+// Claude's empty box is "❯" plus a non-breaking space, which `\s` does not
+// match, so its box patterns spell out \x{a0}.
 //
 // Copilot CLI (newer UI): busy = "● Working · … esc esc interrupt" in the
 // footer; idle = the mode footer ("Interactive · Allow All · / commands ·
@@ -73,23 +82,31 @@ working = ['(?i)esc (esc )?(to )?interrupt', '(?i)^\s*(\S+ · )*\S? ?working · 
 idle = ['^\s*[>❯]\s*$', '(?i)type @ to mention', '(?i)hold to record', '(?i)^\s*(← open sidebar · )?(interactive|autopilot|plan) · ']
 
 [claude]
-input = ['^\s*[>❯]\s(.*)$', '^\s*[>❯]()$']
-waiting = ['Do you want to', '❯ 1\. Yes', '\[y/n\]']
-error = ['(?i)^\s*(⎿\s*)?error', 'API Error']
-working = ['(?i)esc to interrupt', '[✻✽✶✳✢·] \w+…']
-idle = ['^\s*[>❯]\s*$', '\? for shortcuts']
+scan = 'window'
+input = ['^[\s\x{a0}]*[>❯][\s\x{a0}](.*)$', '^[\s\x{a0}]*[>❯]()[\s\x{a0}]*$']
+placeholder = ['^Try "']
+waiting = ['Do you want to', 'Quick safety check', '(?i)this command requires approval', '❯ 1\. Yes', '\[y/n\]', '(?i)enter to confirm · esc to cancel']
+error = ['(?i)^\s*●?\s*API Error', '(?i)^\s*(fatal|panic):']
+working = ['(?i)esc to interrupt', '^\s*[✻✽✶✳✢] \w+…']
+idle = ['^[\s\x{a0}]*[>❯][\s\x{a0}]*$', '\? for shortcuts', '^\s*[⏸⏵]+ \w+ mode on']
 
 [agy]
-waiting = ['\[y/n\]', '(?i)approve', '(?i)allow']
-error = ['(?i)^error']
-working = ['(?i)esc to (interrupt|cancel)', '[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]']
-idle = ['^\s*[>❯]\s*$']
+scan = 'window'
+input = ['^[\s\x{a0}]*>[\s\x{a0}](.*)$', '^[\s\x{a0}]*>()[\s\x{a0}]*$']
+placeholder = ['(?i)^ask anything']
+waiting = ['(?i)requesting permission for', '(?i)do you trust', 'Run this command\?', '\[y/n\]', '(?i)approve', '(?i)allow']
+error = ['(?i)^\s*⚠ (failed|error)', '^Error ID: ']
+working = ['(?i)esc to (interrupt|cancel)', '[\x{2800}-\x{28ff}]\s+\w+(…|\.\.\.)']
+idle = ['^[\s\x{a0}]*>[\s\x{a0}]*$', '(?i)ctx [░▒▓█]+ +\d+%']
 
 [vibe]
-waiting = ['\[y/n\]', '(?i)approve', '(?i)allow']
-error = ['(?i)^error']
-working = ['(?i)esc to (interrupt|cancel)', '[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]']
-idle = ['^\s*[>❯]\s*$']
+scan = 'window'
+input = ['^[\s\x{a0}]*>[\s\x{a0}](.*)$', '^[\s\x{a0}]*>()[\s\x{a0}]*$']
+placeholder = ['(?i)^ask anything']
+waiting = ['(?i)permission for the ', '(?i)allow once', '\[y/n\]', '(?i)approve', '(?i)allow']
+error = ['(?i)^\s*[⎣⎿]?\s*error: failed to', '(?i)^\s*⚠ ']
+working = ['(?i)esc(/ctrl\+c)? to (interrupt|cancel)', '[\x{2800}-\x{28ff}]\s+\w+(…|\.\.\.)']
+idle = ['^[\s\x{a0}]*>[\s\x{a0}]*$', '(?i)/\d+k tokens \(']
 `
 
 // Set holds compiled patterns for one tool.
@@ -98,6 +115,10 @@ type Set struct {
 	Transcript                    []*regexp.Regexp // lines of the scrolling conversation
 	Pending                       []*regexp.Regexp // unsubmitted input in the prompt box
 	Input                         []*regexp.Regexp // a prompt-box line; group 1 = its text
+	Placeholder                   []*regexp.Regexp // the hint an empty prompt box shows
+	// Scan "window" lets working, then error, win anywhere in the window,
+	// for tools that draw them above the prompt box instead of in a footer.
+	Scan string
 }
 
 // Sets maps pattern-set name to Set.
@@ -118,10 +139,13 @@ func Load(home string) Sets {
 				continue
 			}
 			s := out[name]
-			for k, dst := range map[string]*[]*regexp.Regexp{"waiting": &s.Waiting, "error": &s.Error, "working": &s.Working, "idle": &s.Idle, "transcript": &s.Transcript, "pending": &s.Pending, "input": &s.Input} {
+			for k, dst := range map[string]*[]*regexp.Regexp{"waiting": &s.Waiting, "error": &s.Error, "working": &s.Working, "idle": &s.Idle, "transcript": &s.Transcript, "pending": &s.Pending, "input": &s.Input, "placeholder": &s.Placeholder} {
 				if l, ok := sec[k].([]string); ok {
 					*dst = compile(name, l)
 				}
+			}
+			if v, ok := sec["scan"].(string); ok {
+				s.Scan = v
 			}
 			out[name] = s
 		}
@@ -199,6 +223,20 @@ func (s Set) Match(text string) (Status, string, bool) {
 	if l, ok := s.pending(lines, skip); ok {
 		return Waiting, PendingPrefix + l, true
 	}
+	if s.Scan == "window" {
+		// Claude, agy and vibe put the spinner and the error above the
+		// prompt box; the footer under it says the same thing idle or busy.
+		for _, c := range []struct {
+			st Status
+			rs []*regexp.Regexp
+		}{{Working, s.Working}, {Error, s.Error}} {
+			for i := len(lines) - 1; i >= 0; i-- {
+				if !skip[i] && matchAny(c.rs, lines[i]) {
+					return c.st, clean(lines[i]), true
+				}
+			}
+		}
+	}
 	for i := len(lines) - 1; i >= 0; i-- {
 		l := lines[i]
 		for _, c := range []struct {
@@ -230,8 +268,9 @@ func (s Set) Unsubmitted(text string) (string, bool) {
 
 // InputBox returns the text in the prompt box: the bottom-most run of
 // lines matching `input` plus the indented rows a wrapped entry continues
-// on below it (up to a rule), their text joined by spaces. ok=false when
-// the set has no input pattern or no box is on screen.
+// on below it (up to a rule), their text joined by spaces. A box showing
+// only its `placeholder` hint reads as empty. ok=false when the set has no
+// input pattern or no box is on screen.
 func (s Set) InputBox(text string) (string, bool) {
 	if len(s.Input) == 0 {
 		return "", false
@@ -263,7 +302,11 @@ func (s Set) InputBox(text string) (string, bool) {
 		}
 		parts = append(parts, strings.TrimSpace(l))
 	}
-	return strings.TrimSpace(strings.Join(parts, " ")), true
+	box := strings.TrimSpace(strings.Join(parts, " "))
+	if matchAny(s.Placeholder, box) {
+		return "", true
+	}
+	return box, true
 }
 
 func inputLine(rs []*regexp.Regexp, l string) (string, bool) {

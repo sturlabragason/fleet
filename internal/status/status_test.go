@@ -206,7 +206,64 @@ func TestInputBox(t *testing.T) {
 	if got, ok := cl.InputBox(strings.Replace(claude, "> on the acme sum\n  mary it needs", ">", 1)); !ok || got != "" {
 		t.Errorf("claude empty: got %q %v", got, ok)
 	}
-	if _, ok := sets["vibe"].InputBox("> hi\n"); ok {
+	if _, ok := (Set{}).InputBox("> hi\n"); ok {
 		t.Error("a set without an input pattern must not claim a box")
+	}
+	// Claude's empty box is "❯" plus a non-breaking space, and an empty box
+	// shows a placeholder hint: both read as empty, so a wake can be typed.
+	for _, s := range []string{"\u00a0", ` Try "refactor <filepath>"`} {
+		if got, ok := cl.InputBox("────────\n❯" + s + "\n────────\n  ? for shortcuts\n"); !ok || got != "" {
+			t.Errorf("claude %q: got %q %v", s, got, ok)
+		}
+	}
+}
+
+// The window scan (ADR-40) reads the whole window, so a tool's own words
+// must not look like its spinner or its error banner.
+func TestWindowScanIgnoresTranscript(t *testing.T) {
+	sets := Load(t.TempDir())
+	footer := map[string]string{
+		"claude": "  ⏵⏵ auto mode on (shift+tab to cycle)",
+		"agy":    "  ctx ░░░░░░ 0%",
+		"vibe":   "  0/202k tokens (0%)",
+	}
+	for _, tc := range []struct{ set, above string }{
+		{"claude", "⎿  Error: ls: /nope: No such file or directory"},
+		{"claude", "  * Refactoring…"},
+		{"claude", "● I hit an error: the path was wrong, so I fixed it."},
+		{"agy", "  ⎿ Error: command not found: fo"},
+		{"vibe", "  ⎣ Error: ls: /nope: No such file or directory"},
+	} {
+		screen := tc.above + "\n────────\n>\u00a0\n────────\n" + footer[tc.set] + "\n"
+		got, _, _ := sets[tc.set].Match(screen)
+		if got != Idle {
+			t.Errorf("%s %q: got %s, want idle", tc.set, tc.above, got)
+		}
+	}
+}
+
+// Every idle capture of a set with input patterns must show an empty prompt
+// box, so the report wake (ADR-36) knows it may type; an "-typed" capture
+// must read the text back instead. A tool busy, crashed or showing an
+// approval box often has no box on screen, so those are not required to.
+func TestInputBoxCaptures(t *testing.T) {
+	sets := Load(t.TempDir())
+	files, _ := filepath.Glob("testdata/*/*.txt")
+	for _, f := range files {
+		set := filepath.Base(filepath.Dir(f))
+		s := sets[set]
+		name := strings.TrimSuffix(filepath.Base(f), ".txt")
+		if len(s.Input) == 0 || !strings.HasPrefix(name, "idle") {
+			continue
+		}
+		b, _ := os.ReadFile(f)
+		got, ok := s.InputBox(string(b))
+		if !ok {
+			t.Errorf("%s: no prompt box found", f)
+			continue
+		}
+		if typed := strings.HasSuffix(name, "-typed"); typed != (got != "") {
+			t.Errorf("%s: box %q, typed=%v", f, got, typed)
+		}
 	}
 }
