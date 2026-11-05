@@ -202,9 +202,12 @@ func MenuKeys(selected, option int) []string {
 	return append(keys, "Enter")
 }
 
-// Answer answers y or n. With a numbered prompt on screen, y picks option 1
-// and n the first option starting with "No". Without one it types y/n and
-// Enter as before (Label ""); expect is then checked against the waiting line.
+// Answer answers y or n. With a prompt on screen, y picks the first option
+// starting with "Yes" (else option 1) and n the first starting with "No" —
+// pickers do not always put the yes first, as Claude's folder-trust dialog
+// ("❯ No, exit" / "Yes, I trust this folder") shows. Without one it types
+// y/n and Enter as before (Label ""); expect is then checked against the
+// waiting line.
 func (f *Fleet) Answer(name, yn, expect string) (Choice, error) {
 	if yn != "y" && yn != "n" {
 		return Choice{}, fmt.Errorf(`answer must be "y" or "n"`)
@@ -223,18 +226,24 @@ func (f *Fleet) Answer(name, yn, expect string) (Choice, error) {
 		}
 		return Choice{Question: w}, f.Send(name, yn)
 	}
-	target := 1
+	target := first(m.Options, "Yes")
 	if yn == "n" {
-		target = 0
-		for i, o := range m.Options {
-			if strings.HasPrefix(status.Label(o), "No") {
-				target = i + 1
-				break
-			}
-		}
-		if target == 0 {
+		if target = first(m.Options, "No"); target == 0 {
 			return Choice{}, fmt.Errorf("no option starting with \"No\" in %s; use option", strings.Join(m.Options, " | "))
 		}
+	} else if target == 0 {
+		target = 1
 	}
 	return f.choose(name, target, expect, "prompt no longer on screen")
+}
+
+// first is the 1-based index of the first option whose label starts with
+// word (case-insensitive), or 0.
+func first(options []string, word string) int {
+	for i, o := range options {
+		if strings.HasPrefix(strings.ToLower(status.Label(o)), strings.ToLower(word)) {
+			return i + 1
+		}
+	}
+	return 0
 }

@@ -326,7 +326,7 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 		}
 		return nil
 	}
-	fmt.Printf("spawned %s (%s) in %s pane %s\n", ag.Name, ag.Profile, ag.Dir, ag.PaneID)
+	fmt.Printf("spawned %s (%s) in %s pane %s%s\n", ag.Name, ag.Profile, ag.Dir, ag.PaneID, dirNote(f, ag.Dir))
 	if w := ag.Worktree; w != nil {
 		fmt.Printf("worktree %s on branch %s (of %s)\n", w.Path, w.Branch, w.Repo)
 	}
@@ -355,7 +355,7 @@ func cmdAdopt(f *fleet.Fleet, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("adopted %s (%s) session %s in %s pane %s\n", ag.Name, ag.Profile, ag.SessionID, ag.Dir, ag.PaneID)
+	fmt.Printf("adopted %s (%s) session %s in %s pane %s%s\n", ag.Name, ag.Profile, ag.SessionID, ag.Dir, ag.PaneID, dirNote(f, ag.Dir))
 	return nil
 }
 
@@ -522,4 +522,13 @@ func cmdPeek(f *fleet.Fleet, args []string) error {
 	}
 	fmt.Println(out)
 	return nil
+}
+
+// dirNote tells the user when fleet did not start the agent where it was
+// asked to: a home-directory spawn goes to a scratch dir of its own (ADR-47).
+func dirNote(f *fleet.Fleet, dir string) string {
+	if !f.InScratch(dir) {
+		return ""
+	}
+	return "\n  " + fleet.RedirectNote()
 }

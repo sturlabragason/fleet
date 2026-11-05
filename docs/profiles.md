@@ -86,6 +86,32 @@ Each agent runs as `bash -lc 'exec <command> <args>…'` in a new hidden tmux wi
 
 Shell aliases and functions are not available in that shell. If you use `alias cw='CLAUDE_CONFIG_DIR=… claude'`, make it a profile instead.
 
+## Folder trust (ADR-47)
+
+Tools ask "do you trust this folder?" the first time they run somewhere new. Nobody is watching a spawn, so fleet answers that question before the tool can ask it: just before launch it writes the agent's dir (the worktree, when there is one) into the tool's own trust store. Which store depends on the profile's `command` and `env`, not its name — `claude-copilot` runs `copilot`, so it is trusted the Copilot way.
+
+| Profile | Where fleet writes | What it sets |
+|---|---|---|
+| `claude` | `$CLAUDE_CONFIG_DIR/.claude.json`, else `~/.claude.json` | `projects["<dir>"]`: `hasTrustDialogAccepted`, and `hasClaudeMdExternalIncludesApproved`/`…WarningShown` for the modal behind it |
+| `claude-personal`, `claude-work` | the same file under that profile's `CLAUDE_CONFIG_DIR` (`~/.claude-personal`, `~/.claude-work`) | the same keys |
+| `copilot`, `claude-copilot` | `~/.copilot/config.json` | the dir appended to `trustedFolders` |
+| `vibe` | `$VIBE_HOME/trusted_folders.toml` (default `~/.vibe`) | the dir added to `trusted`, removed from `untrusted` |
+| `agy` | — | no trust store on disk; the dialog is answered on screen instead |
+
+Every other key in those files is kept, and the file is rewritten under a lock and renamed into place, so a running agent writing its own config at the same moment cannot lose anything. A config dir that does not exist means you have never run that tool; fleet logs it and does not create one.
+
+If fleet cannot write that config — agy keeps no trust store on disk — it answers on screen instead: for the first seconds after launch it watches the pane and picks the dialog's "Yes, I trust …" option, before the first prompt, which would otherwise be typed into the menu. A spawn fleet could pre-mark never waits for this.
+
+Turn it off per profile (you then answer the prompts yourself):
+
+```toml
+# ~/.config/fleet/config.toml
+[profile.claude-work]
+auto_trust = false
+```
+
+**Fleet never starts an agent in your home directory.** A spawn or adopt dir that is `$HOME` or `/` is moved to `~/.fleet/scratch/<name>`; the reply and `fleet.log` say so. Agents started in `$HOME` read every dotfile as project config, share one project identity, and trip each tool's own "dangerous directory" guard.
+
 ## Status patterns: `~/.fleet/patterns.toml`
 
 Status is read from the last six non-empty lines of the pane. The lowest line that matches any pattern decides; within one line the order is waiting, error, working, idle. If nothing matches but the pane changed, the agent counts as working. An agent is stuck when the same error banner shows twice in a row, or when it is working and its pane has not changed for `stuck_after` (default 10 minutes; see `config.toml`).

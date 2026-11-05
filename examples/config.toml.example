@@ -46,6 +46,12 @@ ready_timeout = "15s"
 # --no-worktree` (or worktree=false on fleet_spawn) skips it for one spawn.
 # Closing an agent never removes the worktree or the branch.
 # worktree = true
+# Before an agent starts, write its dir into the tool's own trust store so it
+# never stops on "Do you trust this folder?" (Claude's ~/.claude.json or the
+# profile's CLAUDE_CONFIG_DIR, Copilot's trustedFolders, vibe's
+# trusted_folders.toml), and answer the dialog on screen for a tool fleet
+# cannot pre-mark, like agy. false: you get the prompt (DESIGN §4, ADR-47).
+# auto_trust = true
 # Added to every agent pane's environment (spawn and adopt), over the profile's
 # own env. [profile.<name>] env keys override these one by one. Keeps parallel
 # builds and tests from each taking every core (DESIGN §7a, docs/perf.md).

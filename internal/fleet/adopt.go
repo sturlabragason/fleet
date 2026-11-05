@@ -58,6 +58,10 @@ func (f *Fleet) Adopt(o AdoptOpts) (*board.Agent, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Resuming in the home directory is the same mistake as spawning there
+	// (ADR-47): the session keeps its history, it just gets a dir of its own.
+	dir, _ = f.safeDir(name, dir)
+	f.TrustDir(o.Profile, p, dir)
 	argv, _ := p.Argv(tools.AgentVars(f.Exe, name, id), tools.Launch{Resume: true})
 	// Adopt resumes a session that already has a dir, so it never makes a
 	// worktree; when that dir is one, the board records it so close and

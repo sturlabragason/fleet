@@ -70,6 +70,8 @@ Use only the `fleet` MCP tools: `fleet_status`, `fleet_info`, `fleet_peek`, `fle
   live claims, and a claim frees itself once its ADR is on main.
 - In a git repo `fleet_spawn` makes that worktree for the agent itself (`<repo>.wt/<name>`, branch `fleet/<name>`);
   pass `worktree=false` only when the work must land in the user's own checkout. Closing never removes it.
+- Never spawn in the home directory: give `fleet_spawn` the repo or project dir. A home-directory spawn is
+  moved to a scratch dir of the agent's own, and the reply says so.
 
 ## Running the work
 

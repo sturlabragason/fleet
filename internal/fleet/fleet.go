@@ -181,6 +181,9 @@ func (f *Fleet) SpawnWith(o SpawnOpts, name, profile, dir, prompt string) (*boar
 	if abs, err := filepath.Abs(dir); err == nil {
 		dir = abs
 	}
+	// Never start an agent in the home directory (ADR-47); do it before the
+	// queue so a queued agent remembers where it will really start.
+	dir, _ = f.safeDir(name, dir)
 	wt := f.Prefs.For(profile).Worktree
 	if o.Worktree != nil {
 		wt = *o.Worktree
@@ -233,6 +236,9 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 			dir = ex.Worktree.Path
 		}
 	}
+	// The dir is final here (worktree or not), so this is the last moment
+	// before the tool reads it: pre-answer its trust dialog (ADR-47).
+	marked := f.TrustDir(profile, p, dir)
 	id := ""
 	if len(p.LaunchID) > 0 {
 		id = tools.NewUUID()
@@ -265,6 +271,11 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	a, err := f.start(name, profile, p, dir, prompt, full, id, argv, claimed, ex)
 	if err != nil {
 		return nil, err
+	}
+	// Before autostart: the dialog reads as waiting, so an unanswered one
+	// would swallow the first prompt (ADR-47).
+	if !marked {
+		f.answerTrust(f.T, time.Sleep, a.PaneID, p, pr)
 	}
 	f.autostart(f.T, time.Sleep, a.PaneID, p, pr, full, embedded)
 	return a, nil

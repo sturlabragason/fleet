@@ -52,6 +52,10 @@ type Spawn struct {
 	// and telling the admiral: StuckNone (the default) or StuckInterrupt,
 	// which sends Escape once per episode.
 	StuckAction string
+	// AutoTrust pre-marks the dir an agent starts in as trusted in the
+	// tool's own config, so its "do you trust this folder?" dialog never
+	// appears (DESIGN §4, ADR-47). false leaves the tool to ask.
+	AutoTrust bool
 }
 
 // Stuck actions for stuck_action: tell the admiral only (the default), or
@@ -69,10 +73,10 @@ const GraceOff time.Duration = -1
 const DefaultDeadPaneGrace = 5 * time.Minute
 
 // Neutral is the built-in default: no mode, auto-submit, DefaultReadyTimeout,
-// worker playbook on, DefaultDeadPaneGrace, a worktree per agent, the stuck
-// rule's default timeout and no action on stuck.
+// worker playbook on, DefaultDeadPaneGrace, a worktree per agent, auto-trust,
+// the stuck rule's default timeout and no action on stuck.
 func Neutral() Spawn {
-	return Spawn{AutoSubmit: true, ReadyTimeout: DefaultReadyTimeout, Playbook: true, DeadPaneGrace: DefaultDeadPaneGrace, Worktree: true, StuckAfter: status.DefaultStuckAfter, StuckAction: StuckNone}
+	return Spawn{AutoSubmit: true, ReadyTimeout: DefaultReadyTimeout, Playbook: true, DeadPaneGrace: DefaultDeadPaneGrace, Worktree: true, AutoTrust: true, StuckAfter: status.DefaultStuckAfter, StuckAction: StuckNone}
 }
 
 // DefaultMaxWorking caps how many agents may be working at once before new
@@ -211,6 +215,9 @@ func applySpawn(s Spawn, sec map[string]conf.Value) Spawn {
 		} else {
 			s.StuckAction = StuckNone
 		}
+	}
+	if v, ok := conf.Bool(sec, "auto_trust"); ok {
+		s.AutoTrust = v
 	}
 	if v, ok := conf.Dur(sec, "ready_timeout"); ok && v > 0 {
 		s.ReadyTimeout = v

@@ -54,12 +54,20 @@ func admiralLaunch(f *fleet.Fleet, prof, resumeID, boot string) (supLaunch, erro
 		dir = filepath.Join(filepath.Dir(filepath.Dir(f.Exe)), "supervisor")
 	}
 	if _, err := os.Stat(dir); err != nil {
-		// No checkout next to the binary (go install): any readable cwd will do,
-		// the admiral works through MCP tools, not files.
-		home, _ := os.UserHomeDir()
-		logx.For("up").Info("admiral dir missing, using home", "dir", dir, "home", home)
-		dir = home
+		// No checkout next to the binary (go install): the admiral works
+		// through MCP tools, not files, so any readable dir will do — but not
+		// the home directory (ADR-47), which tools treat as a project.
+		dir = filepath.Join(logx.Home(), fleet.ScratchRoot, "admiral")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			home, _ := os.UserHomeDir()
+			logx.For("up").Warn("admiral scratch dir failed, using home", "err", err, "home", home)
+			dir = home
+		} else {
+			logx.For("up").Info("admiral dir missing, using a scratch dir", "dir", dir)
+		}
 	}
+	// The admiral is a tool too: pre-answer its trust dialog for its dir.
+	f.TrustDir(prof, p, dir)
 	id := resumeID
 	if id == "" && len(p.LaunchID) > 0 {
 		id = tools.NewUUID()

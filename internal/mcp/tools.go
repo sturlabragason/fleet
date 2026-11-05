@@ -57,7 +57,7 @@ var toolDefs = []tool{
 		"expect": str("the question the user confirmed (or part of it, or of the option label); refused if the prompt on screen no longer matches"), "confirmed": confirmedProp})},
 	{"fleet_info", "Facts about one agent: profile, team, status and age, last activity, dir, its task card (goal, done-check and its verdict, result file), git (worktree, branch, dirty files, merged into main, commits ahead), session id, context %, spend so far, mode.", obj([]string{"name"}, map[string]any{
 		"name": str("agent name")})},
-	{"fleet_spawn", "Start a new agent with a tool profile in a directory, optionally with a first prompt. In a git repo the agent gets its own worktree, <repo>.wt/<name> on branch fleet/<name>, and works there; pass worktree=false to put it straight in dir (e.g. a read-only task, or work that must land in the user's checkout). goal, check and result make a task card: fleet runs check in the agent's dir when it reports done and tells you whether it passed, and the agent is told to write the result file.", obj([]string{"name", "profile", "dir"}, map[string]any{
+	{"fleet_spawn", "Start a new agent with a tool profile in a directory, optionally with a first prompt. Never spawn in the home directory: pass the repo or project dir, not $HOME (fleet moves a home-directory spawn to a scratch dir of its own and says so). In a git repo the agent gets its own worktree, <repo>.wt/<name> on branch fleet/<name>, and works there; pass worktree=false to put it straight in dir (e.g. a read-only task, or work that must land in the user's checkout). goal, check and result make a task card: fleet runs check in the agent's dir when it reports done and tells you whether it passed, and the agent is told to write the result file.", obj([]string{"name", "profile", "dir"}, map[string]any{
 		"name": str("short unique agent name"), "profile": str("tool profile, see fleet_profiles"), "dir": str("working directory (absolute)"), "prompt": str("optional first prompt"),
 		"worktree":   map[string]any{"type": "boolean", "description": "give the agent its own git worktree (default: the user's config, normally true)"},
 		"goal":       str("task card: the goal in one line (shown on the tile and in fleet_info)"),
@@ -162,7 +162,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		if w := ag.Worktree; w != nil {
 			return fmt.Sprintf("spawned %s (%s) in its own worktree %s on branch %s (of %s)", ag.Name, ag.Profile, w.Path, w.Branch, w.Repo) + cardNote(ag), nil
 		}
-		return fmt.Sprintf("spawned %s (%s) in %s", ag.Name, ag.Profile, ag.Dir) + cardNote(ag), nil
+		return fmt.Sprintf("spawned %s (%s) in %s%s", ag.Name, ag.Profile, ag.Dir, s.dirNote(ag.Dir)) + cardNote(ag), nil
 	case "fleet_sessions":
 		return s.sessions(a.Query, a.Limit)
 	case "fleet_adopt":
@@ -195,7 +195,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("adopted %s (%s) session %s in %s", ag.Name, ag.Profile, ag.SessionID, ag.Dir), nil
+		return fmt.Sprintf("adopted %s (%s) session %s in %s%s", ag.Name, ag.Profile, ag.SessionID, ag.Dir, s.dirNote(ag.Dir)), nil
 	case "fleet_profiles":
 		var b strings.Builder
 		for _, n := range tools.Names(s.F.Profiles) {
@@ -414,4 +414,13 @@ func (s *summaryArg) UnmarshalJSON(b []byte) error {
 		s.Flag = true
 	}
 	return nil
+}
+
+// dirNote tells the caller when fleet did not start the agent where it was
+// asked to: a home-directory spawn goes to a scratch dir of its own (ADR-47).
+func (s *Server) dirNote(dir string) string {
+	if !s.F.InScratch(dir) {
+		return ""
+	}
+	return " — " + fleet.RedirectNote()
 }
