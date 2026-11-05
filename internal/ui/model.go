@@ -22,30 +22,33 @@ import (
 
 // Model is the overview state.
 type Model struct {
-	be       Backend
-	agents   []*board.Agent // attention-sorted
-	queuePos map[string]int // queued agent -> 1-based start position
-	onWall   map[string]bool
-	teams    map[string]team.Info
-	sel      string
-	w, h     int
-	frame    int
-	animate  bool
-	msg      string
-	msgAt    time.Time // when msg was set; it clears after msgTTL
-	target   string    // agent in the ▶ target slot, "" if none (DESIGN.md §5e)
-	help     bool      // ? overlay with every hotkey replaces the tiles
-	helpOff  int       // first overlay line shown when it is taller than the pane
-	stateDir string
-	cfg      layout.Config
-	now      func() time.Time
-	supCtx   [2]string // last label/colour set on the admiral border
-	ctxSet   bool
+	be        Backend
+	agents    []*board.Agent // attention-sorted
+	queuePos  map[string]int // queued agent -> 1-based start position
+	onWall    map[string]bool
+	pinned    map[string]bool
+	teams     map[string]team.Info
+	sel       string
+	w, h      int
+	frame     int
+	animate   bool
+	msg       string
+	msgAt     time.Time // when msg was set; it clears after msgTTL
+	target    string    // agent in the ▶ target slot, "" if none (DESIGN.md §5e)
+	help      bool      // ? overlay with every hotkey replaces the tiles
+	helpOff   int       // first overlay line shown when it is taller than the pane
+	rightDown bool      // right button pressed, the menu opens on its release
+	stateDir  string
+	cfg       layout.Config
+	now       func() time.Time
+	supCtx    [2]string // last label/colour set on the admiral border
+	ctxSet    bool
 }
 
 type agentsMsg struct {
 	agents []*board.Agent
 	onWall map[string]bool
+	pinned map[string]bool
 	teams  map[string]team.Info
 	target string
 	supCtx [2]string
@@ -54,7 +57,9 @@ type agentsMsg struct {
 
 // wallMsg is the outcome of a wall action: a message for the header and,
 // on success, the agent now in the ▶ slot (also selected).
-type wallMsg struct{ info, target string }
+// wallMsg reports a wall change: the message, the agent now in ▶ and, when
+// it differs from target, where the cursor goes.
+type wallMsg struct{ info, target, sel string }
 
 // msgTTL is how long a header message replaces the hint line.
 const msgTTL = 5 * time.Second
@@ -91,7 +96,7 @@ func (m *Model) poll() tea.Cmd {
 		// is what makes emphasis move when a pane starts waiting (§5b.3).
 		_ = be.ApplyWall()
 		l, c := be.SupCtx()
-		return agentsMsg{agents: as, onWall: be.OnWall(), teams: be.Teams(), target: be.Target(), supCtx: [2]string{l, c}, err: err}
+		return agentsMsg{agents: as, onWall: be.OnWall(), pinned: be.Pinned(), teams: be.Teams(), target: be.Target(), supCtx: [2]string{l, c}, err: err}
 	}
 }
 
@@ -130,6 +135,7 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 		}
 		m.setAgents(msg.agents)
 		m.onWall = msg.onWall
+		m.pinned = msg.pinned
 		m.teams = msg.teams
 		m.target = msg.target
 		return m, tea.Batch(pollLater(), m.syncSupCtx(msg.supCtx))
@@ -147,6 +153,9 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 		m.msg, m.msgAt = msg.info, m.now()
 		if msg.target != "" {
 			m.target, m.sel = msg.target, msg.target
+			if msg.sel != "" {
+				m.sel = msg.sel
+			}
 			m.saveCursor()
 		}
 	case tea.KeyMsg:
@@ -158,6 +167,26 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 				m.scrollHelp(-1)
 			case tea.MouseButtonWheelDown:
 				m.scrollHelp(1)
+			}
+			return m, nil
+		}
+		// The menu opens on the right button's release: opened on the press,
+		// the release that follows would land outside its items and close it.
+		// SGR mouse reports the released button; X10 says none, so a release
+		// right after a right press counts too.
+		if !m.help && msg.Button == tea.MouseButtonRight && msg.Action == tea.MouseActionPress {
+			m.rightDown = true
+			return m, nil
+		}
+		if !m.help && msg.Action == tea.MouseActionRelease &&
+			(msg.Button == tea.MouseButtonRight || msg.Button == tea.MouseButtonNone && m.rightDown) {
+			m.rightDown = false
+			for _, a := range m.agents {
+				if zone.Get("tile-" + a.Name).InBounds(msg) {
+					m.sel = a.Name
+					m.saveCursor()
+					return m, m.menu(a.Name, msg.X, msg.Y)
+				}
 			}
 			return m, nil
 		}
@@ -284,6 +313,12 @@ func (m *Model) key(k string) tea.Cmd {
 		return m.show()
 	case "a", "+":
 		return m.add()
+	case " ":
+		return m.preview()
+	case "u":
+		return m.undo()
+	case "p":
+		return m.pin()
 	case "esc":
 		if m.target == "" {
 			return nil
@@ -392,15 +427,16 @@ func (m *Model) show() tea.Cmd {
 
 // shownMsg says what a Show or Next did, from the ▶ agent before it and
 // whether the agent was already on the wall: it replaced the ▶ pane, was
-// appended, or was already there.
+// appended, or was already there. When the ▶ pane is pinned the wall places
+// the agent by its old rules instead (DESIGN.md §5e) and the cursor stays on
+// the pinned agent, so p there unpins it.
 func shownMsg(be Backend, name, before string, wasOn bool) wallMsg {
-	switch {
-	case wasOn:
-		return wallMsg{name + " on wall", name}
-	case before != "" && before != name && !be.OnWall()[before]:
-		return wallMsg{name + " → ▶ (was " + before + ")", name}
+	beforeOn := before != "" && be.OnWall()[before]
+	msg := wallMsg{info: wall.ShownMsg(name, before, wasOn, beforeOn), target: name}
+	if !wasOn && before != "" && before != name && beforeOn {
+		msg.sel = before
 	}
-	return wallMsg{name + " added to wall", name}
+	return msg
 }
 
 // add puts the selected agent onto the wall as a new pane.
@@ -420,9 +456,9 @@ func (m *Model) add() tea.Cmd {
 			return infoMsg(wall.AddFullMsg)
 		}
 		if wasOn {
-			return wallMsg{name + " on wall", name}
+			return wallMsg{info: name + " on wall", target: name}
 		}
-		return wallMsg{name + " added to wall", name}
+		return wallMsg{info: name + " added to wall", target: name}
 	}
 }
 
@@ -444,6 +480,71 @@ func (m *Model) next(dir int) tea.Cmd {
 			return infoMsg(wall.FullMsg) // cursor and ▶ stay put
 		}
 		return shownMsg(be, name, before, on[name])
+	}
+}
+
+// undo swaps the last replace back (u); pressed again it redoes.
+func (m *Model) undo() tea.Cmd {
+	if !m.wallReady() {
+		return nil
+	}
+	be := m.be
+	return func() tea.Msg {
+		msg, target, err := be.Undo()
+		if err != nil {
+			logx.For("ui").Error("undo failed", "err", err)
+			return infoMsg("undo: " + err.Error())
+		}
+		return wallMsg{info: msg, target: target}
+	}
+}
+
+// pin toggles the pin on the selected agent's pane (p).
+func (m *Model) pin() tea.Cmd {
+	name, be := m.sel, m.be
+	if name == "" || !m.wallReady() {
+		return nil
+	}
+	return func() tea.Msg {
+		on, err := be.TogglePin(name)
+		if err != nil {
+			logx.For("ui").Error("pin failed", "agent", name, "err", err)
+			return infoMsg("pin " + name + ": " + err.Error())
+		}
+		if on {
+			return infoMsg(name + " pinned " + pinMark)
+		}
+		return infoMsg(name + " unpinned")
+	}
+}
+
+// preview opens the live preview popup for the selected agent (Space).
+func (m *Model) preview() tea.Cmd {
+	name, be := m.sel, m.be
+	if name == "" || !m.wallReady() {
+		return nil
+	}
+	return func() tea.Msg {
+		if err := be.Preview(name); err != nil {
+			logx.For("ui").Error("preview failed", "agent", name, "err", err)
+			return infoMsg("preview " + name + ": " + err.Error())
+		}
+		return nil
+	}
+}
+
+// menu opens the right-click menu for an agent at overview cell x,y.
+func (m *Model) menu(name string, x, y int) tea.Cmd {
+	if !m.wallReady() {
+		return nil
+	}
+	be := m.be
+	return func() tea.Msg {
+		if err := be.Menu(name, x, y); err != nil {
+			logx.For("ui").Error("menu failed", "agent", name, "err", err)
+			return infoMsg("menu: " + err.Error())
+		}
+		return nil
 	}
 }
 

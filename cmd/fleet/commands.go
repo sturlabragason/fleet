@@ -39,6 +39,8 @@ const usage = `usage:
   fleet ls [--json]
   fleet send <name> "text"
   fleet peek <name> [--raw] [-n 200]
+  fleet peek --live <name>                  live colour view of the agent's pane, 4x a second (Space in
+                                            the overview opens it in a popup; Enter puts it in ▶)
   fleet close <name>                        stop an agent and remove it from the board
   fleet team ls [--json]                    teams with colour and members (running members marked)
   fleet team create <team> [colour]         new empty team; colour: blue, pink, teal, mauve, sky, sapphire or #rrggbb
@@ -73,6 +75,9 @@ const usage = `usage:
   fleet profiles                            list tool profiles (~/.fleet/tools.toml)
   fleet wall <apply|refresh|preset N|show NAME|emphasis>   wall control (used by tmux key bindings)
   fleet wall <add NAME|next|prev|untarget>  add a pane, next/previous waiting agent into the ▶ pane, clear ▶
+  fleet wall <undo|pin NAME>                undo the last ▶ replace (again: redo); pin/unpin a pane
+                                            (--keep-focus: show/add leave keyboard focus where it is;
+                                            --notify: the result goes to a tmux message, not stdout)
   fleet keys [--markdown]                   list every hotkey (Alt-? in tmux, ? in the overview)
   fleet changes [--json]                    what's new in fleet: its latest features, newest first (Alt-g)
 
@@ -361,6 +366,7 @@ func cmdPeek(f *fleet.Fleet, args []string) error {
 	fs := flag.NewFlagSet("peek", flag.ContinueOnError)
 	fs.Bool("raw", true, "raw pane text (summaries come in slice 7)")
 	n := fs.Int("n", 0, "lines of history")
+	live := fs.Bool("live", false, "live colour view of the pane (the preview popup)")
 	var name string
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		name, args = args[0], args[1:]
@@ -372,7 +378,10 @@ func cmdPeek(f *fleet.Fleet, args []string) error {
 		name = fs.Arg(0)
 	}
 	if name == "" {
-		return fmt.Errorf("usage: fleet peek <name> [--raw] [-n N]")
+		return fmt.Errorf("usage: fleet peek <name> [--raw] [-n N] | fleet peek --live <name>")
+	}
+	if *live {
+		return cmdPeekLive(f, name)
 	}
 	out, err := f.Peek(name, *n)
 	if err != nil {

@@ -38,6 +38,13 @@ type fakeBE struct {
 	picks         int
 	changes       int
 	teams         map[string]team.Info
+	undos         int
+	undoMsg       string // what Undo returns
+	undoTarget    string
+	pins          []string
+	pinned        map[string]bool
+	previews      []string
+	menus         []string // "name x,y"
 }
 
 func (f *fakeBE) Refresh() ([]*board.Agent, error) {
@@ -76,7 +83,25 @@ func (f *fakeBE) SetSupCtx(l, c string) error {
 	return nil
 }
 func (f *fakeBE) ResetSup() error { f.resets++; return nil }
-func (f *fakeBE) Changes() error  { f.changes++; return nil }
+func (f *fakeBE) Undo() (string, string, error) {
+	f.undos++
+	return f.undoMsg, f.undoTarget, nil
+}
+func (f *fakeBE) TogglePin(n string) (bool, error) {
+	f.pins = append(f.pins, n)
+	if f.pinned == nil {
+		f.pinned = map[string]bool{}
+	}
+	f.pinned[n] = !f.pinned[n]
+	return f.pinned[n], nil
+}
+func (f *fakeBE) Pinned() map[string]bool { return f.pinned }
+func (f *fakeBE) Preview(n string) error  { f.previews = append(f.previews, n); return nil }
+func (f *fakeBE) Menu(n string, x, y int) error {
+	f.menus = append(f.menus, fmt.Sprintf("%s %d,%d", n, x, y))
+	return nil
+}
+func (f *fakeBE) Changes() error { f.changes++; return nil }
 func (f *fakeBE) PickProfile() error {
 	f.picks++
 	return nil
@@ -203,7 +228,7 @@ func TestShowReportsTheReplacedAgent(t *testing.T) {
 	m := New(be, "")
 	m.sel = "bravo"
 	got := m.show()().(wallMsg)
-	if got.info != "bravo → ▶ (was alpha)" || got.target != "bravo" {
+	if got.info != "bravo → ▶ (was alpha) · u undo" || got.target != "bravo" {
 		t.Errorf("got %+v", got)
 	}
 	m.Update(got)
@@ -225,7 +250,9 @@ func (r *replacingBE) OnWall() map[string]bool { return map[string]bool{r.target
 // Tab / Shift-Tab put the next/previous waiting agent into the ▶ slot and
 // select it; a/+ add; Esc clears the target (and does nothing without one).
 func TestTargetKeys(t *testing.T) {
-	be := &fakeBE{nextName: "delta", target: "alpha"}
+	// foxtrot is off the fake wall, so Tab reads as a replace of the ▶ pane
+	// (a ▶ pane still on the wall is pinned: TestShowReportsAPinnedTarget).
+	be := &fakeBE{nextName: "delta", target: "foxtrot"}
 	m := New(be, "")
 	as, _ := be.Refresh()
 	m.setAgents(as)
@@ -307,7 +334,7 @@ func TestTargetCardAndHeader(t *testing.T) {
 		t.Errorf("non-target tile has ▶:\n%s", other)
 	}
 	h := ansi.Strip(m.header())
-	if !strings.Contains(h, "▶ alpha · click card replace · a add · Tab next waiting · Esc clear · ? all keys") {
+	if !strings.Contains(h, "▶ alpha · click card replace · a add · Space preview · Tab next waiting · Esc clear · ? all keys") {
 		t.Errorf("header %q", h)
 	}
 	m.Update(tea.WindowSizeMsg{Width: 110, Height: 9})
@@ -316,10 +343,10 @@ func TestTargetCardAndHeader(t *testing.T) {
 	}
 	m.target = ""
 	m.Update(tea.WindowSizeMsg{Width: 160, Height: 9})
-	if h := ansi.Strip(m.header()); !strings.Contains(h, "no ▶ pane · click a wall pane to pick one · ⏎ add/evict · ? all keys") {
+	if h := ansi.Strip(m.header()); !strings.Contains(h, "no ▶ pane · click a wall pane to pick one · ⏎ add/evict · Space preview · ? all keys") {
 		t.Errorf("no-target header %q", h)
 	}
-	m.msg = "bravo → ▶ (was alpha)"
+	m.msg = "bravo → ▶ (was alpha) · u undo"
 	if h := ansi.Strip(m.header()); !strings.Contains(h, m.msg) || strings.Contains(h, "all keys") {
 		t.Errorf("message must win: %q", h)
 	}
@@ -345,14 +372,14 @@ func TestMessageExpires(t *testing.T) {
 func TestHelpOverlay(t *testing.T) {
 	zone.NewGlobal()
 	m := New(&fakeBE{}, "")
-	m.Update(tea.WindowSizeMsg{Width: 160, Height: 30})
+	m.Update(tea.WindowSizeMsg{Width: 180, Height: 30})
 	as, _ := (&fakeBE{}).Refresh()
 	m.setAgents(as)
-	if v := m.View(); !strings.Contains(v, "no ▶ pane · click a wall pane to pick one · ⏎ add/evict · ? all keys") {
+	if v := m.View(); !strings.Contains(v, "no ▶ pane · click a wall pane to pick one · ⏎ add/evict · Space preview · ? all keys") {
 		t.Errorf("header hint under fleet up with no target:\n%s", v)
 	}
 	m.be = &fakeBE{noWall: true}
-	if v := m.View(); !strings.Contains(v, "⏎ replace ▶ · a add · Tab next waiting · x take off wall · ←↑↓→ select · g what's new · ? all keys") {
+	if v := m.View(); !strings.Contains(v, "⏎ replace ▶ · a add · Space preview · Tab next waiting · x take off wall · ←↑↓→ select · g what's new · ? all keys") {
 		t.Errorf("header hint without fleet up:\n%s", v)
 	}
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
@@ -625,7 +652,7 @@ func TestNextMessages(t *testing.T) {
 	as, _ := be.Refresh()
 	m.setAgents(as)
 	m.target, m.sel = "bravo", "echo"
-	if got := m.next(1)().(wallMsg); got.info != "delta → ▶ (was bravo)" {
+	if got := m.next(1)().(wallMsg); got.info != "delta → ▶ (was bravo) · u undo" {
 		t.Errorf("replace: %q", got.info)
 	}
 	be.target = ""

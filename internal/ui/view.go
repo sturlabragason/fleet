@@ -14,6 +14,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/keys"
 	"github.com/sturlabragason/fleet/internal/layout"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/theme"
 )
 
 // View renders the header, a card per agent wrapped to the pane, and, only
@@ -176,9 +177,12 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 	if m.onWall[a.Name] {
 		wall = " ▣"
 	}
-	tgt, tw2 := "", 0 // the ▶ after the name of the agent in the target slot
+	tgt, tw2 := "", 0 // the ⚑ and ▶ after the name of a pinned / ▶ agent
+	if m.pinned[a.Name] {
+		tgt, tw2 = pinStyle.Render(" "+pinMark), 2
+	}
 	if a.Name == m.target {
-		tgt, tw2 = targetStyle.Render(" "+targetMark), 2
+		tgt, tw2 = tgt+targetStyle.Render(" "+targetMark), tw2+2
 	}
 	inner := w - 4
 	st1 := lipgloss.NewStyle().Foreground(col).Bold(true)
@@ -226,6 +230,9 @@ func (m *Model) chips(rest []*board.Agent, all bool) string {
 			st = st.Reverse(true)
 		}
 		c := st.Render(glyph(a.Status, m.frame) + " " + a.Name + m.queueMark(a.Name))
+		if m.pinned[a.Name] {
+			c += pinStyle.Render(" " + pinMark)
+		}
 		if a.Name == m.target {
 			c += targetStyle.Render(" " + targetMark)
 		}
@@ -280,6 +287,13 @@ const teamMark = "◆"
 
 // targetMark follows the name of the agent in the ▶ target slot (DESIGN.md §5e).
 const targetMark = "▶"
+
+// pinMark follows the name of a pinned agent (DESIGN.md §5e), before ▶ and
+// the team mark; one cell wide.
+const pinMark = "⚑"
+
+// pinStyle draws pinMark: Overlay1, never the select colour.
+var pinStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Overlay1))
 
 // targetStyle draws targetMark: always the select colour, bold.
 var targetStyle = lipgloss.NewStyle().Foreground(colSelect).Bold(true)

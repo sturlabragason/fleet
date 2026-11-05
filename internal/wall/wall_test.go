@@ -301,8 +301,8 @@ func TestShowReplacesTheTarget(t *testing.T) {
 	if got := w.opt("@fleet_target"); got != agents[4] {
 		t.Errorf("target %q, want it to stay on the slot (now %s)", got, agents[4])
 	}
-	if got := w.opt("@fleet_undo"); got != agents[4]+" "+x {
-		t.Errorf("@fleet_undo %q, want %q", got, agents[4]+" "+x)
+	if got := w.opt("@fleet_undo"); got != agents[4]+" "+x+" a1" {
+		t.Errorf("@fleet_undo %q, want %q", got, agents[4]+" "+x+" a1")
 	}
 	if got := w.TargetAgent(); got != "a4" {
 		t.Errorf("TargetAgent %q, want a4", got)

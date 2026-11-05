@@ -248,7 +248,7 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		{"set-option", "-g", "pane-border-style", "fg=" + theme.Surface1},
 		{"set-option", "-g", "pane-active-border-style", "fg=" + theme.Select},
 		{"set-option", "-g", "pane-border-format",
-			" #{?#{==:#{@role},sup},#[fg=" + theme.Supervisor + "]#[bold]admiral#[default]#{?@fleet_admiral_profile,#[fg=" + theme.Muted + "] · #{@fleet_admiral_profile}#[default],}#{?@fleet_ctx,#[fg=#{@fleet_ctx_color}] · ctx #{@fleet_ctx}#[default],},#{?#{==:#{@role},ov},#[fg=" + theme.Text + "]#[bold]overview#[default]," + targetMark + "#[fg=#{?@fleet_color,#{@fleet_color},default}]#{@fleet_glyph} #{@fleet_agent}#{?@fleet_team, #[fg=#{@fleet_team_color}]◆,} #[fg=" + theme.Muted + "]#{@fleet_status}#[default]" + nextOutMark + "}} "},
+			" #{?#{==:#{@role},sup},#[fg=" + theme.Supervisor + "]#[bold]admiral#[default]#{?@fleet_admiral_profile,#[fg=" + theme.Muted + "] · #{@fleet_admiral_profile}#[default],}#{?@fleet_ctx,#[fg=#{@fleet_ctx_color}] · ctx #{@fleet_ctx}#[default],},#{?#{==:#{@role},ov},#[fg=" + theme.Text + "]#[bold]overview#[default]," + targetMark + "#[fg=#{?@fleet_color,#{@fleet_color},default}]#{@fleet_glyph} #{@fleet_agent}" + pinMark + "#{?@fleet_team, #[fg=#{@fleet_team_color}]◆,} #[fg=" + theme.Muted + "]#{@fleet_status}#[default]" + nextOutMark + "}} "},
 		{"set-option", "-g", "window-style", "fg=" + theme.Subtext0 + ",bg=" + theme.Base},
 		{"set-option", "-g", "window-active-style", "fg=" + theme.Text + ",bg=" + theme.Base},
 		{"set-option", "-g", "status-style", "fg=" + theme.Text + ",bg=" + theme.Mantle},
@@ -279,7 +279,7 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		{"bind-key", "-n", "M-Right", "select-pane", "-R"},
 		{"bind-key", "-n", "M-Up", "select-pane", "-U"},
 		{"bind-key", "-n", "M-Down", "select-pane", "-D"},
-		{"bind-key", "-n", "M-n", wallCmd("next")},
+		{"bind-key", "-n", "M-n", wallCmd("--notify next")},
 		{"bind-key", "-n", "M-z", "resize-pane", "-Z"},
 		{"bind-key", "-n", "M-x", wallCmd("hide-focused")},
 		{"bind-key", "-n", "M-s", wallCmd("sup")},
@@ -321,36 +321,109 @@ const targetHook = `if-shell -F '#{==:#{@role},wall}' 'set-option -wF @fleet_tar
 var targetMark = "#{?#{==:#{pane_id},#{@fleet_target}},#[fg=" + theme.Select + "]#[bold]▶#[nobold] ,}"
 
 // nextOutMark ends the title of the pane a card would evict (no target, full wall).
+// pinMark follows the agent name on a pinned pane's border (@fleet_pin, DESIGN.md
+// §5e): ⚑ in Overlay1, then the name colour again.
+var pinMark = "#{?@fleet_pin, #[fg=" + theme.Overlay1 + "]⚑#[fg=#{?@fleet_color,#{@fleet_color},default}],}"
+
 var nextOutMark = "#{?#{==:#{pane_id},#{@fleet_next_out}}, #[fg=" + theme.Muted + "]· next out#[default],}"
+
+// wallUsage lists the `fleet wall` verbs.
+const wallUsage = "fleet wall apply|refresh|preset N|sup|side|chips|emphasis|show NAME|hide NAME|add NAME|next|prev|untarget|undo|pin NAME [--keep-focus] [--notify]"
+
+// pinMsg says what a pin toggle did (the overview's p says the same).
+func pinMsg(name string, on bool) string {
+	if on {
+		return name + " pinned ⚑"
+	}
+	return name + " unpinned"
+}
 
 func cmdWall(f *fleet.Fleet, args []string) error {
 	w := wall.New(f.T, fleet.Session)
+	// --keep-focus (the right-click menu): show and add leave keyboard focus
+	// where it is, as from the overview. --notify (also the menu): the result
+	// line, or the error, goes to a tmux message instead of stdout/stderr.
+	notify := false
+	rest := args[:0:0]
+	for _, a := range args {
+		switch a {
+		case "--keep-focus":
+			w.KeepFocus = true
+		case "--notify":
+			notify = true
+		default:
+			rest = append(rest, a)
+		}
+	}
+	args = rest
 	if len(args) == 0 {
-		return fmt.Errorf("usage: fleet wall apply|refresh|preset N|sup|side|chips|emphasis|show NAME|hide NAME|add NAME|next|prev|untarget")
+		return fmt.Errorf("usage: %s", wallUsage)
+	}
+	say := func(msg string) {
+		if msg == "" {
+			return
+		}
+		if notify {
+			f.T.Run("display-message", "-d", "3000", "-t", w.Target, msg)
+			return
+		}
+		fmt.Println(msg)
+	}
+	msg, err := wallVerb(f, w, args)
+	if err != nil && notify {
+		say("wall " + args[0] + ": " + err.Error())
+		return nil
+	}
+	say(msg)
+	return err
+}
+
+// wallVerb runs one `fleet wall` verb and returns its result line ("" for
+// the verbs the tmux key bindings run silently).
+func wallVerb(f *fleet.Fleet, w *wall.Wall, args []string) (string, error) {
+	named := func() (name, pane string, err error) {
+		if len(args) < 2 {
+			return "", "", fmt.Errorf("usage: fleet wall %s NAME", args[0])
+		}
+		pane, err = f.Pane(args[1])
+		return args[1], pane, err
 	}
 	switch args[0] {
 	case "apply":
-		return w.Apply()
+		return "", w.Apply()
 	case "refresh":
 		// Cached: used by the pane-focus-in hook, which fires constantly.
-		return w.ApplyCached()
+		return "", w.ApplyCached()
 	case "preset":
 		if len(args) < 2 {
-			return fmt.Errorf("usage: fleet wall preset 1|2|4|6|9|m")
+			return "", fmt.Errorf("usage: fleet wall preset 1|2|4|6|9|m")
 		}
-		return w.SetPreset(args[1])
+		return "", w.SetPreset(args[1])
 	case "sup":
-		return w.ToggleSup()
+		return "", w.ToggleSup()
 	case "side":
-		return w.SwapSide()
+		return "", w.SwapSide()
 	case "chips":
-		return w.ToggleChips()
+		return "", w.ToggleChips()
 	case "emphasis":
-		return w.ToggleEmphasis()
+		return "", w.ToggleEmphasis()
 	case "hide-focused":
-		return w.HideFocused()
+		return "", w.HideFocused()
 	case "untarget":
-		return w.Untarget()
+		return "", w.Untarget()
+	case "undo":
+		msg, _, err := w.Undo()
+		return msg, err
+	case "pin":
+		name, p, err := named()
+		if err != nil {
+			return "", err
+		}
+		on, err := w.TogglePin(p)
+		if err != nil {
+			return "", err
+		}
+		return pinMsg(name, on), nil
 	case "next", "prev":
 		dir := 1
 		if args[0] == "prev" {
@@ -359,42 +432,50 @@ func cmdWall(f *fleet.Fleet, args []string) error {
 		name, ok, err := w.Next(dir)
 		switch {
 		case err != nil:
+			return "", err
 		case name == "":
-			fmt.Fprintln(os.Stderr, wall.NothingWaitingMsg)
+			return wall.NothingWaitingMsg, nil
 		case !ok:
-			fmt.Fprintln(os.Stderr, wall.FullMsg)
+			return wall.FullMsg, nil
 		}
-		return err
+		return "", nil
 	case "add":
-		if len(args) < 2 {
-			return fmt.Errorf("usage: fleet wall add NAME")
-		}
-		p, err := f.Pane(args[1])
+		name, p, err := named()
 		if err != nil {
-			return err
+			return "", err
 		}
+		wasOn := w.OnWall()[name]
 		ok, err := w.Add(p)
-		if err == nil && !ok {
-			fmt.Fprintln(os.Stderr, wall.AddFullMsg)
+		switch {
+		case err != nil:
+			return "", err
+		case !ok:
+			return wall.AddFullMsg, nil
+		case wasOn:
+			return name + " on wall", nil
 		}
-		return err
-	case "show", "hide":
-		if len(args) < 2 {
-			return fmt.Errorf("usage: fleet wall %s NAME", args[0])
-		}
-		p, err := f.Pane(args[1])
+		return name + " added to wall", nil
+	case "hide":
+		name, p, err := named()
 		if err != nil {
-			return err
+			return "", err
 		}
-		if args[0] == "hide" {
-			return w.Hide(p)
+		return name + " off wall", w.Hide(p)
+	case "show":
+		name, p, err := named()
+		if err != nil {
+			return "", err
 		}
+		before, wasOn := w.TargetAgent(), w.OnWall()[name]
 		ok, err := w.Show(p)
-		if err == nil && !ok {
+		switch {
+		case err != nil:
+			return "", err
+		case !ok:
 			// display-message goes nowhere from a plain shell, so say it here too.
-			fmt.Fprintln(os.Stderr, wall.FullMsg)
+			return wall.FullMsg, nil
 		}
-		return err
+		return wall.ShownMsg(name, before, wasOn, before != "" && w.OnWall()[before]), nil
 	}
-	return fmt.Errorf("unknown wall command %q", args[0])
+	return "", fmt.Errorf("unknown wall command %q", args[0])
 }

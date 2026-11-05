@@ -11,9 +11,9 @@ import (
 func TestHintExact(t *testing.T) {
 	cases := map[Scope]string{
 		ScopeTmux:     "Alt-←↑↓→ switch pane · Alt-n next waiting · Alt-z zoom · Alt-x hide · Alt-s admiral · Alt-g what's new · Alt-? all keys",
-		ScopeOverview: "⏎ replace ▶ · a add · Tab next waiting · x take off wall · ←↑↓→ select · g what's new · ? all keys",
-		ScopeTarget:   "a add · Tab next waiting · Esc clear · ? all keys",
-		ScopeNoTarget: "⏎ add/evict · ? all keys",
+		ScopeOverview: "⏎ replace ▶ · a add · Space preview · Tab next waiting · x take off wall · ←↑↓→ select · g what's new · ? all keys",
+		ScopeTarget:   "a add · Space preview · Tab next waiting · Esc clear · ? all keys",
+		ScopeNoTarget: "⏎ add/evict · Space preview · ? all keys",
 	}
 	for sc, want := range cases {
 		if got := Hint(sc, 200); got != want {
@@ -47,15 +47,16 @@ func TestHintFitsAndKeepsAllKeys(t *testing.T) {
 }
 
 // HintWith keeps its prefix and "? all keys" and drops the scope's items
-// from the right (designer decision: Esc clear, then Tab, then a add).
+// from the right (designer decision: Esc clear, then Tab, then Space, then a add).
 func TestHintWithKeepsPrefix(t *testing.T) {
 	pre := []string{"▶ orch-auth", "click card replace"}
-	full := "▶ orch-auth · click card replace · a add · Tab next waiting · Esc clear · ? all keys"
+	full := "▶ orch-auth · click card replace · a add · Space preview · Tab next waiting · Esc clear · ? all keys"
 	if got := HintWith(pre, ScopeTarget, 200); got != full {
 		t.Errorf("got %q", got)
 	}
 	want := []string{
-		"▶ orch-auth · click card replace · a add · Tab next waiting · ? all keys",
+		"▶ orch-auth · click card replace · a add · Space preview · Tab next waiting · ? all keys",
+		"▶ orch-auth · click card replace · a add · Space preview · ? all keys",
 		"▶ orch-auth · click card replace · a add · ? all keys",
 		"▶ orch-auth · click card replace · ? all keys",
 	}
@@ -64,7 +65,7 @@ func TestHintWithKeepsPrefix(t *testing.T) {
 			t.Errorf("width %d: got %q, want %q", ansi.StringWidth(w), got, w)
 		}
 	}
-	if got := HintWith(pre, ScopeTarget, 5); got != want[2] {
+	if got := HintWith(pre, ScopeTarget, 5); got != want[len(want)-1] {
 		t.Errorf("tiny width must keep prefix and all keys: %q", got)
 	}
 }

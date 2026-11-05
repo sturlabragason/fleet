@@ -81,6 +81,48 @@ func (b *backend) Untarget() error {
 	}
 	return b.w.Untarget()
 }
+func (b *backend) Undo() (string, string, error) {
+	if !b.enabled {
+		return wall.NothingToUndoMsg, "", nil
+	}
+	return b.w.Undo()
+}
+func (b *backend) TogglePin(name string) (bool, error) {
+	p, err := b.f.Pane(name)
+	if err != nil {
+		return false, err
+	}
+	return b.w.TogglePin(p)
+}
+func (b *backend) Pinned() map[string]bool {
+	if !b.enabled {
+		return map[string]bool{}
+	}
+	return b.w.Pinned()
+}
+
+// Preview opens the live preview popup (the overview's Space).
+func (b *backend) Preview(name string) error {
+	_, err := b.f.T.Run(previewPopupArgs(tools.Quote(b.f.Exe), name, b.w.TargetAgent() != "")...)
+	return err
+}
+
+// Menu opens the right-click menu for name. x,y are overview cells; tmux
+// wants client cells, so the overview pane's offset is added.
+func (b *backend) Menu(name string, x, y int) error {
+	pane := os.Getenv("TMUX_PANE")
+	off, err := b.f.T.Run("display-message", "-p", "-t", pane, "#{pane_left} #{pane_top}")
+	if err != nil {
+		return err
+	}
+	var left, top int
+	fmt.Sscan(off, &left, &top)
+	target, pins := b.w.TargetAgent(), b.w.Pinned()
+	st := menuState{onWall: b.w.OnWall()[name], hasTarget: target != "", pinned: pins[name], targetPinned: pins[target]}
+	args := menuArgs(tools.Quote(b.f.Exe), name, x+left, y+top, st)
+	_, err = b.f.T.Run(append(args[:1:1], append([]string{"-t", pane}, args[1:]...)...)...)
+	return err
+}
 func (b *backend) Hide(name string) error {
 	p, err := b.f.Pane(name)
 	if err != nil {

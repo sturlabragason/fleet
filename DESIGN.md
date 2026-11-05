@@ -362,8 +362,12 @@ The bottom tmux status line and the overview header show a short hint in plain w
 | Overview | `Alt-c` | overview: tiles ↔ compact chips |
 | Overview | `⏎ / click` | put the selected agent into the ▶ pane (or onto the wall if no pane is ▶) |
 | Overview | `a / +` | add the selected agent as a new pane (more slots if full) |
+| Overview | `Space` | preview the selected agent in a popup (⏎ there puts it in ▶) |
 | Overview | `Tab / Shift-Tab` | put the next/previous waiting agent into the ▶ pane (or onto the wall) |
 | Overview | `Esc` | clear the ▶ target |
+| Overview | `u` | undo the last replace (again: redo) |
+| Overview | `p` | pin/unpin: a pinned pane is never replaced or evicted |
+| Overview | `right-click` | menu: put in ▶, add, preview, take off, pin |
 | Overview | `x` | take the selected agent off the wall |
 | Overview | `←↑↓→ / hjkl` | select a tile |
 | Overview | `g` | same as Alt-g: what's new in fleet |
@@ -554,7 +558,7 @@ Reviewing the agents' commits and diffs (use git or the agent's pane), release t
 
 ## 5e. Clicking around: a target slot on the wall (ADR-31)
 
-Status: the target slot, `a`, `Tab`/`Alt-n` and `Esc` are built. Right-click, preview, undo, pin and the overview tiers are planned (below).
+Status: the target slot, `a`, `Tab`/`Alt-n`, `Esc`, the right-click menu, `Space` preview, `u` undo and `p` pin are built. The overview tiers are planned (below).
 
 The problem and the options weighed are in `docs/ux-interaction.md`. In short: "click a pane, then click a card" replaced the pane only on a full wall, nothing showed which pane a card would replace, clicking a pane resized it, and cards moved under the mouse.
 
@@ -574,13 +578,14 @@ The problem and the options weighed are in `docs/ux-interaction.md`. In short: "
 
 ### Right-click and preview
 
-- **Right-click a card:** a tmux menu at the pointer with Replace target, Add as a new pane, Preview, Take off the wall, Pin/Unpin.
-- **`Space`** in the overview, or Preview in the menu, opens a read-only live view of the agent in a popup (`fleet peek --live NAME`, captured 4× a second). `Enter` in the popup puts the agent into the target slot and closes it; `q`/`Esc`/`Space` close it.
-- **Pin** finally gets its binding: `p` in the overview (and the menu) toggles `@fleet_pin` on the cursor agent's pane (§5b.1 class 0). A pinned pane shows `📌` in its title.
+- **Right-click a card or chip:** a tmux menu at the pointer (opened on release, with mouse on) titled with the agent: `Put in ▶ pane` (or `Add to wall` with no ▶ pane or a pinned one), `Add as a new pane`, `Preview`, then `Pin`/`Unpin` and `Take off the wall` (only when on the wall). Items that don't apply are hidden. Menu items run `fleet wall --notify --keep-focus ...`, which shows the result with `display-message` and never moves focus.
+- **`Space`** in the overview, or Preview in the menu, opens a read-only live view of the agent in a popup (`fleet peek --live NAME`, captured 4× a second). `Enter` in the popup puts the agent into the target slot and closes it; `q`/`Esc`/`Space` close it. The popup title says what `⏎` does.
+- **Pin** finally gets its binding: `p` in the overview (and the menu) toggles `@fleet_pin` on the cursor agent's pane (§5b.1 class 0). A pinned agent shows `⚑` (one cell, muted) after its name on the pane border, the card and the chip. A pinned `▶` is never replaced: a card click places the agent by the old rules and says `<name> is pinned · p unpins`, with the cursor left on the pinned agent.
+- **Undo:** `u` in the overview, or `fleet wall undo`, puts the replaced agent back into its slot (`@fleet_undo` holds `<in> <out> <out name>`); `u` again redoes. Replace messages end with `· u undo`.
 
 ### Visible keys
 
-Every key above is in the key registry (`internal/keys`), so it shows in `?`, `Alt-?` and `fleet keys`. The overview header names the target and the next action: `▶ orch-auth · click card replace · a add · Tab next waiting · Esc clear · ? all keys`, or `no ▶ pane · click a wall pane to pick one · ⏎ add/evict · ? all keys` without one. Items drop from the right on a narrow pane; the target and `? all keys` stay. The `?` overlay scrolls (`↑↓`, wheel) when the pane is too short for every key.
+Every key above is in the key registry (`internal/keys`), so it shows in `?`, `Alt-?` and `fleet keys`. The overview header names the target and the next action: `▶ orch-auth · click card replace · a add · Space preview · Tab next waiting · Esc clear · ? all keys`, or `no ▶ pane · click a wall pane to pick one · ⏎ add/evict · ? all keys` without one. Items drop from the right on a narrow pane; the target and `? all keys` stay. The `?` overlay scrolls (`↑↓`, wheel) when the pane is too short for every key.
 
 ### Overview past one screen of cards (ADR-32)
 

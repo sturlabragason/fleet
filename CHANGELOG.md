@@ -5,6 +5,7 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-05
+- Right-click a card for a menu (put in ▶, add, preview, pin, take off); `Space` previews an agent live in a popup, `u` undoes a replace, `p` pins a pane so it is never replaced (ADR-31)
 - Click a wall pane to mark it `▶`, then click a card: that agent takes the `▶` pane, whether or not the wall is full. `a` adds a pane instead, `Tab` or `Alt-n` sends the next waiting agent there, `Esc` clears it, and clicking no longer resizes or moves other panes (ADR-31)
 - Agent reports no longer land in text you are typing to the admiral: fleet types the wake line only into an empty, quiet input box, presses Enter only when the box holds exactly that line, sends one line for several reports, and shows unread reports on the status line (✉ N reports) (ADR-36)
 - Agents end their reports with `next:`, `risks:`, `decisions:` and `retro:` lines, escalate blockers early, keep to their scope and leave merge order to a named coordinator; the admiral keeps risks, assumptions, issues and decisions in its notes. Why: docs/process.md (ADR-35)

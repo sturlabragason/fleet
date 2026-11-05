@@ -219,7 +219,7 @@ func (w *Wall) show(pane string, useTarget, selectPane bool) (bool, error) {
 		return w.focus(pane, now, selectPane)
 	}
 	if t, ok := targetPane(s, w.opt("@fleet_target")); useTarget && ok && !t.Pin {
-		w.setOpt("@fleet_undo", pane+" "+t.ID)
+		w.setOpt("@fleet_undo", undoRecord(pane, t.ID, t.Agent))
 		return w.swapInto(pane, t.ID, now)
 	}
 	slots := s.Cfg.Slots(s.Preset)
