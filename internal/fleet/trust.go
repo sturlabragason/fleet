@@ -77,7 +77,7 @@ func isHomeOrRoot(dir string) bool {
 	if c == filepath.Clean(home) {
 		return true
 	}
-	// A symlinked home ("/home/me" -> "/var/home/me") must still count.
+	// A symlinked home ("/home/user" -> "/var/home/user") must still count.
 	r1, err1 := filepath.EvalSymlinks(c)
 	r2, err2 := filepath.EvalSymlinks(home)
 	return err1 == nil && err2 == nil && r1 == r2

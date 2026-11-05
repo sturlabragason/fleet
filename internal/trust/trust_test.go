@@ -333,7 +333,7 @@ func TestMarkUnknownTool(t *testing.T) {
 	if Supported("agy") {
 		t.Error("agy reported as supported")
 	}
-	for _, c := range []string{"claude", "/home/me/.local/bin/claude", "copilot", "vibe"} {
+	for _, c := range []string{"claude", "/home/user/.local/bin/claude", "copilot", "vibe"} {
 		if !Supported(c) {
 			t.Errorf("%s not supported", c)
 		}

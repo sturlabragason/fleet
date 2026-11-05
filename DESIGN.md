@@ -143,7 +143,7 @@ Several agents on one checkout collide: they stage each other's files, and `git`
 Every tool now asks "do you trust this folder?" the first time it runs somewhere new, and a spawn that stops on that menu is a spawn nobody is watching. So the last thing fleet does before starting the tool — after the worktree exists, so it is the dir the tool will actually read — is write that dir into the tool's *own* trust store, the documented way:
 
 - **Claude Code:** `projects["<dir>"].hasTrustDialogAccepted = true` in `$CLAUDE_CONFIG_DIR/.claude.json`, else `~/.claude.json`, together with `hasClaudeMdExternalIncludesApproved`/`…WarningShown` — the modal that comes up right behind it when your own CLAUDE.md imports other files. The profile's env decides the file, so `claude-personal` and `claude-work` get their own.
-- **Copilot CLI:** the dir is appended to `trustedFolders` in `~/.copilot/config.json`, keeping the `//` header that file opens with. (This is why copilot agents don't prompt today: `/home/user` is on that list already.)
+- **Copilot CLI:** the dir is appended to `trustedFolders` in `~/.copilot/config.json`, keeping the `//` header that file opens with. (This is why copilot agents don't prompt today: the user's own home is usually on that list already.)
 - **vibe:** added to `trusted` and removed from `untrusted` in `$VIBE_HOME/trusted_folders.toml`, default `~/.vibe` — removed too, because vibe decides by closest decided ancestor.
 - **agy** has no trust store on disk that fleet can find, so it falls through to the on-screen fallback below.
 

@@ -131,7 +131,7 @@ func TestAnswerTrustPicksYes(t *testing.T) {
 	// a spawn just as hard (ADR-47).
 	imports := strings.Join([]string{
 		"  Allow external CLAUDE.md file imports?",
-		"  Imports /home/u/notes/core.md",
+		"  Imports /home/user/notes/core.md",
 		"  ❯ No, disable external imports",
 		"    Yes, allow external imports",
 		"",
