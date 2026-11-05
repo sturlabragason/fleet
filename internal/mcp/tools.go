@@ -92,6 +92,7 @@ var toolDefs = []tool{
 		"summary": str("what the next admiral must know")})},
 	{"fleet_admiral_profile", "Switch the admiral (you) to another tool profile, e.g. claude-personal; same profile = restart and resume this chat. Only when the user asks. You are replaced in a few seconds; pass a summary of open questions, promises and plans in flight.", obj([]string{"profile"}, map[string]any{
 		"profile": str("tool profile, see fleet_profiles"), "summary": str("optional handoff for the next admiral")})},
+	adrToolDef,
 }
 
 type args struct {
@@ -103,6 +104,7 @@ type args struct {
 	To, From, Reason, Decision, A, B, State string
 	SessionID                               string `json:"session_id"`
 	Lines, Limit, Option                    int
+	Number                                  int
 	Confirmed, All, Raw, Force              bool
 	LastMessage                             bool `json:"last_message"`
 	Team, Color                             string
@@ -239,6 +241,8 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		return "", fmt.Errorf("action must be show, hide or preset")
 	case "fleet_team":
 		return s.team(a)
+	case "fleet_adr":
+		return s.adrCmd(a.Action, a.Agent, a.Dir, a.Number)
 	case "fleet_note":
 		if err := need(strings.TrimSpace(a.Text), "text"); err != nil {
 			return "", err

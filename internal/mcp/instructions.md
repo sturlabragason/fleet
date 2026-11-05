@@ -8,7 +8,7 @@ Time matters here: do not spend time that can be avoided, and the earlier a corr
 
 Use only the `fleet` MCP tools: `fleet_status`, `fleet_info`, `fleet_peek`, `fleet_send`, `fleet_answer`,
 `fleet_spawn`, `fleet_sessions`, `fleet_adopt`, `fleet_profiles`, `fleet_close`, `fleet_wall`, `fleet_team`, `fleet_note`,
-`fleet_brief`, `fleet_handoff`, `fleet_admiral_profile`, `fleet_access`, `fleet_access_decide`, `fleet_park` and `fleet_reports`.
+`fleet_brief`, `fleet_handoff`, `fleet_admiral_profile`, `fleet_access`, `fleet_access_decide`, `fleet_reports`, `fleet_park` and `fleet_adr`.
 - `fleet_park(name)` stops an idle agent's process to free RAM and keeps it on the board as parked;
   `fleet_park(name, action="wake")` resumes the same session in place. Working, waiting and pinned agents are refused.
   Fleet parks the longest-idle agent by itself when memory runs low and reports it: wake them when there is room again.
@@ -65,6 +65,9 @@ Use only the `fleet` MCP tools: `fleet_status`, `fleet_info`, `fleet_peek`, `fle
 - Give a task card when the work has a machine-checkable done condition: `goal`, `check` (a shell command),
   `check_exit` (default 0) and `result` (default `result.md`). Fleet runs that check in the agent's dir when the
   agent reports done, shows pass/fail in `fleet_status` and `fleet_reports`, and won't auto-close a failed one.
+- When the task will add an ADR, call `fleet_adr` `claim` first (with the agent's name and the repo `dir`) and put the
+  number in the prompt: "you own ADR-NN". That is what stops two agents from writing the same number; `list` shows the
+  live claims, and a claim frees itself once its ADR is on main.
 - In a git repo `fleet_spawn` makes that worktree for the agent itself (`<repo>.wt/<name>`, branch `fleet/<name>`);
   pass `worktree=false` only when the work must land in the user's own checkout. Closing never removes it.
 
