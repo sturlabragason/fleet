@@ -399,39 +399,51 @@ func (m *Model) rowCell(tv tierView, name string, w int) string {
 		if m.unfold {
 			label = " − fold idle"
 		}
-		st := dim
-		if m.cellOf(tv) >= 0 && tv.cells[m.cellOf(tv)] == foldSel {
-			st = st.Reverse(true)
-		}
+		st := cursorStyle(dim, m.cellOf(tv) >= 0 && tv.cells[m.cellOf(tv)] == foldSel)
 		return zone.Mark("fold", st.Render(fit(label, w)))
 	}
 	a := m.agents[slices.IndexFunc(m.agents, func(a *board.Agent) bool { return a.Name == name })]
 	col := statusColor(a.Status, m.frame)
-	var marks, plain []string
-	if m.pinned[a.Name] {
-		marks, plain = append(marks, pinStyle.Render(" "+pinMark)), append(plain, " "+pinMark)
+	cur := a.Name == m.sel
+	if cur {
+		col = cursorColor(col)
 	}
-	if a.Name == m.target {
-		marks, plain = append(marks, targetStyle.Render(" "+targetMark)), append(plain, " "+targetMark)
-	}
-	if ti, ok := m.teams[a.Name]; ok && ti.Team != "" {
-		ts := lipgloss.NewStyle().Foreground(lipgloss.Color(ti.Color))
-		marks, plain = append(marks, " "+ts.Render(teamMark)), append(plain, " "+teamMark)
-	}
-	mw := 2 * len(plain)
+	// The cursor underlines the whole row but each mark keeps its own colour:
+	// ▶ stays Lavender and a team ◆ stays the team colour (ADR-37).
+	var row string
+	mark := func(st lipgloss.Style, glyph string) { row += cursorStyle(st, cur).Render(" " + glyph) }
 	age := since(a.StatusSince, m.now())
 	if q := m.queuePos[a.Name]; q > 0 {
 		age = fmt.Sprintf("#%d", q)
 	}
 	age = fmt.Sprintf("%4s", age)
+	mw := 2 * m.markCount(a)
 	head := " " + glyph(a.Status, m.frame) + " " + ansi.Truncate(a.Name, max(w-3-mw-ansi.StringWidth(age)-1, 1), "…")
-	pad := strings.Repeat(" ", max(w-ansi.StringWidth(head)-mw-ansi.StringWidth(age), 0))
-	st := lipgloss.NewStyle().Foreground(col)
-	var cell string
-	if a.Name == m.sel {
-		cell = st.Reverse(true).Render(fit(head+strings.Join(plain, "")+pad+age, w))
-	} else {
-		cell = fit(st.Render(head)+strings.Join(marks, "")+pad+dim.Render(age), w)
+	row = cursorStyle(lipgloss.NewStyle().Foreground(col), cur).Render(head)
+	if m.pinned[a.Name] {
+		mark(pinStyle, pinMark)
 	}
-	return zone.Mark("tile-"+a.Name, cell)
+	if a.Name == m.target {
+		mark(targetStyle, targetMark)
+	}
+	if ti, ok := m.teams[a.Name]; ok && ti.Team != "" {
+		mark(lipgloss.NewStyle().Foreground(lipgloss.Color(ti.Color)), teamMark)
+	}
+	pad := strings.Repeat(" ", max(w-ansi.StringWidth(head)-mw-ansi.StringWidth(age), 0))
+	return zone.Mark("tile-"+a.Name, fit(row+cursorStyle(dim, cur).Render(pad+age), w))
+}
+
+// markCount is how many two-cell marks (⚑ ▶ ◆) follow an agent's name.
+func (m *Model) markCount(a *board.Agent) int {
+	n := 0
+	if m.pinned[a.Name] {
+		n++
+	}
+	if a.Name == m.target {
+		n++
+	}
+	if ti, ok := m.teams[a.Name]; ok && ti.Team != "" {
+		n++
+	}
+	return n
 }

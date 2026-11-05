@@ -10,6 +10,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	zone "github.com/lrstanley/bubblezone"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/sturlabragason/fleet/internal/board"
 )
 
@@ -178,5 +180,58 @@ func TestQueuedTileShowsPositionAndGoal(t *testing.T) {
 	}
 	if c := ansi.Strip(m.chips(m.agents[2:3], false)); !strings.Contains(c, "‖ q1 #1") {
 		t.Errorf("chip: %q", c)
+	}
+}
+
+// The cursor is an underline in the status colour; Lavender (theme.Select)
+// is left to the \u25b6 target mark alone (ADR-37).
+func TestCursorIsUnderlineNotSelectColour(t *testing.T) {
+	base := lipgloss.NewStyle().Foreground(colWorking)
+	cur := cursorStyle(base, true)
+	if !cur.GetUnderline() {
+		t.Error("the cursor must be an underline")
+	}
+	if got := cur.GetForeground(); got != colWorking {
+		t.Errorf("the cursor keeps the status colour, got %v", got)
+	}
+	if cur.GetReverse() {
+		t.Error("the cursor must not use reverse video")
+	}
+	// Statuses that are meant to recede (gone, queued: Surface2, 2.5:1) would
+	// make the underline invisible, so a cursor on them takes the bright Text.
+	if got := cursorColor(colGone); got != colText {
+		t.Errorf("cursor on a gone cell = %v, want the bright text colour", got)
+	}
+	if got := cursorColor(colWorking); got != colWorking {
+		t.Errorf("cursor on a live cell keeps its status colour, got %v", got)
+	}
+	if cursorStyle(base, false).GetUnderline() {
+		t.Error("an unselected cell must not be underlined")
+	}
+	if got := targetStyle.GetForeground(); got != colSelect {
+		t.Errorf("the \u25b6 target mark must stay the select colour, got %v", got)
+	}
+	if got := pinStyle.GetForeground(); got == colSelect {
+		t.Error("the \u2691 pin mark must not use the select colour")
+	}
+}
+
+// The cursor card is told apart by its border shape (thick vs rounded) as
+// well as the underline, so the cue survives any colour vision.
+func TestCursorCardBorderShape(t *testing.T) {
+	zone.NewGlobal()
+	now := time.Now()
+	m := New(&fakeBE{}, "")
+	m.now = func() time.Time { return now }
+	m.Update(tea.WindowSizeMsg{Width: 150, Height: 20})
+	m.setAgents([]*board.Agent{{Name: "a1", Profile: "fake", Status: "waiting", StatusSince: now}})
+	tw := m.grid().TileW
+	m.sel = "a1"
+	if sel := ansi.Strip(m.tile(m.agents[0], tw)); !strings.Contains(sel, "\u250f") {
+		t.Errorf("cursor card is not the thick border:\n%s", sel)
+	}
+	m.sel = ""
+	if plain := ansi.Strip(m.tile(m.agents[0], tw)); !strings.Contains(plain, "\u256d") {
+		t.Errorf("unselected card is not the rounded border:\n%s", plain)
 	}
 }

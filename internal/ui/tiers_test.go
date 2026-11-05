@@ -12,6 +12,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/team"
+	"github.com/sturlabragason/fleet/internal/theme"
 )
 
 // crowd is 20 agents: 3 waiting, one working on the wall, 10 working and
@@ -249,5 +250,44 @@ func TestEnterOnChipStandingInForAFoldedAgent(t *testing.T) {
 	m.key("enter")
 	if !m.unfold {
 		t.Error("Enter on the chip unfolds")
+	}
+}
+
+// A one-line row is exactly w cells whether or not it is the cursor, and it
+// keeps the ⚑ ▶ ◆ marks in both states (ADR-37 moved the cursor from reverse
+// video to an underline, which no longer flattens the marks' colours).
+func TestRowCellWidthAndMarks(t *testing.T) {
+	zone.NewGlobal()
+	now := time.Now()
+	m := New(&fakeBE{}, "")
+	m.now = func() time.Time { return now }
+	m.Update(tea.WindowSizeMsg{Width: 150, Height: 20})
+	m.setAgents([]*board.Agent{{Name: "row-agent", Profile: "fake", Status: "gone", StatusSince: now.Add(-2 * time.Minute)}})
+	a := m.agents[0]
+	m.pinned = map[string]bool{a.Name: true}
+	m.target = a.Name
+	m.teams = map[string]team.Info{a.Name: {Team: "t", Color: theme.Blue}}
+	tv := tierView{}
+	for _, w := range []int{20, 34, 48} {
+		for _, sel := range []bool{false, true} {
+			m.sel = ""
+			if sel {
+				m.sel = a.Name
+			}
+			got := ansi.Strip(m.rowCell(tv, a.Name, w))
+			if ansi.StringWidth(got) != w {
+				t.Errorf("sel=%v w=%d: width %d, %q", sel, w, ansi.StringWidth(got), got)
+			}
+			// fit() always returns w cells, so the real check is that the
+			// mark budget left room: nothing was cut off the right edge.
+			if !strings.HasSuffix(strings.TrimRight(got, " "), "2m") {
+				t.Errorf("sel=%v w=%d: the age was truncated away: %q", sel, w, got)
+			}
+			for _, mark := range []string{"⚑", "▶", "◆"} {
+				if !strings.Contains(got, mark) {
+					t.Errorf("sel=%v w=%d: %q lost %s", sel, w, got, mark)
+				}
+			}
+		}
 	}
 }

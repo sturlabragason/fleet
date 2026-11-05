@@ -113,7 +113,7 @@ func (m *pickModel) row(i int, name string) string {
 	cursor := "  "
 	if i == m.cur {
 		base = base.Bold(true).Foreground(lipgloss.Color(theme.Select)).Background(lipgloss.Color(theme.Surface0))
-		cursor = "▸ "
+		cursor = "❯ "
 	}
 	label := fmt.Sprintf("%s%d  %-*s ", cursor, i+1, pickName, name)
 	if i >= 9 {

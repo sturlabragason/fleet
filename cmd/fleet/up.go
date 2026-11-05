@@ -246,10 +246,13 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		{"set-option", "-g", "pane-border-status", "top"},
 		{"set-option", "-g", "pane-border-lines", "heavy"},
 		{"set-option", "-g", "pane-border-style", "fg=" + theme.Surface1},
-		{"set-option", "-g", "pane-active-border-style", "fg=" + theme.Select},
+		// Not Select: Lavender means "target slot" and nothing else (ADR-37).
+		{"set-option", "-g", "pane-active-border-style", "fg=" + theme.Text},
 		{"set-option", "-g", "pane-border-format",
 			" #{?#{==:#{@role},sup},#[fg=" + theme.Supervisor + "]#[bold]admiral#[default]#{?@fleet_admiral_profile,#[fg=" + theme.Muted + "] · #{@fleet_admiral_profile}#[default],}#{?@fleet_ctx,#[fg=#{@fleet_ctx_color}] · ctx #{@fleet_ctx}#[default],},#{?#{==:#{@role},ov},#[fg=" + theme.Text + "]#[bold]overview#[default]," + targetMark + "#[fg=#{?@fleet_color,#{@fleet_color},default}]#{@fleet_glyph} #{@fleet_agent}" + pinMark + "#{?@fleet_team, #[fg=#{@fleet_team_color}]◆,} #[fg=" + theme.Muted + "]#{@fleet_status}#[default]" + nextOutMark + "}} "},
-		{"set-option", "-g", "window-style", "fg=" + theme.Subtext0 + ",bg=" + theme.Base},
+		// Unfocused panes recede one step (Overlay2, 5.8:1 on Base: still
+		// readable, so an emphasised pane you are not in stays legible).
+		{"set-option", "-g", "window-style", "fg=" + theme.Overlay2 + ",bg=" + theme.Base},
 		{"set-option", "-g", "window-active-style", "fg=" + theme.Text + ",bg=" + theme.Base},
 		{"set-option", "-g", "status-style", "fg=" + theme.Text + ",bg=" + theme.Mantle},
 		{"set-option", "-g", "message-style", "fg=" + theme.Text + ",bg=" + theme.Surface0},
@@ -258,7 +261,7 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		{"set-option", "-g", "copy-mode-match-style", "fg=" + theme.Base + ",bg=" + theme.Yellow},
 		{"set-option", "-g", "copy-mode-current-match-style", "fg=" + theme.Base + ",bg=" + theme.Peach},
 		{"set-option", "-g", "display-panes-colour", theme.Overlay0},
-		{"set-option", "-g", "display-panes-active-colour", theme.Select},
+		{"set-option", "-g", "display-panes-active-colour", theme.Text},
 		{"set-option", "-g", "clock-mode-colour", theme.Mauve},
 		// The unread-report badge (ADR-36) is set by the overview poll.
 		{"set-option", "-g", "status-left", "#[fg=" + theme.Crust + ",bg=" + theme.Mauve + ",bold] fleet #[default] #{?" + fleet.BadgeOption + ",#[fg=" + theme.Crust + "#,bg=" + theme.Waiting + "#,bold] ✉ #{" + fleet.BadgeOption + "} #[default] ,}"},
@@ -325,7 +328,7 @@ var targetMark = "#{?#{==:#{pane_id},#{@fleet_target}},#[fg=" + theme.Select + "
 // §5e): ⚑ in Overlay1, then the name colour again.
 var pinMark = "#{?@fleet_pin, #[fg=" + theme.Overlay1 + "]⚑#[fg=#{?@fleet_color,#{@fleet_color},default}],}"
 
-var nextOutMark = "#{?#{==:#{pane_id},#{@fleet_next_out}}, #[fg=" + theme.Muted + "]· next out#[default],}"
+var nextOutMark = "#{?#{==:#{pane_id},#{@fleet_next_out}}, #[fg=" + theme.Gone + "]· next out#[default],}"
 
 // wallUsage lists the `fleet wall` verbs.
 const wallUsage = "fleet wall apply|refresh|preset N|sup|side|chips|emphasis|show NAME|hide NAME|add NAME|next|prev|untarget|undo|pin NAME [--keep-focus] [--notify]"

@@ -56,7 +56,8 @@ from the code at `c1b9dfe` on 2026-11-05. tmux defaults were checked on tmux 3.8
    that starts waiting jumps to the front. A click aimed at one card can land on another.
 5. **Two unrelated "selected" marks in the same colour.** The card cursor (thick lavender
    border) and the active pane (lavender border) both look selected, but they are not linked.
-   `▣` says "on the wall", not which pane.
+   `▣` says "on the wall", not which pane. *(Fixed by ADR-37: lavender is the `▶` target
+   only, the cursor is an underline in the status colour, the active pane is the bright neutral.)*
 6. **`Tab` only moves the cursor.** It never brings the waiting agent onto the wall, so working
    through approvals is Tab, Enter, click the pane, answer, click the overview, Tab...
 7. **No add-without-replace and no undo.** On a full wall, one click on the wrong card evicts a
@@ -134,8 +135,8 @@ wall or not.
   has focus. tmux `pane-border-format` reads `#{==:#{pane_id},#{@fleet_target}}`, so no process
   runs.
 - The target's card gets the same `▶` and colour. The keyboard cursor becomes a separate,
-  quieter mark (underlined name, no thick border), so "where the next card goes" and "which
-  card the keys act on" no longer look alike.
+  quieter mark (underlined name; ADR-37 kept the thick border as a second, colour-blind-safe
+  cue), so "where the next card goes" and "which card the keys act on" no longer look alike.
 - Linked highlight: the cursor card's wall pane, if it has one, gets a dim marker in its title
   (`@fleet_hl`). With all-motion mouse tracking, hovering a card does the same.
 - The overview header names the state: `▶ slot 2: orch-auth · click a card to replace ·

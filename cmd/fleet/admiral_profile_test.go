@@ -156,7 +156,7 @@ func TestPickModel(t *testing.T) {
 		t.Fatalf("cursor must start on the active row: %d", m.cur)
 	}
 	v := m.View()
-	if !strings.Contains(v, "▸ 2  copilot") || !strings.Contains(v, "● now · restart") || !strings.Contains(v, "new chat") || !strings.Contains(v, "⏎ switch · esc cancel") {
+	if !strings.Contains(v, "❯ 2  copilot") || !strings.Contains(v, "● now · restart") || !strings.Contains(v, "new chat") || !strings.Contains(v, "⏎ switch · esc cancel") {
 		t.Errorf("view:\n%s", v)
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})

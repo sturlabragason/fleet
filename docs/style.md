@@ -208,6 +208,25 @@ Status colours carry meaning, and that meaning is fixed:
 | `queued` | `theme.Gone` | Surface2 `#585b70` | Waiting for a slot, no pane yet |
 | `starting` | `theme.Working` | Green `#a6e3a1` | Launching |
 
+Selection, focus and the target slot are three different things, so they look different (ADR-37).
+Lavender is spent on exactly one of them:
+
+| State | Looks like | Constant |
+|---|---|---|
+| `▶` target slot (the next card lands here) | Bold `▶` before the pane title and after the card name | `theme.Select` Lavender `#b4befe` |
+| Overview cursor (what `⏎` would act on) | An underline, in the cell's own status colour, plus a thick card border | the status colour, or `theme.Text` when that colour recedes (`gone`, `queued`) |
+| Active tmux pane (where your keys go) | Heavy border, full-brightness text | `theme.Text` `#cdd6f4` |
+| Any other pane | One step dimmer, same ground | Overlay2 `#9399b2` |
+| Pinned `⚑`, `+N hidden`, `+N idle`, one-line row ages | Resting grey | `theme.Muted` / `theme.Idle` Overlay1 `#7f849c` |
+| `· next out` (the pane a card would evict) | Dimmest, it is on its way out | `theme.Gone` Surface2 `#585b70` |
+
+Dimming unfocused panes and the emphasis pane (ADR-16, off by default, `fleet wall emphasis`) must not
+stack into "big but unreadable": emphasis only changes a pane's size, dimming only its text, and
+Overlay2 stays at 5.8:1 on the base so an emphasised pane you are not typing in is still legible.
+Do not take the dim step down to Overlay1 (4.4:1), which is the resting colour of things you are
+meant to ignore. A card-to-pane highlight (`@fleet_hl` in docs/ux-interaction.md) is not built; when
+it is, it is Overlay1, not a second accent.
+
 Rules for anyone changing `internal/theme`:
 
 - A new colour is a new meaning. If it does not change what the user should do, it is decoration:

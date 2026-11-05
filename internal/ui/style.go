@@ -97,3 +97,25 @@ func rank(st string) int {
 	}
 	return 6
 }
+
+// cursorStyle marks the overview cursor (ADR-37): an underline, in whatever
+// colour the cell already carries, which for an agent is its status colour.
+// Lavender (colSelect) is left to the ▶ target mark alone, so the two states
+// never look alike.
+func cursorStyle(s lipgloss.Style, on bool) lipgloss.Style {
+	if !on {
+		return s
+	}
+	return s.Underline(true)
+}
+
+// cursorColor is the ink of a cursor cell: the status colour, except for the
+// statuses that are meant to recede. Surface2 (gone, queued) is 2.5:1 on the
+// base, so an underline drawn in it would be invisible; those cells take the
+// plain bright Text instead. No new role either way.
+func cursorColor(c lipgloss.Color) lipgloss.Color {
+	if c == colGone {
+		return colText
+	}
+	return c
+}

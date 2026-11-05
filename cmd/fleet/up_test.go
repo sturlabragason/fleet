@@ -158,7 +158,7 @@ func TestBorderFormatTargetAndNextOut(t *testing.T) {
 	c.Run("set-option", "-w", "-t", "f:main", "@fleet_target", "")
 	c.Run("set-option", "-w", "-t", "f:main", "@fleet_next_out", pane)
 	got = expand()
-	if !strings.HasSuffix(strings.TrimSpace(got), "waiting#[default] #[fg="+theme.Muted+"]· next out#[default]") {
+	if !strings.HasSuffix(strings.TrimSpace(got), "waiting#[default] #[fg="+theme.Gone+"]· next out#[default]") {
 		t.Errorf("next out: %q", got)
 	}
 }
@@ -310,5 +310,36 @@ func TestCopyCommand(t *testing.T) {
 		if got := copyCommand(c.env, c.look, c.goos); got != c.want {
 			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
 		}
+	}
+}
+
+// Lavender (theme.Select) means "the ▶ target slot" and nothing else, so the
+// active pane border and the pane-number overlay must not use it; the active
+// pane is told apart by brightness instead (ADR-37).
+func TestSelectColourIsTargetOnly(t *testing.T) {
+	opts := map[string]string{}
+	for _, c := range tmuxCommands(&fleet.Fleet{Exe: "/bin/true"}) {
+		if len(c) == 4 && c[0] == "set-option" && c[1] == "-g" {
+			opts[c[2]] = c[3]
+		}
+	}
+	for _, o := range []string{"pane-active-border-style", "display-panes-active-colour"} {
+		if v, ok := opts[o]; !ok || strings.Contains(v, theme.Select) {
+			t.Errorf("%s = %q, must not use the select colour", o, v)
+		}
+	}
+	if !strings.Contains(opts["pane-active-border-style"], theme.Text) {
+		t.Errorf("the active border must be the bright neutral: %q", opts["pane-active-border-style"])
+	}
+	// Unfocused panes recede, but stay a step above the resting Overlay1 so an
+	// emphasised pane you are not in is still readable.
+	if want := "fg=" + theme.Overlay2 + ",bg=" + theme.Base; opts["window-style"] != want {
+		t.Errorf("window-style = %q, want %q", opts["window-style"], want)
+	}
+	if want := "fg=" + theme.Text + ",bg=" + theme.Base; opts["window-active-style"] != want {
+		t.Errorf("window-active-style = %q, want %q", opts["window-active-style"], want)
+	}
+	if !strings.Contains(targetMark, theme.Select) {
+		t.Error("the ▶ target mark must keep the select colour")
 	}
 }

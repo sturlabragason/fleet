@@ -162,7 +162,7 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 	}
 	bc := col
 	if a.Name == m.sel {
-		bc = colSelect
+		bc = cursorColor(col)
 	}
 	wall := ""
 	if m.onWall[a.Name] {
@@ -176,7 +176,10 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 		tgt, tw2 = tgt+targetStyle.Render(" "+targetMark), tw2+2
 	}
 	inner := w - 4
-	st1 := lipgloss.NewStyle().Foreground(col).Bold(true)
+	st1 := cursorStyle(lipgloss.NewStyle().Foreground(col).Bold(true), a.Name == m.sel)
+	if a.Name == m.sel {
+		st1 = st1.Foreground(cursorColor(col))
+	}
 	l1 := st1.Render(glyph(a.Status, m.frame)+" "+ansi.Truncate(a.Name, inner-4-tw2, "…")) + tgt + st1.Render(wall)
 	state := strings.TrimSpace(a.Status + m.queueMark(a.Name) + " " + since(a.StatusSince, m.now()))
 	l2 := lipgloss.NewStyle().Foreground(colIdle).Render(metaLine(a.Profile, state, inner))
@@ -216,10 +219,12 @@ func (m *Model) chips(rest []*board.Agent, all bool) string {
 		line += dim.Render(fmt.Sprintf("+%d hidden:", len(rest))) + "  "
 	}
 	for i, a := range rest {
-		st := lipgloss.NewStyle().Foreground(statusColor(a.Status, m.frame))
-		if a.Name == m.sel {
-			st = st.Reverse(true)
+		cur := a.Name == m.sel
+		sc := statusColor(a.Status, m.frame)
+		if cur {
+			sc = cursorColor(sc)
 		}
+		st := cursorStyle(lipgloss.NewStyle().Foreground(sc), cur)
 		c := st.Render(glyph(a.Status, m.frame) + " " + a.Name + m.queueMark(a.Name))
 		if m.pinned[a.Name] {
 			c += pinStyle.Render(" " + pinMark)
