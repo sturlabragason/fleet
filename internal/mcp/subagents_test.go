@@ -42,7 +42,7 @@ patterns = "fake"
 	s := New(f, wall.New(tc, fleet.Session))
 	s.Fill = func() (int, int, bool) { return 0, 0, false }
 	st, isErr := callText(t, s, "fleet_status", nil)
-	if isErr || !strings.HasPrefix(st, "admiral: ?\nname | team | profile | status | subagents | wall | age | waiting_for | report\n") {
+	if isErr || !strings.HasPrefix(st, "admiral: ?\nname | team | profile | status | subagents | wall | age | spend | waiting_for | report\n") {
 		t.Fatalf("header: %q", st)
 	}
 	if !regexp.MustCompile(`(?m)^s1 \|  \| sub \| \w+ \| 1 \| `).MatchString(st) || !regexp.MustCompile(`(?m)^s2 \|  \| sub \| \w+ \|  \| `).MatchString(st) {

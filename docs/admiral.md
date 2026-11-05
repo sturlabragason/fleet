@@ -22,8 +22,8 @@ To use a tool fleet doesn't start itself, register `fleet mcp` as a stdio MCP se
 
 | Tool | Arguments | What it does |
 |---|---|---|
-| `fleet_status` | none | Table of agents: name, team, profile, status, subagents, on wall, what it waits for, age |
-| `fleet_info` | `name` | One agent in detail: dir, git state, session id, context %, mode |
+| `fleet_status` | none | Table of agents: name, team, profile, status, subagents, on wall, age, spend so far, what it waits for; ends with the fleet-wide spend |
+| `fleet_info` | `name` | One agent in detail: dir, git state, session id, context %, spend so far, mode |
 | `fleet_peek` | `name`, `lines` (max 80), `raw`, `last_message` | Last lines of the agent's screen, or its last reply from the session log |
 | `fleet_send` | `name` / `names` / `team`, `text`, `keys`, `confirmed` | Paste a prompt and press Enter, or press keys |
 | `fleet_answer` | `name`, `answer` (`y`/`n`) or `option` N, `expect`, `confirmed` | Answer a y/n prompt or a numbered menu |

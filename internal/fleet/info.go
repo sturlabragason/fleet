@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/spend"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/supervisor"
 )
@@ -154,6 +155,9 @@ func (f *Fleet) Info(name string) (string, error) {
 		}
 	}
 	kv("context", ctx)
+	if s, ok := spend.Default.Agent(f.Profiles[a.Profile], a.SessionID); ok {
+		kv("spend", s.Long())
+	}
 	mode := ""
 	if p := f.paneOf(name); p != "" {
 		if text, err := f.T.Capture(p, 0); err == nil {

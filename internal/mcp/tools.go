@@ -9,6 +9,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/sessions"
+	"github.com/sturlabragason/fleet/internal/spend"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/tools"
@@ -38,7 +39,7 @@ func strList(desc string) map[string]any {
 var confirmedProp = map[string]any{"type": "boolean", "description": "true only after the user explicitly said yes in chat"}
 
 var toolDefs = []tool{
-	{"fleet_status", "List all agents: name, team, profile, status, running subagents, on_wall, what it waits for, age. Start here.", obj(nil, map[string]any{})},
+	{"fleet_status", "List all agents: name, team, profile, status, running subagents, on_wall, age, spend so far, what it waits for. Ends with the fleet-wide spend. Start here.", obj(nil, map[string]any{})},
 	{"fleet_peek", "Show the last N lines (default 20, max 80) of one agent's screen, without box borders and blank runs (raw=true: as captured). last_message=true returns the agent's last reply from its session log instead. summary=true returns about 5 lines from a cheap model (what it is doing, what it waits for, any error) and costs a model call, so prefer it over long screens and don't poll it.", obj([]string{"name"}, map[string]any{
 		"name": str("agent name"), "lines": map[string]any{"type": "integer", "description": "lines to return (default 20, max 80)"},
 		"raw":          map[string]any{"type": "boolean", "description": "screen as captured, with borders"},
@@ -52,7 +53,7 @@ var toolDefs = []tool{
 		"name": str("agent name"), "answer": map[string]any{"type": "string", "enum": []string{"y", "n"}, "description": "y = option 1, n = the first option starting with No; plain y/n when there is no menu"},
 		"option": map[string]any{"type": "integer", "minimum": 1, "maximum": 9, "description": "menu option number; pass answer or option, not both"},
 		"expect": str("the question the user confirmed (or part of it, or of the option label); refused if the prompt on screen no longer matches"), "confirmed": confirmedProp})},
-	{"fleet_info", "Facts about one agent: profile, team, status and age, last activity, dir, git (worktree, branch, dirty files, merged into main, commits ahead), session id, context %, mode.", obj([]string{"name"}, map[string]any{
+	{"fleet_info", "Facts about one agent: profile, team, status and age, last activity, dir, git (worktree, branch, dirty files, merged into main, commits ahead), session id, context %, spend so far, mode.", obj([]string{"name"}, map[string]any{
 		"name": str("agent name")})},
 	{"fleet_spawn", "Start a new agent with a tool profile in a directory, optionally with a first prompt. In a git repo the agent gets its own worktree, <repo>.wt/<name> on branch fleet/<name>, and works there; pass worktree=false to put it straight in dir (e.g. a read-only task, or work that must land in the user's checkout).", obj([]string{"name", "profile", "dir"}, map[string]any{
 		"name": str("short unique agent name"), "profile": str("tool profile, see fleet_profiles"), "dir": str("working directory (absolute)"), "prompt": str("optional first prompt"),
@@ -264,7 +265,8 @@ func (s *Server) status() (string, error) {
 	on := s.W.OnWall()
 	var b strings.Builder
 	teams := s.F.Teams.ByAgent()
-	b.WriteString("name | team | profile | status | subagents | wall | age | waiting_for | report\n")
+	b.WriteString("name | team | profile | status | subagents | wall | age | spend | waiting_for | report\n")
+	var total spend.Spend
 	for _, a := range as {
 		wf := ""
 		if a.Status == "waiting" || a.Status == "error" || a.Status == "stuck" {
@@ -278,7 +280,16 @@ func (s *Server) status() (string, error) {
 		if n := status.RunningCount(a.Subagents); n > 0 {
 			sub = strconv.Itoa(n)
 		}
-		fmt.Fprintf(&b, "%s | %s | %s | %s | %s | %s | %s | %s | %s\n", a.Name, teams[a.Name].Team, a.Profile, a.Status, sub, w, time.Since(a.StatusSince).Round(time.Second), wf, reportCell(a.Report))
+		sp := ""
+		if x, ok := spend.Default.Agent(s.F.Profiles[a.Profile], a.SessionID); ok {
+			sp = x.Short()
+			total.Add(x)
+		}
+		fmt.Fprintf(&b, "%s | %s | %s | %s | %s | %s | %s | %s | %s | %s\n", a.Name, teams[a.Name].Team, a.Profile, a.Status, sub, w, time.Since(a.StatusSince).Round(time.Second), sp, wf, reportCell(a.Report))
+	}
+	if total.Any() {
+		fmt.Fprintf(&b, "fleet spend so far: %s over %d model calls (%s); %s\n",
+			total.Short(), total.Calls, spend.Tokens(total.Total())+" tokens", fleet.SpendNote)
 	}
 	return b.String(), nil
 }
