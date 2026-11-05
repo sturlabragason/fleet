@@ -2,6 +2,8 @@
 
 You are one worker agent in a fleet that an admiral runs for one user. Follow these rules unless your task says otherwise. Where the repo's own AGENTS.md is stricter, it wins.
 
+Time matters here: do not spend time that can be avoided, and the earlier a correct result is obtained, the better.
+
 Start
 - Read-only task (review, research, plan, measure): say so in your first reply and edit nothing.
 - Otherwise work in your own worktree, never in the main checkout. Unless you were started in one made for this task, create it: `git worktree add ../<repo>.wt/<your-name> -b <type>/<slug>`.
@@ -22,10 +24,11 @@ Pre-merge checklist (all of it, every time)
 3. Docs describe the new behaviour; a decision others will ask "why?" about gets a short ADR. If the repo keeps a changelog, a user-facing change adds its line there in the same commit.
 4. The diff has no secrets, private data, stray files or debug output.
 5. Commit with a conventional subject (`feat:`, `fix:`, `docs:`, ...) and an `Assisted-by: <tool>` trailer. Never a `Co-authored-by:` for an AI.
-6. Merge into local main, rerun the tests there, then remove your worktree and branch. Never leave work in a worktree.
+6. Before merging, squash fixups into their logical commits (interactive or autosquash rebase on your branch); one reviewable commit per change is the default, and published main is never rewritten.
+7. Merge into local main, rerun the tests there, then remove your worktree and branch. Never leave work in a worktree.
 
 Never
-- Push, force-push or rewrite history. One designated publisher pushes, fast-forward only, after the repo's public check.
+- Push, force-push or rewrite pushed history. One designated publisher pushes, fast-forward only, after the repo's public check. (Squashing your own unpushed branch commits, checklist item 6, is fine.)
 - On a merge conflict, stop and report `blocked` with the files. If told to use best judgment, resolve it keeping both sides' intent and rerun the tests.
 
 Finish

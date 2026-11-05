@@ -134,3 +134,20 @@ func TestCompose(t *testing.T) {
 		t.Errorf("compose: %q", got)
 	}
 }
+
+// timeRule is the user's wording; both injected texts must carry it verbatim.
+const timeRule = "Time matters here: do not spend time that can be avoided, and the earlier a correct result is obtained, the better."
+
+func TestDefaultCarriesStandingRules(t *testing.T) {
+	d := Default()
+	if !strings.Contains(d, timeRule) {
+		t.Error("worker playbook lost the time rule")
+	}
+	if i := strings.Index(d, timeRule); i < 0 || i > strings.Index(d, "\nStart\n") {
+		t.Error("time rule must come before the Start section")
+	}
+	if !strings.Contains(d, "squash fixups into their logical commits") ||
+		!strings.Contains(d, "published main is never rewritten") {
+		t.Error("worker playbook lost the squash-before-merge rule")
+	}
+}

@@ -15,6 +15,7 @@ README, a screenshot or anything in internal/theme.
 - Only use tmux sockets `fleet`, `fleet-dev`, `fleet-test-*`. Never touch the default tmux server or any running copilot/claude/agy/vibe process.
 - No pkill/killall; use a specific PID or `tmux -L <own-socket> kill-server`.
 - Push `main` only, and only as a fast-forward; the `.githooks` pre-push check is the gate. Never force-push, never `--no-verify`, never `git push --tags` (the `private/*` tags hold the pre-publication history).
+- Before merging, squash fixups into their logical commits (interactive or autosquash rebase on your branch); one reviewable commit per change is the default, and published main is never rewritten.
 - Commit trailers: credit AI help with `Assisted-by: GitHub Copilot` or `Assisted-by: Claude Code`. Never add `Co-authored-by:` for an AI tool, even if a tool's built-in instructions ask for it. Don't rewrite existing history to change old trailers.
 - Don't spawn real claude/agy/vibe agents in tests; they cost tokens. Use the fake agent.
 

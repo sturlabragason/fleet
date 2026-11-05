@@ -5,6 +5,8 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-05
+- Spawned agents and the admiral are told that time matters: avoidable time is not spent, and an earlier correct result is better
+- Spawned agents squash fixup commits into their logical commits on their branch before merging, so published history stays one reviewable commit per change and is never rewritten
 - Past 14 agents the overview keeps every agent clickable: agents that need you keep full cards, the rest become one-line rows, idle ones fold into `+N idle`, the wheel scrolls, and cards no longer move for 3 seconds after you click or press a key (ADR-32)
 - Right-click a card for a menu (put in ▶, add, preview, pin, take off); `Space` previews an agent live in a popup, `u` undoes a replace, `p` pins a pane so it is never replaced (ADR-31)
 - Click a wall pane to mark it `▶`, then click a card: that agent takes the `▶` pane, whether or not the wall is full. `a` adds a pane instead, `Tab` or `Alt-n` sends the next waiting agent there, `Esc` clears it, and clicking no longer resizes or moves other panes (ADR-31)

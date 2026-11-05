@@ -13,6 +13,7 @@ differently without it. The reasons live here instead.
 
 | Practice | What it means for an agent fleet | Fleet mechanism | Where it is written |
 |---|---|---|---|
+| Time matters | Avoidable time is not spent, and an earlier correct result is better; it applies to the admiral and to every spawned agent | Near the top of both injected texts | Playbook intro, admiral intro |
 | Clear ownership | One agent owns one area; the spawn prompt names the neighbours that own the rest | Spawn prompt ("don't touch X"), `fleet touching` | Playbook *Start*, admiral *Spawning work* |
 | Who decides (RACI-light) | The user decides scope and anything public or irreversible; the target agent or the user decides access across teams. The admiral decides who works on what and asks the user before telling an agent to merge, push to a shared branch or apply infrastructure. A worker decides delegated choices. A coordinator decides the merge order for overlapping work | `fleet_answer` / `fleet_access_decide` confirmations, `question` reports | Playbook *Work*, admiral *Confirmation* |
 | Definition of ready | A spawn prompt states the task, done-when, neighbours, dependencies and exceptions | Spawn prompt | Admiral *Spawning work* |
@@ -23,6 +24,7 @@ differently without it. The reasons live here instead.
 | RAID log | The admiral records risks, assumptions, issues and decisions as they surface, one line each | `fleet_note` with a `risk:`, `assumption:`, `issue:` or `decision:` prefix; the last 30 notes come back in `fleet_brief` after a reset | Admiral *Running the work* |
 | WIP limits, small batches | One reviewable change per agent; finish and merge before starting more | `max_working` and the spawn queue (ADR-23) | Admiral *Running the work*, playbook *Start* |
 | Merge order for overlapping work | Agents whose files overlap get a coordinator that sets the order; others message it. If they can't message each other yet, the admiral asks the user before teaming them or granting the pair | `fleet touching`, teams (§5c), mail access (ADR-34) | Playbook *Start*, admiral *Running the work* |
+| Clean published history | Before merging, squash fixups into their logical commits (interactive or autosquash rebase on your branch); one reviewable commit per change is the default, and published main is never rewritten | Branch-level rebase before the merge into local main | Playbook checklist item 6 |
 | Decision records | A choice others will ask "why?" about gets an ADR | DESIGN.md §14 | Playbook checklist item 3 |
 | Scope control | Work found outside the task becomes a follow-up in the report; growing the task needs a `question` first | `next:` lines, `question` reports | Playbook *Work* |
 | Retro | One line on what slowed the agent down. When the same line shows up from several agents, the admiral proposes a playbook change to the user | `retro:` report line, `fleet_note` | Playbook *Finish*, admiral *Running the work* |
