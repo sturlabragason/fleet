@@ -53,8 +53,9 @@ var toolDefs = []tool{
 		"expect": str("the question the user confirmed (or part of it, or of the option label); refused if the prompt on screen no longer matches"), "confirmed": confirmedProp})},
 	{"fleet_info", "Facts about one agent: profile, team, status and age, last activity, dir, git (worktree, branch, dirty files, merged into main, commits ahead), session id, context %, mode.", obj([]string{"name"}, map[string]any{
 		"name": str("agent name")})},
-	{"fleet_spawn", "Start a new agent with a tool profile in a directory, optionally with a first prompt.", obj([]string{"name", "profile", "dir"}, map[string]any{
-		"name": str("short unique agent name"), "profile": str("tool profile, see fleet_profiles"), "dir": str("working directory (absolute)"), "prompt": str("optional first prompt")})},
+	{"fleet_spawn", "Start a new agent with a tool profile in a directory, optionally with a first prompt. In a git repo the agent gets its own worktree, <repo>.wt/<name> on branch fleet/<name>, and works there; pass worktree=false to put it straight in dir (e.g. a read-only task, or work that must land in the user's checkout).", obj([]string{"name", "profile", "dir"}, map[string]any{
+		"name": str("short unique agent name"), "profile": str("tool profile, see fleet_profiles"), "dir": str("working directory (absolute)"), "prompt": str("optional first prompt"),
+		"worktree": map[string]any{"type": "boolean", "description": "give the agent its own git worktree (default: the user's config, normally true)"}})},
 	{"fleet_sessions", "Find copilot/claude sessions the user started outside fleet, newest first: id | age | profile | dir | title | flags. Use before fleet_adopt.", obj(nil, map[string]any{
 		"query": str("optional words; every word must appear in title, dir, branch or id"), "limit": map[string]any{"type": "integer", "description": "max sessions (default 15)"}})},
 	{"fleet_adopt", "Resume an existing session the user started outside fleet as a fleet agent. Pass session_id (full id or unique 8+ char prefix) or query (words that match exactly one session), not both. Refuses if the session is missing or still open elsewhere.", obj(nil, map[string]any{
@@ -93,6 +94,8 @@ type args struct {
 	LastMessage                                                                     bool `json:"last_message"`
 	Team, Color                                                                     string
 	Agents, Names, Keys                                                             []string
+	// Worktree is fleet_spawn's opt-out; nil means "whatever config says".
+	Worktree *bool
 }
 
 func (s *Server) call(name string, raw json.RawMessage) (string, error) {
@@ -126,13 +129,16 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 				return "", err
 			}
 		}
-		ag, err := s.F.Spawn(a.Name, a.Profile, a.Dir, a.Prompt)
+		ag, err := s.F.SpawnWith(fleet.SpawnOpts{Worktree: a.Worktree}, a.Name, a.Profile, a.Dir, a.Prompt)
 		if err != nil {
 			return "", err
 		}
 		if ag.Status == string(status.Queued) {
 			return fmt.Sprintf("queued %s (%s) in %s: %d agents busy, max_working %d; it starts when a slot frees while the overview TUI runs",
 				ag.Name, ag.Profile, ag.Dir, s.F.Busy(), s.F.Prefs.MaxWorking()), nil
+		}
+		if w := ag.Worktree; w != nil {
+			return fmt.Sprintf("spawned %s (%s) in its own worktree %s on branch %s (of %s)", ag.Name, ag.Profile, w.Path, w.Branch, w.Repo), nil
 		}
 		return fmt.Sprintf("spawned %s (%s) in %s", ag.Name, ag.Profile, ag.Dir), nil
 	case "fleet_sessions":

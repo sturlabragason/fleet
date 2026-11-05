@@ -32,6 +32,12 @@ ready_timeout = "15s"
 # long: "0" closes at once, "off" never. Its dir and session stay on disk.
 # dead_pane_grace = "5m"
 # playbook = true  # prepend the fleet worker playbook to the first prompt (DESIGN §4)
+# Give each agent spawned into a git repo its own worktree, <repo>.wt/<name> on
+# branch fleet/<name>, and run it there instead of in your checkout, so parallel
+# agents don't fight over one index (DESIGN §4, ADR-39). `fleet spawn
+# --no-worktree` (or worktree=false on fleet_spawn) skips it for one spawn.
+# Closing an agent never removes the worktree or the branch.
+# worktree = true
 # Added to every agent pane's environment (spawn and adopt), over the profile's
 # own env. [profile.<name>] env keys override these one by one. Keeps parallel
 # builds and tests from each taking every core (DESIGN §7a, docs/perf.md).

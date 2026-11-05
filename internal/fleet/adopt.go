@@ -13,6 +13,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/sessions"
 	"github.com/sturlabragason/fleet/internal/tools"
+	"github.com/sturlabragason/fleet/internal/worktree"
 )
 
 // AdoptOpts are the inputs of Adopt. Name and Dir may be empty.
@@ -58,12 +59,25 @@ func (f *Fleet) Adopt(o AdoptOpts) (*board.Agent, error) {
 		return nil, err
 	}
 	argv, _ := p.Argv(tools.AgentVars(f.Exe, name, id), tools.Launch{Resume: true})
-	a, err := f.start(name, o.Profile, p, dir, "", "", id, argv, false, nil)
+	// Adopt resumes a session that already has a dir, so it never makes a
+	// worktree; when that dir is one, the board records it so close and
+	// sweep can name the work left there (DESIGN §4, ADR-39).
+	a, err := f.start(name, o.Profile, p, dir, "", "", id, argv, false,
+		startExtra{Worktree: adoptWorktree(dir), NoWorktree: true})
 	if err != nil {
 		return nil, err
 	}
 	logx.For("fleet").Info("adopted", "agent", name, "profile", o.Profile, "session_id", id, "force", o.Force)
 	return a, nil
+}
+
+// adoptWorktree records the linked worktree an adopted dir is already in.
+func adoptWorktree(dir string) *board.Worktree {
+	w := worktree.Of(dir)
+	if w == nil {
+		return nil
+	}
+	return &board.Worktree{Path: w.Path, Branch: w.Branch, Repo: w.Repo}
 }
 
 // adoptDir picks the working dir: given > workspace.yaml cwd > current dir.

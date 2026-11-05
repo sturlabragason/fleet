@@ -267,8 +267,10 @@ func TestAutoCloseReadOnlyAndNonGit(t *testing.T) {
 	fakeAdm(f, pasted, ptr(true))
 	var closed []string
 	f.CloseLater = func(n string) error { closed = append(closed, n); return nil }
+	// worktree = false: this test checks the spawn dir's own baseline, so
+	// the agent works in the repo rather than a worktree of its own.
 	cfg := filepath.Join(t.TempDir(), "config.toml")
-	os.WriteFile(cfg, []byte("[defaults]\nauto_close_done = true\n"), 0o644)
+	os.WriteFile(cfg, []byte("[defaults]\nauto_close_done = true\nworktree = false\n"), 0o644)
 	t.Setenv("FLEET_CONFIG", cfg)
 	f.Prefs, _ = prefs.Load()
 

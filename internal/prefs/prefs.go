@@ -40,6 +40,9 @@ type Spawn struct {
 	// DeadPaneGrace is how long a crashed agent's dead pane stays before it
 	// is closed (DESIGN §6.7, ADR-33): 0 = at once, GraceOff = never.
 	DeadPaneGrace time.Duration
+	// Worktree gives a spawn into a git repo its own worktree and branch
+	// (DESIGN §4, ADR-39). false spawns straight into the dir.
+	Worktree bool
 }
 
 // GraceOff is DeadPaneGrace for dead_pane_grace = "off".
@@ -49,9 +52,9 @@ const GraceOff time.Duration = -1
 const DefaultDeadPaneGrace = 5 * time.Minute
 
 // Neutral is the built-in default: no mode, auto-submit, DefaultReadyTimeout,
-// worker playbook on, DefaultDeadPaneGrace.
+// worker playbook on, DefaultDeadPaneGrace, a worktree per agent.
 func Neutral() Spawn {
-	return Spawn{AutoSubmit: true, ReadyTimeout: DefaultReadyTimeout, Playbook: true, DeadPaneGrace: DefaultDeadPaneGrace}
+	return Spawn{AutoSubmit: true, ReadyTimeout: DefaultReadyTimeout, Playbook: true, DeadPaneGrace: DefaultDeadPaneGrace, Worktree: true}
 }
 
 // DefaultMaxWorking caps how many agents may be working at once before new
@@ -163,6 +166,9 @@ func applySpawn(s Spawn, sec map[string]conf.Value) Spawn {
 	}
 	if v, ok := conf.Bool(sec, "playbook"); ok {
 		s.Playbook = v
+	}
+	if v, ok := conf.Bool(sec, "worktree"); ok {
+		s.Worktree = v
 	}
 	if v, ok := conf.Dur(sec, "ready_timeout"); ok && v > 0 {
 		s.ReadyTimeout = v

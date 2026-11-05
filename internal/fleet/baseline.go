@@ -122,8 +122,9 @@ func worktrees(dir string) []string {
 // A dir that git says is not a work tree, or that is gone, has nothing to
 // lose; a git error or timeout blocks. With a spawn baseline only the
 // agent's own work counts: paths that became dirty or changed since spawn,
-// its own worktree (named after it, per the playbook) left dirty or
-// unmerged, and commits not merged into main (or master); dirt that predates
+// its own worktree (the one spawn made for it, or one named after it per the
+// playbook) left dirty or unmerged, and commits not merged into main (or
+// master); dirt that predates
 // the agent and an unchanged HEAD are fine. Without a baseline it is the
 // strict CloseBlocker rule.
 func AgentBlocker(a *board.Agent) string {
@@ -167,6 +168,8 @@ func AgentBlocker(a *board.Agent) string {
 	switch {
 	case g.Base == "":
 		return "no main or master branch"
+	case !g.Merged && a.Worktree != nil:
+		return "worktree left behind (not merged into " + g.Base + "): " + a.Worktree.Path
 	case !g.Merged:
 		return "not merged into " + g.Base
 	}

@@ -45,6 +45,22 @@ type Agent struct {
 	// Exit is the first sighting of the agent's dead pane (DESIGN §6.7,
 	// ADR-33); set once, so each death is reported once.
 	Exit *Exit `json:"exit,omitempty"`
+	// Worktree is the git worktree the agent works in: the one spawn made
+	// for it, or the linked worktree an adopted session was already in
+	// (DESIGN §4, ADR-39). nil: it works in a plain checkout. Dir is the
+	// same path; this records the branch and where it came from, so close
+	// and sweep can name the work left behind.
+	Worktree *Worktree `json:"worktree,omitempty"`
+	// NoWorktree keeps a queued agent's opt-out, so the drain starts it the
+	// way the spawn asked (DESIGN §4).
+	NoWorktree bool `json:"no_worktree,omitempty"`
+}
+
+// Worktree is an agent's own git worktree and branch.
+type Worktree struct {
+	Path   string `json:"path"`
+	Branch string `json:"branch"`
+	Repo   string `json:"repo,omitempty"` // main worktree it was made from
 }
 
 // Exit is how an agent's process ended, as tmux reported it.

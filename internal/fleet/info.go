@@ -68,19 +68,25 @@ func GitInfo(dir string) Git {
 }
 
 // CloseNote says what closing name could lose ("" = nothing known): its
-// work tree has uncommitted changes or is not merged.
+// work tree has uncommitted changes or is not merged. An agent with its own
+// worktree (DESIGN §4, ADR-39) has it named, with its branch: closing leaves
+// both on disk.
 func (f *Fleet) CloseNote(name string) string {
 	a, ok := f.Store.Load().Agents[name]
 	if !ok || a.Dir == "" {
 		return ""
 	}
+	where := a.Dir
+	if w := a.Worktree; w != nil {
+		where = fmt.Sprintf("worktree %s, branch %s", w.Path, w.Branch)
+	}
 	switch r := CloseBlocker(a.Dir); r {
 	case "", "not a git work tree", "no main or master branch":
 		return ""
 	case "uncommitted changes":
-		return fmt.Sprintf("Note: %s has uncommitted changes in %s", name, a.Dir)
+		return fmt.Sprintf("Note: %s has uncommitted changes in %s", name, where)
 	default:
-		return fmt.Sprintf("Note: %s's branch is %s (%s)", name, r, a.Dir)
+		return fmt.Sprintf("Note: %s's branch is %s (%s)", name, r, where)
 	}
 }
 
@@ -118,6 +124,9 @@ func (f *Fleet) Info(name string) (string, error) {
 	kv("status", fmt.Sprintf("%s (for %s)", a.Status, now.Sub(a.StatusSince).Round(time.Second)))
 	kv("last activity", now.Sub(a.LastChange).Round(time.Second).String()+" ago")
 	kv("dir", a.Dir)
+	if w := a.Worktree; w != nil {
+		kv("agent worktree", w.Path+" on "+w.Branch)
+	}
 	if g := GitInfo(a.Dir); a.Dir == "" {
 		kv("git", "no dir")
 	} else if !g.Repo {

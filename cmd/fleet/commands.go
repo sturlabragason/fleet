@@ -27,7 +27,10 @@ const usage = `usage:
                                             run the admiral under profile NAME (alone: fleet up); default
                                             $FLEET_ADMIRAL_PROFILE, last choice, [admiral] profile, copilot
   fleet ui                                  run the overview TUI in this terminal
-  fleet spawn <name> <profile> [dir] ["prompt"]
+  fleet spawn [--worktree|--no-worktree] <name> <profile> [dir] ["prompt"]
+                                            in a git repo the agent gets its own worktree,
+                                            <repo>.wt/<name> on branch fleet/<name> (worktree in
+                                            config.toml turns it off; --no-worktree for one spawn);
                                             queued instead when max_working agents are busy;
                                             the overview TUI starts it when a slot frees
   fleet spawn --fake <name> [dir]           shorthand for profile "fake"
@@ -82,8 +85,9 @@ const usage = `usage:
   fleet changes [--json]                    what's new in fleet: its latest features, newest first (Alt-g)
 
 local preferences (never committed): ~/.config/fleet/config.toml ($FLEET_CONFIG overrides)
-  sets the starting mode (e.g. copilot autopilot), extra args, prompt auto-submit and
-  the worker playbook (playbook = false turns it off);
+  sets the starting mode (e.g. copilot autopilot), extra args, prompt auto-submit,
+  the worker playbook (playbook = false turns it off) and the per-agent git
+  worktree (worktree = false turns it off);
   see examples/config.toml.example`
 
 func run(args []string) error {
@@ -177,8 +181,26 @@ func run(args []string) error {
 func cmdSpawn(f *fleet.Fleet, args []string) error {
 	fs := flag.NewFlagSet("spawn", flag.ContinueOnError)
 	isFake := fs.Bool("fake", false, "use the fake agent profile")
+	wt := fs.Bool("worktree", false, "give the agent its own git worktree, whatever config.toml says")
+	noWT := fs.Bool("no-worktree", false, "spawn straight into dir, with no worktree of its own")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	var o fleet.SpawnOpts
+	var set []string
+	// Read which flag was passed, not just its value, so --worktree=false and
+	// --no-worktree=false mean what they say.
+	fs.Visit(func(fl *flag.Flag) {
+		switch fl.Name {
+		case "worktree":
+			set, o.Worktree = append(set, fl.Name), wt
+		case "no-worktree":
+			v := !*noWT
+			set, o.Worktree = append(set, fl.Name), &v
+		}
+	})
+	if len(set) > 1 {
+		return fmt.Errorf("--worktree and --no-worktree are opposites; pass one")
 	}
 	a := fs.Args()
 	var name, profile, dir, prompt string
@@ -202,7 +224,7 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 			prompt = strings.Join(a[3:], " ")
 		}
 	}
-	ag, err := f.Spawn(name, profile, dir, prompt)
+	ag, err := f.SpawnWith(o, name, profile, dir, prompt)
 	if err != nil {
 		return err
 	}
@@ -211,6 +233,9 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 		return nil
 	}
 	fmt.Printf("spawned %s (%s) in %s pane %s\n", ag.Name, ag.Profile, ag.Dir, ag.PaneID)
+	if w := ag.Worktree; w != nil {
+		fmt.Printf("worktree %s on branch %s (of %s)\n", w.Path, w.Branch, w.Repo)
+	}
 	return nil
 }
 

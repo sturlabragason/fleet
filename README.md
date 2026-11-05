@@ -29,13 +29,14 @@ Session switchers make moving between agents faster, but you still do all the su
 - **Live wall**: real, interactive tmux panes for the agents you are working with. Layouts 1, 2, 4, 6, 9 and main+stack, as caps rather than fixed shapes: the grid is sized to the window so panes stay readable, and the pane that needs attention gets the big slot. When the wall is full, the pane you were last in is replaced in place; otherwise an idle pane leaves before a working one, and waiting or failing panes stay. Processes never restart.
 - **Adopt**: `fleet sessions` lists Copilot and Claude sessions started outside fleet, and `fleet adopt` resumes one as an agent.
 - **A queue**: with `max_working` set, a spawn past the limit waits and starts when a slot frees.
+- **A worktree per agent**: spawning into a git repo gives the agent `<repo>.wt/<name>` on branch `fleet/<name>`, so parallel agents never share an index. `--no-worktree` opts out.
 - **Admiral**: an agent (Copilot CLI by default) in the left pane with nineteen `fleet_*` MCP tools from `fleet mcp`. It keeps a context meter, can hand off to a fresh session (`Alt+R`) and can swap its own tool profile (`Alt+P`).
 - **Teams**: group agents (`fleet team create frontend teal`), then send to, show or close a whole team at once. Members are marked with a coloured `◆`.
 - **Agent mail**: agents message each other with `fleet mail` or peer MCP tools. Free inside a team or a repo, otherwise one agent asks and you decide.
 - **CLI** for scripting: `spawn`, `adopt`, `sessions`, `ls`, `send`, `peek`, `close`, `team`, `mail`, `access`, `report`, `admiral`, `note`, `playbook`, `touching`, `profiles`, `keys`, `changes`, `wall`.
 - **Fake agents** that cycle through states, so you can try everything without spending tokens.
 
-Planned, not built yet: park/wake to save RAM, cheap-model summaries for `peek`, tool hooks instead of screen scraping, a spawn wizard and approve/reject keys in the TUI, notifications, worktree per agent. See [Roadmap](#roadmap).
+Planned, not built yet: park/wake to save RAM, cheap-model summaries for `peek`, tool hooks instead of screen scraping, a spawn wizard and approve/reject keys in the TUI, notifications. See [Roadmap](#roadmap).
 
 ## Requirements
 
@@ -220,14 +221,14 @@ Tests that need tmux use throwaway `fleet-test-*` servers. Architecture: [docs/a
 
 ## Roadmap
 
-Built: slices 0–3 of [DESIGN.md §9](DESIGN.md#9-how-ill-build-and-iterate-quickly) (fake agents, status, overview, live wall), the admiral's MCP server, admiral handoff (context meter, notes, `Alt+R` reset, profile swap), `fleet adopt`/`fleet sessions`, teams, agent mail with access control, the worker playbook, and a wall that sizes itself to the window. Planned:
+Built: slices 0–3 of [DESIGN.md §9](DESIGN.md#9-how-ill-build-and-iterate-quickly) (fake agents, status, overview, live wall), the admiral's MCP server, admiral handoff (context meter, notes, `Alt+R` reset, profile swap), `fleet adopt`/`fleet sessions`, teams, agent mail with access control, the worker playbook, a worktree per agent, and a wall that sizes itself to the window. Planned:
 
 - Peek overlay, send, approve/reject and spawn wizard in the TUI
 - Real-tool status patterns from captured screens; hooks for Claude Code and Copilot
 - Park/wake with resume by session ID, a live-process cap and a RAM guard
 - Cheap-model summaries for `peek`
 - Pinned wall panes, auto-slotting waiting agents, saved walls
-- tmux control-mode events instead of polling; desktop notifications; worktree per agent; `fleet doctor`
+- tmux control-mode events instead of polling; desktop notifications; `fleet doctor`
 
 ## License
 

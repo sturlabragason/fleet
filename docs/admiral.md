@@ -27,7 +27,7 @@ To use a tool fleet doesn't start itself, register `fleet mcp` as a stdio MCP se
 | `fleet_peek` | `name`, `lines` (max 80), `raw`, `last_message` | Last lines of the agent's screen, or its last reply from the session log |
 | `fleet_send` | `name` / `names` / `team`, `text`, `keys`, `confirmed` | Paste a prompt and press Enter, or press keys |
 | `fleet_answer` | `name`, `answer` (`y`/`n`) or `option` N, `expect`, `confirmed` | Answer a y/n prompt or a numbered menu |
-| `fleet_spawn` | `name`, `profile`, `dir`, `prompt` | Start an agent |
+| `fleet_spawn` | `name`, `profile`, `dir`, `prompt`, `worktree` | Start an agent; in a git repo it gets its own worktree `<repo>.wt/<name>` on branch `fleet/<name>` (`worktree: false` spawns straight into `dir`) |
 | `fleet_adopt` | `session_id` or `query`, optional `profile`, `dir`, `name` | Resume a session started outside fleet |
 | `fleet_sessions` | `query`, `limit` | Copilot/Claude sessions started outside fleet, newest first |
 | `fleet_profiles` | none | Profiles and their command lines |

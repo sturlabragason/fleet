@@ -114,7 +114,7 @@ Where the ID can't be set at launch, `fleet` has to find it after the start. It 
 
 | Command | What it does |
 |---|---|
-| `fleet spawn <name> <tool> <dir> ["prompt"]` | New tmux window, starts the tool, records the session ID, creates the card |
+| `fleet spawn [--worktree\|--no-worktree] <name> <tool> <dir> ["prompt"]` | New tmux window, starts the tool, records the session ID, creates the card; in a git repo the agent gets its own worktree (see below) |
 | `fleet ls [--json]` | All agents with status, live/parked and RAM |
 | `fleet peek <name> [--raw] [-n 200]` | Default: a summary of about 5 lines from a cheap model. `--raw`: the actual pane text (for me, not the admiral). |
 | `fleet send <name> "text"` | Paste into the agent and press Enter |
@@ -124,6 +124,18 @@ Where the ID can't be set at launch, `fleet` has to find it after the start. It 
 | `fleet note <name> "text"` | Add an entry to `decisions.log` |
 | `fleet team <action> <team> ...` | ✅ built (2026-11-05) Create/delete teams, add/remove agents, set the colour, and send/show/hide/close a whole team (see §5c) |
 | `fleet adopt [--name N] [--force] <profile> <session-id> [dir]` | Bring an existing session (started outside fleet) under management by resuming it in tmux (see below) |
+
+### A worktree per agent (ADR-39, built)
+
+Several agents on one checkout collide: they stage each other's files, and `git` has one index per work tree. So when the dir handed to `fleet spawn` is inside a git repo, the agent does not work there. Fleet runs `git worktree add` first and starts the tool in the result.
+
+- **Where:** `<repo>.wt/<name>` beside the repo's *main* worktree, on branch `fleet/<name>` — the same place and shape the worker playbook already told agents to make by hand (§4 playbook). Spawning from inside a linked worktree still hangs the new one off the main checkout, so they never nest.
+- **What the board records:** `worktree: {path, branch, repo}` on the agent entry, and `dir` is the worktree. `fleet info` shows `agent worktree: <path> on <branch>`. Closing an agent never removes the worktree or the branch (§6.7), so `fleet close` and the idle sweep name them instead: "Note: a1's branch is not merged into main (worktree …, branch fleet/a1)" and "worktree left behind (not merged into main): …".
+- **Reuse:** a live worktree at that path is adopted as is, so re-spawning a name picks its work up rather than failing. An existing `fleet/<name>` branch is checked out again, and a registration left behind by a worktree dir someone deleted by hand is pruned and made again rather than handing the agent a path that is not there.
+- **Opt out:** `worktree = false` in `config.toml` (`[defaults]` or `[profile.<name>]`), `fleet spawn --no-worktree` for one spawn (`--worktree` forces it back on), and `worktree: false` on the `fleet_spawn` MCP tool. A queued agent keeps the choice its spawn made, whatever the config says by the time a slot frees.
+- **When git refuses** (the path is taken by something else, the branch is checked out elsewhere), or the checkout takes longer than 30s, the spawn falls back to the dir itself with a warning in `fleet.log` rather than failing: a usable agent in a shared checkout beats no agent. The bound matters because `spawn` blocks, including the `fleet_spawn` MCP call. A dir outside git simply has no worktree.
+- **The baseline and the playbook come from the worktree**, not the spawn dir: a fresh worktree is clean, so auto-close (§6.7) sees exactly the agent's own work, and `.fleet/worker.md` is found through the worktree's `.git` file.
+- `fleet adopt` never creates one — the session already has a dir — but when that dir *is* a linked worktree it is recorded the same way, so close and sweep report its leftovers too.
 
 ### `fleet adopt`
 
@@ -161,6 +173,7 @@ Repo defaults stay neutral: fleet out of the box spawns in whatever mode the too
 mode = "autopilot"              # "" = leave the tool's default
 auto_submit = true              # press Enter after a pasted prompt
 ready_timeout = "15s"           # how long to wait for the TUI before giving up
+worktree = true                 # a git worktree per agent (false: spawn straight into dir)
 
 [profile.copilot]               # per-profile override of the above
 mode = "autopilot"
@@ -178,6 +191,7 @@ patterns = "copilot"
 - `[profile.<name>]` is a third override layer for tool profiles, after the built-ins and `~/.fleet/tools.toml`; it accepts every `tools.toml` key, so a local file can define or redefine a profile without touching the repo.
 - `mode` names a key in the profile's `mode_args` / `mode_keys`. An unknown mode for a profile is logged and ignored rather than failing the spawn.
 - `extra_args` are appended to the launch argv.
+- `worktree` turns the per-agent worktree on or off for a profile (ADR-39); `fleet spawn --worktree` / `--no-worktree` and the `fleet_spawn` `worktree` argument override it for one spawn.
 - Precedence: `[profile.<name>]` > `[defaults]` > built-in (no mode, `auto_submit = true`, `ready_timeout = 15s`). `spawn` blocks for up to `ready_timeout`, including the `fleet_spawn` MCP call, so the default stays well under a typical MCP client tool timeout.
 - `auto_submit = false` also disables launch-time prompt delivery: `copilot -i <prompt>` submits the prompt itself, so honouring "paste but don't press Enter" means falling back to the paste path.
 - A `[profile.<name>]` section that neither names an existing profile nor sets `command` is ignored with a warning, so a typo like `[profile.coplot]` cannot create a command-less profile.
@@ -1171,6 +1185,11 @@ Decision: `fleet up` rebinds `MouseDrag1Pane`, `DoubleClick1Pane` and `TripleCli
 Why: ADR-28 wired copy-mode to the clipboard but nothing ever entered copy-mode. Every fleet pane runs a program with mouse reporting on (Copilot, Claude and fleet's own overview all set `mouse_any_flag`), so tmux's default bindings forwarded the drag to the program, and `mouse on` meanwhile stops the terminal from making its own selection. Dragging over the admiral produced no selection anywhere, `Ctrl+Shift+C` copied nothing, and `Ctrl+Shift+V` then pasted whatever was in the clipboard before, which read as "paste is broken too". The A/B is a test (`TestMouseDragOverMouseReportingPaneCopies`): a scratch tmux server, a pane program that turns mouse reporting on, a real SGR drag through an attached pty client, and `copy-command` writing to a file. With tmux's defaults the file stays empty; with these bindings it holds the dragged text. Accepted cost: once tmux takes the drag the pane's program sees the button press but no release, so a TUI that tracks a held button can be a frame behind until the next click.
 Rejected: (a) a modifier drag such as `C-MouseDrag1Pane` (discoverable only from the docs, and it is tmux's `new-pane -M`, which §5e already unbinds); (b) Shift-drag in the terminal (ADR-28 rejected it, and a native selection ignores pane borders, so it grabs the neighbouring wall pane's columns too); (c) `mouse off` for agent panes (loses click-to-focus and scrollback); (d) taking presses and the wheel as well (that would break the overview's click-a-card and the right-click menu, ADR-31/32); (e) taking the drag in the overview too (a card click that slips one cell would then do nothing, which is the worse bug).
 
+**ADR-39: spawn gives each agent its own git worktree; a refusal falls back to the dir** (§4, §18 #4, R11)
+Decision: when the spawn dir is inside a git repo, `fleet spawn` runs `git worktree add` at `<repo>.wt/<name>` on branch `fleet/<name>`, off the repo's main worktree, and starts the agent there; the board entry keeps `worktree: {path, branch, repo}` and `dir` becomes that path. The worker playbook, the auto-close baseline and `fleet touching` all read the worktree, not the spawn dir. It is on by default, off with `worktree = false` in `config.toml`, `--no-worktree`, or `worktree: false` on `fleet_spawn`; a queued agent carries its own choice to the drain. An existing worktree or `fleet/<name>` branch is reused. When git refuses, the spawn warns and falls back to the dir. `adopt` never creates one but records a linked worktree it finds, so close and the idle sweep name the work left there. Closing still removes nothing (ADR-29).
+Why: §18 #4 — parallel agents on one checkout fight over one index and one HEAD, which is the collision the playbook was asking every agent to avoid by hand, and a rule only works when it is the default. A worktree also makes auto-close exact: a fresh one is clean, so every dirty path in it is the agent's own, and the branch makes "merged into main?" a real question instead of a guess about a shared HEAD.
+Rejected: (a) failing the spawn when git refuses (an admiral that cannot start an agent is worse than one working in the shared checkout, and the warning is in the log and in `fleet info`); (b) removing the worktree on close (ADR-29 already says fleet never destroys work, and a branch is the only trace of a closed agent); (c) putting the worktree inside the repo (`.fleet/wt/<name>`) — it would show up in `git status`, in every tool's file search and in the repo's own ignore rules; (d) a worktree per *task* rather than per agent (fleet has no task object yet, §18 #5); (e) deriving the path from the branch instead of the name, which would break the playbook's `../<repo>.wt/<name>` and the auto-close rule that already matches on the agent's name.
+
 ---
 
 ## 16a. Lean admiral (R11)
@@ -1198,7 +1217,7 @@ Source: https://code.claude.com/docs/en/best-practices (fetched 2026-11-04).
 
 ## 18. Review after the prototype (2026-11-04): what would make it a real agentic fleet manager
 
-State at review: about 3,900 lines of Go. Built: tmux substrate, tool profiles, scraped status, overview grid, live wall (incl. smarter tiling, §5b: status-aware eviction, screen-sized grid, emphasis pane), lean Copilot admiral over MCP (`fleet_status/peek/send/answer/spawn/profiles/close/wall`). Missing: park/wake, summaries, workflows, worktrees, real status patterns for Claude, agy and vibe.
+State at review: about 3,900 lines of Go. Built: tmux substrate, tool profiles, scraped status, overview grid, live wall (incl. smarter tiling, §5b: status-aware eviction, screen-sized grid, emphasis pane), lean Copilot admiral over MCP (`fleet_status/peek/send/answer/spawn/profiles/close/wall`), a worktree per agent on spawn. Missing: park/wake, summaries, workflows, real status patterns for Claude, agy and vibe.
 
 The gap: fleet today manages **sessions**. Agentic work is about **tasks** (a goal, a place to do it, a definition of done, a result, dependencies). The admiral can poke panes, but it has nothing to plan against and no way to know when work is actually finished.
 
@@ -1209,7 +1228,7 @@ The gap: fleet today manages **sessions**. Agentic work is about **tasks** (a go
 | 1 | ✅ built (2026-11-04, see §4) **`fleet adopt`**: bring an already-running session (copilot/claude ID + dir) under fleet by resuming it in a fleet pane | I already have many sessions open. Without this, live testing means starting over. |
 | 2 | **`fleet snap <name> <state>`**: save the current pane to `testdata/<tool>/<state>.txt` when a tile shows the wrong colour | Turns every misdetection during live testing into a test case in seconds. Fixes the "patterns are guesses" gap with real data. |
 | 3 | **Claude hooks for status** (`Stop` = turn finished, `Notification`/`PreToolUse` = needs me), writing to `~/.fleet/status/<name>.json`; scraping stays as fallback | Claude variants are most of the fleet; hooks don't break when the UI changes. |
-| 4 | **Worktree per agent by default** when the dir is a git repo: `spawn` creates `git worktree add` on branch `fleet/<name>` | Agentic work runs several agents on one repo; shared checkouts collide. |
+| 4 | ✅ built (2026-11-05, see §4 and ADR-39) **Worktree per agent by default** when the dir is a git repo: `spawn` creates `git worktree add` on branch `fleet/<name>` | Agentic work runs several agents on one repo; shared checkouts collide. |
 
 ### Priority 2: tasks, not sessions
 

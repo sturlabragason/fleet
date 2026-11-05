@@ -148,7 +148,11 @@ func TestRoundTrip(t *testing.T) {
 // cleaned peek, last_message, fleet_info and the close note.
 func TestSupervisorErgonomics(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("FLEET_CONFIG", filepath.Join(home, "no-config.toml"))
+	// worktree = false: this test watches the git state of the spawn dir
+	// itself, so a1 works in the repo rather than a worktree of its own.
+	cfg := filepath.Join(home, "config.toml")
+	os.WriteFile(cfg, []byte("[defaults]\nworktree = false\n"), 0o644)
+	t.Setenv("FLEET_CONFIG", cfg)
 	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
 	t.Cleanup(func() { tc.KillServer() })
 	os.WriteFile(filepath.Join(home, "tools.toml"), []byte(`[yn]

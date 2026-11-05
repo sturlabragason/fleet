@@ -21,6 +21,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/team"
 	"github.com/sturlabragason/fleet/internal/tmux"
 	"github.com/sturlabragason/fleet/internal/tools"
+	"github.com/sturlabragason/fleet/internal/worktree"
 )
 
 const (
@@ -108,8 +109,23 @@ func validName(name string) bool {
 	return nameRe.MatchString(name) && name != mail.User && name != mail.Admiral && name != mail.LegacySupervisor
 }
 
-// Spawn starts an agent in its own hidden window.
+// SpawnOpts are the per-spawn overrides of the config file. A nil field
+// leaves the profile's `config.toml` setting alone.
+type SpawnOpts struct {
+	// Worktree overrides [defaults]/[profile.<name>] worktree: the agent
+	// gets its own git worktree, or works straight in dir (DESIGN §4).
+	Worktree *bool
+}
+
+// Spawn starts an agent in its own hidden window, with the config file's
+// spawn settings.
 func (f *Fleet) Spawn(name, profile, dir, prompt string) (*board.Agent, error) {
+	return f.SpawnWith(SpawnOpts{}, name, profile, dir, prompt)
+}
+
+// SpawnWith is Spawn with per-spawn overrides (the CLI flags and the
+// fleet_spawn MCP arguments).
+func (f *Fleet) SpawnWith(o SpawnOpts, name, profile, dir, prompt string) (*board.Agent, error) {
 	if !validName(name) {
 		return nil, fmt.Errorf("bad name %q", name)
 	}
@@ -127,22 +143,55 @@ func (f *Fleet) Spawn(name, profile, dir, prompt string) (*board.Agent, error) {
 	if abs, err := filepath.Abs(dir); err == nil {
 		dir = abs
 	}
-	if a, err := f.enqueue(name, profile, dir, prompt); a != nil || err != nil {
+	wt := f.Prefs.For(profile).Worktree
+	if o.Worktree != nil {
+		wt = *o.Worktree
+	}
+	if a, err := f.enqueue(name, profile, dir, prompt, wt); a != nil || err != nil {
 		return a, err
 	}
 	// The busy count and the launch are not one critical section, so two
 	// concurrent spawns can both see the last free slot: the cap is
 	// best-effort and may be exceeded by one per racing spawn.
-	return f.launch(name, profile, dir, prompt, false)
+	return f.launch(name, profile, dir, prompt, false, wt)
+}
+
+// agentWorktree gives the agent its own worktree and branch for a spawn into
+// a git repo (DESIGN §4, ADR-39). A dir outside git simply has none. When git
+// refuses (no commit yet, the branch is checked out elsewhere), the spawn
+// falls back to dir with a logged warning rather than failing: a usable agent
+// in a shared checkout beats no agent at all.
+func (f *Fleet) agentWorktree(name, dir string) *board.Worktree {
+	log := logx.For("fleet")
+	w, err := worktree.Create(dir, name)
+	switch {
+	case errors.Is(err, worktree.ErrNoRepo):
+		log.Debug("no worktree: not a git repo", "agent", name, "dir", dir)
+		return nil
+	case err != nil:
+		log.Warn("worktree failed; spawning in the dir itself", "agent", name, "dir", dir, "err", err)
+		return nil
+	}
+	log.Info("worktree", "agent", name, "path", w.Path, "branch", w.Branch)
+	return &board.Worktree{Path: w.Path, Branch: w.Branch, Repo: w.Repo}
 }
 
 // launch builds the argv for a profile and starts it: the real start behind
 // Spawn and the queue drain. The first prompt is built here only. claimed is
-// true for a queued agent the drain marked starting (see start).
-func (f *Fleet) launch(name, profile, dir, prompt string, claimed bool) (*board.Agent, error) {
+// true for a queued agent the drain marked starting (see start). wantWT asks
+// for the agent's own git worktree; the playbook and the baseline are then
+// read from that worktree, not from the spawn dir.
+func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool) (*board.Agent, error) {
 	p, ok := f.Profiles[profile]
 	if !ok {
 		return nil, fmt.Errorf("unknown profile %q (have %v)", profile, tools.Names(f.Profiles))
+	}
+	ex := startExtra{NoWorktree: !wantWT}
+	if wantWT {
+		ex.Worktree = f.agentWorktree(name, dir)
+		if ex.Worktree != nil {
+			dir = ex.Worktree.Path
+		}
 	}
 	id := ""
 	if len(p.LaunchID) > 0 {
@@ -164,8 +213,8 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed bool) (*board.
 	}
 	argv, embedded := launchArgv(name, p, tools.AgentVars(f.Exe, name, id),
 		tools.Launch{Mode: pr.Mode, Extra: pr.ExtraArgs, Prompt: full, NoPromptArgs: !pr.AutoSubmit})
-	base := Baseline(dir) // before the agent can touch anything
-	a, err := f.start(name, profile, p, dir, prompt, full, id, argv, claimed, base)
+	ex.Base = Baseline(dir) // before the agent can touch anything
+	a, err := f.start(name, profile, p, dir, prompt, full, id, argv, claimed, ex)
 	if err != nil {
 		return nil, err
 	}
@@ -214,8 +263,8 @@ func redactArgv(argv []string, prompt string) []string {
 // goal; secret is the text redacted from the logged argv (the full first
 // prompt). claimed: the board entry must still be "starting" once the pane
 // exists, else the agent was closed mid-launch and the new pane is killed.
-// base is the dir's git baseline (nil for Adopt).
-func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, id string, argv []string, claimed bool, base *board.GitBase) (*board.Agent, error) {
+// ex carries the board fields worked out before the pane exists.
+func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, id string, argv []string, claimed bool, ex startExtra) (*board.Agent, error) {
 	log := logx.For("fleet")
 	if extra := f.Prefs.For(profile).Env; len(extra) > 0 {
 		env := make(map[string]string, len(p.Env)+len(extra))
@@ -242,7 +291,8 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 	}
 	now := time.Now()
 	a := &board.Agent{Name: name, Profile: profile, Patterns: p.Patterns, Dir: dir, Goal: goal, SessionID: id,
-		PaneID: pane, Status: string(status.Unknown), Created: now, StatusSince: now, LastChange: now, Baseline: base}
+		PaneID: pane, Status: string(status.Unknown), Created: now, StatusSince: now, LastChange: now,
+		Baseline: ex.Base, Worktree: ex.Worktree, NoWorktree: ex.NoWorktree}
 	if err := f.Store.Update(func(b *board.Board) error {
 		old, ok := b.Agents[name]
 		if claimed {
@@ -262,6 +312,14 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 	}
 	log.Info("started", "agent", name, "profile", profile, "dir", dir, "pane", pane, "session_id", id, "argv", redactArgv(argv, secret))
 	return a, nil
+}
+
+// startExtra are the board fields spawn and adopt work out before the pane
+// exists.
+type startExtra struct {
+	Base       *board.GitBase
+	Worktree   *board.Worktree
+	NoWorktree bool
 }
 
 // afterTag, when set by a test, runs between tagging a new pane and the
