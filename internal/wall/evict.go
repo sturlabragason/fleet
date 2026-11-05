@@ -36,21 +36,6 @@ func evictClass(p tmux.PaneInfo) int {
 	return classIdle
 }
 
-// ReplaceSlot returns the wall pane whose slot an incoming pane should take:
-// the pane the user was last in (#{pane_last}), because the usual path is
-// wall pane -> overview -> Enter, so that slot is the one they meant to reuse
-// (DESIGN.md §5b.1). Status does not matter — an explicit Enter beats class-1
-// protection — but a pinned pane is never replaced, and there is nothing to
-// reuse when focus came from the admiral or never left the overview.
-func ReplaceSlot(ps []tmux.PaneInfo) (string, bool) {
-	for _, p := range ps {
-		if p.Last && p.Role == "wall" && !p.Pin {
-			return p.ID, true
-		}
-	}
-	return "", false
-}
-
 // EvictCandidate returns the wall pane that should leave: the least recently
 // used pane (@fleet_used) of the worst class present. ok is false when every
 // pane is protected (pinned, waiting, error or stuck).

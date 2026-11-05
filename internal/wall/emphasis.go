@@ -4,78 +4,51 @@ import (
 	"math"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/tmux"
 )
 
-// Hysteresis for the emphasis pane (DESIGN.md §5b.3, ADR-16): resizing a pane
-// makes an agent TUI reflow, so emphasis moves reluctantly.
+// Hysteresis for the emphasis pane (DESIGN.md §5b.3, ADR-16 as amended by
+// ADR-31): resizing a pane makes an agent TUI reflow, so emphasis moves
+// reluctantly. It follows attention only; focusing a pane never picks it.
 const (
-	EmphasisDwell     = 10 * time.Second // a candidate must have waited this long
-	EmphasisHold      = 30 * time.Second // ... and the current choice held this long
-	EmphasisFocusHold = 60 * time.Second // ... or this long, if I focused it myself
+	EmphasisDwell = 10 * time.Second // a candidate must have waited this long
+	EmphasisHold  = 30 * time.Second // ... and the current choice held this long
 )
 
-// chooseEmphasis picks the emphasis pane. ps are the wall panes, active is the
-// window's active pane and prev the active pane at the last call (so a change
-// is an explicit focus by the user), cur/at are the cached choice and when it
-// was made, and curFocus records that cur was chosen by an explicit focus. It
-// returns the choice and whether that choice is an explicit focus. It is pure
-// so the hysteresis can be tested without tmux.
-func chooseEmphasis(ps []tmux.PaneInfo, active, prev, cur string, curFocus bool, at, now time.Time) (string, bool) {
-	onWall := func(id string) bool {
-		for _, p := range ps {
-			if p.ID == id {
-				return true
-			}
+// chooseEmphasis picks the emphasis pane: the wall pane that has needed me the
+// longest (waiting before error/stuck), or "" for an even grid. cur/at are the
+// cached choice and when it was made. It is pure so the hysteresis can be
+// tested without tmux.
+func chooseEmphasis(ps []tmux.PaneInfo, cur string, at, now time.Time) string {
+	best := bestCandidate(ps)
+	fallback := func() string {
+		if best != nil {
+			return best.ID
 		}
-		return false
+		return ""
 	}
-	fallback := func() (string, bool) {
-		if best := bestCandidate(ps); best != nil {
-			return best.ID, false
-		}
-		if onWall(active) {
-			return active, false
-		}
-		return "", false
-	}
-	if active != prev && active != cur && onWall(active) {
-		return active, true // the user just focused a wall pane: wins immediately
-	}
-	if cur == "" || !onWall(cur) {
+	if cur == "" {
 		return fallback()
 	}
-	// A pane I chose myself keeps emphasis for EmphasisFocusHold wherever the
-	// active pane wanders to afterwards (clicking the admiral must not
-	// re-tile the pane I just picked).
-	if curFocus && now.Sub(at) < EmphasisFocusHold {
-		return cur, true
+	curPane, ok := paneByID(ps, cur)
+	if !ok || !needsAttention(curPane.Status) {
+		return fallback() // it left the wall or stopped needing attention
 	}
-	curPane := paneByID(ps, cur)
-	if !needsAttention(curPane.Status) && cur != active {
-		return fallback() // it stopped needing attention
-	}
-	best := bestCandidate(ps)
 	if best == nil || best.ID == cur {
-		return cur, curFocus
-	}
-	hold := EmphasisHold
-	if cur == active || curFocus {
-		hold = EmphasisFocusHold
+		return cur
 	}
 	// StatusSince 0 means "untagged by an older build": the dwell is unknown,
 	// so it is not satisfied and the pane cannot steal emphasis yet.
 	if best.StatusSince == 0 {
-		return cur, curFocus
+		return cur
 	}
 	waited := now.Sub(time.Unix(0, best.StatusSince))
-	if now.Sub(at) >= hold && waited >= EmphasisDwell {
-		return best.ID, false
+	if now.Sub(at) >= EmphasisHold && waited >= EmphasisDwell {
+		return best.ID
 	}
-	return cur, curFocus
+	return cur
 }
 
 // bestCandidate is the pane that most needs attention: waiting before
@@ -114,47 +87,42 @@ func bestCandidate(ps []tmux.PaneInfo) *tmux.PaneInfo {
 	return &c[0]
 }
 
-func paneByID(ps []tmux.PaneInfo, id string) tmux.PaneInfo {
+func paneByID(ps []tmux.PaneInfo, id string) (tmux.PaneInfo, bool) {
 	for _, p := range ps {
 		if p.ID == id {
-			return p
+			return p, true
 		}
 	}
-	return tmux.PaneInfo{}
+	return tmux.PaneInfo{}, false
 }
 
 // emphasis returns the pane to emphasise for this state, updating the cached
 // choice in window options. "" means an even grid.
 func (w *Wall) emphasis(s *State) string {
-	if w.opt("@fleet_emphasis") == "0" || len(s.Wall) < 2 {
+	if !w.emphasisOn() || len(s.Wall) < 2 {
 		return ""
 	}
 	cur := w.opt("@fleet_emphasis_pane")
-	curFocus := w.opt("@fleet_emphasis_focus") == "1"
 	at, _ := strconv.ParseInt(w.opt("@fleet_emphasis_at"), 10, 64)
-	out, _ := w.T.Run("display-message", "-p", "-t", w.Target, "#{pane_id}")
-	active := strings.TrimSpace(out)
-	prev := w.opt("@fleet_emphasis_active")
 	now := w.now()
-	pick, byFocus := chooseEmphasis(s.Wall, active, prev, cur, curFocus, time.Unix(0, at), now)
-	if active != prev {
-		w.setOpt("@fleet_emphasis_active", active)
-	}
+	pick := chooseEmphasis(s.Wall, cur, time.Unix(0, at), now)
 	if pick != cur {
 		w.setOpt("@fleet_emphasis_pane", pick)
 		w.setOpt("@fleet_emphasis_at", strconv.FormatInt(now.UnixNano(), 10))
 	}
-	if byFocus != curFocus {
-		w.setOpt("@fleet_emphasis_focus", map[bool]string{true: "1", false: "0"}[byFocus])
-	}
 	return pick
 }
 
-// ToggleEmphasis switches the emphasis pane off and back on (`fleet wall emphasis`).
+// emphasisOn reports whether emphasis is enabled. It is off unless
+// `fleet wall emphasis` turned it on: a pane growing on its own when an agent
+// starts waiting moves everything else under the user's pointer (§5e).
+func (w *Wall) emphasisOn() bool { return w.opt("@fleet_emphasis") == "1" }
+
+// ToggleEmphasis switches the emphasis pane on and back off (`fleet wall emphasis`).
 func (w *Wall) ToggleEmphasis() error {
-	v := "0"
-	if w.opt("@fleet_emphasis") == "0" {
-		v = "1"
+	v := "1"
+	if w.emphasisOn() {
+		v = "0"
 	}
 	w.setOpt("@fleet_emphasis", v)
 	return w.Apply()

@@ -248,7 +248,7 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		{"set-option", "-g", "pane-border-style", "fg=" + theme.Surface1},
 		{"set-option", "-g", "pane-active-border-style", "fg=" + theme.Select},
 		{"set-option", "-g", "pane-border-format",
-			" #{?#{==:#{@role},sup},#[fg=" + theme.Supervisor + "]#[bold]admiral#[default]#{?@fleet_admiral_profile,#[fg=" + theme.Muted + "] · #{@fleet_admiral_profile}#[default],}#{?@fleet_ctx,#[fg=#{@fleet_ctx_color}] · ctx #{@fleet_ctx}#[default],},#{?#{==:#{@role},ov},#[fg=" + theme.Text + "]#[bold]overview#[default],#[fg=#{?@fleet_color,#{@fleet_color},default}]#{@fleet_glyph} #{@fleet_agent}#{?@fleet_team, #[fg=#{@fleet_team_color}]◆,} #[fg=" + theme.Muted + "]#{@fleet_status}#[default]}} "},
+			" #{?#{==:#{@role},sup},#[fg=" + theme.Supervisor + "]#[bold]admiral#[default]#{?@fleet_admiral_profile,#[fg=" + theme.Muted + "] · #{@fleet_admiral_profile}#[default],}#{?@fleet_ctx,#[fg=#{@fleet_ctx_color}] · ctx #{@fleet_ctx}#[default],},#{?#{==:#{@role},ov},#[fg=" + theme.Text + "]#[bold]overview#[default]," + targetMark + "#[fg=#{?@fleet_color,#{@fleet_color},default}]#{@fleet_glyph} #{@fleet_agent}#{?@fleet_team, #[fg=#{@fleet_team_color}]◆,} #[fg=" + theme.Muted + "]#{@fleet_status}#[default]" + nextOutMark + "}} "},
 		{"set-option", "-g", "window-style", "fg=" + theme.Subtext0 + ",bg=" + theme.Base},
 		{"set-option", "-g", "window-active-style", "fg=" + theme.Text + ",bg=" + theme.Base},
 		{"set-option", "-g", "status-style", "fg=" + theme.Text + ",bg=" + theme.Mantle},
@@ -270,14 +270,16 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		{"set-option", "-g", "status-right-length", strconv.Itoa(statusRightLen)},
 		{"set-hook", "-g", "client-resized", wallCmd("apply")},
 		{"set-hook", "-g", "client-attached", wallCmd("apply")},
-		// Focusing a wall pane is an explicit choice: re-tile so it gets
-		// emphasis. This fires on every pane switch, so it takes the cached
-		// path: an unchanged layout string costs one tmux round trip.
-		{"set-hook", "-g", "pane-focus-in", wallCmd("refresh")},
+		// Focusing a wall pane makes it the target slot (DESIGN.md §5e), inline
+		// so no process runs per click; the overview and admiral leave it alone.
+		// The refresh fires on every pane switch, so it takes the cached path:
+		// an unchanged layout string costs one tmux round trip.
+		{"set-hook", "-g", "pane-focus-in", targetHook + " ; " + wallCmd("refresh")},
 		{"bind-key", "-n", "M-Left", "select-pane", "-L"},
 		{"bind-key", "-n", "M-Right", "select-pane", "-R"},
 		{"bind-key", "-n", "M-Up", "select-pane", "-U"},
 		{"bind-key", "-n", "M-Down", "select-pane", "-D"},
+		{"bind-key", "-n", "M-n", wallCmd("next")},
 		{"bind-key", "-n", "M-z", "resize-pane", "-Z"},
 		{"bind-key", "-n", "M-x", wallCmd("hide-focused")},
 		{"bind-key", "-n", "M-s", wallCmd("sup")},
@@ -297,6 +299,10 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		// Chord for terminals that grab Alt+digit (Ptyxis/GNOME use it for tabs).
 		set = append(set, []string{"bind-key", "-T", "fleetwall", p, wallCmd("preset " + p)})
 	}
+	// These drags move panes out of the wall order or make untracked panes.
+	for _, k := range []string{"M-MouseDrag1Pane", "M-MouseDrag1Border", "C-MouseDrag1Pane"} {
+		set = append(set, []string{"unbind-key", "-n", k})
+	}
 	set = append(set, []string{"bind-key", "-n", "M-w", "switch-client", "-T", "fleetwall", "\\;", "display-message", "wall layout: press 1 2 4 6 9 or m (release Alt first)"})
 	if cc := hostCopyCommand(); cc != "" {
 		set = append(set, []string{"set-option", "-s", "copy-command", cc})
@@ -304,12 +310,23 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 	return set
 }
 
-const statusRightLen = 110
+const statusRightLen = 120 // fits the full tmux hint (keys.Hint ScopeTmux) plus a space
+
+// targetHook runs on pane-focus-in: a focused wall pane becomes the target
+// slot (@fleet_target on its window).
+const targetHook = `if-shell -F '#{==:#{@role},wall}' 'set-option -wF @fleet_target "#{pane_id}"'`
+
+// targetMark starts the border title of the target pane with a bold ▶ in the
+// select colour; the agent colour that follows still applies.
+var targetMark = "#{?#{==:#{pane_id},#{@fleet_target}},#[fg=" + theme.Select + "]#[bold]▶#[nobold] ,}"
+
+// nextOutMark ends the title of the pane a card would evict (no target, full wall).
+var nextOutMark = "#{?#{==:#{pane_id},#{@fleet_next_out}}, #[fg=" + theme.Muted + "]· next out#[default],}"
 
 func cmdWall(f *fleet.Fleet, args []string) error {
 	w := wall.New(f.T, fleet.Session)
 	if len(args) == 0 {
-		return fmt.Errorf("usage: fleet wall apply|refresh|preset N|sup|side|chips|emphasis|show NAME|hide NAME")
+		return fmt.Errorf("usage: fleet wall apply|refresh|preset N|sup|side|chips|emphasis|show NAME|hide NAME|add NAME|next|prev|untarget")
 	}
 	switch args[0] {
 	case "apply":
@@ -332,6 +349,35 @@ func cmdWall(f *fleet.Fleet, args []string) error {
 		return w.ToggleEmphasis()
 	case "hide-focused":
 		return w.HideFocused()
+	case "untarget":
+		return w.Untarget()
+	case "next", "prev":
+		dir := 1
+		if args[0] == "prev" {
+			dir = -1
+		}
+		name, ok, err := w.Next(dir)
+		switch {
+		case err != nil:
+		case name == "":
+			fmt.Fprintln(os.Stderr, wall.NothingWaitingMsg)
+		case !ok:
+			fmt.Fprintln(os.Stderr, wall.FullMsg)
+		}
+		return err
+	case "add":
+		if len(args) < 2 {
+			return fmt.Errorf("usage: fleet wall add NAME")
+		}
+		p, err := f.Pane(args[1])
+		if err != nil {
+			return err
+		}
+		ok, err := w.Add(p)
+		if err == nil && !ok {
+			fmt.Fprintln(os.Stderr, wall.AddFullMsg)
+		}
+		return err
 	case "show", "hide":
 		if len(args) < 2 {
 			return fmt.Errorf("usage: fleet wall %s NAME", args[0])

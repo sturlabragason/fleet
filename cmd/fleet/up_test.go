@@ -12,6 +12,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/keys"
+	"github.com/sturlabragason/fleet/internal/theme"
 	"github.com/sturlabragason/fleet/internal/tmux"
 	"github.com/sturlabragason/fleet/internal/tools"
 )
@@ -39,8 +40,8 @@ func TestDisableUserMCPArgs(t *testing.T) {
 	}
 }
 
-// Finding 1: focusing a wall pane is what makes emphasis move to it, so the
-// hooks must include pane-focus-in next to client-resized/client-attached.
+// The hooks must include pane-focus-in (target slot + cached refresh) next to
+// client-resized/client-attached.
 func TestConfigureSetsPaneFocusHook(t *testing.T) {
 	c := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
 	t.Cleanup(func() { c.KillServer() })
@@ -72,6 +73,106 @@ func TestConfigureSetsPaneFocusHook(t *testing.T) {
 		if !found {
 			t.Errorf("hook %s is not set", h.name)
 		}
+	}
+}
+
+// DESIGN.md §5e: the pane-focus-in hook makes a focused wall pane the target
+// slot, inline, and focusing the overview, the admiral or anything else
+// leaves it alone. Runs the configured hook on a real tmux server.
+func TestFocusHookSetsTargetForWallPanesOnly(t *testing.T) {
+	c := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
+	t.Cleanup(func() { c.KillServer() })
+	ov, err := c.Run("new-session", "-d", "-s", "f", "-n", "main", "-x", "200", "-y", "50", "-P", "-F", "#{pane_id}", "cat")
+	if err != nil {
+		t.Skip("tmux unavailable")
+	}
+	sup, _ := c.Run("split-window", "-d", "-h", "-t", "f:main", "-P", "-F", "#{pane_id}", "cat")
+	w1, _ := c.Run("split-window", "-d", "-h", "-t", "f:main", "-P", "-F", "#{pane_id}", "cat")
+	w2, _ := c.Run("split-window", "-d", "-h", "-t", "f:main", "-P", "-F", "#{pane_id}", "cat")
+	c.SetPaneOption(ov, "@role", "ov")
+	c.SetPaneOption(sup, "@role", "sup")
+	c.SetPaneOption(w1, "@role", "wall")
+	c.SetPaneOption(w2, "@role", "wall")
+	// /bin/true: the hook's `wall refresh` must not run a real fleet here.
+	configure(&fleet.Fleet{T: c, Exe: "/bin/true"})
+	target := func() string {
+		out, _ := c.Run("show-options", "-wqv", "-t", "f:main", "@fleet_target")
+		return strings.TrimSpace(out)
+	}
+	// A detached server fires no focus events, so run the hook as tmux would.
+	focus := func(p string) {
+		t.Helper()
+		if _, err := c.Run("set-hook", "-R", "-t", p, "pane-focus-in"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	focus(w1)
+	if got := target(); got != w1 {
+		t.Fatalf("focus wall pane %s: target %q", w1, got)
+	}
+	focus(ov)
+	focus(sup)
+	if got := target(); got != w1 {
+		t.Errorf("focusing the overview/admiral changed the target to %q", got)
+	}
+	focus(w2)
+	if got := target(); got != w2 {
+		t.Errorf("focus wall pane %s: target %q", w2, got)
+	}
+}
+
+// The target pane's title starts with a bold ▶ in the select colour and the
+// "next out" pane's title ends with a dim mark; other panes are unchanged.
+func TestBorderFormatTargetAndNextOut(t *testing.T) {
+	c := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
+	t.Cleanup(func() { c.KillServer() })
+	if _, err := c.Run("new-session", "-d", "-s", "f", "-n", "main", "cat"); err != nil {
+		t.Skip("tmux unavailable")
+	}
+	var format string
+	for _, a := range tmuxCommands(&fleet.Fleet{T: c, Exe: "/bin/true"}) {
+		if len(a) == 4 && a[2] == "pane-border-format" {
+			format = a[3]
+		}
+	}
+	pane, _ := c.Run("display-message", "-p", "-t", "f:main", "#{pane_id}")
+	for k, v := range map[string]string{"@fleet_agent": "a1", "@fleet_glyph": "●", "@fleet_status": "waiting", "@fleet_color": "#f9e2af"} {
+		c.SetPaneOption(pane, k, v)
+	}
+	expand := func() string {
+		out, err := c.Run("display-message", "-p", "-t", pane, format)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	plain := expand()
+	if strings.Contains(plain, "▶") || strings.Contains(plain, "next out") {
+		t.Fatalf("no target, no next out: %q", plain)
+	}
+	c.Run("set-option", "-w", "-t", "f:main", "@fleet_target", pane)
+	got := expand()
+	if want := "#[fg=" + theme.Select + "]#[bold]▶#[nobold] #[fg=#f9e2af]● a1"; !strings.Contains(got, want) {
+		t.Errorf("target: %q, want it to contain %q", got, want)
+	}
+	c.Run("set-option", "-w", "-t", "f:main", "@fleet_target", "")
+	c.Run("set-option", "-w", "-t", "f:main", "@fleet_next_out", pane)
+	got = expand()
+	if !strings.HasSuffix(strings.TrimSpace(got), "waiting#[default] #[fg="+theme.Muted+"]· next out#[default]") {
+		t.Errorf("next out: %q", got)
+	}
+}
+
+// fleet up unbinds the drags that move panes out of the wall order.
+func TestUnbindsPaneDrags(t *testing.T) {
+	want := map[string]bool{"M-MouseDrag1Pane": true, "M-MouseDrag1Border": true, "C-MouseDrag1Pane": true}
+	for _, c := range tmuxCommands(&fleet.Fleet{Exe: "/bin/true"}) {
+		if len(c) == 3 && c[0] == "unbind-key" && c[1] == "-n" {
+			delete(want, c[2])
+		}
+	}
+	if len(want) != 0 {
+		t.Errorf("not unbound: %v", want)
 	}
 }
 

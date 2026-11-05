@@ -10,8 +10,10 @@ import (
 
 func TestHintExact(t *testing.T) {
 	cases := map[Scope]string{
-		ScopeTmux:     "Alt-←↑↓→ switch pane · Alt-z zoom · Alt-x hide · Alt-s admiral · Alt-g what's new · Alt-? all keys",
-		ScopeOverview: "←↑↓→ select · ⏎ show on wall · x take off wall · Tab next waiting · g what's new · ? all keys",
+		ScopeTmux:     "Alt-←↑↓→ switch pane · Alt-n next waiting · Alt-z zoom · Alt-x hide · Alt-s admiral · Alt-g what's new · Alt-? all keys",
+		ScopeOverview: "⏎ replace ▶ · a add · Tab next waiting · x take off wall · ←↑↓→ select · g what's new · ? all keys",
+		ScopeTarget:   "a add · Tab next waiting · Esc clear · ? all keys",
+		ScopeNoTarget: "⏎ add/evict · ? all keys",
 	}
 	for sc, want := range cases {
 		if got := Hint(sc, 200); got != want {
@@ -41,6 +43,46 @@ func TestHintFitsAndKeepsAllKeys(t *testing.T) {
 	// drops from the end of the middle, keeps the start
 	if h := Hint(ScopeTmux, 40); h != "Alt-←↑↓→ switch pane · Alt-? all keys" {
 		t.Errorf("got %q", h)
+	}
+}
+
+// HintWith keeps its prefix and "? all keys" and drops the scope's items
+// from the right (designer decision: Esc clear, then Tab, then a add).
+func TestHintWithKeepsPrefix(t *testing.T) {
+	pre := []string{"▶ orch-auth", "click card replace"}
+	full := "▶ orch-auth · click card replace · a add · Tab next waiting · Esc clear · ? all keys"
+	if got := HintWith(pre, ScopeTarget, 200); got != full {
+		t.Errorf("got %q", got)
+	}
+	want := []string{
+		"▶ orch-auth · click card replace · a add · Tab next waiting · ? all keys",
+		"▶ orch-auth · click card replace · a add · ? all keys",
+		"▶ orch-auth · click card replace · ? all keys",
+	}
+	for _, w := range want {
+		if got := HintWith(pre, ScopeTarget, ansi.StringWidth(w)); got != w {
+			t.Errorf("width %d: got %q, want %q", ansi.StringWidth(w), got, w)
+		}
+	}
+	if got := HintWith(pre, ScopeTarget, 5); got != want[2] {
+		t.Errorf("tiny width must keep prefix and all keys: %q", got)
+	}
+}
+
+// A row with no tmux key (an overview key or a mouse gesture) claims no
+// tmux binding.
+func TestRowWithoutTmuxKey(t *testing.T) {
+	found := false
+	for _, b := range Bindings {
+		if b.Key == "click a pane" {
+			found = true
+			if len(b.Tmux) != 0 || b.Group != Panes {
+				t.Errorf("click a pane row %+v", b)
+			}
+		}
+	}
+	if !found {
+		t.Error("Panes row \"click a pane\" missing")
 	}
 }
 
@@ -85,7 +127,7 @@ func TestHelpGroupsAndRows(t *testing.T) {
 
 func TestTmuxKeys(t *testing.T) {
 	k := TmuxKeys()
-	for _, want := range []string{"M-?", "M-Left", "M-z", "M-x", "M-o", "M-1", "M-9", "M-m", "M-s", "M-S", "M-c", "M-w", "M-g"} {
+	for _, want := range []string{"M-?", "M-n", "M-Left", "M-z", "M-x", "M-o", "M-1", "M-9", "M-m", "M-s", "M-S", "M-c", "M-w", "M-g"} {
 		if !k[want] {
 			t.Errorf("missing %s", want)
 		}

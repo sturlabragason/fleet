@@ -34,6 +34,8 @@ type Scope int
 const (
 	ScopeTmux     Scope = iota // tmux status-right
 	ScopeOverview              // overview header
+	ScopeTarget                // overview header while a wall pane is the ▶ target
+	ScopeNoTarget              // overview header under fleet up with no ▶ target
 )
 
 // Binding is one row of the registry.
@@ -50,12 +52,16 @@ type Binding struct {
 var Bindings = []Binding{
 	{Group: Panes, Key: "Alt-←↑↓→", Tmux: []string{"M-Left", "M-Right", "M-Up", "M-Down"},
 		Desc: "move to the pane in that direction", Hints: map[Scope]string{ScopeTmux: "Alt-←↑↓→ switch pane"}},
+	{Group: Panes, Key: "Alt-n", Tmux: []string{"M-n"},
+		Desc: "put the next waiting agent into the ▶ pane", Hints: map[Scope]string{ScopeTmux: "Alt-n next waiting"}},
 	{Group: Panes, Key: "Alt-z", Tmux: []string{"M-z"},
 		Desc: "zoom this pane; press again to restore", Hints: map[Scope]string{ScopeTmux: "Alt-z zoom"}},
 	{Group: Panes, Key: "Alt-x", Tmux: []string{"M-x"},
 		Desc: "hide this pane (the agent keeps running)", Hints: map[Scope]string{ScopeTmux: "Alt-x hide"}},
 	{Group: Panes, Key: "Alt-o", Tmux: []string{"M-o"},
 		Desc: "jump to the marked pane (right-click → Mark)"},
+	{Group: Panes, Key: "click a pane",
+		Desc: "make it the ▶ pane (the next card goes there)"},
 	{Group: Wall, Key: "Alt-w 1/2/4/6/9/m", Tmux: []string{"M-w"}, Chord: []string{"1", "2", "4", "6", "9", "m"},
 		Desc: "same as Alt-1…9/m: Alt-w, let go, then the key"},
 	{Group: Wall, Key: "Alt-1/2/4/6/9", Tmux: []string{"M-1", "M-2", "M-4", "M-6", "M-9"},
@@ -76,14 +82,22 @@ var Bindings = []Binding{
 		Desc: "what's new in fleet: its latest features, unseen ones marked", Hints: map[Scope]string{ScopeTmux: ChangesHint}},
 	{Group: Overview, Key: "Alt-c", Tmux: []string{"M-c"},
 		Desc: "overview: tiles ↔ compact chips"},
-	{Group: Overview, Key: "←↑↓→ / hjkl",
-		Desc: "select a tile", Hints: map[Scope]string{ScopeOverview: "←↑↓→ select"}},
+	// Overview rows are in hint order: ⏎, a, Tab, x, ←↑↓→, g (ADR-31).
 	{Group: Overview, Key: "⏎ / click",
-		Desc: "show the selected agent on the wall", Hints: map[Scope]string{ScopeOverview: "⏎ show on wall"}},
+		Desc:  "put the selected agent into the ▶ pane (or onto the wall if no pane is ▶)",
+		Hints: map[Scope]string{ScopeOverview: "⏎ replace ▶", ScopeNoTarget: "⏎ add/evict"}},
+	{Group: Overview, Key: "a / +",
+		Desc:  "add the selected agent as a new pane (more slots if full)",
+		Hints: map[Scope]string{ScopeOverview: "a add", ScopeTarget: "a add"}},
+	{Group: Overview, Key: "Tab / Shift-Tab",
+		Desc:  "put the next/previous waiting agent into the ▶ pane (or onto the wall)",
+		Hints: map[Scope]string{ScopeOverview: "Tab next waiting", ScopeTarget: "Tab next waiting"}},
+	{Group: Overview, Key: "Esc",
+		Desc: "clear the ▶ target", Hints: map[Scope]string{ScopeTarget: "Esc clear"}},
 	{Group: Overview, Key: "x",
 		Desc: "take the selected agent off the wall", Hints: map[Scope]string{ScopeOverview: "x take off wall"}},
-	{Group: Overview, Key: "Tab",
-		Desc: "jump to the next waiting agent", Hints: map[Scope]string{ScopeOverview: "Tab next waiting"}},
+	{Group: Overview, Key: "←↑↓→ / hjkl",
+		Desc: "select a tile", Hints: map[Scope]string{ScopeOverview: "←↑↓→ select"}},
 	{Group: Overview, Key: "g",
 		Desc: "same as Alt-g: what's new in fleet", Hints: map[Scope]string{ScopeOverview: "g what's new"}},
 	{Group: Overview, Key: "1/2/4/6/9/m",
@@ -114,7 +128,8 @@ const HelpTmuxKey = "M-?"
 const Footer = "Alt-? (tmux) · ? (overview)  show this list"
 
 // allKeys is the final hint item per scope; Hint never drops it.
-var allKeys = map[Scope]string{ScopeTmux: "Alt-? all keys", ScopeOverview: "? all keys"}
+var allKeys = map[Scope]string{ScopeTmux: "Alt-? all keys", ScopeOverview: "? all keys",
+	ScopeTarget: "? all keys", ScopeNoTarget: "? all keys"}
 
 const sep = " · "
 
@@ -142,7 +157,11 @@ func PopupHeight() int { return strings.Count(Help(0), "\n") + 1 + 2 }
 // Hint returns the short hint line for scope, at most width cells wide. Items
 // are dropped from the end of the middle when it is too long; the final
 // "all keys" item is always kept.
-func Hint(scope Scope, width int) string {
+func Hint(scope Scope, width int) string { return HintWith(nil, scope, width) }
+
+// HintWith is Hint with fixed leading items (e.g. "▶ orch-auth"), which are
+// never dropped: only the scope's registry items are, from the right.
+func HintWith(prefix []string, scope Scope, width int) string {
 	var items []string
 	for _, b := range Bindings {
 		if h := b.Hints[scope]; h != "" {
@@ -151,7 +170,7 @@ func Hint(scope Scope, width int) string {
 	}
 	last := allKeys[scope]
 	for {
-		s := strings.Join(append(append([]string{}, items...), last), sep)
+		s := strings.Join(append(append(append([]string{}, prefix...), items...), last), sep)
 		if ansi.StringWidth(s) <= width || len(items) == 0 {
 			return s
 		}

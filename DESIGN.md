@@ -346,9 +346,11 @@ The bottom tmux status line and the overview header show a short hint in plain w
 | Group | Key | Description |
 |---|---|---|
 | Panes | `Alt-←↑↓→` | move to the pane in that direction |
+| Panes | `Alt-n` | put the next waiting agent into the ▶ pane |
 | Panes | `Alt-z` | zoom this pane; press again to restore |
 | Panes | `Alt-x` | hide this pane (the agent keeps running) |
 | Panes | `Alt-o` | jump to the marked pane (right-click → Mark) |
+| Panes | `click a pane` | make it the ▶ pane (the next card goes there) |
 | Wall | `Alt-w 1/2/4/6/9/m` | same as Alt-1…9/m: Alt-w, let go, then the key |
 | Wall | `Alt-1/2/4/6/9` | wall: show up to N panes |
 | Wall | `Alt-m` | wall: one main pane + stack |
@@ -358,10 +360,12 @@ The bottom tmux status line and the overview header show a short hint in plain w
 | Admiral | `Alt-R` | reset the admiral to a fresh chat (asks y/n) |
 | Admiral | `Alt-P` | pick the admiral's profile (copilot, claude, …) |
 | Overview | `Alt-c` | overview: tiles ↔ compact chips |
-| Overview | `←↑↓→ / hjkl` | select a tile |
-| Overview | `⏎ / click` | show the selected agent on the wall |
+| Overview | `⏎ / click` | put the selected agent into the ▶ pane (or onto the wall if no pane is ▶) |
+| Overview | `a / +` | add the selected agent as a new pane (more slots if full) |
+| Overview | `Tab / Shift-Tab` | put the next/previous waiting agent into the ▶ pane (or onto the wall) |
+| Overview | `Esc` | clear the ▶ target |
 | Overview | `x` | take the selected agent off the wall |
-| Overview | `Tab` | jump to the next waiting agent |
+| Overview | `←↑↓→ / hjkl` | select a tile |
 | Overview | `g` | same as Alt-g: what's new in fleet |
 | Overview | `1/2/4/6/9/m` | same as Alt-1…9 / Alt-m |
 | Overview | `R` | same as Alt-R: reset the admiral (asks y/n) |
@@ -442,9 +446,7 @@ Status comes from the pane itself: `fleet refresh` already tags `@fleet_status` 
 
 Pinning (`P` in §5a) is **specified here but not built**: class 0 exists in the ordering and `@fleet_pin` is read, so the key binding is the only missing piece.
 
-**Take the slot I just left.** Eviction order is the fallback, not the first rule. When the wall is full and I bring an agent on from the overview, the pane that goes is the wall pane I was **last in** — tmux `#{pane_last}` = 1 in the main window. My focus path is almost always *wall pane → overview → `Enter`*, so the slot I just left is the slot I meant to reuse, whatever its status: an explicit `Enter` is my decision and it beats class-1 protection. The incoming pane takes that slot with `swap-pane`, so it keeps the position and size I was already looking at, nothing else on the wall moves, and the layout string doesn't change. The pane that leaves goes back to a window renamed `ag-<agent>`, as with any eviction.
-
-Two exceptions fall back to the class order above: a **pinned** last-focused pane (class 0 is never replaced, even explicitly), and a last pane that isn't a wall pane at all — if I came from the admiral, or focus never left the overview, there is no slot to reuse.
+**Replaced by the target slot (§5e, ADR-31).** The first version reused the pane I was last in (`#{pane_last}`), but only on a full wall, and nothing showed which pane that was. A card now replaces the visible `▶` target pane, full wall or not, and the class order below applies only when there is no target.
 
 ### 5b.2 A grid sized to the screen, not to the preset
 
@@ -461,12 +463,13 @@ Presets (`M-1/2/4/6/9`) stop being fixed shapes and become **caps on the number 
 
 Equal tiles are wrong when one agent is asking a question and the rest are grinding. The wall picks one **emphasis pane** and gives it `FocusPercent` = 60% of the wall; the others share the rest in an auto-grid (§5b.2):
 
-- Emphasis pane = the **longest-waiting** pane (`waiting`, then `error`/`stuck`, by `@fleet_status_since`); if none needs attention, the **active** wall pane; if neither, no emphasis and the grid is even.
+- **Off by default** since ADR-31: a pane growing on its own moves every other pane under the pointer. `fleet wall emphasis` turns it on.
+- Emphasis pane = the **longest-waiting** pane (`waiting`, then `error`/`stuck`, by `@fleet_status_since`); if none needs attention, no emphasis and the grid is even. Focus never picks it (ADR-31): choosing a slot must not resize it.
 - Stacked or side by side is decided by scoring both remainders with the grid rule above, tie to stacked — on a 209×64 wall stacked gives the emphasis pane the full 209 columns and the others better shapes, while side by side leaves one cramped column.
 - The emphasis pane takes the first slot. The other panes keep their relative order: reordering them to follow focus would mean `swap-pane`, and every agent TUI would repaint and lose its scroll position.
 - Emphasis is skipped when it would push the remaining panes under the minimum pane size, or when there are fewer than two panes. With the default 14-row overview that means emphasis is off above about four wall panes — intended, not a bug.
-- **Hysteresis**, because resizing a pane makes an agent TUI reflow: emphasis moves only when its pane leaves the wall or stops needing attention, when I explicitly focus a wall pane (immediate, then held 60s), or when a candidate has waited 10s *and* the current emphasis has held 30s. The choice lives in `@fleet_emphasis_pane` / `@fleet_emphasis_at`, and a re-layout that produces the same layout string as `@fleet_layout` is skipped entirely.
-- `fleet wall emphasis` toggles it off and back on (window option `@fleet_emphasis`) for when I want a plain even grid. No key binding: the hint bar is already full, and the remaining key budget belongs to pinning.
+- **Hysteresis**, because resizing a pane makes an agent TUI reflow: emphasis moves only when its pane leaves the wall or stops needing attention, or when a candidate has waited 10s *and* the current emphasis has held 30s. The choice lives in `@fleet_emphasis_pane` / `@fleet_emphasis_at`, and a re-layout that produces the same layout string as `@fleet_layout` is skipped entirely.
+- `fleet wall emphasis` toggles it on and back off (window option `@fleet_emphasis`, on only when `1`). No key binding: the hint bar is already full, and the remaining key budget belongs to pinning.
 
 A pane that is merely `working` therefore shrinks on its own as soon as another pane starts waiting, and grows back when I answer it.
 
@@ -546,6 +549,50 @@ One list of fleet's own user-facing features, newest first, so I can see what th
 ### Out of scope
 
 Reviewing the agents' commits and diffs (use git or the agent's pane), release tags and version numbers, an MCP tool, filtering and search.
+
+---
+
+## 5e. Clicking around: a target slot on the wall (ADR-31)
+
+Status: the target slot, `a`, `Tab`/`Alt-n` and `Esc` are built. Right-click, preview, undo, pin and the overview tiers are planned (below).
+
+The problem and the options weighed are in `docs/ux-interaction.md`. In short: "click a pane, then click a card" replaced the pane only on a full wall, nothing showed which pane a card would replace, clicking a pane resized it, and cards moved under the mouse.
+
+### Target slot
+
+- The wall has one **target slot**, the window option `@fleet_target` (a pane id). Focusing a wall pane by any means (click, `Alt-←↑↓→`, a card bringing it on) makes it the target. The `pane-focus-in` hook sets it with an inline tmux command, so no process runs per click. Focusing the overview or the admiral does **not** clear it.
+- **A card click or `Enter` puts that agent into the target slot**, full wall or not, with `swap-pane` so position and size are kept. The target stays on that slot (now the incoming pane), so clicking cards one after another cycles agents through one slot. A pinned target is never replaced.
+- A card whose agent is already on the wall makes its pane the target and focuses it; nothing moves.
+- **No target** (fresh start, `Esc`, the target pane left the wall): today's rules (§5b.1), append if there is room, else evict by class. The pane that would leave carries a dim `next out` in its title.
+- The target pane's border title starts with `▶` in the select colour, whichever pane has focus. Its card shows `▶` after the name.
+- **Undo:** `u` in the overview swaps the last replace back (one level, window option `@fleet_undo` = `<slot pane> <pane that left>`).
+- **Add without replacing:** `a` or `+` in the overview appends the cursor agent as a new slot. On a full wall the preset steps up (1 → 2 → 4 → 6 → 9, `m` → 6) because you asked for one more pane; at 9 it refuses with a message.
+- **Next waiting:** `Tab` / `Shift+Tab` in the overview, and `Alt-n` anywhere, put the next/previous waiting agent (longest wait first) into the target slot. Repeated presses work through approvals in one slot.
+- **Emphasis is off by default and follows attention only** (amends ADR-16): focusing a pane no longer gives it 60%, so choosing a slot never resizes it. `Alt-z` is the way to give one pane the space.
+- **Focus stays in the overview.** A card click, `Enter`, `a`, `Tab` and `Alt-n` never move keyboard focus; a swap into the target keeps focus where it was. So clicking cards or pressing `Tab` repeatedly keeps working.
+- `fleet up` unbinds tmux's `M-MouseDrag1Pane`, `M-MouseDrag1Border` and `C-MouseDrag1Pane`, which move panes out of the wall order or create untracked panes.
+
+### Right-click and preview
+
+- **Right-click a card:** a tmux menu at the pointer with Replace target, Add as a new pane, Preview, Take off the wall, Pin/Unpin.
+- **`Space`** in the overview, or Preview in the menu, opens a read-only live view of the agent in a popup (`fleet peek --live NAME`, captured 4× a second). `Enter` in the popup puts the agent into the target slot and closes it; `q`/`Esc`/`Space` close it.
+- **Pin** finally gets its binding: `p` in the overview (and the menu) toggles `@fleet_pin` on the cursor agent's pane (§5b.1 class 0). A pinned pane shows `📌` in its title.
+
+### Visible keys
+
+Every key above is in the key registry (`internal/keys`), so it shows in `?`, `Alt-?` and `fleet keys`. The overview header names the target and the next action: `▶ orch-auth · click card replace · a add · Tab next waiting · Esc clear · ? all keys`, or `no ▶ pane · click a wall pane to pick one · ⏎ add/evict · ? all keys` without one. Items drop from the right on a narrow pane; the target and `? all keys` stay. The `?` overlay scrolls (`↑↓`, wheel) when the pane is too short for every key.
+
+### Overview past one screen of cards (ADR-32)
+
+- The strip height stays fixed (§5a; wall geometry is worth more than overview rows).
+- Agents that need you or are on the wall (waiting, error, stuck, on the wall) get **full cards**. Everyone else gets a **one-line row** (glyph, name, team mark, status age) in columns of at least 30 cells. A click on a row does the same as on a card.
+- If the rows still overflow, idle and done agents fold into one clickable `N idle ▸` chip that unfolds them in place, and the wheel scrolls the row area. Nothing is ever unreachable.
+- **Stable order:** within a tier, agents keep their position. Re-sorting waits while the mouse was over the overview or a key was pressed in the last 3 seconds, so nothing moves under the pointer. Within a tier, team members sit together.
+- With every agent fitting as a full card (the common case), the overview looks as before.
+
+### Out of scope
+
+Drag a card onto a pane (tmux sends the release to the pane the drag started in), Shift+click and Shift+Enter (the terminal keeps Shift+click for selection; Bubble Tea v1 cannot see Shift+Enter), an interactive preview, collapsing teams, a taller overview size.
 
 ---
 
@@ -1077,6 +1124,16 @@ Rejected: (a) `mouse off` (breaks R6 click-to-focus, border resizing and scrolli
 Decision: the view reads a curated `CHANGELOG.md` (dated, one line per user-facing change, newest first) built in with `go:embed`, plus uncovered `feat` commits from fleet's own repo when the binary runs from it. A last-seen file marks unseen entries as new. Adding the line is part of done in the worker playbook.
 Why: the git view showed whatever repo the focused pane was in, so its content changed with the pane and was mostly other projects' commits; what I wanted was "what can fleet do now". Embedding means an installed binary knows its features without a checkout; the commit fallback catches features merged without a line.
 Rejected: generating the list from commit subjects only (many fleet commits are not conventional, and subjects describe the code, not what the user can do); reading the changelog from the checkout at runtime (an installed binary may have no checkout); keeping the git review in the same view (two unrelated lists under one key).
+
+**ADR-31: a sticky target slot decides where a card goes** (R6, R7). *Amends ADR-16.*
+Decision: the last focused wall pane is the target (`@fleet_target`), shown with `▶` on the pane and its card, kept while focus is in the overview or the admiral. A card click replaces the target whether or not the wall is full; `a` adds, `u` undoes, `Esc` clears, `Tab`/`Alt-n` send the next waiting agent there. Focus no longer moves emphasis, and emphasis is off by default.
+Why: clicking around moved panes the user had not touched. The user's model is "select a terminal, then pick what goes in it" (Grafana/OBS scene slots, VS Code editor groups). Before, the same gesture appended on a wall with room and replaced on a full one, and `#{pane_last}` was invisible and overwritten by any focus change. Emphasis on focus resized the slot the user had just chosen.
+Rejected: pick a card, then click a pane (arms a mode that eats a click meant for the agent, and is the reverse order); only showing today's rules (with room on the wall a card still appends); Shift+click to add (terminals keep it for selection, it never reaches tmux); drag and drop (tmux delivers the release to the starting pane).
+
+**ADR-32: the overview keeps its height and gives full cards only to agents that need you** (R4, R9)
+Decision: full cards for waiting, failing and on-wall agents; one-line rows for the rest; idle and done fold into a chip when even rows overflow; order is stable within a tier and frozen while the user interacts.
+Why: past about 14 agents the second card row filled and the rest became an unclickable `+k`. Growing the strip resizes every wall pane and repaints every agent TUI; scrolling hides exactly what you want to click.
+Rejected: one-line rows for everyone (loses the context meter and subagents on the agents that need you); growing the strip; grouping by team as the main fix (only helps when teams are used).
 
 **ADR-33: dead agent panes close themselves; the exit code comes from tmux** (§6.7, R11)
 Decision: the overview poll reads `#{pane_dead_status}` and `#{pane_dead_signal}` for agent panes (they keep `remain-on-exit on`). Exit 0 closes the agent at once with a `done` "exited, closed" report; anything else is reported `blocked` with the code and the last screen lines and closed after `dead_pane_grace` (default 5m, `0` at once, `off` never). The ADR-29 check still runs, but only adds a "left work behind" note: the pane is closed either way, since the dir, branch and the tool's session stay on disk and `fleet adopt` can pick them up. The first sighting is stored on the board (`exit`) so each death is reported once.

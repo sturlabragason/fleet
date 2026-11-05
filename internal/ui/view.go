@@ -54,17 +54,49 @@ func (m *Model) View() (out string) {
 	return zone.Scan(b.String())
 }
 
-// helpOverlay is the hotkey list centred below the header. Too tall for the
-// pane: two columns; still too tall: the bottom is cut, never the top.
-func (m *Model) helpOverlay() string {
-	avail := max(m.h-1, 1)
+// helpLines is the hotkey list for the overlay and the rows it has (the
+// pane minus the header). Too tall for the pane: two columns.
+func (m *Model) helpLines() (lines []string, avail int) {
+	avail = max(m.h-1, 1)
 	h := keys.HelpStyled(min(m.w, keys.PopupWidth()-2*keys.PopupMargin-2))
 	if strings.Count(h, "\n")+1 > avail {
 		h = keys.HelpColumns(m.w)
 	}
-	lines := strings.Split(h, "\n")
+	return strings.Split(h, "\n"), avail
+}
+
+// helpMaxOff is the last scroll offset: the window of avail-1 rows (one is
+// kept for the "more" row) then ends on the last line.
+func (m *Model) helpMaxOff() int {
+	lines, avail := m.helpLines()
+	if len(lines) <= avail {
+		return 0
+	}
+	return len(lines) - max(avail-1, 1)
+}
+
+// scrollHelp moves the overlay by d lines, clamped.
+func (m *Model) scrollHelp(d int) {
+	m.helpOff = min(max(m.helpOff+d, 0), m.helpMaxOff())
+}
+
+// helpOverlay is the hotkey list centred below the header. Still too tall
+// for the pane in two columns: it scrolls (↑↓, PgUp/PgDn, wheel) and the
+// last row says which way more keys are, so every key can be reached.
+func (m *Model) helpOverlay() string {
+	lines, avail := m.helpLines()
 	if len(lines) > avail {
-		lines = lines[:avail]
+		off := min(max(m.helpOff, 0), m.helpMaxOff())
+		end := min(off+max(avail-1, 1), len(lines))
+		var more []string
+		if off > 0 {
+			more = append(more, "↑ more")
+		}
+		if end < len(lines) {
+			more = append(more, "↓ more")
+		}
+		more = append(more, "↑↓ scroll")
+		lines = append(lines[off:end:end], lipgloss.NewStyle().Foreground(colIdle).Render(strings.Join(more, " · ")))
 	}
 	bw := 0
 	for i, l := range lines {
@@ -83,11 +115,23 @@ func (m *Model) header() string {
 		counts[a.Status]++
 	}
 	h := fmt.Sprintf(" fleet · %d agents · %d working · %d waiting · %d error", len(m.agents), counts["working"], counts["waiting"], counts["error"]+counts["stuck"])
-	hint := "  " + keys.Hint(keys.ScopeOverview, m.w-ansi.StringWidth(h)-2)
-	if m.msg != "" {
-		hint = "  " + m.msg
+	idle := lipgloss.NewStyle().Foreground(colIdle)
+	room := m.w - ansi.StringWidth(h) - 2
+	var hint string
+	switch {
+	case m.msg != "":
+		hint = idle.Render("  " + m.msg)
+	case m.target != "":
+		// DESIGN.md §5e: name the target and the next action.
+		mark := targetMark + " " + m.target
+		line := keys.HintWith([]string{mark, "click card replace"}, keys.ScopeTarget, room)
+		hint = "  " + targetStyle.Render(mark) + idle.Render(strings.TrimPrefix(line, mark))
+	case m.be.WallEnabled():
+		hint = idle.Render("  " + keys.HintWith([]string{"no " + targetMark + " pane", "click a wall pane to pick one"}, keys.ScopeNoTarget, room))
+	default:
+		hint = idle.Render("  " + keys.Hint(keys.ScopeOverview, room))
 	}
-	return ansi.Truncate(lipgloss.NewStyle().Bold(true).Render(h)+lipgloss.NewStyle().Foreground(colIdle).Render(hint), m.w, "…")
+	return ansi.Truncate(lipgloss.NewStyle().Bold(true).Render(h)+hint, m.w, "…")
 }
 
 // line3 is the tile's last line: the latest report while the agent is not
@@ -132,14 +176,18 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 	if m.onWall[a.Name] {
 		wall = " ▣"
 	}
+	tgt, tw2 := "", 0 // the ▶ after the name of the agent in the target slot
+	if a.Name == m.target {
+		tgt, tw2 = targetStyle.Render(" "+targetMark), 2
+	}
 	inner := w - 4
 	st1 := lipgloss.NewStyle().Foreground(col).Bold(true)
-	l1 := st1.Render(glyph(a.Status, m.frame) + " " + ansi.Truncate(a.Name, inner-4, "…") + wall)
+	l1 := st1.Render(glyph(a.Status, m.frame)+" "+ansi.Truncate(a.Name, inner-4-tw2, "…")) + tgt + st1.Render(wall)
 	state := strings.TrimSpace(a.Status + m.queueMark(a.Name) + " " + since(a.StatusSince, m.now()))
 	l2 := lipgloss.NewStyle().Foreground(colIdle).Render(metaLine(a.Profile, state, inner))
 	if ti, ok := m.teams[a.Name]; ok && ti.Team != "" {
 		ts := lipgloss.NewStyle().Foreground(lipgloss.Color(ti.Color))
-		l1 = st1.Render(glyph(a.Status, m.frame)+" "+ansi.Truncate(a.Name, inner-4-2, "…")) + " " + ts.Render(teamMark)
+		l1 = st1.Render(glyph(a.Status, m.frame)+" "+ansi.Truncate(a.Name, inner-4-2-tw2, "…")) + tgt + " " + ts.Render(teamMark)
 		if wall != "" {
 			l1 += st1.Render(wall)
 		}
@@ -178,6 +226,9 @@ func (m *Model) chips(rest []*board.Agent, all bool) string {
 			st = st.Reverse(true)
 		}
 		c := st.Render(glyph(a.Status, m.frame) + " " + a.Name + m.queueMark(a.Name))
+		if a.Name == m.target {
+			c += targetStyle.Render(" " + targetMark)
+		}
 		if ti, ok := m.teams[a.Name]; ok && ti.Team != "" {
 			c += " " + lipgloss.NewStyle().Foreground(lipgloss.Color(ti.Color)).Render(teamMark)
 		}
@@ -226,6 +277,12 @@ func shorten(s string, w int) string {
 
 // teamMark follows the name of an agent in a team (● is the waiting glyph).
 const teamMark = "◆"
+
+// targetMark follows the name of the agent in the ▶ target slot (DESIGN.md §5e).
+const targetMark = "▶"
+
+// targetStyle draws targetMark: always the select colour, bold.
+var targetStyle = lipgloss.NewStyle().Foreground(colSelect).Bold(true)
 
 func since(t, now time.Time) string {
 	if t.IsZero() {

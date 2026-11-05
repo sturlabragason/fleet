@@ -1,6 +1,7 @@
 package wall
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -55,40 +56,7 @@ func TestEvictAllProtected(t *testing.T) {
 	}
 }
 
-func TestReplaceSlotPicksTheLastFocusedWallPane(t *testing.T) {
-	ps := []tmux.PaneInfo{
-		{ID: "%1", Role: "wall", Status: "idle"},
-		{ID: "%2", Role: "wall", Status: "waiting", Last: true},
-		{ID: "%3", Role: "wall", Status: "idle"},
-	}
-	// An explicit Enter beats class-1 protection.
-	if got, ok := ReplaceSlot(ps); !ok || got != "%2" {
-		t.Errorf("got %q %v, want %%2", got, ok)
-	}
-	// Pinned panes are never replaced, not even explicitly.
-	ps[1].Pin = true
-	if got, ok := ReplaceSlot(ps); ok {
-		t.Errorf("pinned slot reused: %q", got)
-	}
-	// Focus came from the admiral, or never left the overview.
-	ps[1].Pin, ps[1].Last = false, false
-	if got, ok := ReplaceSlot(ps); ok {
-		t.Errorf("no last pane, got %q", got)
-	}
-	// The last pane is not on the wall (admiral/overview).
-	if got, ok := ReplaceSlot([]tmux.PaneInfo{{ID: "%9", Role: "ov", Last: true}}); ok {
-		t.Errorf("non-wall slot reused: %q", got)
-	}
-}
-
 // --- emphasis hysteresis -------------------------------------------------
-
-// choose is chooseEmphasis for the common case: the cached choice was not an
-// explicit focus, and the test only cares about the pane it picks.
-func choose(ps []tmux.PaneInfo, active, prev, cur string, at, now time.Time) string {
-	pick, _ := chooseEmphasis(ps, active, prev, cur, false, at, now)
-	return pick
-}
 
 func waiting(id string, since time.Time) tmux.PaneInfo {
 	return tmux.PaneInfo{ID: id, Status: "waiting", StatusSince: since.UnixNano()}
@@ -101,19 +69,54 @@ func TestEmphasisPicksLongestWaiting(t *testing.T) {
 		waiting("%2", now.Add(-20*time.Second)),
 		waiting("%3", now.Add(-60*time.Second)),
 	}
-	if got := choose(ps, "%1", "%1", "", time.Time{}, now); got != "%3" {
+	if got := chooseEmphasis(ps, "", time.Time{}, now); got != "%3" {
 		t.Errorf("got %q, want the longest-waiting %%3", got)
 	}
 }
 
-func TestEmphasisFallsBackToActivePane(t *testing.T) {
+// ADR-31: with nothing needing me the grid is even; the focused pane no
+// longer gets emphasis.
+func TestEmphasisNoneWithoutAttention(t *testing.T) {
 	now := time.Unix(1000, 0)
 	ps := []tmux.PaneInfo{{ID: "%1", Status: "working"}, {ID: "%2", Status: "idle"}}
-	if got := choose(ps, "%2", "%2", "", time.Time{}, now); got != "%2" {
-		t.Errorf("got %q, want the active pane %%2", got)
-	}
-	if got := choose(ps, "", "", "", time.Time{}, now); got != "" {
+	if got := chooseEmphasis(ps, "", time.Time{}, now); got != "" {
 		t.Errorf("got %q, want no emphasis", got)
+	}
+	// A cached pick that was a focused, non-attention pane is dropped.
+	if got := chooseEmphasis(ps, "%2", now, now); got != "" {
+		t.Errorf("got %q, want the stale focus pick dropped", got)
+	}
+}
+
+// ADR-31: focus never changes the pick. chooseEmphasis does not even see the
+// active pane, and the tmux path must not read it into the choice: focusing a
+// working pane while another waits keeps emphasis on the waiting one.
+func TestEmphasisIgnoresFocus(t *testing.T) {
+	c, w, agents := setupWall(t, 3)
+	for _, p := range agents {
+		noTarget(t, w)
+		if _, err := w.Show(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c.SetPaneOption(agents[1], "@fleet_status", "waiting")
+	c.SetPaneOption(agents[1], "@fleet_status_since", strconv.FormatInt(time.Now().Add(-time.Hour).UnixNano(), 10))
+	s, _ := w.Read()
+	if got := w.emphasis(s); got != "" {
+		t.Fatalf("emphasis is off by default, got %q", got)
+	}
+	w.setOpt("@fleet_emphasis", "1")
+	if got := w.emphasis(s); got != agents[1] {
+		t.Fatalf("emphasis %q, want the waiting %s", got, agents[1])
+	}
+	c.Run("select-pane", "-t", agents[2])
+	if got := w.emphasis(s); got != agents[1] {
+		t.Errorf("focusing %s moved emphasis to %q", agents[2], got)
+	}
+	c.SetPaneOption(agents[1], "@fleet_status", "working")
+	s, _ = w.Read()
+	if got := w.emphasis(s); got != "" {
+		t.Errorf("nothing waiting: emphasis %q, want an even grid", got)
 	}
 }
 
@@ -125,11 +128,11 @@ func TestEmphasisHoldsAgainstANewWaitingPane(t *testing.T) {
 	fresh := waiting("%3", now.Add(-EmphasisDwell-time.Second))
 	ps := []tmux.PaneInfo{{ID: "%1", Status: "working"}, cur, fresh}
 	at := now.Add(-EmphasisHold + 5*time.Second)
-	if got := choose(ps, "%1", "%1", "%2", at, now); got != "%2" {
+	if got := chooseEmphasis(ps, "%2", at, now); got != "%2" {
 		t.Errorf("stole emphasis before the hold: %q", got)
 	}
 	at = now.Add(-EmphasisHold - time.Second)
-	if got := choose(ps, "%1", "%1", "%2", at, now); got != "%3" {
+	if got := chooseEmphasis(ps, "%2", at, now); got != "%3" {
 		t.Errorf("after the hold the waiting pane wins, got %q", got)
 	}
 }
@@ -142,52 +145,15 @@ func TestEmphasisDwellMustPass(t *testing.T) {
 		waiting("%3", now.Add(-time.Second)), // waiting, but not yet for Dwell
 	}
 	at := now.Add(-time.Hour)
-	if got := choose(ps, "%1", "%1", "%2", at, now); got != "%2" {
+	if got := chooseEmphasis(ps, "%2", at, now); got != "%2" {
 		t.Errorf("a pane waiting < dwell must not win: %q", got)
-	}
-}
-
-func TestEmphasisExplicitFocusWinsImmediately(t *testing.T) {
-	now := time.Unix(1000, 0)
-	ps := []tmux.PaneInfo{{ID: "%1", Status: "working"}, waiting("%2", now.Add(-time.Hour))}
-	if got := choose(ps, "%1", "%2", "%2", now, now); got != "%1" {
-		t.Errorf("got %q, want the just-focused pane %%1", got)
-	}
-}
-
-func TestEmphasisFocusHeldAgainstCandidates(t *testing.T) {
-	now := time.Unix(1000, 0)
-	ps := []tmux.PaneInfo{{ID: "%1", Status: "working"}, waiting("%2", now.Add(-time.Hour))}
-	at := now.Add(-EmphasisHold - time.Second) // past the normal hold...
-	if got := choose(ps, "%1", "%1", "%1", at, now); got != "%1" {
-		t.Errorf("focused pane must hold for %s, got %q", EmphasisFocusHold, got)
-	}
-	at = now.Add(-EmphasisFocusHold - time.Second)
-	if got := choose(ps, "%1", "%1", "%1", at, now); got != "%2" {
-		t.Errorf("after the focus hold the waiting pane wins, got %q", got)
-	}
-	// ... and the hold survives looking away: I focus %1, then click the
-	// admiral, which is not a wall pane at all. %1 must keep emphasis.
-	at = now.Add(-5 * time.Second)
-	pick, byFocus := chooseEmphasis(ps, "%sup", "%sup", "%1", true, at, now)
-	if pick != "%1" || !byFocus {
-		t.Errorf("looking away dropped the focus hold: got %q focus=%v, want %%1 true", pick, byFocus)
-	}
-	// Same on the first call after the active pane moved (prev was still %1).
-	if pick, _ := chooseEmphasis(ps, "%sup", "%1", "%1", true, at, now); pick != "%1" {
-		t.Errorf("got %q, want %%1 to hold", pick)
-	}
-	// Once the focus hold expires the waiting pane takes over anyway.
-	at = now.Add(-EmphasisFocusHold - time.Second)
-	if pick, byFocus := chooseEmphasis(ps, "%sup", "%sup", "%1", true, at, now); pick != "%2" || byFocus {
-		t.Errorf("after the focus hold: got %q focus=%v, want %%2 false", pick, byFocus)
 	}
 }
 
 func TestEmphasisMovesWhenItsPaneLeavesTheWall(t *testing.T) {
 	now := time.Unix(1000, 0)
 	ps := []tmux.PaneInfo{{ID: "%1", Status: "working"}, waiting("%3", now.Add(-time.Second))}
-	if got := choose(ps, "%1", "%1", "%9", now, now); got != "%3" {
+	if got := chooseEmphasis(ps, "%9", now, now); got != "%3" {
 		t.Errorf("got %q, want an immediate move to %%3", got)
 	}
 }
@@ -195,20 +161,8 @@ func TestEmphasisMovesWhenItsPaneLeavesTheWall(t *testing.T) {
 func TestEmphasisMovesWhenItStopsNeedingAttention(t *testing.T) {
 	now := time.Unix(1000, 0)
 	ps := []tmux.PaneInfo{{ID: "%1", Status: "idle"}, {ID: "%2", Status: "working"}, waiting("%3", now)}
-	if got := choose(ps, "%2", "%2", "%1", now, now); got != "%3" {
+	if got := chooseEmphasis(ps, "%1", now, now); got != "%3" {
 		t.Errorf("got %q, want %%3 once %%1 stopped waiting", got)
-	}
-}
-
-// An explicit focus is reported so the caller can persist @fleet_emphasis_focus.
-func TestEmphasisReportsExplicitFocus(t *testing.T) {
-	now := time.Unix(1000, 0)
-	ps := []tmux.PaneInfo{{ID: "%1", Status: "working"}, waiting("%2", now.Add(-time.Hour))}
-	if pick, byFocus := chooseEmphasis(ps, "%1", "%2", "%2", false, now, now); pick != "%1" || !byFocus {
-		t.Errorf("got %q focus=%v, want %%1 true", pick, byFocus)
-	}
-	if pick, byFocus := chooseEmphasis(ps, "%2", "%2", "", false, time.Time{}, now); pick != "%2" || byFocus {
-		t.Errorf("a candidate pick is not an explicit focus: %q %v", pick, byFocus)
 	}
 }
 
@@ -221,7 +175,7 @@ func TestEmphasisUntaggedStatusSinceFailsDwell(t *testing.T) {
 		{ID: "%2", Status: "waiting"}, // StatusSince 0: never tagged
 	}
 	at := now.Add(-time.Hour) // the hold passed long ago
-	if got := choose(ps, "%3", "%3", "%1", at, now); got != "%1" {
+	if got := chooseEmphasis(ps, "%1", at, now); got != "%1" {
 		t.Errorf("a pane with no status_since must not steal emphasis, got %q", got)
 	}
 }
@@ -235,11 +189,11 @@ func TestEmphasisUntaggedPaneDoesNotBlockTheQueue(t *testing.T) {
 		{ID: "%2", Status: "waiting"}, // StatusSince 0: never tagged
 		waiting("%3", now.Add(-5*time.Minute)),
 	}
-	at := now.Add(-time.Hour)
-	if got := choose(ps, "%1", "%1", "%1", at, now); got != "%3" {
-		t.Errorf("got %q, want the dwelled %%3 (the untagged %%2 must not block it)", got)
-	}
-	if got := choose(ps, "%1", "%1", "", time.Time{}, now); got != "%3" {
+	if got := chooseEmphasis(ps, "", time.Time{}, now); got != "%3" {
 		t.Errorf("first choice got %q, want %%3", got)
+	}
+	// %1 was the pick (an old focus pick) and stopped needing attention.
+	if got := chooseEmphasis(ps, "%1", now.Add(-time.Hour), now); got != "%3" {
+		t.Errorf("got %q, want the dwelled %%3 (the untagged %%2 must not block it)", got)
 	}
 }

@@ -135,7 +135,7 @@ func (f *Fleet) TeamClose(team string) ([]Result, error) {
 
 // Waller is the part of wall.Wall team show/hide needs.
 type Waller interface {
-	Show(pane string) (bool, error)
+	Place(pane string) (bool, error) // onto the wall without using the ▶ slot
 	Hide(pane string) error
 	OnWall() map[string]bool
 	Slots() (int, error)
@@ -171,7 +171,7 @@ func (f *Fleet) TeamShow(w Waller, team string) ([]Result, error) {
 			rs = append(rs, Result{m, false, "did not fit"})
 			continue
 		}
-		ok, err := w.Show(p)
+		ok, err := w.Place(p)
 		switch {
 		case err != nil:
 			rs = append(rs, Result{m, false, err.Error()})

@@ -10,10 +10,14 @@ import (
 type Backend interface {
 	Refresh() ([]*board.Agent, error)
 	OnWall() map[string]bool
-	Teams() map[string]team.Info    // agent -> team and colour
-	Show(name string) (bool, error) // onto the live wall; false = refused (wall full)
-	Preset(p string) error          // wall layout 1/2/4/6/9/m
-	Hide(name string) error         // send back to its hidden window
+	Teams() map[string]team.Info        // agent -> team and colour
+	Show(name string) (bool, error)     // into the ▶ slot or onto the wall; false = refused (wall full)
+	Add(name string) (bool, error)      // as a new wall pane; false = refused (wall at 9)
+	Next(dir int) (string, bool, error) // next (+1) / previous (-1) waiting agent into the ▶ slot; "" = none, false = refused (wall full)
+	Target() string                     // agent in the ▶ target slot, "" if none (DESIGN.md §5e)
+	Untarget() error                    // clear the ▶ target
+	Preset(p string) error              // wall layout 1/2/4/6/9/m
+	Hide(name string) error             // send back to its hidden window
 	WallEnabled() bool
 	ApplyWall() error // re-tile after a refresh (cheap; cached layout)
 	// SupCtx is the admiral context meter: label ("34%") and colour,

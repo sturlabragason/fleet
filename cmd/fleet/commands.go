@@ -72,6 +72,7 @@ const usage = `usage:
                                             the overlaps (exit 0 none, 1 overlap, 2 error)
   fleet profiles                            list tool profiles (~/.fleet/tools.toml)
   fleet wall <apply|refresh|preset N|show NAME|emphasis>   wall control (used by tmux key bindings)
+  fleet wall <add NAME|next|prev|untarget>  add a pane, next/previous waiting agent into the ▶ pane, clear ▶
   fleet keys [--markdown]                   list every hotkey (Alt-? in tmux, ? in the overview)
   fleet changes [--json]                    what's new in fleet: its latest features, newest first (Alt-g)
 

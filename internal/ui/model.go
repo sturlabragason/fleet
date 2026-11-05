@@ -32,7 +32,10 @@ type Model struct {
 	frame    int
 	animate  bool
 	msg      string
-	help     bool // ? overlay with every hotkey replaces the tiles
+	msgAt    time.Time // when msg was set; it clears after msgTTL
+	target   string    // agent in the ▶ target slot, "" if none (DESIGN.md §5e)
+	help     bool      // ? overlay with every hotkey replaces the tiles
+	helpOff  int       // first overlay line shown when it is taller than the pane
 	stateDir string
 	cfg      layout.Config
 	now      func() time.Time
@@ -44,9 +47,18 @@ type agentsMsg struct {
 	agents []*board.Agent
 	onWall map[string]bool
 	teams  map[string]team.Info
+	target string
 	supCtx [2]string
 	err    error
 }
+
+// wallMsg is the outcome of a wall action: a message for the header and,
+// on success, the agent now in the ▶ slot (also selected).
+type wallMsg struct{ info, target string }
+
+// msgTTL is how long a header message replaces the hint line.
+const msgTTL = 5 * time.Second
+
 type pollMsg struct{}
 type animMsg struct{}
 type infoMsg string
@@ -79,7 +91,7 @@ func (m *Model) poll() tea.Cmd {
 		// is what makes emphasis move when a pane starts waiting (§5b.3).
 		_ = be.ApplyWall()
 		l, c := be.SupCtx()
-		return agentsMsg{agents: as, onWall: be.OnWall(), teams: be.Teams(), supCtx: [2]string{l, c}, err: err}
+		return agentsMsg{agents: as, onWall: be.OnWall(), teams: be.Teams(), target: be.Target(), supCtx: [2]string{l, c}, err: err}
 	}
 }
 
@@ -96,6 +108,12 @@ func pollLater() tea.Cmd {
 
 // Update handles messages; panics are logged and swallowed.
 func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
+	prevMsg := m.msg
+	defer func() { // runs after the recover below, so it sees its message too
+		if m.msg != prevMsg {
+			m.msgAt = m.now()
+		}
+	}()
 	defer func() {
 		if r := recover(); r != nil {
 			logx.For("ui").Error("panic in Update", "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
@@ -113,17 +131,36 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 		m.setAgents(msg.agents)
 		m.onWall = msg.onWall
 		m.teams = msg.teams
+		m.target = msg.target
 		return m, tea.Batch(pollLater(), m.syncSupCtx(msg.supCtx))
 	case pollMsg:
 		return m, m.poll()
 	case animMsg:
 		m.frame++
+		if m.msg != "" && m.now().Sub(m.msgAt) >= msgTTL {
+			m.msg = ""
+		}
 		return m, anim()
 	case infoMsg:
-		m.msg = string(msg)
+		m.msg, m.msgAt = string(msg), m.now()
+	case wallMsg:
+		m.msg, m.msgAt = msg.info, m.now()
+		if msg.target != "" {
+			m.target, m.sel = msg.target, msg.target
+			m.saveCursor()
+		}
 	case tea.KeyMsg:
 		return m, m.key(msg.String())
 	case tea.MouseMsg:
+		if m.help && msg.Action == tea.MouseActionPress {
+			switch msg.Button {
+			case tea.MouseButtonWheelUp:
+				m.scrollHelp(-1)
+			case tea.MouseButtonWheelDown:
+				m.scrollHelp(1)
+			}
+			return m, nil
+		}
 		if !m.help && msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
 			for _, a := range m.agents {
 				if zone.Get("tile-" + a.Name).InBounds(msg) {
@@ -188,7 +225,15 @@ func (m *Model) key(k string) tea.Cmd {
 	if m.help {
 		switch k {
 		case "q", "esc", "?": // q closes the overlay, it doesn't quit
-			m.help = false
+			m.help, m.helpOff = false, 0
+		case "up", "k":
+			m.scrollHelp(-1)
+		case "down", "j":
+			m.scrollHelp(1)
+		case "pgup":
+			m.scrollHelp(-max(m.h-2, 1))
+		case "pgdown":
+			m.scrollHelp(max(m.h-2, 1))
 		case "ctrl+c":
 			return tea.Quit
 		}
@@ -207,8 +252,16 @@ func (m *Model) key(k string) tea.Cmd {
 		move(-m.cols())
 	case "down", "j":
 		move(m.cols())
-	case "tab":
-		// waiting tiles sort first, longest wait first: cycle through them
+	case "tab", "shift+tab":
+		dir := 1
+		if k == "shift+tab" {
+			dir = -1
+		}
+		if m.be.WallEnabled() {
+			return m.next(dir)
+		}
+		// No wall: just move the cursor through the waiting tiles, which
+		// sort first, longest wait first.
 		var waiting []string
 		for _, a := range m.agents {
 			if a.Status == "waiting" {
@@ -216,19 +269,34 @@ func (m *Model) key(k string) tea.Cmd {
 			}
 		}
 		if len(waiting) == 0 {
-			m.msg = "nothing waiting"
+			m.msg = wall.NothingWaitingMsg
 			return nil
 		}
-		next := waiting[0]
-		for j, nm := range waiting {
-			if nm == m.sel && j+1 < len(waiting) {
-				next = waiting[j+1]
+		j := 0
+		for x, nm := range waiting {
+			if nm == m.sel {
+				j = ((x+dir)%len(waiting) + len(waiting)) % len(waiting)
 			}
 		}
-		m.sel = next
+		m.sel = waiting[j]
 		m.saveCursor()
 	case "enter":
 		return m.show()
+	case "a", "+":
+		return m.add()
+	case "esc":
+		if m.target == "" {
+			return nil
+		}
+		m.target, m.msg = "", "▶ cleared"
+		be := m.be
+		return func() tea.Msg {
+			if err := be.Untarget(); err != nil {
+				logx.For("ui").Error("untarget", "err", err)
+				return infoMsg("clear ▶: " + err.Error())
+			}
+			return nil
+		}
 	case "R":
 		if !m.be.WallEnabled() {
 			m.msg = "R needs fleet up"
@@ -292,16 +360,24 @@ func (m *Model) key(k string) tea.Cmd {
 	return nil
 }
 
+// wallReady reports whether the live wall is there, else says so.
+func (m *Model) wallReady() bool {
+	if !m.be.WallEnabled() {
+		m.msg = "live wall needs `fleet up` (TUI must run inside the fleet tmux server)"
+		return false
+	}
+	return true
+}
+
+// show puts the selected agent into the ▶ slot, or onto the wall when there
+// is no target (the wall decides, DESIGN.md §5e).
 func (m *Model) show() tea.Cmd {
 	name, be := m.sel, m.be
-	if name == "" {
-		return nil
-	}
-	if !be.WallEnabled() {
-		m.msg = "live wall needs `fleet up` (TUI must run inside the fleet tmux server)"
+	if name == "" || !m.wallReady() {
 		return nil
 	}
 	return func() tea.Msg {
+		before, wasOn := be.Target(), be.OnWall()[name]
 		ok, err := be.Show(name)
 		if err != nil {
 			logx.For("ui").Error("show failed", "agent", name, "err", err)
@@ -310,7 +386,64 @@ func (m *Model) show() tea.Cmd {
 		if !ok {
 			return infoMsg(wall.FullMsg)
 		}
-		return infoMsg(name + " on wall")
+		return shownMsg(be, name, before, wasOn)
+	}
+}
+
+// shownMsg says what a Show or Next did, from the ▶ agent before it and
+// whether the agent was already on the wall: it replaced the ▶ pane, was
+// appended, or was already there.
+func shownMsg(be Backend, name, before string, wasOn bool) wallMsg {
+	switch {
+	case wasOn:
+		return wallMsg{name + " on wall", name}
+	case before != "" && before != name && !be.OnWall()[before]:
+		return wallMsg{name + " → ▶ (was " + before + ")", name}
+	}
+	return wallMsg{name + " added to wall", name}
+}
+
+// add puts the selected agent onto the wall as a new pane.
+func (m *Model) add() tea.Cmd {
+	name, be := m.sel, m.be
+	if name == "" || !m.wallReady() {
+		return nil
+	}
+	return func() tea.Msg {
+		wasOn := be.OnWall()[name]
+		ok, err := be.Add(name)
+		if err != nil {
+			logx.For("ui").Error("add failed", "agent", name, "err", err)
+			return infoMsg("add " + name + ": " + err.Error())
+		}
+		if !ok {
+			return infoMsg(wall.AddFullMsg)
+		}
+		if wasOn {
+			return wallMsg{name + " on wall", name}
+		}
+		return wallMsg{name + " added to wall", name}
+	}
+}
+
+// next puts the next (dir=+1) or previous (-1) waiting agent into the ▶ slot
+// and moves the cursor to it.
+func (m *Model) next(dir int) tea.Cmd {
+	be := m.be
+	return func() tea.Msg {
+		before, on := be.Target(), be.OnWall()
+		name, ok, err := be.Next(dir)
+		if err != nil {
+			logx.For("ui").Error("next waiting failed", "dir", dir, "err", err)
+			return infoMsg("next waiting: " + err.Error())
+		}
+		if name == "" {
+			return infoMsg(wall.NothingWaitingMsg)
+		}
+		if !ok {
+			return infoMsg(wall.FullMsg) // cursor and ▶ stay put
+		}
+		return shownMsg(be, name, before, on[name])
 	}
 }
 

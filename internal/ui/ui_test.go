@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"fmt"
+
 	"io"
 	"strings"
 	"testing"
@@ -12,6 +14,7 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 
 	"github.com/sturlabragason/fleet/internal/board"
+	"github.com/sturlabragason/fleet/internal/keys"
 	"github.com/sturlabragason/fleet/internal/layout"
 	"github.com/sturlabragason/fleet/internal/team"
 	"github.com/sturlabragason/fleet/internal/wall"
@@ -19,6 +22,13 @@ import (
 
 type fakeBE struct {
 	shown, hidden []string
+	added         []string
+	nexts         []int
+	nextName      string // what Next returns
+	nextRefuse    bool   // Next finds a waiting agent but the wall refuses it
+	target        string // agent in the ▶ slot
+	untargets     int
+	addRefuse     bool
 	applied       int
 	refuse        bool
 	noWall        bool
@@ -46,6 +56,16 @@ func (f *fakeBE) Show(n string) (bool, error) {
 	f.shown = append(f.shown, n)
 	return !f.refuse, nil
 }
+func (f *fakeBE) Add(n string) (bool, error) {
+	f.added = append(f.added, n)
+	return !f.addRefuse, nil
+}
+func (f *fakeBE) Next(dir int) (string, bool, error) {
+	f.nexts = append(f.nexts, dir)
+	return f.nextName, !f.nextRefuse, nil
+}
+func (f *fakeBE) Target() string           { return f.target }
+func (f *fakeBE) Untarget() error          { f.untargets++; f.target = ""; return nil }
 func (f *fakeBE) Hide(n string) error      { f.hidden = append(f.hidden, n); return nil }
 func (f *fakeBE) Preset(string) error      { return nil }
 func (f *fakeBE) WallEnabled() bool        { return !f.noWall }
@@ -77,7 +97,7 @@ func TestOrderAndKeys(t *testing.T) {
 	if got := strings.Join(names, ","); got != "delta,bravo,charlie,alpha,echo" {
 		t.Errorf("order %s", got)
 	}
-	tm.Send(tea.KeyMsg{Type: tea.KeyTab})   // next waiting after delta -> bravo
+	tm.Send(tea.KeyMsg{Type: tea.KeyRight}) // delta -> bravo
 	tm.Send(tea.KeyMsg{Type: tea.KeyRight}) // -> charlie
 	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
@@ -168,8 +188,157 @@ func TestShowRefusalIsReported(t *testing.T) {
 		t.Errorf("got %q, want %q", got, wall.FullMsg)
 	}
 	be.refuse = false
-	if got := m.show()().(infoMsg); string(got) != "alpha on wall" {
-		t.Errorf("got %q, want the success message", got)
+	if got := m.show()().(wallMsg); got.info != "alpha on wall" || got.target != "alpha" {
+		t.Errorf("got %+v, want the already-on-wall message", got)
+	}
+	m.sel = "bravo"
+	if got := m.show()().(wallMsg); got.info != "bravo added to wall" {
+		t.Errorf("no target: got %q, want the append message", got.info)
+	}
+}
+
+// DESIGN.md §5e: a card replacing the ▶ pane says which agent left.
+func TestShowReportsTheReplacedAgent(t *testing.T) {
+	be := &replacingBE{fakeBE: fakeBE{target: "alpha"}}
+	m := New(be, "")
+	m.sel = "bravo"
+	got := m.show()().(wallMsg)
+	if got.info != "bravo → ▶ (was alpha)" || got.target != "bravo" {
+		t.Errorf("got %+v", got)
+	}
+	m.Update(got)
+	if m.target != "bravo" || m.sel != "bravo" || m.msg != got.info {
+		t.Errorf("after the message: target %q sel %q msg %q", m.target, m.sel, m.msg)
+	}
+}
+
+// replacingBE swaps the shown agent into the target slot, like the wall.
+type replacingBE struct{ fakeBE }
+
+func (r *replacingBE) Show(n string) (bool, error) {
+	r.shown = append(r.shown, n)
+	r.target = n
+	return true, nil
+}
+func (r *replacingBE) OnWall() map[string]bool { return map[string]bool{r.target: true} }
+
+// Tab / Shift-Tab put the next/previous waiting agent into the ▶ slot and
+// select it; a/+ add; Esc clears the target (and does nothing without one).
+func TestTargetKeys(t *testing.T) {
+	be := &fakeBE{nextName: "delta", target: "alpha"}
+	m := New(be, "")
+	as, _ := be.Refresh()
+	m.setAgents(as)
+	m.Update(m.poll()())
+	m.sel = "echo"
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m.Update(cmd())
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	m.Update(cmd())
+	if len(be.nexts) != 2 || be.nexts[0] != 1 || be.nexts[1] != -1 {
+		t.Errorf("Next calls %v, want [1 -1]", be.nexts)
+	}
+	if m.sel != "delta" || m.target != "delta" {
+		t.Errorf("sel %q target %q, want delta", m.sel, m.target)
+	}
+	be.nextName = ""
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m.Update(cmd())
+	if m.msg != "nothing waiting" {
+		t.Errorf("msg %q", m.msg)
+	}
+	for _, k := range []string{"a", "+"} {
+		m.sel = "echo"
+		_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)})
+		if got := cmd().(wallMsg); got.info != "echo added to wall" {
+			t.Errorf("%s: %q", k, got.info)
+		}
+	}
+	if len(be.added) != 2 || be.added[0] != "echo" {
+		t.Errorf("added %v", be.added)
+	}
+	be.addRefuse = true
+	if got := m.add()().(infoMsg); string(got) != wall.AddFullMsg {
+		t.Errorf("refused add: %q", got)
+	}
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if cmd == nil {
+		t.Fatal("esc with a target must clear it")
+	}
+	cmd()
+	if be.untargets != 1 || m.target != "" || m.msg != "▶ cleared" {
+		t.Errorf("untargets %d target %q msg %q", be.untargets, m.target, m.msg)
+	}
+	m.msg = ""
+	if _, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc}); cmd != nil || m.msg != "" {
+		t.Errorf("esc without a target: cmd %v msg %q", cmd != nil, m.msg)
+	}
+	// Esc with the ? overlay open only closes it.
+	m.target = "alpha"
+	m.help = true
+	if _, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc}); cmd != nil || m.help || m.target != "alpha" {
+		t.Errorf("esc in the overlay: cmd %v help %v target %q", cmd != nil, m.help, m.target)
+	}
+}
+
+// The agent in the ▶ slot shows ▶ after its name on its card and its chip,
+// and the header names it with the next actions.
+func TestTargetCardAndHeader(t *testing.T) {
+	zone.NewGlobal()
+	be := &fakeBE{target: "alpha"}
+	m := New(be, "")
+	m.Update(tea.WindowSizeMsg{Width: 160, Height: 9})
+	m.Update(m.poll()())
+	a := m.agents[3] // alpha, on the wall
+	if a.Name != "alpha" {
+		t.Fatalf("agent %s", a.Name)
+	}
+	tile := ansi.Strip(m.tile(a, m.cfg.TileW))
+	if !strings.Contains(tile, "alpha ▶ ▣") {
+		t.Errorf("tile:\n%s", tile)
+	}
+	if strings.Count(m.tile(a, m.cfg.TileW), "\n") != layout.Default.TileH-1 {
+		t.Error("the ▶ must not wrap line 1")
+	}
+	if c := ansi.Strip(m.chips([]*board.Agent{a}, true)); !strings.Contains(c, "alpha ▶") {
+		t.Errorf("chip %q", c)
+	}
+	if other := ansi.Strip(m.tile(m.agents[0], m.cfg.TileW)); strings.Contains(other, "▶") {
+		t.Errorf("non-target tile has ▶:\n%s", other)
+	}
+	h := ansi.Strip(m.header())
+	if !strings.Contains(h, "▶ alpha · click card replace · a add · Tab next waiting · Esc clear · ? all keys") {
+		t.Errorf("header %q", h)
+	}
+	m.Update(tea.WindowSizeMsg{Width: 110, Height: 9})
+	if h := ansi.Strip(m.header()); !strings.Contains(h, "▶ alpha · click card replace") || !strings.HasSuffix(h, "? all keys") || strings.Contains(h, "Esc clear") {
+		t.Errorf("narrow header %q", h)
+	}
+	m.target = ""
+	m.Update(tea.WindowSizeMsg{Width: 160, Height: 9})
+	if h := ansi.Strip(m.header()); !strings.Contains(h, "no ▶ pane · click a wall pane to pick one · ⏎ add/evict · ? all keys") {
+		t.Errorf("no-target header %q", h)
+	}
+	m.msg = "bravo → ▶ (was alpha)"
+	if h := ansi.Strip(m.header()); !strings.Contains(h, m.msg) || strings.Contains(h, "all keys") {
+		t.Errorf("message must win: %q", h)
+	}
+}
+
+// A header message gives way to the hint line after msgTTL.
+func TestMessageExpires(t *testing.T) {
+	now := time.Unix(1000, 0)
+	m := New(&fakeBE{}, "")
+	m.now = func() time.Time { return now }
+	m.Update(infoMsg("alpha added to wall"))
+	m.Update(animMsg{})
+	if m.msg == "" {
+		t.Fatal("message cleared at once")
+	}
+	now = now.Add(msgTTL)
+	m.Update(animMsg{})
+	if m.msg != "" {
+		t.Errorf("message %q outlived msgTTL", m.msg)
 	}
 }
 
@@ -179,8 +348,12 @@ func TestHelpOverlay(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 160, Height: 30})
 	as, _ := (&fakeBE{}).Refresh()
 	m.setAgents(as)
-	if v := m.View(); !strings.Contains(v, "←↑↓→ select · ⏎ show on wall · x take off wall · Tab next waiting · g what's new · ? all keys") {
-		t.Errorf("header hint:\n%s", v)
+	if v := m.View(); !strings.Contains(v, "no ▶ pane · click a wall pane to pick one · ⏎ add/evict · ? all keys") {
+		t.Errorf("header hint under fleet up with no target:\n%s", v)
+	}
+	m.be = &fakeBE{noWall: true}
+	if v := m.View(); !strings.Contains(v, "⏎ replace ▶ · a add · Tab next waiting · x take off wall · ←↑↓→ select · g what's new · ? all keys") {
+		t.Errorf("header hint without fleet up:\n%s", v)
 	}
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	if h := m.header(); !strings.Contains(h, "? all keys") || ansi.StringWidth(h) > 100 {
@@ -229,7 +402,7 @@ func TestHelpOverlayShortPane(t *testing.T) {
 		t.Errorf("view is %d lines, pane is 14", len(lines))
 	}
 	// columns are half width, so the Alt-z description may wrap after "again to"
-	for _, want := range []string{"Panes", "Admiral", "Alt-z         zoom this pane; press again", "Alt-m         wall: one main pane"} {
+	for _, want := range []string{"Panes", "Admiral", "Alt-z         zoom this pane; press again", "Alt-w 1/2/4/6/9/m"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("missing %q:\n%s", want, v)
 		}
@@ -238,6 +411,75 @@ func TestHelpOverlayShortPane(t *testing.T) {
 		if ansi.StringWidth(l) > 120 {
 			t.Errorf("line wider than 120: %q", l)
 		}
+	}
+	if !strings.Contains(v, "↓ more · ↑↓ scroll") {
+		t.Errorf("a cut overlay must say more keys follow:\n%s", v)
+	}
+}
+
+// TestHelpOverlayScrollsToEveryKey: at 120x14 the overlay scrolls (↓/j,
+// PgDn, wheel) and every registry key is visible at some offset.
+func TestHelpOverlayScrollsToEveryKey(t *testing.T) {
+	zone.NewGlobal()
+	m := New(&fakeBE{}, "")
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 14})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	seen := map[string]bool{}
+	var all strings.Builder
+	view := func() string {
+		v := ansi.Strip(m.View())
+		if n := len(strings.Split(v, "\n")); n > 14 {
+			t.Fatalf("view is %d lines at offset %d, pane is 14", n, m.helpOff)
+		}
+		all.WriteString(v + "\n")
+		return v
+	}
+	view()
+	for i := 0; i < 100; i++ {
+		prev := m.helpOff
+		m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		v := view()
+		if m.helpOff == prev {
+			if strings.Contains(v, "↓ more") || !strings.Contains(v, "↑ more · ↑↓ scroll") {
+				t.Errorf("at the end the last row must say only ↑ more:\n%s", v)
+			}
+			break
+		}
+		if m.helpOff > 0 && !strings.Contains(v, "↑ more · ↓ more · ↑↓ scroll") && !strings.Contains(v, "↑ more · ↑↓ scroll") {
+			t.Errorf("scrolled overlay must say ↑ more:\n%s", v)
+		}
+		seen[fmt.Sprint(m.helpOff)] = true
+	}
+	if len(seen) == 0 {
+		t.Fatal("↓ did not scroll")
+	}
+	got := all.String()
+	for _, b := range keys.Bindings {
+		if !strings.Contains(got, b.Key) {
+			t.Errorf("key %q never visible while scrolling", b.Key)
+		}
+	}
+	if !strings.Contains(got, "Alt-m") {
+		t.Error("Alt-m never visible")
+	}
+	end := m.helpOff
+	m.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelUp})
+	if m.helpOff != end-1 {
+		t.Errorf("wheel up: offset %d, want %d", m.helpOff, end-1)
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	if m.helpOff != 0 {
+		t.Errorf("PgUp: offset %d, want 0 (clamped)", m.helpOff)
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	m.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown})
+	if m.helpOff == 0 {
+		t.Error("PgDn/wheel down did not scroll")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.help || m.helpOff != 0 {
+		t.Errorf("esc: help %v off %d, want closed and reset", m.help, m.helpOff)
 	}
 }
 
@@ -372,5 +614,31 @@ func TestPickProfileKey(t *testing.T) {
 	cmd()
 	if be.picks != 1 || m.msg != "" {
 		t.Errorf("picks=%d msg=%q", be.picks, m.msg)
+	}
+}
+
+// Tab says what it did like a click does (replaced / added / already on the
+// wall), and a refusal leaves the cursor and ▶ alone.
+func TestNextMessages(t *testing.T) {
+	be := &fakeBE{nextName: "delta", target: "bravo"}
+	m := New(be, "")
+	as, _ := be.Refresh()
+	m.setAgents(as)
+	m.target, m.sel = "bravo", "echo"
+	if got := m.next(1)().(wallMsg); got.info != "delta → ▶ (was bravo)" {
+		t.Errorf("replace: %q", got.info)
+	}
+	be.target = ""
+	if got := m.next(1)().(wallMsg); got.info != "delta added to wall" {
+		t.Errorf("append: %q", got.info)
+	}
+	be.nextName = "alpha" // fakeBE.OnWall has alpha
+	if got := m.next(1)().(wallMsg); got.info != "alpha on wall" {
+		t.Errorf("already there: %q", got.info)
+	}
+	be.nextName, be.nextRefuse = "delta", true
+	m.Update(m.next(1)())
+	if m.msg != wall.FullMsg || m.sel != "echo" || m.target != "bravo" {
+		t.Errorf("refused: msg %q sel %q target %q", m.msg, m.sel, m.target)
 	}
 }

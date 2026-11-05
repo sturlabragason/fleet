@@ -11,17 +11,13 @@ import (
 	"github.com/sturlabragason/fleet/internal/tmux"
 )
 
-// fromOutsideTheWall makes the last-focused pane a non-wall pane (I came from
-// the admiral), so Show takes the class/LRU fallback instead of reusing the
-// slot I just left (DESIGN §5b.1).
-func fromOutsideTheWall(t *testing.T, c *tmux.Client, w *Wall) {
+// noTarget clears the target slot (Esc in the overview), so Show takes the
+// append / class+LRU rules instead of replacing the target (DESIGN §5e).
+func noTarget(t *testing.T, w *Wall) {
 	t.Helper()
-	s, err := w.Read()
-	if err != nil {
+	if err := w.Untarget(); err != nil {
 		t.Fatal(err)
 	}
-	c.Run("select-pane", "-t", s.Sup)
-	c.Run("select-pane", "-t", s.Ov)
 }
 
 func TestFiveOntoFourSlots(t *testing.T) {
@@ -43,7 +39,7 @@ func TestFiveOntoFourSlots(t *testing.T) {
 	}
 	w := New(c, "f")
 	for _, p := range agents {
-		fromOutsideTheWall(t, c, w)
+		noTarget(t, w)
 		if _, err := w.Show(p); err != nil {
 			t.Fatal(err)
 		}
@@ -140,7 +136,7 @@ func TestEvictionKeepsWaitingPaneOnTheWall(t *testing.T) {
 	c.SetPaneOption(agents[0], "@fleet_status", "waiting")
 	c.SetPaneOption(agents[0], "@fleet_status_since", "1")
 	for _, p := range agents {
-		fromOutsideTheWall(t, c, w)
+		noTarget(t, w)
 		if _, err := w.Show(p); err != nil {
 			t.Fatal(err)
 		}
@@ -156,13 +152,14 @@ func TestEvictionKeepsWaitingPaneOnTheWall(t *testing.T) {
 func TestShowRefusesWhenEveryPaneNeedsAttention(t *testing.T) {
 	c, w, agents := setupWall(t, 5)
 	for _, p := range agents[:4] {
+		noTarget(t, w)
 		if _, err := w.Show(p); err != nil {
 			t.Fatal(err)
 		}
 		c.SetPaneOption(p, "@fleet_status", "waiting")
 		time.Sleep(2 * time.Millisecond)
 	}
-	fromOutsideTheWall(t, c, w)
+	noTarget(t, w)
 	before := w.OnWall()
 	ok, err := w.Show(agents[4])
 	if err != nil {
@@ -185,6 +182,7 @@ func TestShowRefusesWhenEveryPaneNeedsAttention(t *testing.T) {
 func TestApplyForcesThroughADriftedCache(t *testing.T) {
 	c, w, agents := setupWall(t, 3)
 	for _, p := range agents {
+		noTarget(t, w)
 		if _, err := w.Show(p); err != nil {
 			t.Fatal(err)
 		}
@@ -243,6 +241,7 @@ func slots(t *testing.T, c *tmux.Client) []string {
 func fillWall(t *testing.T, w *Wall, agents []string) {
 	t.Helper()
 	for _, p := range agents[:4] {
+		noTarget(t, w)
 		if ok, err := w.Show(p); err != nil || !ok {
 			t.Fatalf("show %s: %v %v", p, ok, err)
 		}
@@ -250,22 +249,25 @@ func fillWall(t *testing.T, w *Wall, agents []string) {
 	}
 }
 
-// DESIGN §5b.1: the wall pane I was last in is the slot the incoming pane
-// takes, in place — same position, same size, nothing else moves.
-func TestShowTakesTheSlotJustLeft(t *testing.T) {
-	c, w, agents := setupWall(t, 5)
-	fillWall(t, w, agents)
-	s, _ := w.Read()
-	x := agents[1]
-	c.Run("select-pane", "-t", x)    // I was in a1 ...
-	c.Run("select-pane", "-t", s.Ov) // ... then went to the overview and pressed Enter
-	before := slots(t, c)
-	idx := -1
-	for i, sl := range before {
-		if strings.HasPrefix(sl, x+" ") {
-			idx = i
+// slotIndex is the position of pane among the wall slots, -1 if absent.
+func slotIndex(sl []string, pane string) int {
+	for i, x := range sl {
+		if strings.HasPrefix(x, pane+" ") {
+			return i
 		}
 	}
+	return -1
+}
+
+// DESIGN §5e: a card goes into the target slot, in place — same position,
+// same size, nothing else moves — and the target stays on that slot.
+func TestShowReplacesTheTarget(t *testing.T) {
+	c, w, agents := setupWall(t, 5)
+	fillWall(t, w, agents)
+	x := agents[1]
+	w.setOpt("@fleet_target", x) // I clicked a1, then a card
+	before := slots(t, c)
+	idx := slotIndex(before, x)
 	if idx < 0 {
 		t.Fatalf("%s not on the wall: %v", x, before)
 	}
@@ -296,68 +298,224 @@ func TestShowTakesTheSlotJustLeft(t *testing.T) {
 	if strings.TrimSpace(win) != "ag-a1" {
 		t.Errorf("replaced pane landed in window %q, want ag-a1", win)
 	}
-	if strings.TrimSpace(win) == "main" {
-		t.Error("replaced pane is stranded in the main window")
+	if got := w.opt("@fleet_target"); got != agents[4] {
+		t.Errorf("target %q, want it to stay on the slot (now %s)", got, agents[4])
 	}
-	ps, _ := c.ListPanes("f:main")
-	for _, p := range ps {
-		if p.ID == x {
-			t.Error("replaced pane is still in the main window")
-		}
+	if got := w.opt("@fleet_undo"); got != agents[4]+" "+x {
+		t.Errorf("@fleet_undo %q, want %q", got, agents[4]+" "+x)
+	}
+	if got := w.TargetAgent(); got != "a4" {
+		t.Errorf("TargetAgent %q, want a4", got)
 	}
 }
 
-// An explicit Enter beats class-1 protection: a waiting pane I just left is
-// still the slot that gets reused.
-func TestShowTakesTheSlotEvenWhenItIsWaiting(t *testing.T) {
+// The target is replaced even when the wall has free slots (before ADR-31 a
+// card appended there, and only a full wall reused a slot).
+func TestShowReplacesTheTargetOnAWallWithRoom(t *testing.T) {
+	c, w, agents := setupWall(t, 3)
+	for _, p := range agents[:2] {
+		noTarget(t, w)
+		if ok, err := w.Show(p); err != nil || !ok {
+			t.Fatalf("show %s: %v %v", p, ok, err)
+		}
+	}
+	w.setOpt("@fleet_target", agents[0])
+	before := slots(t, c)
+	if ok, err := w.Show(agents[2]); err != nil || !ok {
+		t.Fatalf("show: %v %v", ok, err)
+	}
+	after := slots(t, c)
+	if len(after) != 2 {
+		t.Fatalf("appended instead of replacing: %v -> %v", before, after)
+	}
+	if on := w.OnWall(); on["a0"] || !on["a1"] || !on["a2"] {
+		t.Errorf("on wall: %v, want a2 in a0's slot", on)
+	}
+	if after[slotIndex(before, agents[0])] != strings.Replace(before[slotIndex(before, agents[0])], agents[0]+" ", agents[2]+" ", 1) {
+		t.Errorf("a2 not in a0's slot: %v -> %v", before, after)
+	}
+}
+
+// Place (team show) ignores the target slot: members fill the wall instead of
+// replacing each other in ▶.
+func TestPlaceIgnoresTheTarget(t *testing.T) {
+	_, w, agents := setupWall(t, 3)
+	for _, p := range agents {
+		w.setOpt("@fleet_target", agents[0])
+		if ok, err := w.Place(p); err != nil || !ok {
+			t.Fatalf("place %s: %v %v", p, ok, err)
+		}
+	}
+	if on := w.OnWall(); !on["a0"] || !on["a1"] || !on["a2"] {
+		t.Errorf("on wall: %v, want all three", on)
+	}
+}
+
+// An explicit card click beats class-1 protection: a waiting target is still
+// replaced.
+func TestShowReplacesAWaitingTarget(t *testing.T) {
 	c, w, agents := setupWall(t, 5)
 	fillWall(t, w, agents)
-	s, _ := w.Read()
 	x := agents[1]
 	c.SetPaneOption(x, "@fleet_status", "waiting")
 	c.SetPaneOption(x, "@fleet_status_since", "1")
-	c.Run("select-pane", "-t", x)
-	c.Run("select-pane", "-t", s.Ov)
+	w.setOpt("@fleet_target", x)
 	if ok, err := w.Show(agents[4]); err != nil || !ok {
 		t.Fatalf("show: %v %v", ok, err)
 	}
 	if on := w.OnWall(); on["a1"] || !on["a4"] {
-		t.Errorf("a waiting pane I just left must still be replaced: %v", on)
+		t.Errorf("a waiting target must still be replaced: %v", on)
 	}
 }
 
-// A pinned last pane is never replaced: class 0 wins and the class/LRU
-// fallback picks an evictable pane instead.
-func TestShowDoesNotTakeAPinnedSlot(t *testing.T) {
+// A pinned target is never replaced: with room the card appends, on a full
+// wall the class/LRU fallback picks an evictable pane.
+func TestShowDoesNotReplaceAPinnedTarget(t *testing.T) {
 	c, w, agents := setupWall(t, 5)
-	fillWall(t, w, agents)
-	s, _ := w.Read()
+	for _, p := range agents[:3] {
+		noTarget(t, w)
+		if ok, err := w.Show(p); err != nil || !ok {
+			t.Fatalf("show %s: %v %v", p, ok, err)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
 	x := agents[1]
 	c.SetPaneOption(x, "@fleet_pin", "1")
-	c.Run("select-pane", "-t", x)
-	c.Run("select-pane", "-t", s.Ov)
+	w.setOpt("@fleet_target", x)
+	if ok, err := w.Show(agents[3]); err != nil || !ok {
+		t.Fatalf("show: %v %v", ok, err)
+	}
+	if on := w.OnWall(); len(on) != 4 || !on["a1"] || !on["a3"] {
+		t.Errorf("pinned target with room: want a3 appended, got %v", on)
+	}
+	w.setOpt("@fleet_target", x)
 	if ok, err := w.Show(agents[4]); err != nil || !ok {
 		t.Fatalf("show: %v %v", ok, err)
 	}
 	on := w.OnWall()
 	if !on["a1"] {
-		t.Error("pinned pane was replaced")
+		t.Error("pinned target was replaced")
 	}
-	if !on["a4"] || len(on) != 4 {
-		t.Errorf("fallback eviction did not run: %v", on)
-	}
-	if !on["a2"] || !on["a3"] {
-		t.Errorf("fallback took the wrong pane (want LRU a0): %v", on)
+	if !on["a4"] || len(on) != 4 || on["a0"] {
+		t.Errorf("fallback should evict the LRU a0: %v", on)
 	}
 }
 
-// A re-layout must move neither the user nor #{pane_last}: emphasis falls
-// back to the active pane and "take the slot I just left" (§5b.1) reads
-// pane_last, so an apply that rewrote either would change what the next Enter
-// replaces.
+// A target that left the wall counts as no target: the old rules apply.
+func TestShowWithAStaleTargetUsesTheOldRules(t *testing.T) {
+	c, w, agents := setupWall(t, 5)
+	fillWall(t, w, agents)
+	w.setOpt("@fleet_target", agents[4]) // hidden, not on the wall
+	if ok, err := w.Show(agents[4]); err != nil || !ok {
+		t.Fatalf("show: %v %v", ok, err)
+	}
+	if on := w.OnWall(); len(on) != 4 || on["a0"] || !on["a4"] {
+		t.Errorf("stale target: want LRU a0 evicted, got %v", on)
+	}
+	// Hiding the target clears it.
+	if err := w.Hide(agents[4]); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.opt("@fleet_target"); got != "" {
+		t.Errorf("hidden target kept: %q", got)
+	}
+	_ = c
+}
+
+// With no target and a full wall, the pane a card would evict carries
+// @fleet_next_out (the dim "next out" in its title); a target clears it.
+func TestNextOutMarksTheEvictionCandidate(t *testing.T) {
+	_, w, agents := setupWall(t, 5)
+	fillWall(t, w, agents)
+	noTarget(t, w)
+	if got := w.opt("@fleet_next_out"); got != agents[0] {
+		t.Errorf("next out %q, want the LRU %s", got, agents[0])
+	}
+	w.setOpt("@fleet_target", agents[2])
+	if err := w.ApplyCached(); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.opt("@fleet_next_out"); got != "" {
+		t.Errorf("next out %q with a target, want none", got)
+	}
+}
+
+// Add appends without replacing; on a full wall the preset steps up, at 9 it
+// refuses.
+func TestAddStepsThePresetUp(t *testing.T) {
+	_, w, agents := setupWall(t, 10)
+	fillWall(t, w, agents) // preset 4, full, target on a3
+	if ok, err := w.Add(agents[4]); err != nil || !ok {
+		t.Fatalf("add: %v %v", ok, err)
+	}
+	if on := w.OnWall(); len(on) != 5 {
+		t.Errorf("add replaced instead of appending: %v", on)
+	}
+	if p := w.opt("@fleet_wall"); p != "6" {
+		t.Errorf("preset %q, want 6", p)
+	}
+	for _, p := range agents[5:9] {
+		if ok, err := w.Add(p); err != nil || !ok {
+			t.Fatalf("add %s: %v %v", p, ok, err)
+		}
+	}
+	if on, p := w.OnWall(), w.opt("@fleet_wall"); len(on) != 9 || p != "9" {
+		t.Fatalf("on wall %d preset %s, want 9 and 9", len(on), p)
+	}
+	ok, err := w.Add(agents[9])
+	if err != nil || ok {
+		t.Errorf("tenth add: %v %v, want a refusal", ok, err)
+	}
+	if on := w.OnWall(); len(on) != 9 || on["a9"] {
+		t.Errorf("tenth add changed the wall: %v", on)
+	}
+}
+
+func TestPresetUp(t *testing.T) {
+	for from, want := range map[string]string{"1": "2", "2": "4", "4": "6", "m": "6", "6": "9", "9": ""} {
+		if got := presetUp[from]; got != want {
+			t.Errorf("%s -> %q, want %q", from, got, want)
+		}
+	}
+}
+
+// Next walks the waiting agents through the target slot, longest wait first,
+// wrapping both ways.
+func TestNextWalksWaitingAgents(t *testing.T) {
+	c, w, agents := setupWall(t, 4)
+	if got, _, err := w.Next(1); err != nil || got != "" {
+		t.Fatalf("nothing waiting: %q %v", got, err)
+	}
+	// a2 waited longest, then a0, then a3. a1 is idle.
+	for p, since := range map[string]string{agents[2]: "100", agents[0]: "200", agents[3]: "300"} {
+		c.SetPaneOption(p, "@fleet_status", "waiting")
+		c.SetPaneOption(p, "@fleet_status_since", since)
+	}
+	noTarget(t, w)
+	if ok, err := w.Show(agents[1]); err != nil || !ok { // target holds a1, not waiting
+		t.Fatal(ok, err)
+	}
+	var got []string
+	for _, d := range []int{1, 1, 1, 1, -1, -1} {
+		name, ok, err := w.Next(d)
+		if err != nil || !ok {
+			t.Fatal(ok, err)
+		}
+		got = append(got, name)
+	}
+	if s := strings.Join(got, ","); s != "a2,a0,a3,a2,a3,a0" {
+		t.Errorf("order %s, want a2,a0,a3,a2,a3,a0", s)
+	}
+	if on := w.OnWall(); len(on) != 1 || !on["a0"] {
+		t.Errorf("Next must cycle one slot: %v", on)
+	}
+}
+
+// A re-layout must move neither the user nor #{pane_last}: a moved focus
+// would, through the pane-focus-in hook, move the target slot too.
 func TestApplyLeavesFocusAndLastPaneAlone(t *testing.T) {
 	c, w, agents := setupWall(t, 3)
-	fromOutsideTheWall(t, c, w)
+	noTarget(t, w)
 	for _, p := range agents {
 		if _, err := w.Show(p); err != nil {
 			t.Fatal(err)
@@ -403,6 +561,7 @@ func TestApplyLeavesFocusAndLastPaneAlone(t *testing.T) {
 func TestApplyLockKeepsConcurrentAppliesOut(t *testing.T) {
 	c, w, agents := setupWall(t, 3)
 	for _, p := range agents {
+		noTarget(t, w)
 		if _, err := w.Show(p); err != nil {
 			t.Fatal(err)
 		}
@@ -435,5 +594,134 @@ func TestApplyLockKeepsConcurrentAppliesOut(t *testing.T) {
 	}
 	if supW() == "60" {
 		t.Error("a stale lock wedged the wall")
+	}
+}
+
+// geometry is every pane of the main window in window order: id, left, top,
+// width, height.
+func geometry(t *testing.T, c *tmux.Client) []string {
+	t.Helper()
+	out, err := c.Run("list-panes", "-t", "f:main", "-F", "#{pane_id} #{pane_left} #{pane_top} #{pane_width} #{pane_height}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Split(strings.TrimSpace(out), "\n")
+}
+
+func activePane(c *tmux.Client) string {
+	out, _ := c.Run("display-message", "-p", "-t", "f:main", "#{pane_id}")
+	return strings.TrimSpace(out)
+}
+
+// focusHook is what the pane-focus-in hook does (cmd/fleet/up.go): a focused
+// wall pane becomes the target, then `fleet wall refresh` (ApplyCached).
+func focusHook(t *testing.T, c *tmux.Client, w *Wall, pane string) {
+	t.Helper()
+	if _, err := c.Run("select-pane", "-t", pane); err != nil {
+		t.Fatal(err)
+	}
+	role, _ := c.Run("display-message", "-p", "-t", pane, "#{@role}")
+	if strings.TrimSpace(role) == "wall" {
+		w.setOpt("@fleet_target", pane)
+	}
+	if err := w.ApplyCached(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Clicking moves nothing: focusing a wall pane, then the overview, leaves
+// every pane's position, size and window order alone (the user: "whenever I
+// click something it moves the panels around"). A card into the ▶ pane then
+// changes only that slot's occupant.
+func TestClicksDoNotMovePanes(t *testing.T) {
+	c, w, agents := setupWall(t, 5)
+	fillWall(t, w, agents)
+	w.setOpt("@fleet_emphasis", "1") // the harder case: clicks must not move panes even with emphasis on
+	c.SetPaneOption(agents[2], "@fleet_status", "waiting")
+	c.SetPaneOption(agents[2], "@fleet_status_since", strconv.FormatInt(time.Now().Add(-time.Minute).UnixNano(), 10))
+	if err := w.ApplyCached(); err != nil { // emphasis settles on the waiting pane
+		t.Fatal(err)
+	}
+	s, _ := w.Read()
+	before := geometry(t, c)
+	focusHook(t, c, w, agents[0])
+	if got := geometry(t, c); strings.Join(got, "\n") != strings.Join(before, "\n") {
+		t.Fatalf("focusing a wall pane moved panes:\n%s\n->\n%s", strings.Join(before, "\n"), strings.Join(got, "\n"))
+	}
+	if got := w.opt("@fleet_target"); got != agents[0] {
+		t.Fatalf("target %q, want %s", got, agents[0])
+	}
+	focusHook(t, c, w, s.Ov)
+	if got := geometry(t, c); strings.Join(got, "\n") != strings.Join(before, "\n") {
+		t.Fatalf("focusing the overview moved panes:\n%s\n->\n%s", strings.Join(before, "\n"), strings.Join(got, "\n"))
+	}
+	// A card into ▶ (a0's slot): a4 takes a0's exact geometry, all else stays.
+	if ok, err := w.Show(agents[4]); err != nil || !ok {
+		t.Fatalf("show: %v %v", ok, err)
+	}
+	if err := w.ApplyCached(); err != nil {
+		t.Fatal(err)
+	}
+	after := geometry(t, c)
+	if len(after) != len(before) {
+		t.Fatalf("pane count changed:\n%v\n->\n%v", before, after)
+	}
+	for i := range before {
+		want := before[i]
+		if strings.HasPrefix(want, agents[0]+" ") {
+			want = agents[4] + strings.TrimPrefix(want, agents[0])
+		}
+		if after[i] != want {
+			t.Errorf("pane %d: %q -> %q, want %q", i, before[i], after[i], want)
+		}
+	}
+}
+
+// The overview keeps keyboard focus through repeated Tab (Next) and card
+// clicks (KeepFocus Show): a second key press must reach the overview, not
+// the agent the first one put on the wall.
+func TestNextAndKeepFocusShowLeaveTheOverviewFocused(t *testing.T) {
+	c, w, agents := setupWall(t, 6)
+	fillWall(t, w, agents)
+	for i, p := range agents[3:6] {
+		c.SetPaneOption(p, "@fleet_status", "waiting")
+		c.SetPaneOption(p, "@fleet_status_since", strconv.Itoa(100+i))
+	}
+	s, _ := w.Read()
+	focusHook(t, c, w, agents[1]) // a1 is ▶
+	focusHook(t, c, w, s.Ov)
+	for i := 0; i < 2; i++ {
+		name, ok, err := w.Next(1)
+		if err != nil || !ok || name == "" {
+			t.Fatalf("next %d: %q %v %v", i, name, ok, err)
+		}
+		if got := activePane(c); got != s.Ov {
+			t.Fatalf("next %d (%s) moved focus to %s, want the overview %s", i, name, got, s.Ov)
+		}
+	}
+	w.KeepFocus = true
+	for _, p := range []string{agents[0], agents[5], agents[2]} { // on wall, swap in, on wall
+		if ok, err := w.Show(p); err != nil || !ok {
+			t.Fatalf("show %s: %v %v", p, ok, err)
+		}
+		if got := activePane(c); got != s.Ov {
+			t.Fatalf("show %s moved focus to %s, want the overview %s", p, got, s.Ov)
+		}
+		if got := w.opt("@fleet_target"); got != p {
+			t.Errorf("show %s: target %q", p, got)
+		}
+	}
+	noTarget(t, w)
+	if err := w.Hide(agents[0]); err != nil { // room again: the join path
+		t.Fatal(err)
+	}
+	if ok, err := w.Show(agents[0]); err != nil || !ok {
+		t.Fatalf("join: %v %v", ok, err)
+	}
+	if got := activePane(c); got != s.Ov {
+		t.Errorf("join moved focus to %s, want the overview %s", got, s.Ov)
+	}
+	if got := w.opt("@fleet_target"); got != agents[0] {
+		t.Errorf("join: target %q", got)
 	}
 }

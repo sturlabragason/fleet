@@ -136,7 +136,7 @@ func newFakeWall(tc *tmux.Client, slots int) *fakeWall {
 	return &fakeWall{tc: tc, on: map[string]bool{}, slots: slots}
 }
 
-func (w *fakeWall) Show(p string) (bool, error) {
+func (w *fakeWall) Place(p string) (bool, error) {
 	w.shown = append(w.shown, p)
 	name, _ := w.tc.Run("display-message", "-p", "-t", p, "#{@fleet_agent}")
 	w.on[strings.TrimSpace(name)] = true

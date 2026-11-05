@@ -56,6 +56,31 @@ func (b *backend) Show(name string) (bool, error) {
 	}
 	return b.w.Show(p)
 }
+func (b *backend) Add(name string) (bool, error) {
+	p, err := b.f.Pane(name)
+	if err != nil {
+		return false, err
+	}
+	return b.w.Add(p)
+}
+func (b *backend) Next(dir int) (string, bool, error) {
+	if !b.enabled {
+		return "", true, nil
+	}
+	return b.w.Next(dir)
+}
+func (b *backend) Target() string {
+	if !b.enabled {
+		return ""
+	}
+	return b.w.TargetAgent()
+}
+func (b *backend) Untarget() error {
+	if !b.enabled {
+		return nil
+	}
+	return b.w.Untarget()
+}
 func (b *backend) Hide(name string) error {
 	p, err := b.f.Pane(name)
 	if err != nil {
@@ -149,7 +174,9 @@ func cmdUI(f *fleet.Fleet) error {
 	f.OffWallEvery = 5 * time.Second
 	// Only the overview TUI starts queued spawns when a slot frees (§7a).
 	f.DrainQueue = true
-	be := &backend{f: f, w: wall.New(f.T, fleet.Session), enabled: insideFleet(f)}
+	w := wall.New(f.T, fleet.Session)
+	w.KeepFocus = true // keys typed after a click/Enter/Tab/a must still reach the overview
+	be := &backend{f: f, w: w, enabled: insideFleet(f)}
 	logx.For("ui").Info("start", "wall", be.enabled)
 	p := tea.NewProgram(ui.New(be, f.Home), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := p.Run()

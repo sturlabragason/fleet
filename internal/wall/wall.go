@@ -22,6 +22,10 @@ type Wall struct {
 	Target string // e.g. "fleet:main"
 	Cfg    layout.Config
 	Now    func() time.Time // clock for the emphasis hysteresis (default time.Now)
+	// KeepFocus makes Show, Place and Add leave keyboard focus where it is
+	// (the overview sets it, so a second key press still reaches the overview,
+	// not the agent it just put on the wall). @fleet_target is set explicitly.
+	KeepFocus bool
 }
 
 // New returns a wall for session:main.
@@ -100,6 +104,7 @@ func (w *Wall) apply(force bool) error {
 	for _, p := range s.Wall {
 		ids = append(ids, p.ID)
 	}
+	w.syncNextOut(s)
 	lay, leaves := s.Cfg.Render(layout.Input{W: s.W, H: s.H, Sup: s.Sup, Ov: s.Ov, Wall: ids, Preset: s.Preset, Focus: w.emphasis(s)})
 	// An unchanged layout is never re-applied: agent TUIs reflow on every resize.
 	if !force && lay == w.opt("@fleet_layout") {
@@ -144,12 +149,11 @@ func (w *Wall) unlock() { w.setOpt("@fleet_applying", "") }
 const applyLockTTL = 5 * time.Second
 
 // reorder swaps panes so window order matches layout leaf order. A chain of
-// `swap-pane -d` can leave the focus on a different pane, and emphasis follows
-// the active pane, so without restoring it the wall re-tiles itself forever.
-// The restore is deliberately narrow — it only fires when the focus both
-// started and ended on panes this call swapped — because a select-pane that
-// fought a concurrent focus change would also rewrite `#{pane_last}`, the
-// input to "take the slot I just left" (§5b.1).
+// `swap-pane -d` can leave the focus on a different pane, so the focus is
+// restored. The restore is deliberately narrow — it only fires when the focus
+// both started and ended on panes this call swapped — because a select-pane
+// that fought a concurrent focus change would move the user (and, through the
+// pane-focus-in hook, the target slot).
 func (w *Wall) reorder(want []string) {
 	before, _ := w.T.Run("display-message", "-p", "-t", w.Target, "#{pane_id}")
 	before = strings.TrimSpace(before)
@@ -190,31 +194,35 @@ func index(l []string, s string) int {
 	return -1
 }
 
-// Show brings an agent pane onto the wall (evicting the least recently used).
+// Show brings an agent pane onto the wall (DESIGN.md §5e). A pane already
+// there is focused. Otherwise it goes into the target slot (@fleet_target)
+// when there is one that is not pinned, full wall or not; without a target it
+// is appended if there is room, else the least needed pane is evicted (§5b.1).
 // It reports whether the pane ended up on the wall: false with a nil error is
 // the normal "wall full, nothing evictable" refusal.
-func (w *Wall) Show(pane string) (bool, error) {
+func (w *Wall) Show(pane string) (bool, error) { return w.show(pane, true, !w.KeepFocus) }
+
+// Place is Show without the target slot: append if there is room, else evict
+// by class. `fleet team show` uses it, so members fill the wall instead of
+// replacing each other in the ▶ slot.
+func (w *Wall) Place(pane string) (bool, error) { return w.show(pane, false, !w.KeepFocus) }
+
+// show is Show/Place; selectPane=false leaves keyboard focus where it is.
+func (w *Wall) show(pane string, useTarget, selectPane bool) (bool, error) {
 	log := logx.For("wall")
 	s, err := w.Read()
 	if err != nil {
 		return false, err
 	}
 	now := strconv.FormatInt(time.Now().UnixNano(), 10)
-	for _, p := range s.Wall {
-		if p.ID == pane {
-			w.T.SetPaneOption(pane, "@fleet_used", now)
-			_, err := w.T.Run("select-pane", "-t", pane)
-			return true, err
-		}
+	if onWall(s, pane) {
+		return w.focus(pane, now, selectPane)
+	}
+	if t, ok := targetPane(s, w.opt("@fleet_target")); useTarget && ok && !t.Pin {
+		w.setOpt("@fleet_undo", pane+" "+t.ID)
+		return w.swapInto(pane, t.ID, now)
 	}
 	slots := s.Cfg.Slots(s.Preset)
-	// First rule: take the slot I just left (DESIGN.md §5b.1). A swap keeps the
-	// exact position and size, so nothing else on the wall moves.
-	if len(s.Wall) >= slots {
-		if last, ok := ReplaceSlot(s.Wall); ok {
-			return w.swapInto(pane, last, now)
-		}
-	}
 	for len(s.Wall) >= slots {
 		id, ok := EvictCandidate(s.Wall)
 		if !ok {
@@ -226,6 +234,24 @@ func (w *Wall) Show(pane string) (bool, error) {
 		w.breakOut(id)
 		s.Wall = remove(s.Wall, id)
 	}
+	return w.join(s, pane, now, selectPane)
+}
+
+// focus makes a pane already on the wall the target and, with selectPane,
+// selects it.
+func (w *Wall) focus(pane, now string, selectPane bool) (bool, error) {
+	w.T.SetPaneOption(pane, "@fleet_used", now)
+	w.setOpt("@fleet_target", pane)
+	if !selectPane {
+		return true, nil
+	}
+	_, err := w.T.Run("select-pane", "-t", pane)
+	return true, err
+}
+
+// join appends a pane as the last wall slot, re-tiles and makes it the
+// target; with selectPane it is also focused.
+func (w *Wall) join(s *State, pane, now string, selectPane bool) (bool, error) {
 	target := s.Ov
 	if len(s.Wall) > 0 {
 		target = s.Wall[len(s.Wall)-1].ID
@@ -237,11 +263,15 @@ func (w *Wall) Show(pane string) (bool, error) {
 	}
 	w.T.SetPaneOption(pane, "@role", "wall")
 	w.T.SetPaneOption(pane, "@fleet_used", now)
-	log.Info("on wall", "pane", pane, "preset", s.Preset)
+	w.setOpt("@fleet_target", pane)
+	logx.For("wall").Info("on wall", "pane", pane, "preset", s.Preset)
 	if err := w.Apply(); err != nil {
 		return false, err
 	}
-	_, err = w.T.Run("select-pane", "-t", pane)
+	if !selectPane {
+		return true, nil
+	}
+	_, err := w.T.Run("select-pane", "-t", pane)
 	return true, err
 }
 
@@ -271,6 +301,8 @@ func remove(ps []tmux.PaneInfo, id string) []tmux.PaneInfo {
 // in place: no break-pane/join-pane and no re-layout, so the geometry the user
 // was looking at is exactly preserved. The replaced pane lands in the window
 // the incoming pane came from, which is renamed after it as in breakOut.
+// Focus is not moved: `swap-pane -d` keeps the active pane where it was (if
+// the replaced slot had focus, the incoming pane in that slot now has it).
 func (w *Wall) swapInto(incoming, slot, now string) (bool, error) {
 	if _, err := w.T.Run("swap-pane", "-d", "-s", incoming, "-t", slot); err != nil {
 		return false, err
@@ -279,14 +311,16 @@ func (w *Wall) swapInto(incoming, slot, now string) (bool, error) {
 	w.T.SetPaneOption(incoming, "@fleet_used", now)
 	w.T.SetPaneOption(slot, "@role", "agent")
 	w.T.Run("rename-window", "-t", slot, w.agentWindow(slot))
-	logx.For("wall").Info("took the slot just left", "pane", incoming, "replaced", slot)
+	// The target stays on this slot, now holding the incoming pane, so card
+	// after card cycles agents through one slot (DESIGN.md §5e).
+	w.setOpt("@fleet_target", incoming)
+	logx.For("wall").Info("into the target slot", "pane", incoming, "replaced", slot)
 	// The shape is unchanged, but the pane id in that leaf is not: re-apply so
 	// @fleet_layout matches reality (with no emphasis this moves nothing).
 	if err := w.Apply(); err != nil {
 		return false, err
 	}
-	_, err := w.T.Run("select-pane", "-t", incoming)
-	return true, err
+	return true, nil
 }
 
 // agentWindow is the window name a pane belongs in when it is off the wall.
@@ -305,6 +339,9 @@ func (w *Wall) breakOut(pane string) {
 	if _, err := w.T.Run("break-pane", "-d", "-s", pane, "-t", session+":", "-n", win); err == nil {
 		w.T.SetPaneOption(pane, "@role", "agent")
 		logx.For("wall").Info("off wall", "pane", pane, "agent", name)
+	}
+	if w.opt("@fleet_target") == pane {
+		w.setOpt("@fleet_target", "") // a target off the wall is no target
 	}
 }
 
