@@ -8,6 +8,12 @@
 # whatever mode the tool itself defaults to.
 
 [defaults]
+# TUI colour palette (ADR-55): "catppuccin" (the default), "stealth",
+# "neon-drive", "phosphor" or "graphite". An unknown name stops fleet rather
+# than falling back silently. Resolved at start-up: change it and run
+# `fleet up` again — the tmux chrome is re-set and the overview pane restarts,
+# agents keep running.
+# theme = "catppuccin"
 # Starting mode, looked up in the profile's mode_args / mode_keys.
 # "" (or omitted) leaves the tool alone. An unknown mode is logged and ignored.
 mode = ""

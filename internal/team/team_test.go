@@ -19,12 +19,12 @@ func TestAutoColoursDistinctAndSkipUsed(t *testing.T) {
 	s.Create("b", "")
 	s.Create("c", "")
 	f := s.Load()
-	if f.Teams["b"].Color != theme.Pink || f.Teams["c"].Color != theme.Teal {
+	if f.Teams["b"].Color != theme.TeamHex("pink") || f.Teams["c"].Color != theme.TeamHex("teal") {
 		t.Errorf("auto colours: b=%s c=%s", f.Teams["b"].Color, f.Teams["c"].Color)
 	}
 	s.Delete("b")
 	s.Create("d", "")
-	if got := s.Load().Teams["d"].Color; got != theme.Pink {
+	if got := s.Load().Teams["d"].Color; got != theme.TeamHex("pink") {
 		t.Errorf("freed colour not reused: %s", got)
 	}
 	if err := s.Create("a", ""); err == nil || !strings.Contains(err.Error(), "exists") {
@@ -41,7 +41,7 @@ func TestAddMovesAndCreates(t *testing.T) {
 	if err != nil || len(moved) != 0 {
 		t.Fatal(moved, err)
 	}
-	if c := s.Load().Teams["alpha"].Color; c != theme.Blue {
+	if c := s.Load().Teams["alpha"].Color; c != theme.TeamHex("blue") {
 		t.Errorf("created team colour %s", c)
 	}
 	moved, err = s.Add("beta", "a2")
@@ -77,7 +77,7 @@ func TestAddMovesAndCreates(t *testing.T) {
 func TestSetColorAndParse(t *testing.T) {
 	s := NewStore(t.TempDir())
 	s.Create("x", "")
-	if err := s.SetColor("x", "Sapphire"); err != nil || s.Load().Teams["x"].Color != theme.Sapphire {
+	if err := s.SetColor("x", "Sapphire"); err != nil || s.Load().Teams["x"].Color != theme.TeamHex("sapphire") {
 		t.Fatalf("by name: %v", err)
 	}
 	if err := s.SetColor("x", "#ABCDEF"); err != nil || s.Load().Teams["x"].Color != "#abcdef" {
@@ -116,7 +116,7 @@ func TestSurvivesRestartSameTeamDrop(t *testing.T) {
 		t.Fatal(err)
 	}
 	by := NewStore(dir).ByAgent()
-	if _, ok := by["a2"]; ok || by["a1"].Team != "alpha" || by["b1"].Color != theme.Pink {
+	if _, ok := by["a2"]; ok || by["a1"].Team != "alpha" || by["b1"].Color != theme.TeamHex("pink") {
 		t.Errorf("ByAgent %v", by)
 	}
 }

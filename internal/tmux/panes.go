@@ -31,6 +31,15 @@ func (c *Client) SetPaneOption(pane, key, val string) error {
 	return err
 }
 
+// PaneOption reads a pane-level option, "" when it is unset.
+func (c *Client) PaneOption(pane, key string) string {
+	v, err := c.Run("show-options", "-pqv", "-t", pane, key)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(v)
+}
+
 // UnsetPaneOption removes a pane-level option.
 func (c *Client) UnsetPaneOption(pane, key string) error {
 	_, err := c.Run("set-option", "-p", "-u", "-t", pane, key)

@@ -89,6 +89,7 @@ type Prefs struct {
 	defaults   Spawn
 	profiles   map[string]map[string]conf.Value
 	maxWorking int
+	theme      string
 	admiral    string
 	agentMail  string
 	summary    Summary
@@ -113,6 +114,15 @@ func (p *Prefs) MaxWorking() int {
 	return p.maxWorking
 }
 
+// Theme is [defaults] theme: the TUI palette name (ADR-55). "" = the default
+// palette; the name is validated by theme.Load at start-up.
+func (p *Prefs) Theme() string {
+	if p == nil {
+		return ""
+	}
+	return p.theme
+}
+
 // Load reads the config file. A missing file is not an error.
 func Load() (*Prefs, error) {
 	path := Path()
@@ -130,6 +140,7 @@ func Load() (*Prefs, error) {
 			}
 			p.maxWorking = n
 		}
+		p.theme = strings.TrimSpace(conf.Str(sec, "theme"))
 		if p.agentMail, err = parseAgentMail(sec); err != nil {
 			return nil, fmt.Errorf("%s: %w", path, err)
 		}

@@ -18,8 +18,20 @@ import (
 	"github.com/sturlabragason/fleet/internal/sessions"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/team"
+	"github.com/sturlabragason/fleet/internal/theme"
 	"github.com/sturlabragason/fleet/internal/tools"
 )
+
+// loadTheme applies [defaults] theme from config.toml, once, before anything
+// renders (ADR-55). An unknown name stops fleet; a config file that does not
+// parse is left to the command that needs it to report.
+func loadTheme() error {
+	p, err := prefs.Load()
+	if err != nil {
+		return nil
+	}
+	return theme.Load(p.Theme())
+}
 
 const usage = `usage:
   fleet up                                  start/attach the fleet (admiral + overview + wall)
@@ -142,11 +154,16 @@ local preferences (never committed): ~/.config/fleet/config.toml ($FLEET_CONFIG 
   worktree (worktree = false turns it off);
   [defaults] max_working and the [memory] RAM guard (guard, min_free, check_every)
   are re-read live, so a change takes effect without restarting fleet;
+  [defaults] theme picks the TUI palette: catppuccin (default), stealth,
+  neon-drive, phosphor or graphite -- set it and run fleet up again;
   see examples/config.toml.example`
 
 func run(args []string) error {
 	args, err := topLevelProfile(args)
 	if err != nil {
+		return err
+	}
+	if err := loadTheme(); err != nil {
 		return err
 	}
 	if len(args) == 0 {

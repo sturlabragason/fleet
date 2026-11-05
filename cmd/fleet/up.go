@@ -21,6 +21,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/theme"
 	"github.com/sturlabragason/fleet/internal/tools"
 	"github.com/sturlabragason/fleet/internal/wall"
+	"github.com/sturlabragason/fleet/internal/watch"
 )
 
 // supLaunch is how to start the admiral pane.
@@ -176,6 +177,7 @@ func cmdUp(f *fleet.Fleet, args []string) error {
 	} else if explicit != "" {
 		upSwap(f, explicit)
 	}
+	retheme(f)
 	ensureOverview(f, target)
 	configure(f)
 	// One watcher per fleet keeps status fresh whatever is open (ADR-49).
@@ -213,14 +215,45 @@ func windowExists(f *fleet.Fleet, name string) bool {
 	return false
 }
 
+// retheme makes a theme change take effect on `fleet up` without touching a
+// single agent (ADR-55). The global chrome is re-set by configure and the
+// overview pane is respawned by ensureOverview, but two things cache the old
+// palette: the agent pane borders, whose colour is a pane option written on a
+// status transition, and the watcher process, which was started before the
+// change and would write the old hex back. So the stale status tags are
+// dropped — the next refresh re-tags every pane from the new palette — and the
+// watcher is stopped by its own pid, for startWatcher to start again.
+func retheme(f *fleet.Fleet) {
+	name := theme.Active().Name
+	cur, _ := f.T.Run("show-options", "-qv", "-t", fleet.Session, "@fleet_theme")
+	if strings.TrimSpace(cur) == name {
+		return
+	}
+	log := logx.For("theme")
+	log.Info("palette changed", "theme", name)
+	panes, _ := f.T.ListPanes("")
+	for _, p := range panes {
+		if p.Agent != "" && p.Status != "" {
+			f.T.UnsetPaneOption(p.ID, "@fleet_status")
+		}
+	}
+	if pid, ok := watch.Running(f.Home); ok {
+		if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
+			log.Error("stop watcher for the new palette", "pid", pid, "err", err)
+		}
+	}
+	f.T.Run("set-option", "-t", fleet.Session, "@fleet_theme", name)
+}
+
 func ensureOverview(f *fleet.Fleet, target string) {
 	t := f.T
 	panes, _ := t.ListPanes(target)
 	uiCmd := tools.ShellCommand([]string{f.Exe, "ui"})
 	for _, p := range panes {
 		if p.Role == "ov" {
-			if p.Dead {
+			if p.Dead || t.PaneOption(p.ID, "@fleet_theme") != theme.Active().Name {
 				t.Run("respawn-pane", "-k", "-t", p.ID, uiCmd)
+				t.SetPaneOption(p.ID, "@fleet_theme", theme.Active().Name)
 			}
 			return
 		}
@@ -236,6 +269,7 @@ func ensureOverview(f *fleet.Fleet, target string) {
 	}
 	t.SetPaneOption(ov, "@role", "ov")
 	t.SetPaneOption(ov, "remain-on-exit", "on")
+	t.SetPaneOption(ov, "@fleet_theme", theme.Active().Name)
 }
 
 // configure sets server options, key bindings, hooks and border polish.
@@ -267,18 +301,18 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		{"set-option", "-g", "status-style", "fg=" + theme.Text + ",bg=" + theme.Mantle},
 		{"set-option", "-g", "message-style", "fg=" + theme.Text + ",bg=" + theme.Surface0},
 		{"set-option", "-g", "message-command-style", "fg=" + theme.Text + ",bg=" + theme.Surface0},
-		{"set-option", "-g", "mode-style", "fg=" + theme.Base + ",bg=" + theme.Lavender},
-		{"set-option", "-g", "copy-mode-match-style", "fg=" + theme.Base + ",bg=" + theme.Yellow},
-		{"set-option", "-g", "copy-mode-current-match-style", "fg=" + theme.Base + ",bg=" + theme.Peach},
+		{"set-option", "-g", "mode-style", "fg=" + theme.Base + ",bg=" + theme.Select},
+		{"set-option", "-g", "copy-mode-match-style", "fg=" + theme.Base + ",bg=" + theme.Waiting},
+		{"set-option", "-g", "copy-mode-current-match-style", "fg=" + theme.Base + ",bg=" + theme.WaitingAlt},
 		{"set-option", "-g", "display-panes-colour", theme.Overlay0},
 		{"set-option", "-g", "display-panes-active-colour", theme.Text},
-		{"set-option", "-g", "clock-mode-colour", theme.Mauve},
+		{"set-option", "-g", "clock-mode-colour", theme.Supervisor},
 		// The unread-report badge (ADR-36) is set by the overview poll.
-		{"set-option", "-g", "status-left", "#[fg=" + theme.Crust + ",bg=" + theme.Mauve + ",bold] fleet #[default] #{?" + fleet.BadgeOption + ",#[fg=" + theme.Crust + "#,bg=" + theme.Waiting + "#,bold] ✉ #{" + fleet.BadgeOption + "} #[default] ,}"},
+		{"set-option", "-g", "status-left", "#[fg=" + theme.Crust + ",bg=" + theme.Supervisor + ",bold] fleet #[default] #{?" + fleet.BadgeOption + ",#[fg=" + theme.Crust + "#,bg=" + theme.Waiting + "#,bold] ✉ #{" + fleet.BadgeOption + "} #[default] ,}"},
 		{"set-option", "-g", "status-left-length", "70"},
 		{"set-option", "-g", "window-status-separator", ""},
 		{"set-option", "-g", "window-status-format", "#[fg=" + theme.Overlay1 + "] #I #W "},
-		{"set-option", "-g", "window-status-current-format", "#[fg=" + theme.Crust + ",bg=" + theme.Lavender + ",bold] #I #W #[default]"},
+		{"set-option", "-g", "window-status-current-format", "#[fg=" + theme.Crust + ",bg=" + theme.Select + ",bold] #I #W #[default]"},
 		{"set-option", "-g", "status-right", "#[fg=" + theme.Overlay1 + "]" + clickableChanges(keys.Hint(keys.ScopeTmux, statusRightLen-1)) + " "},
 		{"set-option", "-g", "status-right-length", strconv.Itoa(statusRightLen)},
 		{"set-hook", "-g", "client-resized", wallCmd("apply")},
@@ -363,16 +397,27 @@ const statusRightLen = 120 // fits the full tmux hint (keys.Hint ScopeTmux) plus
 // slot (@fleet_target on its window).
 const targetHook = `if-shell -F '#{==:#{@role},wall}' 'set-option -wF @fleet_target "#{pane_id}"'`
 
-// targetMark starts the border title of the target pane with a bold ▶ in the
-// select colour; the agent colour that follows still applies.
-var targetMark = "#{?#{==:#{pane_id},#{@fleet_target}},#[fg=" + theme.Select + "]#[bold]▶#[nobold] ,}"
+// The border-title marks carry palette colours, so they are rebuilt whenever
+// the active palette changes (ADR-55).
+var (
+	// targetMark starts the border title of the target pane with a bold ▶ in
+	// the select colour; the agent colour that follows still applies.
+	targetMark string
+	// pinMark follows the agent name on a pinned pane's border (@fleet_pin,
+	// DESIGN.md §5e): ⚑ in Overlay1, then the name colour again.
+	pinMark string
+	// nextOutMark ends the title of the pane a card would evict (no target,
+	// full wall).
+	nextOutMark string
+)
 
-// nextOutMark ends the title of the pane a card would evict (no target, full wall).
-// pinMark follows the agent name on a pinned pane's border (@fleet_pin, DESIGN.md
-// §5e): ⚑ in Overlay1, then the name colour again.
-var pinMark = "#{?@fleet_pin, #[fg=" + theme.Overlay1 + "]⚑#[fg=#{?@fleet_color,#{@fleet_color},default}],}"
-
-var nextOutMark = "#{?#{==:#{pane_id},#{@fleet_next_out}}, #[fg=" + theme.Gone + "]· next out#[default],}"
+func init() {
+	theme.OnChange(func() {
+		targetMark = "#{?#{==:#{pane_id},#{@fleet_target}},#[fg=" + theme.Select + "]#[bold]▶#[nobold] ,}"
+		pinMark = "#{?@fleet_pin, #[fg=" + theme.Overlay1 + "]⚑#[fg=#{?@fleet_color,#{@fleet_color},default}],}"
+		nextOutMark = "#{?#{==:#{pane_id},#{@fleet_next_out}}, #[fg=" + theme.Gone + "]· next out#[default],}"
+	})
+}
 
 // wallUsage lists the `fleet wall` verbs.
 const wallUsage = "fleet wall apply|refresh|preset N|sup|side|chips|emphasis|show NAME|hide NAME|add NAME|next|prev|untarget|undo|pin NAME [--keep-focus] [--notify]"

@@ -219,7 +219,7 @@ func Help(width int) string {
 // HelpStyled is Help with theme colours: bold Mauve group headings, a bold
 // key column and Subtext0 descriptions.
 func HelpStyled(width int) string {
-	head := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(theme.Mauve))
+	head := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(theme.Supervisor))
 	key := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(theme.Text))
 	desc := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Subtext0))
 	r := func(st lipgloss.Style) func(string) string { return func(s string) string { return st.Render(s) } }
@@ -230,7 +230,7 @@ func HelpStyled(width int) string {
 // Wall and Review | Admiral and Overview) with the footer below, for places too short
 // for the single list. width is the total width; each column wraps to half.
 func HelpColumns(width int) string {
-	head := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(theme.Mauve))
+	head := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(theme.Supervisor))
 	key := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(theme.Text))
 	desc := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Subtext0))
 	r := func(st lipgloss.Style) func(string) string { return func(s string) string { return st.Render(s) } }

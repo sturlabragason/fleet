@@ -138,13 +138,13 @@ func TestHandoffRotationKeeps20(t *testing.T) {
 func TestBandEdges(t *testing.T) {
 	t.Setenv("FLEET_ADMIRAL_HANDOFF_PCT", "")
 	t.Setenv("FLEET_SUP_HANDOFF_PCT", "")
-	for pct, want := range map[int]string{0: theme.Green, 39: theme.Green, 40: theme.Yellow, 69: theme.Yellow, 70: theme.Red, 100: theme.Red} {
+	for pct, want := range map[int]string{0: theme.Working, 39: theme.Working, 40: theme.Waiting, 69: theme.Waiting, 70: theme.Error, 100: theme.Error} {
 		if got := Band(pct); got != want {
 			t.Errorf("%d: %s want %s", pct, got, want)
 		}
 	}
 	t.Setenv("FLEET_SUP_HANDOFF_PCT", "60")
-	if Band(59) != theme.Yellow || Band(60) != theme.Red || Threshold() != 60 {
+	if Band(59) != theme.Waiting || Band(60) != theme.Error || Threshold() != 60 {
 		t.Error("threshold from env")
 	}
 }

@@ -404,3 +404,28 @@ func TestSelectColourIsTargetOnly(t *testing.T) {
 		t.Error("the ▶ target mark must keep the select colour")
 	}
 }
+
+// A theme swaps the tmux chrome too: the border marks and the window styles
+// are rebuilt from the active palette (ADR-55).
+func TestTmuxOptionsFollowTheTheme(t *testing.T) {
+	t.Cleanup(func() {
+		if err := theme.Load(theme.Default); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if err := theme.Load("graphite"); err != nil {
+		t.Fatal(err)
+	}
+	opts := map[string]string{}
+	for _, c := range tmuxCommands(&fleet.Fleet{Exe: "/bin/true"}) {
+		if len(c) == 4 && c[0] == "set-option" && c[1] == "-g" {
+			opts[c[2]] = c[3]
+		}
+	}
+	if want := "fg=" + theme.Text + ",bg=" + theme.Base; opts["window-active-style"] != want {
+		t.Errorf("window-active-style = %q, want %q", opts["window-active-style"], want)
+	}
+	if !strings.Contains(targetMark, theme.Select) {
+		t.Errorf("the ▶ mark kept a stale colour: %q", targetMark)
+	}
+}

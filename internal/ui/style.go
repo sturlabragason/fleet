@@ -6,18 +6,44 @@ import (
 	"github.com/sturlabragason/fleet/internal/theme"
 )
 
-// Colours per status; pulse alternates for waiting tiles.
+// Colours per status; pulse alternates for waiting tiles. They are rebuilt
+// whenever the active palette changes, because a lipgloss colour is a value,
+// not a reference (ADR-55).
 var (
-	colWorking = lipgloss.Color(theme.Working)
-	colWaitA   = lipgloss.Color(theme.Waiting)
-	colWaitB   = lipgloss.Color(theme.WaitingAlt)
-	colError   = lipgloss.Color(theme.Error)
-	colStuck   = lipgloss.Color(theme.Stuck)
-	colIdle    = lipgloss.Color(theme.Idle)
-	colGone    = lipgloss.Color(theme.Gone)
-	colSelect  = lipgloss.Color(theme.Select)
-	colText    = lipgloss.Color(theme.Text)
+	colWorking    lipgloss.Color
+	colWaitA      lipgloss.Color
+	colWaitB      lipgloss.Color
+	colError      lipgloss.Color
+	colStuck      lipgloss.Color
+	colIdle       lipgloss.Color
+	colGone       lipgloss.Color
+	colSelect     lipgloss.Color
+	colText       lipgloss.Color
+	colWorkingDim lipgloss.Color
+
+	leadStyle   lipgloss.Style // leadMark: Overlay1, like ⚑, so no new colour role
+	pinStyle    lipgloss.Style // pinMark: Overlay1, never the select colour
+	targetStyle lipgloss.Style // targetMark: always the select colour, bold
 )
+
+func init() { theme.OnChange(applyTheme) }
+
+func applyTheme() {
+	colWorking = lipgloss.Color(theme.Working)
+	colWaitA = lipgloss.Color(theme.Waiting)
+	colWaitB = lipgloss.Color(theme.WaitingAlt)
+	colError = lipgloss.Color(theme.Error)
+	colStuck = lipgloss.Color(theme.Stuck)
+	colIdle = lipgloss.Color(theme.Idle)
+	colGone = lipgloss.Color(theme.Gone)
+	colSelect = lipgloss.Color(theme.Select)
+	colText = lipgloss.Color(theme.Text)
+	colWorkingDim = lipgloss.Color(theme.WorkingDim)
+
+	dim := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Overlay1))
+	leadStyle, pinStyle = dim, dim
+	targetStyle = lipgloss.NewStyle().Foreground(colSelect).Bold(true)
+}
 
 var spinner = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 

@@ -7,13 +7,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/sturlabragason/fleet/internal/status"
-	"github.com/sturlabragason/fleet/internal/theme"
 )
 
 // Subagent dots (DESIGN.md §4 Subagents, ADR-18).
 const subDot = "•"
-
-var colWorkingDim = lipgloss.Color(theme.WorkingDim)
 
 // subagentDots picks the dots that fit in width (the newest, in start order)
 // and their colours for this animation frame; hidden is how many didn't fit.

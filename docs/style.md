@@ -178,8 +178,8 @@ where the ground travels with it, and its reversed counterpart is `#8AA4FF` (7.6
 ink and grey tokens are likewise for the printed and generated artefacts (the marks, a PDF, a
 slide), where the ground is known.
 
-**The TUI** uses [Catppuccin Mocha](https://catppuccin.com/palette) (`internal/theme`), and should
-keep using it. Lane blue is a print and web accent: `#0033CC` on the Mocha base `#1e1e2e` is
+**The TUI** uses [Catppuccin Mocha](https://catppuccin.com/palette) (`internal/theme`) by default,
+and the docs and screenshots keep using it. Lane blue is a print and web accent: `#0033CC` on the Mocha base `#1e1e2e` is
 1.8:1, which is unreadable in a terminal. The brand rule that carries over is
 not the hex value, it is the discipline: colour means status, never decoration, and at most one
 thing per screen is allowed to be the accent.
@@ -227,6 +227,38 @@ Do not take the dim step down to Overlay1 (4.4:1), which is the resting colour o
 meant to ignore. A card-to-pane highlight (`@fleet_hl` in docs/ux-interaction.md) is not built; when
 it is, it is Overlay1, not a second accent.
 
+### Themes
+
+A palette is a set of *roles*, not of shades (ADR-55). `theme.Working`, `theme.Waiting`,
+`theme.Select`, the grounds `Base`/`Mantle`/`Crust`/`Surface0-2` and the inks
+`Text`/`Subtext0`/`Overlay2-0` mean the same thing in every theme; only the hex changes. There is
+no `theme.Yellow` any more, because yellow means nothing on a grey theme.
+
+Five palettes ship. Set one in `~/.config/fleet/config.toml` and run `fleet up` again: the tmux
+chrome re-colours and the overview pane restarts, agents keep running.
+
+```toml
+[defaults]
+theme = "stealth"   # catppuccin (default), stealth, neon-drive, phosphor, graphite
+```
+
+| Theme | Ground | Working | Waiting | Error | `▶` Select | In one line |
+|---|---|---|---|---|---|---|
+| `catppuccin` | `#1e1e2e` | Green `#a6e3a1` | Yellow `#f9e2af` | Red `#f38ba8` | Lavender `#b4befe` | The default; nothing changes unless you ask |
+| `stealth` | `#0a0b0d` | `#53d6a0` | `#ffcf4d` | `#ff4d5e` | Ember `#ff7a18` | Near-black and quiet until something needs you |
+| `neon-drive` | `#0b0f2a` | Cyan `#00e5ff` | `#ffd166` | `#ff3864` | Magenta `#ff2bd1` | A night-drive dashboard; the loudest |
+| `phosphor` | `#06110a` | `#33ff77` | Amber `#ffc044` | `#ff3b2f` | White `#ffffff` | Green CRT: attention is the only thing that is not green |
+| `graphite` | `#0d0d0f` | Grey `#a8a8b0` | White `#ffffff` | `#ff2200` | Amber `#ffa000` | Greys only: white means answer me, red means it died |
+
+Every theme keeps the rules below, and `internal/theme`'s palette test enforces the measurable
+half of them: each role clears its floor on its own theme's base, `gone` stays dimmer than `idle`
+and `idle` dimmer than `text`, the unfocused-pane step (`Overlay2`) sits exactly between `Overlay1`
+and `Text`, and nothing else may equal `theme.Select`. Add a palette and the test covers it.
+
+Team colours come from the active palette (`theme.TeamPalette`, `theme.TeamHex`). Phosphor and
+Graphite cannot offer six distinguishable hues, so their six teams are steps on the theme's own
+ramp, told apart by lightness and by the team name — a deliberate cost, written down in ADR-55.
+
 Rules for anyone changing `internal/theme`:
 
 - A new colour is a new meaning. If it does not change what the user should do, it is decoration:
@@ -244,7 +276,8 @@ Rules for anyone changing `internal/theme`:
 - The dim step of the running-subagent wave (`theme.WorkingDim`, `#628067`, 3.8:1) stays a darker
   green, never grey, so it cannot be read as a finished dot.
 - Team colours come from `theme.TeamPalette` and must stay out of the status range: no green,
-  yellow, peach, red or maroon, and not the selection lavender.
+  yellow, peach, red or maroon, and not the selection lavender. A new palette fills every role,
+  including its own six team colours; a role may never be left empty.
 
 ## 5. Screenshots and diagrams
 

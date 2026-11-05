@@ -14,7 +14,6 @@ import (
 	"github.com/sturlabragason/fleet/internal/keys"
 	"github.com/sturlabragason/fleet/internal/layout"
 	"github.com/sturlabragason/fleet/internal/logx"
-	"github.com/sturlabragason/fleet/internal/theme"
 )
 
 // View renders the header and a card per agent wrapped to the pane. When the
@@ -392,15 +391,6 @@ const pinMark = "⚑"
 // before the team ◆; one cell wide. Its members need no mark of their own:
 // a squad is a team, so they already carry ◆ in the squad colour.
 const leadMark = "▲"
-
-// leadStyle draws leadMark: Overlay1, like ⚑, so no new colour role.
-var leadStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Overlay1))
-
-// pinStyle draws pinMark: Overlay1, never the select colour.
-var pinStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Overlay1))
-
-// targetStyle draws targetMark: always the select colour, bold.
-var targetStyle = lipgloss.NewStyle().Foreground(colSelect).Bold(true)
 
 func since(t, now time.Time) string {
 	if t.IsZero() {

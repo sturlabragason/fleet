@@ -42,7 +42,7 @@ patterns = "fake"
 	}
 	f.Refresh()
 	for _, n := range []string{"a1", "a2"} {
-		if got := tags(n); got != "alpha|"+theme.Blue {
+		if got := tags(n); got != "alpha|"+theme.TeamHex("blue") {
 			t.Errorf("%s tags %q", n, got)
 		}
 	}
@@ -51,7 +51,7 @@ patterns = "fake"
 	}
 	ps, _ := tc.ListPanes("")
 	for _, p := range ps {
-		if p.Agent == "a1" && (p.Team != "alpha" || p.TeamColor != theme.Blue) {
+		if p.Agent == "a1" && (p.Team != "alpha" || p.TeamColor != theme.TeamHex("blue")) {
 			t.Errorf("PaneInfo %+v", p)
 		}
 	}

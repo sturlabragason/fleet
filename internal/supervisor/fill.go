@@ -139,9 +139,9 @@ func Threshold() int {
 func Band(pct int) string {
 	switch {
 	case pct >= Threshold():
-		return theme.Red
+		return theme.Error
 	case pct >= 40:
-		return theme.Yellow
+		return theme.Waiting
 	}
-	return theme.Green
+	return theme.Working
 }
