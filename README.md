@@ -26,17 +26,19 @@ Session switchers make moving between agents faster, but you still do all the su
 - **Spawn** agents from tool profiles into a dedicated tmux server (`tmux -L fleet`), one hidden window per agent.
 - **Status** for every agent (working, waiting, error, stuck, idle), read from the bottom of each pane with per-tool regex patterns. Polled every second.
 - **Overview TUI**: coloured tiles sorted by attention (waiting agents first, longest wait first), arrow keys, mouse click, `Tab` through waiting agents.
-- **Live wall**: real, interactive tmux panes for the agents you are working with. Layouts 1, 2, 4, 6, 9 and main+stack, as caps rather than fixed shapes: the grid is sized to the window so panes stay readable, and the pane that needs attention gets the big slot. When the wall is full, the pane you were last in is replaced in place; otherwise an idle pane leaves before a working one, and waiting or failing panes stay. Processes never restart.
+- **Live wall**: real, interactive tmux panes for the agents you are working with. Layouts 1, 2, 4, 6, 9 and main+stack, as caps rather than fixed shapes: the grid is sized to the window so panes stay readable, and a readability floor shows fewer panes rather than unreadable ones. The pane that needs attention gets the big slot. Click a pane to make it the `▶` target and the next card you pick from the overview goes there; from the overview, `p` pins a pane so it is never evicted and `u` undoes the last replace. Waiting and failing panes stay. Processes never restart.
+- **Copy out of any pane**: drag-select, double-click or triple-click copies to the system clipboard, even over an agent that asked for the mouse.
 - **Adopt**: `fleet sessions` lists Copilot and Claude sessions started outside fleet, and `fleet adopt` resumes one as an agent.
 - **A queue**: with `max_working` set, a spawn past the limit waits and starts when a slot frees.
 - **A worktree per agent**: spawning into a git repo gives the agent `<repo>.wt/<name>` on branch `fleet/<name>`, so parallel agents never share an index. `--no-worktree` opts out.
-- **Admiral**: an agent (Copilot CLI by default) in the left pane with nineteen `fleet_*` MCP tools from `fleet mcp`. It keeps a context meter, can hand off to a fresh session (`Alt+R`) and can swap its own tool profile (`Alt+P`).
+- **Admiral**: an agent (Copilot CLI by default) in the left pane with nineteen `fleet_*` MCP tools from `fleet mcp`. It keeps a context meter, can hand off to a fresh session (`Alt+R`) and can swap its own tool profile (`Alt+P`). Unread agent reports show as a `✉` badge in the overview header and the tmux status line.
+- **Cheap summaries**: `fleet peek --summary <name>` returns about five lines (what the agent is doing, what it waits for, any error) from a small model instead of a screenful of text.
 - **Teams**: group agents (`fleet team create frontend teal`), then send to, show or close a whole team at once. Members are marked with a coloured `◆`.
 - **Agent mail**: agents message each other with `fleet mail` or peer MCP tools. Free inside a team or a repo, otherwise one agent asks and you decide.
-- **CLI** for scripting: `spawn`, `adopt`, `sessions`, `ls`, `send`, `peek`, `close`, `team`, `mail`, `access`, `report`, `admiral`, `note`, `playbook`, `touching`, `profiles`, `keys`, `changes`, `wall`.
+- **CLI** for scripting: `spawn`, `adopt`, `sessions`, `ls`, `send`, `peek`, `close`, `team`, `mail`, `access`, `report`, `admiral`, `note`, `playbook`, `touching`, `profiles`, `keys`, `changes`, `snap`, `wall`.
 - **Fake agents** that cycle through states, so you can try everything without spending tokens.
 
-Planned, not built yet: park/wake to save RAM, cheap-model summaries for `peek`, tool hooks instead of screen scraping, a spawn wizard and approve/reject keys in the TUI, notifications. See [Roadmap](#roadmap).
+Planned, not built yet: park/wake to save RAM, tool hooks instead of screen scraping, a spawn wizard, approve/reject keys in the TUI, notifications. See [Roadmap](#roadmap).
 
 ## Requirements
 
@@ -221,14 +223,24 @@ Tests that need tmux use throwaway `fleet-test-*` servers. Architecture: [docs/a
 
 ## Roadmap
 
-Built: slices 0–3 of [DESIGN.md §9](DESIGN.md#9-how-ill-build-and-iterate-quickly) (fake agents, status, overview, live wall), the admiral's MCP server, admiral handoff (context meter, notes, `Alt+R` reset, profile swap), `fleet adopt`/`fleet sessions`, teams, agent mail with access control, the worker playbook, a worktree per agent, and a wall that sizes itself to the window. Planned:
+Shipped so far: fake agents, scraped status and the overview; the live wall (screen-sized grid, status-aware eviction, a readability floor, pinning, a `▶` target slot and undo); `fleet adopt` and `fleet sessions`; the admiral's MCP server with handoff, notes, a context meter and profile swap; teams; agent mail with access control; the worker playbook and agent reports with a `✉` badge; a git worktree per agent on spawn; copy to the system clipboard from any pane; `fleet peek --summary` from a cheap model; and `fleet snap`, which turns a misread screen into a test fixture (Claude, agy and vibe read properly because of it).
 
-- Peek overlay, send, approve/reject and spawn wizard in the TUI
-- Real-tool status patterns from captured screens; hooks for Claude Code and Copilot
-- Park/wake with resume by session ID, a live-process cap and a RAM guard
-- Cheap-model summaries for `peek`
-- Pinned wall panes, auto-slotting waiting agents, saved walls
-- tmux control-mode events instead of polling; desktop notifications; `fleet doctor`
+In progress:
+
+- Task cards on spawn (goal, done-check, result file) and `result.md` per agent
+- Park/wake with resume by session ID, a live cap and a RAM guard
+- Spend per agent on the tile, with an optional per-task cap
+- A stuck rule: same error twice, or no progress for N minutes
+
+Planned:
+
+- Approve/reject and a spawn wizard in the TUI
+- Tool hooks (Claude Code, Copilot) instead of screen scraping
+- Workflow files (`fleet run plan.yaml`): tasks with dependencies, fanned out and back in
+- Auto-slotting the longest-waiting agent, saved walls, desktop notifications
+- tmux control-mode events instead of polling; `fleet doctor`
+
+The long version, with reasoning, is [DESIGN.md §18](DESIGN.md#18-review-after-the-prototype-2026-11-04-what-would-make-it-a-real-agentic-fleet-manager).
 
 ## License
 

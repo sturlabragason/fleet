@@ -1,8 +1,11 @@
 # Mouse and keyboard on the overview and the wall
 
-Status: **proposal, nothing here is built yet.** It answers "clicking around in fleet is not
-intuitive" and "the overview breaks past 14 agents". The current behaviour (section 1) was read
-from the code at `c1b9dfe` on 2026-11-05. tmux defaults were checked on tmux 3.8.
+Status: **Model A is built** (the ▶ target slot, `a`, `Tab`/`Alt-n`, `Esc`, the right-click
+menu, preview, `u`, `p` and the overview tiers; see DESIGN §5e and ADR-31). This file is kept as
+the reasoning behind it: the problem it answers was "clicking around in fleet is not intuitive"
+and "the overview breaks past 14 agents". Section 1 describes the behaviour **before** that work,
+read from the code at `c1b9dfe` on 2026-11-05; its dead ends are annotated where they are fixed.
+tmux defaults were checked on tmux 3.8.
 
 ## 1. What each click and key does today
 
@@ -58,14 +61,15 @@ from the code at `c1b9dfe` on 2026-11-05. tmux defaults were checked on tmux 3.8
    border) and the active pane (lavender border) both look selected, but they are not linked.
    `▣` says "on the wall", not which pane. *(Fixed by ADR-37: lavender is the `▶` target
    only, the cursor is an underline in the status colour, the active pane is the bright neutral.)*
-6. **`Tab` only moves the cursor.** It never brings the waiting agent onto the wall, so working
-   through approvals is Tab, Enter, click the pane, answer, click the overview, Tab...
-7. **No add-without-replace and no undo.** On a full wall, one click on the wrong card evicts a
-   pane, and the only way back is to find its card and click again (which evicts another one).
-8. **DESIGN.md §5 and §5a disagree with the registry.** §5 lists `x` reject, `Space` peek, `1-9`
-   repo groups, `P` pin, `Z` zoom. The built keys are `x` hide, `1..9` presets, `P` profile
-   picker, `Alt-z` zoom. A reader cannot tell which is real.
-9. **Overflow agents are barely reachable** (section 4).
+6. ~~**`Tab` only moves the cursor.**~~ *Fixed: `Tab`/`Shift-Tab` and `Alt-n` put the
+   next/previous waiting agent into the ▶ pane.*
+7. ~~**No add-without-replace and no undo.**~~ *Fixed: `a` / `+` adds without evicting, and `u`
+   undoes the last replace (again: redo).*
+8. ~~**DESIGN.md §5 and §5a disagree with the registry.** §5 lists `x` reject, `Space` peek, `1-9`
+   repo groups, `P` pin, `Z` zoom.~~ *Fixed: §5's table is generated from `internal/keys` by
+   `fleet keys --markdown` and a test fails when it drifts, and §5a's zoom is `Alt-z`.*
+9. ~~**Overflow agents are barely reachable**~~ (section 4). *Fixed: the overview steps down
+   through tiers so every agent keeps a row.*
 
 ### What fleet can and cannot intercept
 

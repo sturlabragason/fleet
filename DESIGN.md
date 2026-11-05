@@ -435,7 +435,7 @@ Everything sits in one tmux window, so one terminal window fills the monitor:
 - **Mouse:** `set -g mouse on`. Click a live pane to type into it. Drag a border to resize. Scroll to read history. Click an overview tile to bring that agent onto the wall. Drag-select in any pane copies to the system clipboard, and so do double-click (word) and triple-click (line): fleet takes the left-button drag for tmux even in panes whose program asked for the mouse (ADR-38), and `fleet up` sets tmux `copy-command` to `wl-copy`, `xclip`, `xsel` or `pbcopy`, whichever the session has (ADR-28). Clicks, the wheel and the right-click menu still reach the program.
 - **Tiling layouts**, chosen from the overview (`1 2 4 6 9 m`), globally with `Alt+w` then the digit, or `Alt+<digit>` in terminals that don't use Alt+digit for tabs (Ptyxis and GNOME Terminal do): `1` one large pane; `2` side by side; `4` a 2×2; `6` a 3×2; `9` a 3×3; `M` main + stack (one large pane plus a column of small ones). Built from tmux's own layouts (`main-vertical`, `tiled`) plus saved custom layout strings.
 - **Pin** (`p`, §5e) keeps a pane on the wall so it is never swapped out.
-- **Zoom** (`Z`, or tmux `prefix + z`) makes one pane fill the whole wall for a moment.
+- **Zoom** (`Alt-z`, or tmux `prefix + z`) makes one pane fill the whole wall for a moment.
 - Wall panes show a coloured border in the same colour as their tile, so status is visible in both places.
 - Named wall setups ("web-ui work", "gitops incident") save and restore which agents are on the wall and in which layout.
 
@@ -1268,7 +1268,7 @@ Source: https://code.claude.com/docs/en/best-practices (fetched 2026-11-04).
 
 ## 18. Review after the prototype (2026-11-04): what would make it a real agentic fleet manager
 
-State at review: about 3,900 lines of Go. Built: tmux substrate, tool profiles, scraped status, overview grid, live wall (incl. smarter tiling, §5b: status-aware eviction, screen-sized grid, emphasis pane), lean Copilot admiral over MCP (`fleet_status/peek/send/answer/spawn/profiles/close/wall`), a worktree per agent on spawn. Missing: park/wake, summaries, workflows, real status patterns for Claude, agy and vibe.
+State at the 2026-11-04 review: about 3,900 lines of Go. Built now (2026-11-05): tmux substrate, tool profiles, scraped status with real patterns for Claude, agy and vibe, overview grid and tiers, live wall (smarter tiling, §5b: status-aware eviction, screen-sized grid, emphasis pane, a readability floor, the ▶ target slot, pinning and undo), lean Copilot admiral over MCP, a worktree per agent on spawn, agent reports with a ✉ badge, `fleet snap`, and cheap-model `peek --summary`. Missing: park/wake, task cards and result files, workflows, spend, the stuck rule, tool hooks.
 
 The gap: fleet today manages **sessions**. Agentic work is about **tasks** (a goal, a place to do it, a definition of done, a result, dependencies). The admiral can poke panes, but it has nothing to plan against and no way to know when work is actually finished.
 
@@ -1277,7 +1277,7 @@ The gap: fleet today manages **sessions**. Agentic work is about **tasks** (a go
 | # | Change | Why |
 |---|---|---|
 | 1 | ✅ built (2026-11-04, see §4) **`fleet adopt`**: bring an already-running session (copilot/claude ID + dir) under fleet by resuming it in a fleet pane | I already have many sessions open. Without this, live testing means starting over. |
-| 2 | **`fleet snap <name> <state>`**: save the current pane to `testdata/<tool>/<state>.txt` when a tile shows the wrong colour | Turns every misdetection during live testing into a test case in seconds. Fixes the "patterns are guesses" gap with real data. |
+| 2 | ✅ built (2026-11-05, see §4 and ADR-42) **`fleet snap <name> <state>`**: save the current pane to `testdata/<tool>/<state>.txt` when a tile shows the wrong colour. Claude, agy and vibe patterns came out of it. | Turns every misdetection during live testing into a test case in seconds. Fixes the "patterns are guesses" gap with real data. |
 | 3 | **Claude hooks for status** (`Stop` = turn finished, `Notification`/`PreToolUse` = needs me), writing to `~/.fleet/status/<name>.json`; scraping stays as fallback | Claude variants are most of the fleet; hooks don't break when the UI changes. |
 | 4 | ✅ built (2026-11-05, see §4 and ADR-39) **Worktree per agent by default** when the dir is a git repo: `spawn` creates `git worktree add` on branch `fleet/<name>` | Agentic work runs several agents on one repo; shared checkouts collide. |
 
@@ -1285,8 +1285,8 @@ The gap: fleet today manages **sessions**. Agentic work is about **tasks** (a go
 
 | # | Change | Why |
 |---|---|---|
-| 5 | **Task card on spawn**: goal, repo, **done-check** (command + expected exit code), result file. Stored in the board. | Same rule as my loop guide: no machine-checkable done condition, no loop. Lets fleet mark a tile ✅ done only when the check passes, not when the agent says so. |
-| 6 | **Result file**: every spawned agent gets told to write `~/.fleet/agents/<name>/result.md` (what changed, branch, open questions) when it finishes | The admiral reads results instead of screens: cheaper, and nothing gets lost when an agent is closed. |
+| 5 | 🔨 in progress (fleet-task-card) **Task card on spawn**: goal, repo, **done-check** (command + expected exit code), result file. Stored in the board. | Same rule as my loop guide: no machine-checkable done condition, no loop. Lets fleet mark a tile ✅ done only when the check passes, not when the agent says so. |
+| 6 | 🔨 in progress (fleet-task-card) **Result file**: every spawned agent gets told to write `~/.fleet/agents/<name>/result.md` (what changed, branch, open questions) when it finishes | The admiral reads results instead of screens: cheaper, and nothing gets lost when an agent is closed. |
 | 7 | **`fleet run plan.yaml`**: a small workflow file: tasks with profile, dir, prompt, done-check and `after:` dependencies. Fleet starts tasks as their dependencies finish, up to the live cap. The admiral can write these plans via an MCP tool (`fleet_plan`). | This is the actual agentic workflow: fan out, wait, fan in. Keeps the plan on disk (ADR-4), so an admiral reset loses nothing. |
 | 8 | **Review step as a task type**: after an implement task passes its check, fleet can spawn a reviewer agent (different profile/model) on the same worktree | Writer and reviewer separated, as in the Claude Code guide. |
 | 9 | **Recipes**: named spawn presets (`review-pr`, `implement-story`, `fix-ci`) = profile + prompt template + done-check | One keypress or one admiral call instead of re-typing prompts. |
@@ -1295,13 +1295,13 @@ The gap: fleet today manages **sessions**. Agentic work is about **tasks** (a go
 
 | # | Change | Why |
 |---|---|---|
-| 10 | **Park/wake + live cap + RAM guard** (§7) | Still the RAM fix; needed beyond about 15 real agents. |
-| 11 | **Spend per agent**: read tokens/credits from Copilot `events.jsonl` and Claude transcripts; show on the tile; optional per-task cap | Agentic workflows can burn credits silently. |
-| 12 | **Stuck rule**: same error twice or no progress for N minutes → tile red, agent paused, admiral told | Mirrors the "same failure twice, stop" rule; stops grinding. |
+| 10 | 🔨 in progress (fleet-park) **Park/wake + live cap + RAM guard** (§7) | Still the RAM fix; needed beyond about 15 real agents. |
+| 11 | 🔨 in progress (fleet-spend) **Spend per agent**: read tokens/credits from Copilot `events.jsonl` and Claude transcripts; show on the tile; optional per-task cap | Agentic workflows can burn credits silently. |
+| 12 | 🔨 in progress (fleet-stuck) **Stuck rule**: same error twice or no progress for N minutes → tile red, agent paused, admiral told | Mirrors the "same failure twice, stop" rule; stops grinding. |
 | 13 | **Waiting agents come to me**: optional auto-placement of the longest-waiting agent on the wall, plus a desktop notification | Less hunting; the wall shows what needs me. |
 | 14 | **Admiral reset key + context tile** (§6.3, §6.5). **Built 2026-11-04:** notes, handoff, context meter, `M-R`/`R` reset (ADR-11). | The lean admiral is cheap now, but long days still fill it. |
 | 15 | **A hard floor under the wall grid**. **Built 2026-11-05:** a floor derived from the wall rectangle, presets step down, adds are refused with a reason, recomputed on resize (§5b.4, ADR-41). | §5b.2 preferred a cramped pane to a hidden agent; past some point a 41×12 pane is just wrapped garbage. |
-| 16 | **Pin a pane to the wall** (`M-p` / `@fleet_pin`): eviction class 0 already exists and is read, nothing sets it | §5b.1 is built around it; it is the one key binding worth spending (§5b.3 deliberately skipped `M-e`). |
+| 16 | ✅ built (2026-11-04, see §5e and ADR-31) **Pin a pane to the wall** (`p`, the right-click menu or `@fleet_pin`): a pinned pane is never replaced or evicted | §5b.1 is built around it; it is the one key binding worth spending (§5b.3 deliberately skipped `M-e`). |
 
 ### Not recommended
 
@@ -1310,7 +1310,7 @@ The gap: fleet today manages **sessions**. Agentic work is about **tasks** (a go
 
 ### Suggested order for the next builder slices
 
-1 → 2 → 4 → 5 + 6 → 3 → 7 → 10, then the rest as live testing shows the need.
+1, 2 and 4 are built; 5 + 6, 10, 11 and 12 are in flight. Then 3 → 7 → 9, and the rest as live testing shows the need.
 
 ### Future work: remote agent runtime (idea only, not scheduled)
 
