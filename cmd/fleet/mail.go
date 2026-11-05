@@ -3,12 +3,14 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
 	"text/tabwriter"
 
 	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/mail"
 	"github.com/sturlabragason/fleet/internal/mcp"
 	"github.com/sturlabragason/fleet/internal/wall"
 )
@@ -119,6 +121,51 @@ func cmdReport(f *fleet.Fleet, args []string) error {
 	}
 	fmt.Println(out)
 	return nil
+}
+
+const reportsUsage = `usage: fleet reports [--all] [--limit N] [--as NAME]`
+
+// cmdReports is fleet_reports for agents and the user without MCP
+// (DESIGN §6.7): the same mailbox and rendering.
+func cmdReports(f *fleet.Fleet, args []string) error {
+	fs := flag.NewFlagSet("reports", flag.ContinueOnError)
+	all := fs.Bool("all", false, "show the last N reports, read or not, without marking them read")
+	limit := 20
+	fs.IntVar(&limit, "limit", limit, "N for --all")
+	fs.IntVar(&limit, "n", limit, "alias for --limit")
+	as := fs.String("as", "", "read as this agent (default: the fleet pane you run in, else the admiral)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf("%s", reportsUsage)
+	}
+	return writeReports(os.Stdout, f, *as, *all, limit)
+}
+
+// writeReports renders the admiral's report mailbox, the one place reports
+// land. Only the admiral itself — a shell outside every agent pane and
+// without --as — marks them read, the way fleet_reports does; an agent
+// reading the history must not empty the admiral's unread queue, so it
+// peeks. --all never marks anything.
+func writeReports(w io.Writer, f *fleet.Fleet, as string, all bool, limit int) error {
+	me, err := f.Identity("")
+	if as != "" {
+		me, err = f.Me(as) // validates the name against the board
+	}
+	if err != nil {
+		return err
+	}
+	var ms []mail.Msg
+	if all || me == "" {
+		if ms, err = f.Mail().Inbox(mail.Admiral, all, limit); err != nil {
+			return err
+		}
+	} else {
+		ms = f.Mail().Peek(mail.Admiral)
+	}
+	_, err = fmt.Fprintln(w, mcp.RenderReports(ms, all))
+	return err
 }
 
 // cmdAccess is the user's view and decisions on agent access pairs.

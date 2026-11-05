@@ -79,6 +79,11 @@ const usage = `usage:
                                             list, read or decide agent-to-agent access
   fleet report [--as NAME] <done|blocked|question|progress> "summary"
                                             report to the admiral (for agents without MCP)
+  fleet reports [--all] [--limit N] [--as NAME]
+                                            read agent reports (what fleet_reports gives the admiral):
+                                            unread ones, oldest first; --all shows the last N instead.
+                                            Only the admiral (a shell in no agent pane, no --as) marks
+                                            them read; an agent reads the history without taking them
   fleet admiral [--json]                    admiral session, context fill, generation, uptime
   fleet admiral reset [--handoff]           replace the admiral with a fresh session (M-R)
   fleet admiral profile [NAME | --pick]     show the admiral's profile, or swap it (hands off; Alt-P picks)
@@ -201,6 +206,8 @@ func run(args []string) error {
 		return cmdAccess(f, rest)
 	case "report":
 		return cmdReport(f, rest)
+	case "reports":
+		return cmdReports(f, rest)
 	case "profiles":
 		for _, n := range tools.Names(f.Profiles) {
 			p := f.Profiles[n]
