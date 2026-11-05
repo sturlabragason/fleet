@@ -39,10 +39,11 @@ var confirmedProp = map[string]any{"type": "boolean", "description": "true only 
 
 var toolDefs = []tool{
 	{"fleet_status", "List all agents: name, team, profile, status, running subagents, on_wall, what it waits for, age. Start here.", obj(nil, map[string]any{})},
-	{"fleet_peek", "Show the last N lines (default 20, max 80) of one agent's screen, without box borders and blank runs (raw=true: as captured). last_message=true returns the agent's last reply from its session log instead.", obj([]string{"name"}, map[string]any{
+	{"fleet_peek", "Show the last N lines (default 20, max 80) of one agent's screen, without box borders and blank runs (raw=true: as captured). last_message=true returns the agent's last reply from its session log instead. summary=true returns about 5 lines from a cheap model (what it is doing, what it waits for, any error) and costs a model call, so prefer it over long screens and don't poll it.", obj([]string{"name"}, map[string]any{
 		"name": str("agent name"), "lines": map[string]any{"type": "integer", "description": "lines to return (default 20, max 80)"},
 		"raw":          map[string]any{"type": "boolean", "description": "screen as captured, with borders"},
-		"last_message": map[string]any{"type": "boolean", "description": "the agent's last reply (Copilot profiles), at most 4000 chars"}})},
+		"last_message": map[string]any{"type": "boolean", "description": "the agent's last reply (Copilot profiles), at most 4000 chars"},
+		"summary":      map[string]any{"type": "boolean", "description": "about 5 lines from a cheap model instead of screen text (cached per screen)"}})},
 	{"fleet_send", "Send an ordinary prompt or follow-up text (pastes, presses Enter, re-presses it if the paste stays unsubmitted). Target exactly one of name, names or team; several targets get one line each. keys presses allowed keys instead of Enter (text+keys: paste, no Enter, then keys); text or keys to an agent on a prompt need confirmed=true (Enter would answer it).", obj(nil, map[string]any{
 		"name": str("agent name"), "names": strList("several agent names"), "team": str("send to every member of this team"),
 		"text": str("text to send"), "keys": strList("key names: Enter, Escape, Up, Down, Left, Right, Tab, BTab, Space, BSpace, 1-9, y, n"),
@@ -85,15 +86,18 @@ var toolDefs = []tool{
 }
 
 type args struct {
-	Name, Text, Answer, Profile, Dir, Prompt, Action, Preset, Agent, Summary, Query string
-	Expect                                                                          string
-	To, From, Reason, Decision, A, B, State                                         string
-	SessionID                                                                       string `json:"session_id"`
-	Lines, Limit, Option                                                            int
-	Confirmed, All, Raw                                                             bool
-	LastMessage                                                                     bool `json:"last_message"`
-	Team, Color                                                                     string
-	Agents, Names, Keys                                                             []string
+	Name, Text, Answer, Profile, Dir, Prompt, Action, Preset, Agent, Query string
+	// Summary is text for fleet_handoff and fleet_report, true/false for
+	// fleet_peek: one JSON name, two kinds of argument.
+	Summary                                 summaryArg
+	Expect                                  string
+	To, From, Reason, Decision, A, B, State string
+	SessionID                               string `json:"session_id"`
+	Lines, Limit, Option                    int
+	Confirmed, All, Raw                     bool
+	LastMessage                             bool `json:"last_message"`
+	Team, Color                             string
+	Agents, Names, Keys                     []string
 	// Worktree is fleet_spawn's opt-out; nil means "whatever config says".
 	Worktree *bool
 }
@@ -214,7 +218,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		br, err := s.brief()
 		return s.admiralHeader() + "\n" + br, err
 	case "fleet_admiral_profile":
-		return s.admiralProfile(a.Profile, a.Summary)
+		return s.admiralProfile(a.Profile, a.Summary.Text)
 	case "fleet_reports":
 		return s.reports(a.All, a.Limit)
 	case "fleet_access":
@@ -235,10 +239,10 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		}
 		return fmt.Sprintf("%s: %s and %s", a.Action, a.A, a.B), nil
 	case "fleet_handoff":
-		if err := need(strings.TrimSpace(a.Summary), "summary"); err != nil {
+		if err := need(strings.TrimSpace(a.Summary.Text), "summary"); err != nil {
 			return "", err
 		}
-		if err := supervisor.WriteHandoff(s.F.Home, a.Summary); err != nil {
+		if err := supervisor.WriteHandoff(s.F.Home, a.Summary.Text); err != nil {
 			return "", err
 		}
 		if err := s.Reset(); err != nil {
@@ -327,4 +331,30 @@ func (s *Server) brief() (string, error) {
 	}
 	b.WriteString("## Agents\n" + st)
 	return b.String(), nil
+}
+
+// summaryArg is the `summary` argument. fleet_handoff, fleet_admiral_profile
+// and fleet_report pass text; fleet_peek passes true. One JSON name, two
+// kinds of value, so neither tool makes the other's call fail to parse.
+type summaryArg struct {
+	Text string
+	Flag bool
+}
+
+func (s *summaryArg) UnmarshalJSON(b []byte) error {
+	switch string(b) {
+	case "null":
+		return nil
+	case "true", "false":
+		s.Flag = b[0] == 't'
+		return nil
+	}
+	if err := json.Unmarshal(b, &s.Text); err != nil {
+		return err
+	}
+	switch strings.ToLower(strings.TrimSpace(s.Text)) {
+	case "true", "yes", "1":
+		s.Flag = true
+	}
+	return nil
 }

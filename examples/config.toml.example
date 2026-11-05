@@ -34,7 +34,7 @@ ready_timeout = "15s"
 # playbook = true  # prepend the fleet worker playbook to the first prompt (DESIGN §4)
 # Give each agent spawned into a git repo its own worktree, <repo>.wt/<name> on
 # branch fleet/<name>, and run it there instead of in your checkout, so parallel
-# agents don't fight over one index (DESIGN §4, ADR-39). `fleet spawn
+# agents don't fight over one index (DESIGN §4, ADR-40). `fleet spawn
 # --no-worktree` (or worktree=false on fleet_spawn) skips it for one spawn.
 # Closing an agent never removes the worktree or the branch.
 # worktree = true
@@ -55,6 +55,22 @@ ready_timeout = "15s"
 # Every message is logged (`fleet access log`), and `fleet access revoke A B`
 # still stops any pair. Fleet-wide, [defaults] only; takes effect at once.
 # agent_mail = "team"
+
+# The cheap model behind `fleet peek --summary` and MCP fleet_peek summary=true
+# (DESIGN §6.2, ADR-40). It shells out to a CLI you already have signed in, so
+# fleet never holds an API key. Defaults: Copilot CLI, Haiku 5.5, one call per
+# agent per 30s, 45s timeout. About 6k input tokens and 5s per call: the
+# default args strip the CLI's instructions and tools, which is most of that. Summaries are only ever made on request, cached
+# under the hash of the screen they came from, and fail open.
+# [summary]
+# enabled = true
+# model = "claude-haiku-5.5"
+# command = "copilot"
+# {prompt} and {model} are replaced; without {prompt} the prompt goes on stdin,
+# so `claude` works too: command = "claude", args = ["-p", "{prompt}", "--model", "{model}"]
+# args = ["-p", "{prompt}", "--model", "{model}", "--silent", "--no-custom-instructions", "--available-tools", "none", "--disable-builtin-mcps", "--log-level", "none", "--no-color"]
+# min_interval = "30s"   # at most one model call per agent per interval ("0" = no limit)
+# timeout = "45s"
 
 [profile.copilot]
 # WARNING: "autopilot" for Copilot launches `--allow-all --autopilot`.

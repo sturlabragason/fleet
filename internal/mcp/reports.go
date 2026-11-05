@@ -21,7 +21,7 @@ var reportsToolDef = tool{"fleet_reports", "Read agent reports (done, blocked, q
 
 // report is the agent-mode fleet_report.
 func (s *Server) report(me string, a args) (string, error) {
-	note, err := s.F.Report(me, a.State, a.Summary)
+	note, err := s.F.Report(me, a.State, a.Summary.Text)
 	if err != nil {
 		return "", err
 	}

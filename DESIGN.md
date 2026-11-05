@@ -95,7 +95,7 @@ Yes. It is usually called the supervisor (or api-service) and worker pattern. Ex
 | `teams.json` | Teams: colour and members (§5c); separate from `board.json` so older binaries can't drop it |
 | `admiral/` | The admiral's `session.json`, `handoff.md`, `handoffs/` and `reset.lock` (§6.5). `supervisor/` is a symlink to it for binaries from before ADR-26 |
 | `events.jsonl` | Status transitions (for the TUI animation, notifications and later analysis) |
-| `peek-cache/<name>.txt` | Last summary of each agent and the hash of the pane it was made from |
+| `peek-cache/<name>.txt` | Last summary of each agent, with the hash it was made from, when, and by which model (§6.2) |
 
 ### Resume support (checked against `--help` on 2026-11-04)
 
@@ -116,7 +116,7 @@ Where the ID can't be set at launch, `fleet` has to find it after the start. It 
 |---|---|
 | `fleet spawn [--worktree\|--no-worktree] <name> <tool> <dir> ["prompt"]` | New tmux window, starts the tool, records the session ID, creates the card; in a git repo the agent gets its own worktree (see below) |
 | `fleet ls [--json]` | All agents with status, live/parked and RAM |
-| `fleet peek <name> [--raw] [-n 200]` | Default: a summary of about 5 lines from a cheap model. `--raw`: the actual pane text (for me, not the admiral). |
+| `fleet peek <name> [--raw] [-n 200]` | The pane text. `--summary`: about 5 lines from a cheap model instead (§6.2, ADR-40). |
 | `fleet send <name> "text"` | Paste into the agent and press Enter |
 | `fleet park <name>` | Ask the agent to update its card, wait, stop the process, mark it parked |
 | `fleet wake <name>` | Restart with the tool's resume flag in the same tmux window |
@@ -628,7 +628,9 @@ The admiral reads `board.json`, agent cards and `decisions.log`. Anything it lea
 
 ### 6.2 Summaries, not raw panes
 
-`fleet peek` runs the pane through a cheap model (Haiku, or local Ollama for anything sensitive). It returns roughly: status, what the agent is doing, what it needs, in about 5 lines. The admiral is not allowed `--raw`. If the pane hash hasn't changed, the cached summary is reused, so polling stays cheap.
+`fleet peek --summary <name>` and MCP `fleet_peek(name, summary=true)` run the pane, the agent's last message and its board status through a cheap model (Haiku 5.5, ADR-40). They return about 5 lines: what the agent is doing, what it waits for, any error. The admiral is not allowed `--raw`.
+
+Cheap by construction: a summary is made only when it is asked for, never on a poll loop; the answer is cached in `peek-cache/<name>.txt` under a hash of screen + last message + status, so an unchanged agent costs nothing and a state change makes a new one; one agent can trigger at most one model call per `min_interval` (default 30s), and inside it the last summary comes back marked stale; only the last 6000 characters of the pane are sent. Every failure is open — no model, no CLI, a timeout or an error gives no summary and an explanation, and nothing else in fleet waits for it. `[summary]` in `config.toml` sets the model, the CLI, the interval and the timeout, or turns the feature off.
 
 ### 6.3 One-key reset (`R`)
 
@@ -932,7 +934,7 @@ Goal: the TUI stays open in one pane while I talk to a coding agent in another, 
 | Fake agent script | Build the grid without real agents | First thing to build |
 | One real pane capture per tool, in each state | Waiting/error patterns for status detection | Collect during step 1 |
 | Name of the command | `fleet` might clash with something | `fleet` |
-| Summariser model | Cost vs keeping text local | Ollama for now, Haiku as an option |
+| Summariser model | Cost vs keeping text local vs the RAM the agents need | Haiku 5.5 through the installed Copilot CLI (ADR-40) |
 
 ## 15. Tests per component (R16)
 
@@ -950,7 +952,7 @@ Each component lives in its own Go package with its own `_test.go` file. `make t
 | Local spawn preferences (mode, auto-submit, extra args, local profile layer) | `internal/prefs` | Unit test in a temp directory via `FLEET_CONFIG`: missing file gives neutral defaults, `[profile.x]` beats `[defaults]`, broken TOML names the file |
 | Parking scheduler (cap, least recently used, RAM guard) | `internal/park` | Unit test with a fake clock and fake RAM readings |
 | Admiral memory (§6.5) | `internal/supervisor` | Fill reads the last usage record from the tail of `events.jsonl`; handoff rotation keeps 20; notes format; colour band edges; reset respawns a fake admiral on a `fleet-test-*` socket |
-| Summariser (`peek`) | `internal/summary` | Unit test with a fake model: cache hit when the pane hash is unchanged, at most 5 lines out, raw text never returned in admiral mode |
+| Summariser (`peek`) | `internal/summary` | Unit test with a fake model, no network: cache hit when the pane hash is unchanged, rate limit reuses the last summary, a broken model falls back or returns nothing, at most 5 lines out, raw text never returned in admiral mode |
 | Approval gate (ADR-9) | `internal/gate` | Unit test: risky actions are held for approval, ordinary sends pass |
 | Wall manager (layouts, pin, swap out least recently used) | `internal/wall` | Integration test on a throwaway tmux server: bring 5 agents onto a 4-slot wall and check which one went back |
 | Overview TUI (tiles, colours, arrows, mouse, Tab queue) | `internal/ui` | `teatest`: send key and mouse events, compare the screen with a golden file |
@@ -979,7 +981,6 @@ The biggest maintenance risk is not the language. It's the four agent tools chan
 - Where agy and vibe store session IDs, so `fleet` can find them after launch.
 - The exact pane patterns for "waiting" in each tool (collect real screenshots of each).
 - Which Copilot and Claude hook events give "needs permission" and "turn finished" reliably.
-- Whether the cheap summariser should default to Haiku or local Ollama (Ollama keeps client code on the machine; Haiku is faster).
 - Default live cap (12?) and stuck timeout (10 min?).
 
 ## 13. Not in scope (for now)
@@ -1191,6 +1192,11 @@ Rejected: (a) a modifier drag such as `C-MouseDrag1Pane` (discoverable only from
 Decision: when the spawn dir is inside a git repo, `fleet spawn` runs `git worktree add` at `<repo>.wt/<name>` on branch `fleet/<name>`, off the repo's main worktree, and starts the agent there; the board entry keeps `worktree: {path, branch, repo}` and `dir` becomes that path. The worker playbook, the auto-close baseline and `fleet touching` all read the worktree, not the spawn dir. It is on by default, off with `worktree = false` in `config.toml`, `--no-worktree`, or `worktree: false` on `fleet_spawn`; a queued agent carries its own choice to the drain. An existing worktree or `fleet/<name>` branch is reused. When git refuses, the spawn warns and falls back to the dir. `adopt` never creates one but records a linked worktree it finds, so close and the idle sweep name the work left there. Closing still removes nothing (ADR-29).
 Why: §18 #4 — parallel agents on one checkout fight over one index and one HEAD, which is the collision the playbook was asking every agent to avoid by hand, and a rule only works when it is the default. A worktree also makes auto-close exact: a fresh one is clean, so every dirty path in it is the agent's own, and the branch makes "merged into main?" a real question instead of a guess about a shared HEAD.
 Rejected: (a) failing the spawn when git refuses (an admiral that cannot start an agent is worse than one working in the shared checkout, and the warning is in the log and in `fleet info`); (b) removing the worktree on close (ADR-29 already says fleet never destroys work, and a branch is the only trace of a closed agent); (c) putting the worktree inside the repo (`.fleet/wt/<name>`) — it would show up in `git status`, in every tool's file search and in the repo's own ignore rules; (d) a worktree per *task* rather than per agent (fleet has no task object yet, §18 #5); (e) deriving the path from the branch instead of the name, which would break the playbook's `../<repo>.wt/<name>` and the auto-close rule that already matches on the agent's name.
+
+**ADR-40: the cheap summariser is Haiku 5.5 through the installed Copilot CLI, not a local model** (§6.2, R11). *Settles the open question in §12; implements ADR-6.*
+Decision: `fleet peek --summary` and `fleet_peek(summary=true)` shell out to `copilot -p … --model claude-haiku-5.5 --silent --no-custom-instructions --available-tools none --disable-builtin-mcps`, in a temp working directory. The model name, the command, its argv (`{prompt}`, `{model}`), the rate limit and the timeout are `[summary]` keys in `config.toml`; the default is Haiku 5.5. The summary is asked for, never polled; it is cached under a hash of screen + last message + status; one agent gets at most one call per `min_interval`; and every failure is open.
+Why: the Copilot CLI is already installed and already authenticated for the user's tool profiles, so fleet needs no API key, no key handling and no new dependency. Measured on 2026-11-05 over a 200-line pane: 4–7 s and about 6k input tokens (0.06 AI credits) per call. The lean flags are most of that: with the CLI's own instructions and tool definitions the same call is 36k tokens and 0.25 credits. A local model was the alternative in §12, and it is rejected: this machine already runs up to a dozen agents and a 30B model would take the RAM they need. `{prompt}`/`{model}` argv keeps any other non-interactive CLI (including `claude -p`) one config line away.
+Rejected: (a) local Ollama (RAM on a machine that has none to spare; the privacy argument is weak when the agent screens come from the same models anyway); (b) the Anthropic API directly (an API key in fleet's config, a key-rotation problem and an HTTP client, for the same model); (c) summarising on every refresh (a model call per agent per few seconds); (d) summarising inside the TUI's draw path (a slow model would freeze the overview).
 
 ---
 

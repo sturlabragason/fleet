@@ -42,6 +42,8 @@ const usage = `usage:
   fleet ls [--json]
   fleet send <name> "text"
   fleet peek <name> [--raw] [-n 200]
+  fleet peek --summary <name>               about 5 lines from a cheap model: what it is doing, what it
+                                            waits for, any error (cached per screen; [summary] in config.toml)
   fleet peek --live <name>                  live colour view of the agent's pane, 4x a second (Space in
                                             the overview opens it in a popup; Enter puts it in ▶)
   fleet close <name>                        stop an agent and remove it from the board
@@ -392,6 +394,7 @@ func cmdPeek(f *fleet.Fleet, args []string) error {
 	fs.Bool("raw", true, "raw pane text (summaries come in slice 7)")
 	n := fs.Int("n", 0, "lines of history")
 	live := fs.Bool("live", false, "live colour view of the pane (the preview popup)")
+	sum := fs.Bool("summary", false, "about 5 lines from a cheap model instead of the pane text")
 	var name string
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		name, args = args[0], args[1:]
@@ -403,10 +406,13 @@ func cmdPeek(f *fleet.Fleet, args []string) error {
 		name = fs.Arg(0)
 	}
 	if name == "" {
-		return fmt.Errorf("usage: fleet peek <name> [--raw] [-n N] | fleet peek --live <name>")
+		return fmt.Errorf("usage: fleet peek <name> [--raw] [-n N] | fleet peek --live <name> | fleet peek --summary <name>")
 	}
 	if *live {
 		return cmdPeekLive(f, name)
+	}
+	if *sum {
+		return cmdPeekSummary(f, name)
 	}
 	out, err := f.Peek(name, *n)
 	if err != nil {

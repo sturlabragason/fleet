@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
@@ -18,6 +19,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/playbook"
 	"github.com/sturlabragason/fleet/internal/prefs"
 	"github.com/sturlabragason/fleet/internal/status"
+	"github.com/sturlabragason/fleet/internal/summary"
 	"github.com/sturlabragason/fleet/internal/team"
 	"github.com/sturlabragason/fleet/internal/tmux"
 	"github.com/sturlabragason/fleet/internal/tools"
@@ -68,9 +70,14 @@ type Fleet struct {
 	// DrainQueue lets Refresh start the oldest queued agent when a working
 	// slot is free. Only the overview TUI sets it (DESIGN §7a).
 	DrainQueue bool
-	lastCap    map[string]time.Time
-	sweep      doneSweep
-	dead       deadReaper
+	// SummaryModel replaces the model behind PeekSummary; nil builds the
+	// CLI backend from the [summary] section of config.toml. Tests set it.
+	SummaryModel summary.Model
+	summarizer   *summary.Summarizer
+	summaryMu    sync.Mutex
+	lastCap      map[string]time.Time
+	sweep        doneSweep
+	dead         deadReaper
 }
 
 // Open builds a Fleet on the default socket and ~/.fleet.

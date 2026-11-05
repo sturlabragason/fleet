@@ -1,13 +1,20 @@
 package mcp
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/sessions"
 	"github.com/sturlabragason/fleet/internal/status"
 )
+
+// summaryWait bounds fleet_peek summary=true, so an MCP call never hangs on
+// the model: comfortably inside a typical client tool timeout.
+const summaryWait = 50 * time.Second
 
 // waitingFor is the waiting_for cell: the prompt line, plus the options of
 // a numbered menu on screen (" [1 Yes | 2 Yes, and … | 3 No…]"), at most
@@ -148,6 +155,9 @@ func (s *Server) peek(a args) (string, error) {
 	if a.LastMessage {
 		return s.F.LastMessage(a.Name)
 	}
+	if a.Summary.Flag {
+		return s.peekSummary(a.Name)
+	}
 	n := a.Lines
 	if n <= 0 {
 		n = 20
@@ -167,6 +177,25 @@ func (s *Server) peek(a args) (string, error) {
 		return "", err
 	}
 	return lastLines(status.CleanScreen(out), n), nil
+}
+
+// peekSummary is fleet_peek summary=true: a few lines from the cheap model
+// (DESIGN §6.2, ADR-40). It fails open — when no summary can be made the
+// admiral is told to peek at the screen instead.
+func (s *Server) peekSummary(name string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), summaryWait)
+	defer cancel()
+	r, err := s.F.PeekSummary(ctx, name)
+	if err != nil {
+		return "", fmt.Errorf("no summary for %s: %v. Call fleet_peek without summary to read the screen", name, err)
+	}
+	switch {
+	case r.Stale:
+		return r.Text + "\n\n(cached " + sessions.Age(time.Since(r.At)) + " ago; the screen has changed since)", nil
+	case r.Cached:
+		return r.Text + "\n\n(cached; the screen has not changed for " + sessions.Age(time.Since(r.At)) + ")", nil
+	}
+	return r.Text, nil
 }
 
 func lastLines(text string, n int) string {
