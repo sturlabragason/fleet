@@ -1,5 +1,8 @@
-⠹ Thinking… step 3 of x (esc to interrupt)
+● Task: tidy README
+  ✓ read README.md · 184 lines
+  ✓ edit README.md · +12 −31
+  ✓ markdownlint README.md · clean
+  ✓ check links · 23 ok
 
-I want to run `make test` in ./a
-Approve? [y/n] 
-
+● I want to stage README.md  (./w2)
+Approve? [y/n]

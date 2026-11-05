@@ -3,41 +3,88 @@
 # Runs a separate tmux server (own TMUX_TMPDIR and FLEET_HOME), so a running
 # fleet is never touched. The admiral pane runs the fake profile: no tokens.
 # Needs: tmux, python3 with Pillow + fontTools, ImageMagick (magick).
+#
+# The shot is composed, not waited for: fake agents take "!work", "!wait",
+# "!error" and "!done" directives (internal/fake), so the wall always shows the
+# same believable mix of states. Geometry is overridable while drafting:
+#   SHOT_COLS=200 SHOT_ROWS=52 SHOT_FONT=14 SHOT_OUT=/tmp/draft SHOT_GIF=0 ...
 set -eu
 cd "$(dirname "$0")/.."
 ROOT=$PWD
+COLS=${SHOT_COLS:-200} ROWS=${SHOT_ROWS:-40} FONT=${SHOT_FONT:-15}
+OUT=${SHOT_OUT:-docs/img} GIF=${SHOT_GIF:-1} NAME=${SHOT_NAME:-hero}
 make build >/dev/null
 D=$(mktemp -d)
 mkdir -m 700 "$D/tmux"
 export TMUX_TMPDIR="$D/tmux" FLEET_HOME="$D/home" FLEET_ADMIRAL_PROFILE=fake
+# A config of our own, so the user's max_working or starting mode can't change
+# the picture. All eight agents run: the shot is about a busy fleet.
+printf '[defaults]\nmax_working = 0\n' > "$D/config.toml"
+export FLEET_CONFIG=$D/config.toml
 unset TMUX
 B=$ROOT/bin/fleet
+# Address the servers by socket path, not by name: a caller with a cleared
+# environment would otherwise resolve "-L fleet" to the user's real server and
+# type directives into their admiral.
+SOCK=$D/tmux/tmux-$(id -u)
+T="tmux -S $SOCK/fleet"
+S="tmux -S $SOCK/fleet-test-shot"
 cleanup() {
-  tmux -S "$D/tmux/tmux-$(id -u)/fleet-test-shot" kill-server 2>/dev/null || true
-  tmux -S "$D/tmux/tmux-$(id -u)/fleet" kill-server 2>/dev/null || true
+  $S kill-server 2>/dev/null || true
+  $T kill-server 2>/dev/null || true
   rm -r "$D"
 }
 trap cleanup EXIT
+
+# The wall agents carry the story; the rest fill the overview tiles.
+WALL="api-auth web-nav infra-dns db-migrate"
 "$B" up --no-attach
-for n in api-auth web-nav infra-dns db-migrate ci-cache docs search-idx billing-fix; do
+for n in $WALL ci-cache docs search-idx billing-fix; do
   "$B" spawn --fake "$n" /tmp >/dev/null
 done
 sleep 2
-for n in web-nav api-auth infra-dns ci-cache; do "$B" wall show "$n"; done
-tmux -L fleet-test-shot new-session -d -x 200 -y 52 -s shot \
-  "env TMUX_TMPDIR=$D/tmux TERM=xterm-256color tmux -L fleet attach -t fleet:main"
-sleep 20
-for n in ci-cache docs db-migrate; do "$B" send "$n" y; done
+"$B" wall preset 4 >/dev/null
+for n in $WALL; do "$B" wall add "$n" >/dev/null; done
+
+$S new-session -d -x "$COLS" -y "$ROWS" -s shot \
+  "env TERM=xterm-256color tmux -S $SOCK/fleet attach -t fleet:main"
 sleep 3
-mkdir -p docs/img "$D/frames"
-tmux -L fleet-test-shot capture-pane -e -p -t shot > "$D/hero.ans"
-python3 scripts/ansi2png.py "$D/hero.ans" docs/img/hero.png 14
+
+# One of each state on the wall: working, waiting on you, done, failed. Every
+# directive names its task, so no two panes tell the same story.
+"$B" send web-nav '!work add search endpoint' >/dev/null
+"$B" send api-auth '!wait refactor auth middleware' >/dev/null
+"$B" send db-migrate '!done write migration' >/dev/null
+"$B" send infra-dns '!error bump dependencies' >/dev/null
+# The admiral is a pane, not a board agent, so it is driven through tmux.
+SUP=$($T list-panes -a -F '#{pane_id} #{@role}' | awk '$2=="sup"{print $1; exit}')
+if [ -z "$SUP" ]; then echo "no admiral pane: the shot would show a random state" >&2; exit 1; fi
+$T send-keys -t "$SUP" '!work watch the fleet' Enter
+# Tiles: a second agent waiting on you, the rest working.
+"$B" send search-idx '!wait fix flaky e2e' >/dev/null
+"$B" send ci-cache '!work update deploy config' >/dev/null
+"$B" send docs '!work tidy README' >/dev/null
+"$B" send billing-fix '!work add tests for board store' >/dev/null
+sleep 17
+
+mkdir -p "$OUT" "$D/frames"
+$S capture-pane -e -p -t shot > "$D/shot.ans"
+python3 scripts/ansi2png.py "$D/shot.ans" "$OUT/$NAME.png" "$FONT" "$COLS" "$ROWS"
+echo "wrote $OUT/$NAME.png"
+[ "$GIF" = 1 ] || exit 0
+
+# The demo tells one story: an approval arrives, you answer it, work resumes.
 for i in $(seq -w 1 24); do
-  tmux -L fleet-test-shot capture-pane -e -p -t shot > "$D/frames/$i.ans"
-  [ "$i" = 08 ] && "$B" send web-nav y
-  [ "$i" = 14 ] && "$B" send infra-dns y
+  $S capture-pane -e -p -t shot > "$D/frames/$i.ans"
+  case $i in
+    06) "$B" send api-auth y >/dev/null ;;
+    10) "$B" send infra-dns '!work fix flaky e2e' >/dev/null ;;
+    14) "$B" send search-idx y >/dev/null ;;
+    18) "$B" send db-migrate '!work write migration' >/dev/null ;;
+    22) "$B" send web-nav '!done' >/dev/null ;;
+  esac
   sleep 0.5
 done
-for f in "$D"/frames/*.ans; do python3 scripts/ansi2png.py "$f" "${f%.ans}.png" 11; done
-magick -delay 50 -loop 0 "$D"/frames/*.png -layers Optimize -colors 64 docs/img/demo.gif
-echo "wrote docs/img/hero.png docs/img/demo.gif"
+for f in "$D"/frames/*.ans; do python3 scripts/ansi2png.py "$f" "${f%.ans}.png" $((FONT - 3)) "$COLS" "$ROWS"; done
+magick -delay 50 -loop 0 "$D"/frames/*.png -layers Optimize -colors 64 "$OUT/demo.gif"
+echo "wrote $OUT/demo.gif"

@@ -74,8 +74,20 @@ func TestStuckSameErrorTwice(t *testing.T) {
 	if !strings.Contains(mem.Why(), "the same error twice in a row") {
 		t.Errorf("reason: %q", mem.Why())
 	}
-	if !strings.Contains(mem.Why(), "build failed") {
-		t.Errorf("reason should quote the banner: %q", mem.Why())
+	// Derive the banner from the fixture, so recapturing it with `fleet snap`
+	// cannot break this assertion.
+	var banner string
+	for _, l := range strings.Split(errScreen, "\n") {
+		if strings.HasPrefix(l, "✖ Error:") {
+			banner = l
+			break
+		}
+	}
+	if banner == "" {
+		t.Fatal("the error fixture has no ✖ Error: banner")
+	}
+	if !strings.Contains(mem.Why(), banner) {
+		t.Errorf("reason should quote the banner %q: %q", banner, mem.Why())
 	}
 }
 

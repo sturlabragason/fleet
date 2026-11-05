@@ -1,3 +1,8 @@
-⠹ Thinking… step 9 (esc to interrupt)
+● Task: tidy README
+  ✓ read README.md · 184 lines
+  ✓ edit README.md · +12 −31
+  ✓ markdownlint README.md · clean
+  ✓ check links · 23 ok
 
-✖ Error: build failed: exit status 1 (x)
+✖ Error: check links failed (1 of 23)
+  README.md:77: dead link to docs/old-setup.md

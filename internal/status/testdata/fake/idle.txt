@@ -1,4 +1,8 @@
-✖ Error: build failed
+● Task: write migration
+  ✓ read db/schema.sql · 412 lines
+  ✓ new db/migrations/0042_add_sessions.sql
+  ✓ edit 0042_add_sessions.sql · +28 −0
+  ✓ migrate up --dry-run · 0 destructive
 
-✔ Done: x
-> 
+✔ Done: write migration · sessions table · reversible
+>

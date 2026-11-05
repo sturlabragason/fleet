@@ -252,10 +252,18 @@ Screenshots:
 
 - Made with fake agents (`scripts/screenshot.sh`), never with a real session. A real pane leaks
   repository names, paths and prompts, and `check-public.sh` cannot see inside a PNG.
+- Composed, not waited for: the script holds each agent in a chosen state with the fake agent's
+  `!work`, `!wait`, `!error` and `!done` directives (ADR-52), so the wall always shows one agent
+  working, one waiting on you, one failed and one done. Regenerating after a palette or layout
+  change gives the same composition, not a new roll of the dice.
 - Agent names come from the generic set used elsewhere in the docs (`api-auth`, `web-nav`,
   `infra-dns`). No client or employer words, ever.
 - One window, full fleet layout, no desktop around it, no window shadow, no rounded corners, no
-  device frame, no cursor.
+  device frame, no cursor. The padding around the capture is the terminal's own ground, so the
+  image has no edge of its own.
+- 200 columns by 40 rows at 15 px (`SHOT_COLS`, `SHOT_ROWS`, `SHOT_FONT`), which is the widest
+  the tmux status line stays untruncated and the shortest that leaves no dead band under the
+  panes. The gif renders on the same pinned grid, so every frame is the same size.
 - Every screenshot has a caption in `<sub>` saying what is in it and that it was made with fake
   agents. A reader must never mistake a demo for a measurement.
 - The terminal uses the Mocha palette and the same font at the same size in every shot.

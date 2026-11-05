@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Render a `tmux capture-pane -e -p` dump to PNG on a fixed character grid.
 
-usage: ansi2png.py in.ans out.png [font-size]
+usage: ansi2png.py in.ans out.png [font-size] [cols] [rows]
+
+Give cols and rows to pin the grid: every frame of an animation then comes out
+the same size, whatever the panes happen to hold.
 Needs Pillow and fontTools. Used by scripts/screenshot.sh for docs/img.
 """
 import re
@@ -20,7 +23,13 @@ FONTS = [  # first font that has the glyph wins
     "/usr/share/fonts/google-noto/NotoSansMath-Regular.ttf",
 ]
 BOLD = "/usr/share/fonts/adwaita-mono-fonts/AdwaitaMono-Bold.ttf"
-BG, FG = (13, 17, 23), (201, 209, 217)
+# The ground and the default text are a pinned copy of the TUI's Base and Text
+# (Catppuccin Mocha today), so the padding around the capture is the same colour
+# as the terminal inside it. It is a copy, not a read: if internal/theme changes
+# its Base or Text, edit these two tuples by hand and re-run scripts/screenshot.sh.
+# No window chrome, no shadow, no rounded corners: a screenshot is a terminal,
+# not a device (docs/style.md §5).
+BG, FG = (30, 30, 46), (205, 214, 244)
 BASE16 = [(0, 0, 0), (205, 49, 49), (13, 188, 121), (229, 229, 16), (36, 114, 200), (188, 63, 188), (17, 168, 205), (229, 229, 229),
           (102, 102, 102), (241, 76, 76), (35, 209, 139), (245, 245, 67), (59, 142, 234), (214, 112, 214), (41, 184, 219), (255, 255, 255)]
 
@@ -101,20 +110,21 @@ def parse(text):
 def main():
     src, dst = sys.argv[1], sys.argv[2]
     size = int(sys.argv[3]) if len(sys.argv) > 3 else 14
+    grid = (int(sys.argv[4]), int(sys.argv[5])) if len(sys.argv) > 5 else None
     rows = parse(open(src, encoding="utf-8").read())
+    if grid:
+        rows = (rows + [[]] * grid[1])[:grid[1]]
     fonts = [(ImageFont.truetype(p, size), set(TTFont(p, fontNumber=0).getBestCmap())) for p in FONTS]
     bold = ImageFont.truetype(BOLD, size)
     cw = round(fonts[0][0].getlength("M"))
     ch = round(size * 1.3)
-    pad, bar = 16, 28
-    cols = max(len(r) for r in rows)
-    img = Image.new("RGB", (cols * cw + 2 * pad, len(rows) * ch + 2 * pad + bar), BG)
+    pad = round(size * 1.4)
+    cols = grid[0] if grid else max(len(r) for r in rows)
+    img = Image.new("RGB", (cols * cw + 2 * pad, len(rows) * ch + 2 * pad), BG)
     d = ImageDraw.Draw(img)
-    for i, c in enumerate([(255, 95, 86), (255, 189, 46), (39, 201, 63)]):
-        d.ellipse((pad + i * 20, 9, pad + i * 20 + 11, 20), fill=c)
     for y, row in enumerate(rows):
         for x, (c, f, b, bo, di) in enumerate(row):
-            px, py = pad + x * cw, pad + bar + y * ch
+            px, py = pad + x * cw, pad + y * ch
             if b:
                 d.rectangle((px, py, px + cw - 1, py + ch - 1), fill=b)
             if not c or c == " ":

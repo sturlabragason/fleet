@@ -28,7 +28,7 @@ func stuckFleet(t *testing.T, cfg string) (*Fleet, *[]string) {
 	t.Setenv("FLEET_CONFIG", path)
 	os.WriteFile(filepath.Join(home, "tools.toml"), []byte(`[frozen]
 command = "sh"
-args = ["-c", "printf '● Task: x\n⠹ Thinking… step 3 of x (esc to interrupt)\n'; sleep 600"]
+args = ["-c", "printf '● Task: x\n⠹ working · 3s · (esc to interrupt)\n'; sleep 600"]
 patterns = "fake"
 `), 0o644)
 	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}

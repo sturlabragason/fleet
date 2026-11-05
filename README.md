@@ -3,8 +3,6 @@
   <img src="docs/img/lockup.svg" height="64" alt="fleet">
 </picture>
 
-# fleet
-
 See and steer many coding-agent sessions (Copilot CLI, Claude Code, agy, vibe) from one tmux window, with an LLM admiral that can act on them for you.
 
 ![fleet: the admiral on the left, overview tiles top right, a 2×2 wall of live agent panes below](docs/img/hero.png)
@@ -37,7 +35,7 @@ Session switchers make moving between agents faster, but you still do all the su
 - **Agent mail**: agents message each other with `fleet mail` or peer MCP tools. Free inside a team or a repo, otherwise one agent asks and you decide.
 - **CLI** for scripting: `spawn`, `adopt`, `sessions`, `ls`, `send`, `peek`, `close`, `team`, `mail`, `access`, `report`, `spend`, `admiral`, `note`, `playbook`, `touching`, `merge`, `profiles`, `keys`, `changes`, `snap`, `wall`.
 - **Spend**: `fleet spend` shows what each agent has cost so far and the fleet total — AI credits for Copilot agents, tokens for Claude — read from the agents' own session files, never from a model.
-- **Fake agents** that cycle through states, so you can try everything without spending tokens.
+- **Fake agents** that cycle through states and print scripted work (reads, edits, test runs), so you can try everything without spending tokens. `fleet send <name> "!wait"` (or `!work`, `!error`, `!done`) holds one in a chosen state, which is how the screenshot above is composed.
 
 Planned, not built yet: park/wake to save RAM, tool hooks instead of screen scraping, a spawn wizard, approve/reject keys in the TUI, notifications. See [Roadmap](#roadmap).
 
