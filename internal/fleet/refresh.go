@@ -43,6 +43,11 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 	now := time.Now()
 	var out []*board.Agent
 	var claimed *board.Agent
+	var stuck []stuckNote
+	// Only the process that drains the queue (the overview TUI) claims and
+	// reports stuck episodes, so a one-shot `fleet ls` neither wakes the
+	// admiral nor burns the one notification this episode gets.
+	tell := f.DrainQueue && perr == nil
 	err := f.Store.Update(func(b *board.Board) error {
 		for _, a := range b.Agents {
 			prev := a.Status
@@ -66,6 +71,10 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 				// set by an older fleet): re-sync without resetting the age.
 				f.tagPane(id, next, a.StatusSince)
 			}
+			if tell && a.Stuck.Stuck() && !a.Stuck.Notified {
+				a.Stuck.Notified = true
+				stuck = append(stuck, stuckNote{name: a.Name, profile: a.Profile, pane: ids[a.Name], reason: a.Stuck.Reason, line: a.LastLine})
+			}
 		}
 		// A failed pane listing makes every agent look gone (busy 0):
 		// never drain on that.
@@ -77,6 +86,9 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 	})
 	if claimed != nil {
 		go f.startQueued(claimed)
+	}
+	for _, n := range stuck {
+		go f.reportStuck(n)
 	}
 	f.syncTeams(agentPanes)
 	if f.DrainQueue && perr == nil {
@@ -129,6 +141,7 @@ func (f *Fleet) syncTeams(panes []tmux.PaneInfo) {
 
 func (f *Fleet) classify(a *board.Agent, alive, dead bool, pane string, now time.Time) string {
 	if !alive {
+		a.Stuck = nil // nothing to grind on without a pane
 		if pending(a.Status) {
 			return keepPending(a, now)
 		}
@@ -140,6 +153,9 @@ func (f *Fleet) classify(a *board.Agent, alive, dead bool, pane string, now time
 		return string(status.Unknown)
 	}
 	if dead {
+		// A dead pane is reported by the reaper, not the stuck rule; leaving
+		// the memory would re-assert a claimed episode when it comes back.
+		a.Stuck = nil
 		a.LastLine = "process exited"
 		return string(status.Error)
 	}
@@ -167,11 +183,18 @@ func (f *Fleet) classify(a *board.Agent, alive, dead bool, pane string, now time
 			st = status.Unknown
 		}
 	}
-	if (st == status.Working || st == status.Stuck) && now.Sub(a.LastChange) > StuckAfter {
-		st = status.Stuck
-	} else if st == status.Stuck {
-		st = status.Working
+	errLine := line
+	if st == status.Error && errLine == "" {
+		errLine = a.LastLine
 	}
+	st, a.Stuck = status.NextStuck(a.Stuck, status.StuckIn{
+		Status:  st,
+		Line:    errLine,
+		Changed: changed,
+		Still:   now.Sub(a.LastChange),
+		After:   f.Prefs.For(a.Profile).StuckAfter,
+		Now:     now,
+	})
 	return string(st)
 }
 

@@ -38,6 +38,9 @@ type Agent struct {
 	SubKnown []status.KnownSub `json:"sub_known,omitempty"`
 	// Report is the agent's latest report to the admiral (DESIGN §6.7).
 	Report *Report `json:"report,omitempty"`
+	// Stuck is the current stuck episode and the error-repeat memory the
+	// stuck rule keeps between refreshes (DESIGN §4, ADR-45).
+	Stuck *status.StuckState `json:"stuck,omitempty"`
 	// Baseline is the dir's git state at spawn, so auto-close can tell the
 	// agent's own changes from earlier ones (DESIGN §6.7). nil: not a git
 	// work tree, adopted, or spawned by an older fleet.

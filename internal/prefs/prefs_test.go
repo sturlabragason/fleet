@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sturlabragason/fleet/internal/status"
 )
 
 func write(t *testing.T, body string) string {
@@ -178,6 +180,44 @@ dead_pane_grace = "-1m"
 	for prof, want := range map[string]time.Duration{"copilot": 2 * time.Minute, "zero": 0, "off": GraceOff, "bad": 2 * time.Minute} {
 		if got := p.For(prof).DeadPaneGrace; got != want {
 			t.Errorf("%s: %v want %v", prof, got, want)
+		}
+	}
+}
+
+func TestStuckAfterAndAction(t *testing.T) {
+	write(t, `
+[defaults]
+stuck_after = "2m"
+
+[profile.off]
+stuck_after = " Off "
+
+[profile.bad]
+stuck_after = "0"
+
+[profile.quick]
+stuck_after = "30s"
+stuck_action = " Interrupt "
+
+[profile.typo]
+stuck_action = "pause"
+`)
+	p, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if Neutral().StuckAfter != status.DefaultStuckAfter || Neutral().StuckAction != StuckNone {
+		t.Errorf("default %v %q", Neutral().StuckAfter, Neutral().StuckAction)
+	}
+	for prof, want := range map[string]time.Duration{"copilot": 2 * time.Minute, "off": 0, "bad": 2 * time.Minute, "quick": 30 * time.Second} {
+		if got := p.For(prof).StuckAfter; got != want {
+			t.Errorf("%s: stuck_after %v, want %v", prof, got, want)
+		}
+	}
+	// A typo must never start pressing keys in an agent's pane.
+	for prof, want := range map[string]string{"copilot": StuckNone, "quick": StuckInterrupt, "typo": StuckNone} {
+		if got := p.For(prof).StuckAction; got != want {
+			t.Errorf("%s: stuck_action %q, want %q", prof, got, want)
 		}
 	}
 }

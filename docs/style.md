@@ -202,7 +202,7 @@ Status colours carry meaning, and that meaning is fixed:
 | `working` | `theme.Working` | Green `#a6e3a1` | Running, needs nothing from you |
 | `waiting` | `theme.Waiting` / `WaitingAlt` | Yellow `#f9e2af`, pulsing to Peach `#fab387` | Wants an answer from you |
 | `error` | `theme.Error` | Red `#f38ba8` | Failed |
-| `stuck` | `theme.Stuck` | Maroon `#eba0ac` | No output for a long time |
+| `stuck` | `theme.Stuck` | Maroon `#eba0ac` | Grinding: the same error twice, or no output for a long time |
 | `idle` | `theme.Idle` | Overlay1 `#7f849c` | Alive, nothing to do |
 | `gone` | `theme.Gone` | Surface2 `#585b70` | Process ended |
 | `queued` | `theme.Gone` | Surface2 `#585b70` | Waiting for a slot, no pane yet |

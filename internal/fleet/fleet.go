@@ -35,9 +35,6 @@ const (
 	WindowPrefix = "ag-"
 )
 
-// StuckAfter is how long a working pane may stay unchanged before it is stuck.
-var StuckAfter = 10 * time.Minute
-
 // Fleet bundles the dependencies.
 type Fleet struct {
 	T        *tmux.Client

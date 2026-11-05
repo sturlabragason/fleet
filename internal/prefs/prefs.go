@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/conf"
+	"github.com/sturlabragason/fleet/internal/status"
 )
 
 // DefaultReadyTimeout is how long spawn waits for a TUI to accept input.
@@ -43,7 +44,23 @@ type Spawn struct {
 	// Worktree gives a spawn into a git repo its own worktree and branch
 	// (DESIGN §4, ADR-39). false spawns straight into the dir.
 	Worktree bool
+	// StuckAfter is how long a working pane may stay unchanged before the
+	// agent counts as stuck (DESIGN §4, ADR-45); 0 = that trigger is off.
+	// The same-error-twice trigger is always on and is not timed.
+	StuckAfter time.Duration
+	// StuckAction is what fleet does to a stuck agent besides labelling it
+	// and telling the admiral: StuckNone (the default) or StuckInterrupt,
+	// which sends Escape once per episode.
+	StuckAction string
 }
+
+// Stuck actions for stuck_action: tell the admiral only (the default), or
+// send Escape to the pane as well. Fleet never kills or parks an agent for
+// being stuck (ADR-45).
+const (
+	StuckNone      = "none"
+	StuckInterrupt = "interrupt"
+)
 
 // GraceOff is DeadPaneGrace for dead_pane_grace = "off".
 const GraceOff time.Duration = -1
@@ -52,9 +69,10 @@ const GraceOff time.Duration = -1
 const DefaultDeadPaneGrace = 5 * time.Minute
 
 // Neutral is the built-in default: no mode, auto-submit, DefaultReadyTimeout,
-// worker playbook on, DefaultDeadPaneGrace, a worktree per agent.
+// worker playbook on, DefaultDeadPaneGrace, a worktree per agent, the stuck
+// rule's default timeout and no action on stuck.
 func Neutral() Spawn {
-	return Spawn{AutoSubmit: true, ReadyTimeout: DefaultReadyTimeout, Playbook: true, DeadPaneGrace: DefaultDeadPaneGrace, Worktree: true}
+	return Spawn{AutoSubmit: true, ReadyTimeout: DefaultReadyTimeout, Playbook: true, DeadPaneGrace: DefaultDeadPaneGrace, Worktree: true, StuckAfter: status.DefaultStuckAfter, StuckAction: StuckNone}
 }
 
 // DefaultMaxWorking caps how many agents may be working at once before new
@@ -173,6 +191,20 @@ func applySpawn(s Spawn, sec map[string]conf.Value) Spawn {
 	}
 	if v, ok := conf.Bool(sec, "worktree"); ok {
 		s.Worktree = v
+	}
+	if v, ok := sec["stuck_after"].(string); ok && strings.EqualFold(strings.TrimSpace(v), "off") {
+		s.StuckAfter = 0
+	} else if v, ok := conf.Dur(sec, "stuck_after"); ok && v > 0 {
+		s.StuckAfter = v
+	}
+	// A value that is not "interrupt" means none, so a typo can never start
+	// pressing keys in an agent's pane.
+	if v, ok := sec["stuck_action"].(string); ok {
+		if strings.EqualFold(strings.TrimSpace(v), StuckInterrupt) {
+			s.StuckAction = StuckInterrupt
+		} else {
+			s.StuckAction = StuckNone
+		}
 	}
 	if v, ok := conf.Dur(sec, "ready_timeout"); ok && v > 0 {
 		s.ReadyTimeout = v

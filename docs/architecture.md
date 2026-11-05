@@ -69,7 +69,7 @@ Every second the overview (and every `fleet ls` or `fleet_status`) runs `Refresh
 
 1. List panes on the `fleet` server and match them to board entries by `@fleet_agent`.
 2. Capture each pane, hash it, keep the last line.
-3. Classify with the agent's pattern set; no match but changed text counts as working; unchanged for 10 minutes while working is stuck; dead process is error; missing pane is gone.
+3. Classify with the agent's pattern set; no match but changed text counts as working; the same error banner twice in a row, or working with no screen change for `stuck_after` (default 10m), is stuck (ADR-45); dead process is error; missing pane is gone.
 4. On a change, write the board, append to `events.jsonl`, log it, and set `@fleet_status`, `@fleet_color` and `@fleet_glyph` on the pane so the tmux border shows the status.
 
 ## Not built yet
