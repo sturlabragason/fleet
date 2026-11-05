@@ -49,21 +49,29 @@ Order by what the branches actually are, in this order:
 A coordinator resolves a tie the branch state cannot; it is not a permission gate. Never block on a
 reply you can derive. (`docs/process.md`, *Merge order for overlapping work*.)
 
-## 2. Claim your ADR number from the prompt, not from DESIGN.md
+## 2. Claim your ADR number from the prompt, or from `fleet adr claim`
 
 The spawn prompt assigns it (`you own ADR-44`). Use that number from the start — in the ADR section,
-the CHANGELOG line and the commit. Do not read §14 to "find the next free one": four agents did that
+the CHANGELOG line and the commit. Never read §14 to "find the next free one": four agents did that
 on the same day and renumbered 38 → 40 → 41 between them.
 
-If your prompt gave you no number, at merge time:
+If your prompt gave you no number, take one from the lock (ADR-50):
+
+```sh
+fleet adr claim --for <your-agent-name>   # prints the number; fleet adr ls shows live claims
+```
+
+It is atomic across every worktree, so two agents claiming at once get different numbers, and you can
+claim at the *start* of the work rather than racing at merge time. Tell the admiral the number you
+took. The claim frees itself when your ADR lands on main; `fleet adr release N` gives back one you
+did not use.
+
+Without the `fleet` binary, fall back to reading main and merging **immediately** — the gap between
+reading and merging is the race:
 
 ```sh
 git fetch -q . main && git --no-pager grep -h -o -E '^\*\*ADR-[0-9]+' main -- DESIGN.md | sort -t- -k2 -n | tail -1
 ```
-
-Take the next one, merge **immediately**, and tell the admiral the number you took. The gap between
-reading and merging is the race; keep it to seconds. Before merging, re-run the grep: if someone
-took your number first, renumber yours (it is one bold entry, one CHANGELOG bracket, one commit body).
 
 ## 3. The two shared-file conflicts
 

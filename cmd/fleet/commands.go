@@ -95,6 +95,10 @@ const usage = `usage:
   fleet touching [-C dir] [--json] [file...]
                                             files other worktrees of this repo change; with files, only
                                             the overlaps (exit 0 none, 1 overlap, 2 error)
+  fleet adr claim [--for AGENT] [-C dir]    take the next free ADR number for DESIGN.md §14 and print it;
+                                            atomic, so parallel agents never pick the same one
+  fleet adr ls [--json] [-C dir]            ADR numbers claimed but not yet on main
+  fleet adr release <N> [-C dir]            give a number back (a claim also frees itself once its ADR is on main)
   fleet merge [-C dir] [--dry-run [--json]] [--check CMD] [--retries N]
                                             rebase this worktree's branch onto main, run the checks,
                                             merge into the local main checkout and run them again.
@@ -150,6 +154,8 @@ func run(args []string) error {
 		return cmdPlaybook(rest)
 	case "touching":
 		return cmdTouching(rest)
+	case "adr":
+		return cmdADR(rest)
 	case "merge":
 		return cmdMerge(rest)
 	}

@@ -15,7 +15,7 @@ Check, in order, and report only real problems:
 5. Tests: would they fail without the change? Missing a case the brief lists? Status or tool-output parsing must use a captured fixture under `internal/status/testdata/`, never a hand-written screen (ADR-42).
 6. Docs: usage text, `internal/mcp/instructions.md` if MCP changed, and a `CHANGELOG.md` line for a user-facing change — at the top of today's `## YYYY-MM-DD` section, saying what the user can do now. A change with no user-visible behaviour (docs, skills, agents, refactors) should add **no** CHANGELOG line; flag one that does.
 7. Spawn, worktree or report behaviour changed: does `internal/playbook/worker.md` still describe what the code now does? After ADR-39 it told agents to delete their own working directory for half a day.
-8. ADR hygiene: an ADR number is the one the spawn prompt assigned, every reference to it agrees (§14 heading, CHANGELOG bracket, commit body), and it does not collide with a number already on `main`. Four agents renumbered each other in one day.
+8. ADR hygiene: an ADR number is the one the spawn prompt assigned, or one taken with `fleet adr claim` (ADR-50); every reference to it agrees (§14 heading, CHANGELOG bracket, commit body), and it does not collide with a number already on `main` or a live `fleet adr ls` claim. Four agents renumbered each other in one day.
 9. Publishable: no home paths, hostnames, employer or client names, emails or tokens anywhere in the diff, fixtures included. `scripts/check-public.sh HEAD` is the authority and has blocked a push over a test fixture before.
 
 You may run `go build ./... && go vet ./... && go test ./...` to confirm.
