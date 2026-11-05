@@ -122,9 +122,9 @@ func TestWakeEnterGuard(t *testing.T) {
 	a := fakeAdm(f, pasted, ptr(false))
 	f.Report("a", "done", "x")
 	*a.idle = true
-	a.beforeTyp = func(a *fakeAdmiral) { a.mu.Lock(); a.box = "on the agent sum"; a.mu.Unlock() }
+	a.beforeTyp = func(a *fakeAdmiral) { a.mu.Lock(); a.box = "on the acme sum"; a.mu.Unlock() }
 	f.DeliverWake()
-	if a.box != "on the agent sum" || len(a.submitted) != 0 {
+	if a.box != "on the acme sum" || len(a.submitted) != 0 {
 		t.Fatalf("box %q submitted %q", a.box, a.submitted)
 	}
 	// Typed after the paste: fleet's line is removed and the user's

@@ -199,11 +199,11 @@ func TestInputBox(t *testing.T) {
 		t.Errorf("❯ layout empty: got %q %v", got, ok)
 	}
 	cl := sets["claude"]
-	claude := "> earlier question\n\n● answer\n\n────────\n> on the agent sum\n  mary it needs\n────────\n  ? for shortcuts\n"
-	if got, ok := cl.InputBox(claude); !ok || got != "on the agent sum mary it needs" {
+	claude := "> earlier question\n\n● answer\n\n────────\n> on the acme sum\n  mary it needs\n────────\n  ? for shortcuts\n"
+	if got, ok := cl.InputBox(claude); !ok || got != "on the acme sum mary it needs" {
 		t.Errorf("claude: got %q %v", got, ok)
 	}
-	if got, ok := cl.InputBox(strings.Replace(claude, "> on the agent sum\n  mary it needs", ">", 1)); !ok || got != "" {
+	if got, ok := cl.InputBox(strings.Replace(claude, "> on the acme sum\n  mary it needs", ">", 1)); !ok || got != "" {
 		t.Errorf("claude empty: got %q %v", got, ok)
 	}
 	if _, ok := sets["vibe"].InputBox("> hi\n"); ok {
