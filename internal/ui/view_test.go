@@ -235,3 +235,42 @@ func TestCursorCardBorderShape(t *testing.T) {
 		t.Errorf("unselected card is not the rounded border:\n%s", plain)
 	}
 }
+
+// The header carries the unread-report badge (ADR-36): nothing while the
+// admiral is up to date, "✉ N reports" while reports wait, and it clears
+// again once they are read. Narrow panes still get no over-wide line.
+func TestHeaderReportBadge(t *testing.T) {
+	zone.NewGlobal()
+	be := &fakeBE{}
+	m := New(be, "")
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 20})
+	head := func() string {
+		m.Update(m.poll()())
+		return ansi.Strip(m.header())
+	}
+	if h := head(); strings.Contains(h, reportMark) {
+		t.Errorf("badge with nothing unread: %q", h)
+	}
+	be.reports = 3
+	if h := head(); !strings.Contains(h, "✉ 3 reports") {
+		t.Errorf("3 unread: %q", h)
+	}
+	be.reports = 1
+	if h := head(); !strings.Contains(h, "✉ 1 report") || strings.Contains(h, "reports") {
+		t.Errorf("1 unread: %q", h)
+	}
+	be.reports = 0
+	if h := head(); strings.Contains(h, reportMark) {
+		t.Errorf("badge stayed after the reports were read: %q", h)
+	}
+	for _, w := range []int{60, 80, 150} {
+		m.Update(tea.WindowSizeMsg{Width: w, Height: 20})
+		be.reports = 12
+		m.Update(m.poll()())
+		for _, l := range strings.Split(ansi.Strip(m.View()), "\n") {
+			if ansi.StringWidth(l) > w {
+				t.Errorf("w=%d: line wider than pane: %q", w, l)
+			}
+		}
+	}
+}

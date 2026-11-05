@@ -24,6 +24,7 @@ type Backend interface {
 	Preset(p string) error                 // wall layout 1/2/4/6/9/m
 	Hide(name string) error                // send back to its hidden window
 	WallEnabled() bool
+	Reports() int     // unread admiral reports: the header's ✉ badge, 0 = none (ADR-36)
 	ApplyWall() error // re-tile after a refresh (cheap; cached layout)
 	// SupCtx is the admiral context meter: label ("34%") and colour,
 	// both "" when the fill is unknown.

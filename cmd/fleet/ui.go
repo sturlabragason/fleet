@@ -42,6 +42,9 @@ func (b *backend) ApplyWall() error {
 	return b.w.ApplyCached()
 }
 func (b *backend) WallEnabled() bool { return b.enabled }
+
+// Reports is how many reports the admiral has not read: the header badge (ADR-36).
+func (b *backend) Reports() int { return b.f.UnreadReports() }
 func (b *backend) OnWall() map[string]bool {
 	if !b.enabled {
 		return map[string]bool{}

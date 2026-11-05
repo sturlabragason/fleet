@@ -377,3 +377,26 @@ func TestSweepDoneClosesIdleDone(t *testing.T) {
 		t.Fatalf("extra close: %d", len(closed))
 	}
 }
+
+// UnreadReports is what the overview header's ✉ badge counts (ADR-36): only
+// reports, and only while the admiral has not read them.
+func TestUnreadReportsCountsOnlyUnreadReports(t *testing.T) {
+	f, _ := mailFleet(t)
+	if n := f.UnreadReports(); n != 0 {
+		t.Fatalf("fresh fleet: %d", n)
+	}
+	f.Report("a", "progress", "halfway")
+	f.Report("b", "done", "merged")
+	f.Mail().Send("a", mail.Admiral, "a plain message, not a report")
+	if n := f.UnreadReports(); n != 2 {
+		t.Fatalf("two reports and a message: %d, want 2", n)
+	}
+	f.Mail().Inbox(mail.Admiral, false, 0) // the admiral reads them
+	if n := f.UnreadReports(); n != 0 {
+		t.Fatalf("after reading: %d", n)
+	}
+	f.Report("a", "blocked", "need creds")
+	if n := f.UnreadReports(); n != 1 {
+		t.Fatalf("new report after reading: %d", n)
+	}
+}

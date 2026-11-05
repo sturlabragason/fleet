@@ -46,6 +46,19 @@ func (f *Fleet) Report(me, state, summary string) (note string, err error) {
 	return note, nil
 }
 
+// UnreadReports counts the admiral's unread reports (DESIGN §6.7). It is
+// what the overview header's ✉ badge and the tmux status line show; reading
+// them with fleet_reports marks them read and the count falls to 0 (ADR-36).
+func (f *Fleet) UnreadReports() int {
+	n := 0
+	for _, m := range f.Mail().Peek(mail.Admiral) {
+		if m.Kind == mail.KindReport {
+			n++
+		}
+	}
+	return n
+}
+
 // wakeHeadline caps the summary in the line typed into the admiral pane,
 // so the line fits on screen; the full text stays in the mailbox.
 const wakeHeadline = 100

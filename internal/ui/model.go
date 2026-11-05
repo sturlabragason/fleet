@@ -46,16 +46,18 @@ type Model struct {
 	now       func() time.Time
 	supCtx    [2]string // last label/colour set on the admiral border
 	ctxSet    bool
+	reports   int // unread admiral reports behind the header's ✉ badge (ADR-36)
 }
 
 type agentsMsg struct {
-	agents []*board.Agent
-	onWall map[string]bool
-	pinned map[string]bool
-	teams  map[string]team.Info
-	target string
-	supCtx [2]string
-	err    error
+	agents  []*board.Agent
+	onWall  map[string]bool
+	pinned  map[string]bool
+	teams   map[string]team.Info
+	target  string
+	supCtx  [2]string
+	reports int
+	err     error
 }
 
 // wallMsg is the outcome of a wall action: a message for the header and,
@@ -99,7 +101,7 @@ func (m *Model) poll() tea.Cmd {
 		// is what makes emphasis move when a pane starts waiting (§5b.3).
 		_ = be.ApplyWall()
 		l, c := be.SupCtx()
-		return agentsMsg{agents: as, onWall: be.OnWall(), pinned: be.Pinned(), teams: be.Teams(), target: be.Target(), supCtx: [2]string{l, c}, err: err}
+		return agentsMsg{agents: as, onWall: be.OnWall(), pinned: be.Pinned(), teams: be.Teams(), target: be.Target(), supCtx: [2]string{l, c}, reports: be.Reports(), err: err}
 	}
 }
 
@@ -141,6 +143,7 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 		m.pinned = msg.pinned
 		m.teams = msg.teams
 		m.target = msg.target
+		m.reports = msg.reports
 		m.setAgents(msg.agents) // tiers need the wall and teams
 		return m, tea.Batch(pollLater(), m.syncSupCtx(msg.supCtx))
 	case pollMsg:

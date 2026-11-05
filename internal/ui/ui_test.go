@@ -45,6 +45,7 @@ type fakeBE struct {
 	pinned        map[string]bool
 	previews      []string
 	menus         []string // "name x,y"
+	reports       int      // unread admiral reports the header badge shows
 }
 
 func (f *fakeBE) Refresh() ([]*board.Agent, error) {
@@ -83,6 +84,7 @@ func (f *fakeBE) SetSupCtx(l, c string) error {
 	return nil
 }
 func (f *fakeBE) ResetSup() error { f.resets++; return nil }
+func (f *fakeBE) Reports() int    { return f.reports }
 func (f *fakeBE) Undo() (string, string, error) {
 	f.undos++
 	return f.undoMsg, f.undoTarget, nil

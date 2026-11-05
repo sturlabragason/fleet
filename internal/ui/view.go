@@ -120,7 +120,8 @@ func (m *Model) header() string {
 	}
 	h := fmt.Sprintf(" fleet · %d agents · %d working · %d waiting · %d error", len(m.agents), counts["working"], counts["waiting"], counts["error"]+counts["stuck"])
 	idle := lipgloss.NewStyle().Foreground(colIdle)
-	room := m.w - ansi.StringWidth(h) - 2
+	badge := reportBadge(m.reports)
+	room := m.w - ansi.StringWidth(h) - ansi.StringWidth(badge) - 2
 	var hint string
 	switch {
 	case m.msg != "":
@@ -135,8 +136,28 @@ func (m *Model) header() string {
 	default:
 		hint = idle.Render("  " + keys.Hint(keys.ScopeOverview, room))
 	}
-	return ansi.Truncate(lipgloss.NewStyle().Bold(true).Render(h)+hint, m.w, "…")
+	return ansi.Truncate(lipgloss.NewStyle().Bold(true).Render(h)+badgeStyle.Render(badge)+hint, m.w, "…")
 }
+
+// reportBadge is the unread-report count for the header (ADR-36), "" when
+// nothing is unread; it clears as soon as the admiral reads the reports.
+func reportBadge(n int) string {
+	switch {
+	case n <= 0:
+		return ""
+	case n == 1:
+		return "  " + reportMark + " 1 report"
+	}
+	return fmt.Sprintf("  %s %d reports", reportMark, n)
+}
+
+// reportMark opens the unread-report badge, the same glyph the tmux status
+// line uses, so one unread batch reads the same in both places.
+const reportMark = "✉"
+
+// badgeStyle draws the unread-report badge: the waiting colour, the role the
+// status-line badge already wears for the same state. No new role.
+var badgeStyle = lipgloss.NewStyle().Foreground(colWaitA).Bold(true)
 
 // line3 is the tile's last line: the latest report while the agent is not
 // working (DESIGN §6.7), else the last screen line.
