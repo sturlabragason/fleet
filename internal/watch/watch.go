@@ -47,6 +47,7 @@ type Watcher struct {
 	paths            []string
 	last, lastStop   time.Time
 	beat, ok         time.Time
+	pending          bool
 	refreshes, ticks int
 }
 
@@ -85,12 +86,21 @@ func (w *Watcher) Step() bool {
 	w.ticks++
 	why := ""
 	if p := w.changed(); p != "" {
+		w.pending = true
+		why = "event " + p
+	}
+	if w.pending {
 		// Events coalesce: a busy agent writes its log many times a second,
-		// and one refresh covers every event since the last one.
+		// and one refresh covers every event since the last one. The event
+		// is held, never dropped, so the refresh still happens one tick
+		// after the gap rather than waiting for the baseline interval.
 		if !w.last.IsZero() && now.Sub(w.last) < w.minGap() {
 			return false
 		}
-		why = "event " + p
+		if why == "" {
+			why = "event (deferred)"
+		}
+		w.pending = false
 	} else if w.last.IsZero() || now.Sub(w.last) >= w.interval() {
 		why = "interval"
 	}

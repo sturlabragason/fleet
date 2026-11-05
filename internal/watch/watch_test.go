@@ -113,6 +113,34 @@ func TestEventsCoalesce(t *testing.T) {
 	}
 }
 
+// An event inside the coalescing gap is held, not dropped: the refresh
+// happens as soon as the gap is over, not at the next baseline interval.
+func TestEventInGapIsDeferred(t *testing.T) {
+	dir := t.TempDir()
+	log := filepath.Join(dir, "events.jsonl")
+	os.WriteFile(log, []byte("start\n"), 0o644)
+	n := 0
+	now := time.Now()
+	w := &Watcher{Home: t.TempDir(), Refresh: func() error { n++; return nil },
+		Paths: func() []string { return []string{log} }, Interval: time.Hour,
+		MinGap: 500 * time.Millisecond, Now: func() time.Time { return now }}
+	w.Step()
+	was := n
+	// One event, then quiet: it lands inside the gap and must still be
+	// refreshed about half a second later.
+	os.WriteFile(log, []byte("start\nline\n"), 0o644)
+	now = now.Add(100 * time.Millisecond)
+	w.Step()
+	if n != was {
+		t.Fatal("the gap did not hold the event")
+	}
+	now = now.Add(500 * time.Millisecond)
+	w.Step()
+	if n != was+1 {
+		t.Errorf("deferred event never refreshed (%d refreshes)", n-was)
+	}
+}
+
 func TestBeatLive(t *testing.T) {
 	home := t.TempDir()
 	now := time.Now()
@@ -151,7 +179,8 @@ func TestBeatLive(t *testing.T) {
 }
 
 // Claim is the token two fleets racing to start a watcher fight over: the
-// second one loses while the first is live, and takes over when it is not.
+// lock's own pid decides, so a watcher that is merely wedged or failing —
+// not just a live one — still keeps the claim, and only a dead pid loses it.
 func TestClaim(t *testing.T) {
 	home := t.TempDir()
 	now := time.Now()
@@ -161,21 +190,48 @@ func TestClaim(t *testing.T) {
 	if !Live(home, now) {
 		t.Error("claiming did not make a live heartbeat")
 	}
-	// Another process holding a live claim blocks us (pid 1 always exists).
-	WriteBeat(home, Beat{PID: 1, Started: now, At: now, OK: now})
-	if _, err := Claim(home, now); err == nil {
-		t.Error("claimed a home another live watcher holds")
+	if _, ok := Running(home); !ok {
+		t.Error("a claimed home has no running watcher")
 	}
-	// A dead holder does not.
-	WriteBeat(home, Beat{PID: 0x7FFFFFFF, Started: now, At: now, OK: now})
-	if _, err := Claim(home, now); err != nil {
-		t.Errorf("stale claim not taken over: %v", err)
+	cases := []struct {
+		name  string
+		lock  string
+		beat  *Beat
+		claim bool
+	}{
+		{"live holder", "1\n", &Beat{PID: 1, Started: now, At: now, OK: now}, false},
+		// Finding: a holder that has not written its first beat yet, and a
+		// holder whose beat has gone stale (wedged in a capture, or every
+		// refresh failing), both still hold the lock.
+		{"holder with no beat yet", "1\n", nil, false},
+		{"stale holder", "1\n", &Beat{PID: 1, Started: now.Add(-time.Hour), At: now.Add(-time.Minute), OK: now.Add(-time.Minute)}, false},
+		{"dead holder", "2147483647\n", &Beat{PID: 0x7FFFFFFF, Started: now, At: now, OK: now}, true},
+		{"junk lock", "\n", nil, true},
 	}
+	for _, c := range cases {
+		os.WriteFile(filepath.Join(home, "watch.lock"), []byte(c.lock), 0o644)
+		os.Remove(BeatPath(home))
+		if c.beat != nil {
+			WriteBeat(home, *c.beat)
+		}
+		_, err := Claim(home, now)
+		if c.claim && err != nil {
+			t.Errorf("%s: claim refused: %v", c.name, err)
+		}
+		if !c.claim && err == nil {
+			t.Errorf("%s: claimed a home someone else holds", c.name)
+		}
+	}
+	// Our own claim is ours to release; a stranger's is not.
+	Claim(home, now)
 	Release(home)
 	if _, ok := ReadBeat(home); ok {
 		t.Error("release left a heartbeat")
 	}
-	if _, err := Claim(home, now); err != nil {
-		t.Errorf("claim after release: %v", err)
+	WriteBeat(home, Beat{PID: 1, Started: now, At: now, OK: now})
+	os.WriteFile(filepath.Join(home, "watch.lock"), []byte("1\n"), 0o644)
+	Clear(home)
+	if _, ok := ReadBeat(home); !ok {
+		t.Error("Clear removed a live watcher's claim")
 	}
 }

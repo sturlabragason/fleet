@@ -111,8 +111,11 @@ func TestPlainMenuShape(t *testing.T) {
 	}
 }
 
+// Shape check, not a fixture (ADR-42 keeps captured screens in testdata):
 // ">" is agy's cursor but also starts a quoted shell command in an agent's
-// own output. A quoted block with no key hint under it is not a menu.
+// own prose, so the parser needs the picker's key hint under the options
+// before it calls a ">" block a menu. The captured screens cover the real
+// cases: every non-waiting fixture is swept in TestPlainMenuNoFalsePositives.
 func TestQuotedBlockIsNotAMenu(t *testing.T) {
 	screen := strings.Join([]string{
 		"I ran the checks you asked for:",

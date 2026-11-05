@@ -64,24 +64,25 @@ func cmdWatch(f *fleet.Fleet, args []string) error {
 // stopWatcher signals a running watcher to exit (it drops its heartbeat on
 // the way out, so the next `fleet up` starts a fresh one).
 func stopWatcher(f *fleet.Fleet) error {
-	b, ok := watch.ReadBeat(f.Home)
-	if !ok || !watch.Live(f.Home, time.Now()) {
-		// A heartbeat left by a crash names a pid that may since have been
-		// recycled: never signal that.
-		watch.Release(f.Home)
+	// A pid is signalled only while the process still exists: a heartbeat
+	// left by a crash names a pid that may since have been recycled. A
+	// watcher whose refreshes are failing is still stoppable.
+	pid, ok := watch.Running(f.Home)
+	if !ok {
+		watch.Clear(f.Home)
 		fmt.Println("no watcher running")
 		return nil
 	}
-	p, err := os.FindProcess(b.PID)
+	p, err := os.FindProcess(pid)
 	if err != nil {
 		return err
 	}
 	if err := p.Signal(syscall.SIGTERM); err != nil {
-		watch.Release(f.Home)
+		watch.Clear(f.Home)
 		fmt.Println("no watcher running")
 		return nil
 	}
-	fmt.Printf("stopped the watcher (pid %d)\n", b.PID)
+	fmt.Printf("stopped the watcher (pid %d)\n", pid)
 	return nil
 }
 
@@ -90,8 +91,10 @@ func stopWatcher(f *fleet.Fleet) error {
 // just refreshes for itself.
 func startWatcher(f *fleet.Fleet) {
 	log := logx.For("watch")
-	if watch.Live(f.Home, time.Now()) {
-		log.Debug("watcher already live")
+	// Running, not Live: a watcher whose refreshes are failing is still the
+	// watcher, and a second one would only double the scraping.
+	if pid, ok := watch.Running(f.Home); ok {
+		log.Debug("watcher already running", "pid", pid)
 		return
 	}
 	cmd := exec.Command(f.Exe, "watch")

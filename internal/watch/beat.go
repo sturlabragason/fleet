@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -68,23 +70,31 @@ func DropBeat(home string) {
 	_ = os.Remove(BeatPath(home))
 }
 
-// Claim takes ownership of the heartbeat for this process. It fails when
-// another live watcher holds it, which is what stops two `fleet up`s racing
-// into two watchers on one home.
+// Claim takes ownership of the heartbeat for this process. It fails while
+// the lock names a process that still exists, which is what stops two
+// `fleet up`s racing into two watchers on one home. Freshness is not the
+// test: a watcher wedged in a capture, or one whose refreshes are failing,
+// is still the watcher, and a second one would only double the scraping.
 func Claim(home string, now time.Time) (Beat, error) {
 	if err := os.MkdirAll(home, 0o755); err != nil {
 		return Beat{}, err
 	}
 	f, err := os.OpenFile(lockPath(home), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
-	if err == nil {
+	switch {
+	case err == nil:
 		fmt.Fprintf(f, "%d\n", os.Getpid())
 		f.Close()
-	} else if !os.IsExist(err) {
+	case !os.IsExist(err):
 		return Beat{}, err
-	} else if b, ok := ReadBeat(home); ok && b.PID != os.Getpid() && Live(home, now) {
-		return Beat{}, fmt.Errorf("another watcher is running (pid %d)", b.PID)
+	default:
+		if pid, ok := lockPID(home); ok && pid != os.Getpid() && alive(pid) {
+			return Beat{}, fmt.Errorf("another watcher is running (pid %d)", pid)
+		}
+		// The lock is stale (crash, reboot, recycled pid): take it over.
+		if err := writeLock(home); err != nil {
+			return Beat{}, err
+		}
 	}
-	// The lock is stale (crash, reboot, recycled pid): take it over.
 	b := Beat{PID: os.Getpid(), Started: now, At: now, OK: now}
 	if err := WriteBeat(home, b); err != nil {
 		return Beat{}, err
@@ -99,6 +109,49 @@ func Release(home string) {
 	}
 	_ = os.Remove(lockPath(home))
 	DropBeat(home)
+}
+
+// Clear removes a dead watcher's claim, whoever is asking. It is for a
+// command that has just found the pid gone; a live watcher's claim stays.
+func Clear(home string) {
+	if pid, ok := lockPID(home); ok && pid != os.Getpid() && alive(pid) {
+		return
+	}
+	if b, ok := ReadBeat(home); ok && b.PID != 0 && b.PID != os.Getpid() && alive(b.PID) {
+		return
+	}
+	_ = os.Remove(lockPath(home))
+	_ = os.Remove(BeatPath(home))
+}
+
+// Running reports the pid of a watcher process that still exists, live or
+// wedged, so `fleet watch --stop` can signal one whose refreshes are failing
+// instead of calling it absent.
+func Running(home string) (int, bool) {
+	if b, ok := ReadBeat(home); ok && b.PID != 0 && alive(b.PID) {
+		return b.PID, true
+	}
+	if pid, ok := lockPID(home); ok && alive(pid) {
+		return pid, true
+	}
+	return 0, false
+}
+
+func writeLock(home string) error {
+	return os.WriteFile(lockPath(home), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644)
+}
+
+// lockPID is the pid written into the lock file.
+func lockPID(home string) (int, bool) {
+	b, err := os.ReadFile(lockPath(home))
+	if err != nil {
+		return 0, false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil || pid <= 0 {
+		return 0, false
+	}
+	return pid, true
 }
 
 func lockPath(home string) string { return filepath.Join(home, "watch.lock") }

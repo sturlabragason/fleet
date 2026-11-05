@@ -78,7 +78,7 @@ func (s Set) plainMenu(lines []string) (Menu, bool) {
 			}
 		}
 		m.Question = plainQuestion(lines, top)
-		if strings.ContainsAny(string([]rune(strings.TrimSpace(lines[i]))[0:1]), weak) && !hinted(lines) {
+		if strings.ContainsAny(string([]rune(strings.TrimSpace(lines[i]))[0:1]), weak) && !s.hinted(lines, bot) {
 			// Just a quoted command and a short line after it.
 			continue
 		}
@@ -153,12 +153,22 @@ func plainQuestion(lines []string, top int) string {
 	return Cut(loose, 2*LabelMax)
 }
 
-// hinted reports whether the screen tells the user how to work the picker.
-func hinted(lines []string) bool {
-	for _, l := range lines {
-		if hintRe.MatchString(l) {
+// hinted reports whether the screen tells the user how to work the picker,
+// in the few lines under the options where a picker prints it. A hint the
+// agent quoted in its own prose does not count, which is why transcript
+// lines are skipped: on a screen full of quoted output, any ">" block would
+// otherwise read as a menu.
+func (s Set) hinted(lines []string, bot int) bool {
+	for j := bot + 1; j < len(lines) && j <= bot+hintWithin; j++ {
+		if matchAny(s.Transcript, lines[j]) {
+			continue
+		}
+		if hintRe.MatchString(lines[j]) {
 			return true
 		}
 	}
 	return false
 }
+
+// hintWithin is how far under the last option the key hint may sit.
+const hintWithin = 4
