@@ -163,6 +163,67 @@ func TestBorderFormatTargetAndNextOut(t *testing.T) {
 	}
 }
 
+// Every fleet pane runs a program that turns mouse reporting on (Copilot,
+// Claude, the overview TUI), so tmux's default drag binding handed the drag to
+// the program and copy-mode never started: the drag selected nothing, ADR-28's
+// copy-command never ran, and with `mouse on` the terminal made no native
+// selection either, so the clipboard stayed empty (ADR-38). The bindings must
+// not test mouse_any_flag, and tmux must accept them.
+func TestMouseDragSelectsOverAppMouse(t *testing.T) {
+	binds := map[string]string{}
+	for _, c := range tmuxCommands(&fleet.Fleet{Exe: "/bin/true"}) {
+		if len(c) == 4 && c[0] == "bind-key" && c[1] == "-n" {
+			binds[c[2]] = c[3]
+		}
+	}
+	for _, k := range mouseSelectKeys {
+		v, ok := binds[k]
+		if !ok {
+			t.Fatalf("%s is not bound", k)
+		}
+		if strings.Contains(v, "mouse_any_flag") {
+			t.Errorf("%s still gives the drag to the pane's program: %q", k, v)
+		}
+		if !strings.Contains(v, "copy-mode") {
+			t.Errorf("%s must start a tmux selection: %q", k, v)
+		}
+		// The overview acts on the left-button release (ADR-31), which tmux
+		// swallows once it takes the drag, so it keeps the old behaviour.
+		if !strings.Contains(v, "#{==:#{@role},ov}") {
+			t.Errorf("%s must leave the overview's clicks alone: %q", k, v)
+		}
+	}
+	if !strings.Contains(binds["DoubleClick1Pane"], "copy-pipe-and-cancel") ||
+		!strings.Contains(binds["TripleClick1Pane"], "copy-pipe-and-cancel") {
+		t.Error("double and triple click must pipe the word or line to copy-command")
+	}
+
+	c := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
+	t.Cleanup(func() { c.KillServer() })
+	if _, err := c.Run("new-session", "-d", "-s", "f", "cat"); err != nil {
+		t.Skip("tmux unavailable")
+	}
+	for _, k := range mouseSelectKeys {
+		v := binds[k]
+		if _, err := c.Run("bind-key", "-n", k, v); err != nil {
+			t.Fatalf("tmux rejected the %s binding %q: %v", k, v, err)
+		}
+		got, err := c.Run("list-keys", "-T", "root")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var line string
+		for _, l := range strings.Split(got, "\n") {
+			if strings.Contains(l, " "+k+" ") {
+				line = l
+			}
+		}
+		if !strings.Contains(line, "copy-mode") {
+			t.Errorf("%s round-tripped as %q", k, line)
+		}
+	}
+}
+
 // fleet up unbinds the drags that move panes out of the wall order.
 func TestUnbindsPaneDrags(t *testing.T) {
 	want := map[string]bool{"M-MouseDrag1Pane": true, "M-MouseDrag1Border": true, "C-MouseDrag1Pane": true}

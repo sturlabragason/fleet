@@ -307,11 +307,45 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		set = append(set, []string{"unbind-key", "-n", k})
 	}
 	set = append(set, []string{"bind-key", "-n", "M-w", "switch-client", "-T", "fleetwall", "\\;", "display-message", "wall layout: press 1 2 4 6 9 or m (release Alt first)"})
+	set = append(set, mouseSelectBindings()...)
 	if cc := hostCopyCommand(); cc != "" {
 		set = append(set, []string{"set-option", "-s", "copy-command", cc})
 	}
 	return set
 }
+
+// mouseSelectBindings makes a left-button drag select text for the clipboard
+// in every agent pane (ADR-38). tmux's defaults hand the drag to the pane's
+// program whenever it asked for the mouse (`#{mouse_any_flag}`), and every
+// fleet pane runs such a program: Copilot, Claude and the overview TUI all
+// turn mouse reporting on. With `mouse on` the terminal does not make a
+// native selection either, so a drag-select produced nothing to copy and
+// ADR-28's copy-command never ran. Dropping the mouse_any_flag test gives the
+// drag to tmux; clicks, the wheel and the right-click menu still reach the
+// program, which is what the TUIs use.
+func mouseSelectBindings() [][]string {
+	// Selecting in copy-mode already works, so there the drag keeps going to
+	// the mode (send-keys -M); the copy-mode table's MouseDragEnd1Pane runs
+	// copy-pipe-and-cancel, which pipes through copy-command. The overview is
+	// the other exception: it acts on the left-button release (click a card,
+	// ADR-31), and tmux swallows the release once it takes the drag, so a
+	// click that slips one cell would do nothing. It holds no text worth
+	// copying, so it keeps tmux's old behaviour.
+	keep := "if-shell -F '#{||:#{pane_in_mode},#{==:#{@role},ov}}' 'send-keys -M' "
+	// run-shell -d 0.3 leaves the highlight on screen long enough to see.
+	grab := func(selection string) string {
+		return keep + "'copy-mode -H ; send-keys -X " + selection +
+			" ; run-shell -d 0.3 ; send-keys -X copy-pipe-and-cancel'"
+	}
+	return [][]string{
+		{"bind-key", "-n", "MouseDrag1Pane", keep + "'copy-mode -M'"},
+		{"bind-key", "-n", "DoubleClick1Pane", "select-pane -t = ; " + grab("select-word")},
+		{"bind-key", "-n", "TripleClick1Pane", "select-pane -t = ; " + grab("select-line")},
+	}
+}
+
+// mouseSelectKeys are the keys mouseSelectBindings rebinds.
+var mouseSelectKeys = []string{"MouseDrag1Pane", "DoubleClick1Pane", "TripleClick1Pane"}
 
 const statusRightLen = 120 // fits the full tmux hint (keys.Hint ScopeTmux) plus a space
 

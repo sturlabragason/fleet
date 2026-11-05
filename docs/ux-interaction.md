@@ -35,9 +35,9 @@ from the code at `c1b9dfe` on 2026-11-05. tmux defaults were checked on tmux 3.8
 | Input | What happens |
 |---|---|
 | Left click | `select-pane` plus the click is forwarded to the agent. The `pane-focus-in` hook re-tiles: the clicked pane becomes the emphasis pane and grows to 60% (§5b.3) when four or fewer panes are on the wall |
-| Double/triple click | Select word/line into copy mode, or forwarded when the agent has mouse reporting on |
+| Double/triple click | Select the word or line and copy it to the system clipboard, in agent panes too (ADR-38) |
 | Right click | tmux pane menu (Mark, Zoom, Kill...) only if the agent has mouse reporting **off**. Otherwise the agent gets the click and no menu appears |
-| Drag | Copy-mode selection to the clipboard (ADR-28), or forwarded |
+| Drag | Copy-mode selection to the clipboard, in agent panes too (ADR-28, ADR-38). The overview keeps the old behaviour, because its cards answer the click |
 | Drag a border | Resize. The next re-layout snaps it back |
 | Alt-drag a pane, Ctrl-drag | tmux 3.8 defaults `move-pane -M` and `new-pane -M`. fleet does not unbind them, so they can move a pane out of the wall order or create an untracked pane |
 | `Alt-←↑↓→` `Alt-z` `Alt-x` `Alt-o` | Move, zoom, hide, jump to marked |
