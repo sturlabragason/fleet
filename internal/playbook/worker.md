@@ -26,7 +26,7 @@ Pre-merge checklist (all of it, every time)
 4. The diff has no secrets, private data, stray files or debug output.
 5. Commit with a conventional subject (`feat:`, `fix:`, `docs:`, ...) and an `Assisted-by: <tool>` trailer. Never a `Co-authored-by:` for an AI.
 6. Before merging, squash fixups into their logical commits (interactive or autosquash rebase on your branch); one reviewable commit per change is the default, and published main is never rewritten.
-7. Merge into local main and rerun the tests there. Leave your own worktree and branch in place — fleet and the user clean up after close. Never leave work unmerged.
+7. Merge into local main and rerun the tests there: `fleet merge` does the rebase, the checks, the merge and the checks on main, keeping both sides of a CHANGELOG.md or DESIGN.md conflict and stopping on any other (`fleet merge --dry-run` first). Leave your own worktree and branch in place — fleet and the user clean up after close. Never leave work unmerged.
 
 Never
 - Push, force-push or rewrite pushed history. One designated publisher pushes, fast-forward only, after the repo's public check. (Squashing your own unpushed branch commits, checklist item 6, is fine.)

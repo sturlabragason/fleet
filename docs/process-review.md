@@ -47,8 +47,10 @@ User-wide (drafted in the agent hub, not installed):
 
 ## Still open
 
-- A `fleet merge` command (rebase onto `main`, retry, report the conflict) would replace most of the
-  `fleet-merge` skill with one command. Written up as a task prompt, not built here.
+- ~~A `fleet merge` command (rebase onto `main`, retry, report the conflict) would replace most of
+  the `fleet-merge` skill with one command.~~ **Built 2026-11-05** (ADR-48): `fleet merge`, with
+  `--dry-run` for the order. The skill now points at it and keeps only the order and ADR-number
+  rules the command cannot decide.
 - A `fleet adr claim` command (or one file per ADR) would replace finding 1's convention with a lock.
 - `fleet reports --all` does not exist on the CLI; only the admiral's `fleet_reports` tool reads them.
   A worker cannot see its own report history.

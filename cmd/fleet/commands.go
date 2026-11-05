@@ -95,6 +95,14 @@ const usage = `usage:
   fleet touching [-C dir] [--json] [file...]
                                             files other worktrees of this repo change; with files, only
                                             the overlaps (exit 0 none, 1 overlap, 2 error)
+  fleet merge [-C dir] [--dry-run [--json]] [--check CMD] [--retries N]
+                                            rebase this worktree's branch onto main, run the checks,
+                                            merge into the local main checkout and run them again.
+                                            Conflicts in CHANGELOG.md or DESIGN.md keep both sides,
+                                            newest first; any other conflict aborts the rebase and
+                                            exits 1, naming the files and the other worktree.
+                                            --dry-run prints the order it would take. Never pushes,
+                                            never removes the worktree
   fleet profiles                            list tool profiles (~/.fleet/tools.toml)
   fleet snap [-C dir] [--set NAME] [--socket S] <agent | pane-id> <state>
                                             save the agent's pane as a status fixture in
@@ -142,6 +150,8 @@ func run(args []string) error {
 		return cmdPlaybook(rest)
 	case "touching":
 		return cmdTouching(rest)
+	case "merge":
+		return cmdMerge(rest)
 	}
 	if cmd == "changes" {
 		return cmdChanges(rest)

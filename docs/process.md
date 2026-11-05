@@ -23,7 +23,8 @@ differently without it. The reasons live here instead.
 | Escalate early | The same failure twice, or no progress after two different approaches: report `blocked` now, continue with what you can and say so | `fleet_report blocked`, which wakes an idle admiral | Playbook *Work* |
 | RAID log | The admiral records risks, assumptions, issues and decisions as they surface, one line each | `fleet_note` with a `risk:`, `assumption:`, `issue:` or `decision:` prefix; the last 30 notes come back in `fleet_brief` after a reset | Admiral *Running the work* |
 | WIP limits, small batches | One reviewable change per agent; finish and merge before starting more | `max_working` and the spawn queue (ADR-23) | Admiral *Running the work*, playbook *Start* |
-| Merge order for overlapping work | The order comes from branch state, which every agent can read, so nobody waits for a reply: `fleet touching --json` names the other worktrees and their files, and the branch with fewer touched files goes first. A coordinator is named only for a collision the branch state cannot settle, and resolves it rather than granting permission; an agent that gets no answer within a few minutes merges on the branch-state order and says so. If they can't message each other yet, the admiral asks the user before teaming them or granting the pair | `fleet touching`, teams (§5c), mail access (ADR-34) | Playbook *Start*, admiral *Running the work*, `.claude/skills/fleet-merge` |
+| Merge order for overlapping work | The order comes from branch state, which every agent can read, so nobody waits for a reply: `fleet touching --json` names the other worktrees and their files, and the branch with fewer touched files goes first. A coordinator is named only for a collision the branch state cannot settle, and resolves it rather than granting permission; an agent that gets no answer within a few minutes merges on the branch-state order and says so. If they can't message each other yet, the admiral asks the user before teaming them or granting the pair | `fleet touching`, `fleet merge --dry-run` (ADR-48), teams (§5c), mail access (ADR-34) | Playbook *Start*, admiral *Running the work*, `.claude/skills/fleet-merge` |
+| Merging back | Rebase onto main, check, merge into local main, check again there — the combination nobody has tested before the merge. A CHANGELOG.md or DESIGN.md conflict keeps both sides; any other conflict aborts and is a `blocked` report | `fleet merge` (ADR-48) | Playbook checklist item 7, `.claude/skills/fleet-merge` |
 | Clean published history | Before merging, squash fixups into their logical commits (interactive or autosquash rebase on your branch); one reviewable commit per change is the default, and published main is never rewritten | Branch-level rebase before the merge into local main | Playbook checklist item 6 |
 | Decision records | A choice others will ask "why?" about gets an ADR | DESIGN.md §14 | Playbook checklist item 3 |
 | Scope control | Work found outside the task becomes a follow-up in the report; growing the task needs a `question` first | `next:` lines, `question` reports | Playbook *Work* |
@@ -37,7 +38,8 @@ are cut to the part that changes an agent's next action:
 
 - **Ownership and the coordinator** exist because two agents editing the same files end in a merge
   conflict, and one of them redoes its work. `fleet touching`
-  finds the overlap; a named coordinator turns it into an order instead of a race.
+  finds the overlap; a named coordinator turns it into an order instead of a race. `fleet merge`
+  then takes that order without asking anyone, and resolves the one conflict everybody has.
 - **Escalate early** exists because an agent that is stuck keeps trying. Retries cost tokens and
   time; one line to the admiral costs neither, and the admiral or the user may already know the answer.
 - **The report shape** lets the admiral relay a report to the user in one to three lines without

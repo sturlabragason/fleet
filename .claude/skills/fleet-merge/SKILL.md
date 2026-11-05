@@ -11,6 +11,23 @@ agent sat idle for 15 minutes waiting for a coordinator to reply. This skill rem
 It does not replace the playbook's pre-merge checklist. Finish items 1–6 first; this is item 7 when
 you are not alone.
 
+**Most of this is now one command.** `fleet merge` (ADR-48) does sections 3 and 4 for you:
+
+```sh
+fleet merge --dry-run     # the order it would take, from branch state
+fleet merge               # rebase onto main, check, merge, check main again
+```
+
+It rebases onto `main`, resolves a `CHANGELOG.md` or `DESIGN.md` conflict by keeping both sides in
+that file's own order (your line above in the CHANGELOG, your ADR below in §14), runs `make build && go vet ./... && go test ./...` on the rebased branch and again on
+`main` after the merge, retries if `main` moves under it, and never pushes or removes your worktree.
+Any other conflict aborts the rebase and exits 1 naming the files and the other worktree — that is
+your `blocked` report. Use `--check ''` to skip the checks (don't) or `--check '<cmd>'` in a repo
+that gates differently.
+
+Read sections 1 and 2 anyway: the command does not pick your merge *order* or your ADR number.
+Section 3 stays as the explanation of what it resolves, and as the manual fallback.
+
 ## 1. Merge order comes from branch state, not from replies
 
 ```sh
@@ -72,6 +89,12 @@ playbook says.
 tests, refactors — adds nothing to `CHANGELOG.md`. The file answers "what can the user do now".
 
 ## 4. Merge
+
+```sh
+fleet merge                          # does all four steps below
+```
+
+By hand, if you need to:
 
 ```sh
 git -C <worktree> rebase main        # rebase your branch; never merge main into it
