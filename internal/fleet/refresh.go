@@ -8,6 +8,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/prefs"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/theme"
 	"github.com/sturlabragason/fleet/internal/tmux"
@@ -44,10 +45,20 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 	var out []*board.Agent
 	var claimed *board.Agent
 	var stuck []stuckNote
-	// Only the process that drains the queue (the overview TUI) claims and
-	// reports stuck episodes, so a one-shot `fleet ls` neither wakes the
-	// admiral nor burns the one notification this episode gets.
-	tell := f.DrainQueue && perr == nil
+	// Only the overview claims and reports stuck episodes, so a one-shot
+	// `fleet ls` or the admiral's MCP server -- which now drain the queue
+	// too (ADR-44) -- neither wakes the admiral nor burns the one
+	// notification this episode gets.
+	tell := f.Housekeeping && perr == nil
+	// One memory reading and one config read per poll, both taken before
+	// the board lock: the drain and the guard agree on them, and no
+	// process waits on the lock while another reads a file (§7, ADR-44).
+	low, limit, free := false, 0, uint64(0)
+	var mem prefs.Memory
+	if f.DrainQueue {
+		low, free, mem = f.LowMemory()
+		limit = f.MaxWorking()
+	}
 	err := f.Store.Update(func(b *board.Board) error {
 		for _, a := range b.Agents {
 			prev := a.Status
@@ -79,19 +90,26 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 		// A failed pane listing makes every agent look gone (busy 0):
 		// never drain on that.
 		if f.DrainQueue && perr == nil {
-			claimed = f.claimQueued(b, now)
+			claimed = f.claimQueued(b, now, low, limit)
 		}
 		out = b.Sorted()
 		return nil
 	})
 	if claimed != nil {
-		go f.startQueued(claimed)
+		if f.DrainSync {
+			f.startQueued(claimed)
+		} else {
+			go f.startQueued(claimed)
+		}
 	}
 	for _, n := range stuck {
 		go f.reportStuck(n)
 	}
 	f.syncTeams(agentPanes)
 	if f.DrainQueue && perr == nil {
+		f.guardMemory(out, now, low, free, mem)
+	}
+	if f.Housekeeping && perr == nil {
 		f.DeliverWake()
 		f.sweepDone(out, now)
 		f.sweepChecks(out)
@@ -146,6 +164,10 @@ func (f *Fleet) classify(a *board.Agent, alive, dead bool, pane string, now time
 		if pending(a.Status) {
 			return keepPending(a, now)
 		}
+		// A parked agent has no process on purpose (DESIGN §7): it is not gone.
+		if a.Status == string(status.Parked) {
+			return a.Status
+		}
 		return string(status.Gone)
 	}
 	a.PaneID = pane
@@ -180,7 +202,9 @@ func (f *Fleet) classify(a *board.Agent, alive, dead bool, pane string, now time
 		st = status.Working
 	case !ok:
 		st = status.Status(a.Status)
-		if st == "" || st == status.Gone {
+		// A live pane under a gone or parked entry is a park that did
+		// not take: read it fresh rather than keep the stale label.
+		if st == "" || st == status.Gone || st == status.Parked {
 			st = status.Unknown
 		}
 	}

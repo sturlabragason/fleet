@@ -217,8 +217,10 @@ func cmdUI(f *fleet.Fleet) error {
 	zone.NewGlobal()
 	// Off-wall panes are captured every 5 s instead of every poll (DESIGN §7a).
 	f.OffWallEvery = 5 * time.Second
-	// Only the overview TUI starts queued spawns when a slot frees (§7a).
+	// The overview TUI starts queued spawns, runs the memory guard and does
+	// the once-a-poll housekeeping (§7, §7a).
 	f.DrainQueue = true
+	f.Housekeeping = true
 	// It also runs done-checks nobody else picked up, off the UI loop (ADR-43).
 	f.Async()
 	w := wall.New(f.T, fleet.Session)

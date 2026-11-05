@@ -180,6 +180,10 @@ func cmdMCP(f *fleet.Fleet, args []string) error {
 	s := mcp.New(f, wall.New(f.T, fleet.Session))
 	if me != "" {
 		s = mcp.NewAgent(f, me)
+	} else {
+		// The admiral's server drains the spawn queue and runs the memory
+		// guard, so neither needs the overview TUI to be running (§7, §7a).
+		f.DrainQueue = true
 	}
 	s.Reloaded = reloaded
 	return s.Serve(in, os.Stdout)

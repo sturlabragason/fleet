@@ -27,6 +27,10 @@ const (
 	Queued Status = "queued"
 	// Starting is a queued agent claimed by the overview TUI and being launched.
 	Starting Status = "starting"
+	// Parked is an idle agent whose process was stopped to free memory
+	// (DESIGN §7, ADR-44): on the board with no pane, keeping its session
+	// id, so `fleet wake` resumes the same conversation in place.
+	Parked Status = "parked"
 )
 
 // DefaultPatterns, per tool. Detect reads the last Window non-empty lines:

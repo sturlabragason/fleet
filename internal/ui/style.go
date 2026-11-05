@@ -34,7 +34,7 @@ func statusColor(st string, frame int) lipgloss.Color {
 		return colError
 	case "stuck":
 		return colStuck
-	case "gone", "queued":
+	case "gone", "queued", "parked":
 		return colGone
 	case "starting":
 		return colWorking
@@ -58,6 +58,8 @@ func glyph(st string, frame int) string {
 		return "·"
 	case "queued":
 		return "‖"
+	case "parked":
+		return "z"
 	case "starting":
 		return "▸"
 	}
@@ -94,6 +96,8 @@ func rank(st string) int {
 		return 5
 	case "queued":
 		return 7
+	case "parked":
+		return 8
 	}
 	return 6
 }

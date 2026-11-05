@@ -53,6 +53,7 @@ ready_timeout = "15s"
 # env = { GOFLAGS = "-p=4", GOMAXPROCS = "4" }
 # At most this many agents work at once; further spawns queue and the overview
 # TUI starts them as slots free. 0 = no cap. Fleet-wide, [defaults] only.
+# Re-read on every use: change it and a running fleet picks it up (DESIGN §7).
 # max_working = 4
 # Which agents may message each other without asking (DESIGN §6.6, ADR-34).
 # "team": the same team, or the same repo (any worktree) when neither has a team.
@@ -107,6 +108,17 @@ mode = "autopilot"
 # splits each value on whitespace. Limitation: an argument that itself contains
 # a space cannot be written this way; put it in `args` or `extra_args`.
 mode_args = { autopilot = "--allow-all --autopilot", plan = "--plan" }
+
+# The RAM guard (DESIGN §7, ADR-44). When free memory (MemAvailable) falls
+# under min_free, fleet parks the longest-idle agent -- never a pinned,
+# working, waiting or prompted one -- at most one per check_every, tells the
+# admiral, and queues new spawns until memory comes back. Reversible:
+# `fleet wake <name>` resumes a parked agent where it stopped.
+# These keys are re-read on every use, so a running fleet retunes at once.
+[memory]
+# guard = false          # switch the guard off entirely (default: on)
+# min_free = "4GB"       # park below this much free memory (B/KB/MB/GB/TB)
+# check_every = "30s"    # at most one park per interval, across all processes
 
 # The admiral's tool profile when nothing else picks one (DESIGN §6.10).
 # Order: fleet --admiral-profile > $FLEET_ADMIRAL_PROFILE > last choice

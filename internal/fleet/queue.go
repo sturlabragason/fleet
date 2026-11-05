@@ -79,26 +79,31 @@ func QueueOrder(as []*board.Agent) []*board.Agent {
 	return q
 }
 
-// enqueue writes the agent as queued when max_working is reached or others
-// are already waiting (FIFO: a new spawn never jumps the queue). It returns
-// nil, nil when there is a free slot and the caller should launch. wantWT is
-// kept on the entry so the drain makes the same worktree choice the spawn
-// asked for, whatever config.toml says by then; card is kept for the same
-// reason (ADR-43).
+// enqueue writes the agent as queued when max_working is reached, memory
+// is low, or others are already waiting (FIFO: a new spawn never jumps the
+// queue). It returns nil, nil when there is a free slot and the caller
+// should launch. wantWT is kept on the entry so the drain makes the same
+// worktree choice the spawn asked for, whatever config.toml says by then;
+// card is kept for the same reason (ADR-43).
 func (f *Fleet) enqueue(name, profile, dir, prompt string, wantWT bool, card *board.Card) (*board.Agent, error) {
-	limit := f.Prefs.MaxWorking()
-	if limit <= 0 {
+	limit := f.MaxWorking()
+	low, free, mem := f.LowMemory()
+	note := ""
+	if low {
+		note = LowMemoryNote(free, mem)
+	}
+	if limit <= 0 && !low {
 		return nil, nil
 	}
 	var a *board.Agent
 	n := 0
 	err := f.Store.Update(func(b *board.Board) error {
 		now := time.Now()
-		if n = countBusy(b, now); n < limit && !hasPending(b) {
+		if n = countBusy(b, now); !low && n < limit && !hasPending(b) {
 			return nil
 		}
 		a = &board.Agent{Name: name, Profile: profile, Patterns: f.Profiles[profile].Patterns, Dir: dir, Goal: prompt,
-			Status: string(status.Queued), Created: now, StatusSince: now, NoWorktree: !wantWT, Card: card}
+			Status: string(status.Queued), Created: now, StatusSince: now, NoWorktree: !wantWT, LastLine: note, Card: card}
 		b.Agents[name] = a
 		f.Store.AppendEvent(board.Event{Time: now, Agent: name, From: "", To: a.Status})
 		return nil
@@ -107,15 +112,22 @@ func (f *Fleet) enqueue(name, profile, dir, prompt string, wantWT bool, card *bo
 		return nil, err
 	}
 	if a != nil {
-		logx.For("fleet").Info("queued", "agent", name, "profile", profile, "dir", dir, "busy", n, "max_working", limit)
+		logx.For("fleet").Info("queued", "agent", name, "profile", profile, "dir", dir, "busy", n, "max_working", limit, "low_memory", low)
 	}
 	return a, nil
 }
 
 // claimQueued runs inside Refresh's board update: with a free slot it marks
-// the next queued agent starting and returns a copy to launch.
-func (f *Fleet) claimQueued(b *board.Board, now time.Time) *board.Agent {
-	if limit := f.Prefs.MaxWorking(); limit > 0 && countBusy(b, now) >= limit {
+// the next queued agent starting and returns a copy to launch. A low memory
+// reading holds the queue where it is: starting another agent now is what
+// the guard is there to prevent.
+// limit is max_working as Refresh read it, outside the board lock: a
+// config read must not happen while every other process waits on it.
+func (f *Fleet) claimQueued(b *board.Board, now time.Time, low bool, limit int) *board.Agent {
+	if low {
+		return nil
+	}
+	if limit > 0 && countBusy(b, now) >= limit {
 		return nil
 	}
 	q := QueueOrder(b.Sorted())

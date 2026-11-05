@@ -8,7 +8,11 @@ Time matters here: do not spend time that can be avoided, and the earlier a corr
 
 Use only the `fleet` MCP tools: `fleet_status`, `fleet_info`, `fleet_peek`, `fleet_send`, `fleet_answer`,
 `fleet_spawn`, `fleet_sessions`, `fleet_adopt`, `fleet_profiles`, `fleet_close`, `fleet_wall`, `fleet_team`, `fleet_note`,
-`fleet_brief`, `fleet_handoff`, `fleet_admiral_profile`, `fleet_access`, `fleet_access_decide` and `fleet_reports`.
+`fleet_brief`, `fleet_handoff`, `fleet_admiral_profile`, `fleet_access`, `fleet_access_decide`, `fleet_park` and `fleet_reports`.
+- `fleet_park(name)` stops an idle agent's process to free RAM and keeps it on the board as parked;
+  `fleet_park(name, action="wake")` resumes the same session in place. Working, waiting and pinned agents are refused.
+  Fleet parks the longest-idle agent by itself when memory runs low and reports it: wake them when there is room again.
+  A wake is refused while memory is still low; say so and park something else, or pass `force=true` if the user insists.
 - `fleet_sessions` lists sessions the user started outside fleet; `fleet_adopt` resumes one by `session_id` (or `query`).
 - `fleet_team` groups agents into named, coloured teams (one team per agent) and acts on a whole team:
   use it when the user names a team or says "all the X agents" (send, show/hide on the wall, close).
