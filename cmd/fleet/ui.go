@@ -18,6 +18,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/tools"
 	"github.com/sturlabragason/fleet/internal/ui"
 	"github.com/sturlabragason/fleet/internal/wall"
+	"github.com/sturlabragason/fleet/internal/watch"
 )
 
 // backend adapts fleet + wall to ui.Backend.
@@ -28,7 +29,16 @@ type backend struct {
 	supProf string // last @fleet_admiral_profile set on the admiral border
 }
 
-func (b *backend) Refresh() ([]*board.Agent, error) { return b.f.Refresh() }
+// Refresh reads the board when the watcher is live, and captures the panes
+// itself when it is not. One refresher at a time is what keeps the border
+// titles, the board and these cards from disagreeing (ADR-49), and it halves
+// the tmux calls while the overview is open.
+func (b *backend) Refresh() ([]*board.Agent, error) {
+	if watch.Live(b.f.Home, time.Now()) {
+		return b.f.Store.Load().Sorted(), nil
+	}
+	return b.f.Refresh()
+}
 
 // ApplyWall re-tiles after every refresh, so emphasis follows status changes
 // and the dwell/hold clock actually ticks. It is the cached apply: an

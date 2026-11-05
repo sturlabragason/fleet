@@ -317,3 +317,55 @@ func TestSubagentLogPath(t *testing.T) {
 		t.Errorf("override: %q", g)
 	}
 }
+
+// Claude gets status hooks through its own --settings argument, so fleet
+// never edits the user's ~/.claude/settings.json (ADR-49).
+func TestClaudeHookArgs(t *testing.T) {
+	ps, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	argv, _ := ps["claude"].Argv(AgentVars("/bin/fleet", "a1", ""), Launch{})
+	i := indexOf(argv, "--settings")
+	if i < 0 || i+1 >= len(argv) {
+		t.Fatalf("claude argv has no --settings: %v", argv)
+	}
+	var doc struct {
+		Hooks map[string][]struct {
+			Hooks []struct {
+				Type    string `json:"type"`
+				Command string `json:"command"`
+			} `json:"hooks"`
+		} `json:"hooks"`
+	}
+	if err := json.Unmarshal([]byte(argv[i+1]), &doc); err != nil {
+		t.Fatalf("bad settings json %q: %v", argv[i+1], err)
+	}
+	for _, e := range []string{"Stop", "Notification", "PreToolUse"} {
+		h, ok := doc.Hooks[e]
+		if !ok || len(h) == 0 || len(h[0].Hooks) == 0 {
+			t.Fatalf("no %s hook: %v", e, doc.Hooks)
+		}
+		cmd := h[0].Hooks[0]
+		if cmd.Type != "command" || !strings.Contains(cmd.Command, "/bin/fleet") ||
+			!strings.Contains(cmd.Command, "hook "+strings.ToLower(e)) ||
+			!strings.Contains(cmd.Command, "--agent") {
+			t.Errorf("%s command %q", e, cmd.Command)
+		}
+	}
+	// Tools without hook_args are launched unchanged.
+	for _, prof := range []string{"copilot", "agy", "vibe", "fake"} {
+		if argv, _ := ps[prof].Argv(AgentVars("/bin/fleet", "a1", ""), Launch{}); indexOf(argv, "--settings") >= 0 {
+			t.Errorf("%s got hook args: %v", prof, argv)
+		}
+	}
+}
+
+func indexOf(ss []string, want string) int {
+	for i, s := range ss {
+		if s == want {
+			return i
+		}
+	}
+	return -1
+}

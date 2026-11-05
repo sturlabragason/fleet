@@ -267,7 +267,7 @@ patterns = "pend"
 	if _, err := f.Choose("m", 5, ""); err == nil {
 		t.Error("option 5 of 3 accepted")
 	}
-	if _, err := f.Choose("x", 1, ""); err == nil || !strings.Contains(err.Error(), "no numbered prompt") {
+	if _, err := f.Choose("x", 1, ""); err == nil || !strings.Contains(err.Error(), "no prompt with options") {
 		t.Errorf("choose without menu: %v", err)
 	}
 	if got := MenuKeys(3, 1); strings.Join(got, ",") != "Up,Up,Enter" {

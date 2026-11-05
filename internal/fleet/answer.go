@@ -113,7 +113,34 @@ type Choice struct {
 // case-insensitive substring of the question or of the option's label, so a
 // prompt that changed since the user said yes is not answered.
 func (f *Fleet) Choose(name string, option int, expect string) (Choice, error) {
-	return f.choose(name, option, expect, "no numbered prompt on screen")
+	return f.choose(name, option, expect, "no prompt with options on screen")
+}
+
+// ChooseLabel picks the one option whose label contains label (case
+// insensitive), which is how an unnumbered ❯ menu is answered without
+// quoting numbers that are not on screen. expect is checked as for Choose.
+func (f *Fleet) ChooseLabel(name, label, expect string) (Choice, error) {
+	m, ok, err := f.Menu(name)
+	if err != nil {
+		return Choice{}, err
+	}
+	if !ok {
+		return Choice{}, fmt.Errorf("no prompt with options on screen")
+	}
+	want := strings.ToLower(strings.TrimSpace(label))
+	hit := 0
+	for i, o := range m.Options {
+		if strings.Contains(strings.ToLower(status.Label(o)), want) {
+			if hit != 0 {
+				return Choice{}, fmt.Errorf("%q matches more than one option: %s", label, strings.Join(m.Options, " | "))
+			}
+			hit = i + 1
+		}
+	}
+	if hit == 0 {
+		return Choice{}, fmt.Errorf("no option matches %q (have %s)", label, strings.Join(m.Options, " | "))
+	}
+	return f.Choose(name, hit, expect)
 }
 
 // choose re-reads the menu right before pressing keys; gone is the error

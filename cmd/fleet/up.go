@@ -170,6 +170,8 @@ func cmdUp(f *fleet.Fleet, args []string) error {
 	}
 	ensureOverview(f, target)
 	configure(f)
+	// One watcher per fleet keeps status fresh whatever is open (ADR-49).
+	startWatcher(f)
 	warnAdmiral(f, warns)
 	w := wall.New(t, fleet.Session)
 	if err := w.Apply(); err != nil {

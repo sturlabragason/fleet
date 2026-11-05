@@ -50,9 +50,10 @@ var toolDefs = []tool{
 		"name": str("agent name"), "names": strList("several agent names"), "team": str("send to every member of this team"),
 		"text": str("text to send"), "keys": strList("key names: Enter, Escape, Up, Down, Left, Right, Tab, BTab, Space, BSpace, 1-9, y, n"),
 		"confirmed": map[string]any{"type": "boolean", "description": "only when an agent is waiting on a prompt (text or keys would answer it), after the user said yes"}})},
-	{"fleet_answer", "Answer an agent's prompt: answer y/n, or option N of a numbered menu (fleet_status lists the options). Ask the user first; set confirmed=true only after an explicit yes, and pass expect = the question the user confirmed.", obj([]string{"name", "confirmed"}, map[string]any{
+	{"fleet_answer", "Answer an agent's prompt: answer y/n, option N of a numbered menu, or label for a menu whose options are not numbered on screen (fleet_status lists the options either way). Ask the user first; set confirmed=true only after an explicit yes, and pass expect = the question the user confirmed.", obj([]string{"name", "confirmed"}, map[string]any{
 		"name": str("agent name"), "answer": map[string]any{"type": "string", "enum": []string{"y", "n"}, "description": "y = option 1, n = the first option starting with No; plain y/n when there is no menu"},
-		"option": map[string]any{"type": "integer", "minimum": 1, "maximum": 9, "description": "menu option number; pass answer or option, not both"},
+		"option": map[string]any{"type": "integer", "minimum": 1, "maximum": 9, "description": "menu option number; pass exactly one of answer, option or label"},
+		"label": str("text of the option to pick (part of it is enough, case-insensitive); for ❯ menus with no numbers on screen, e.g. \"Yes, I trust\""),
 		"expect": str("the question the user confirmed (or part of it, or of the option label); refused if the prompt on screen no longer matches"), "confirmed": confirmedProp})},
 	{"fleet_info", "Facts about one agent: profile, team, status and age, last activity, dir, its task card (goal, done-check and its verdict, result file), git (worktree, branch, dirty files, merged into main, commits ahead), session id, context %, spend so far, mode.", obj([]string{"name"}, map[string]any{
 		"name": str("agent name")})},
@@ -102,6 +103,9 @@ type args struct {
 	Summary                                 summaryArg
 	Expect                                  string
 	To, From, Reason, Decision, A, B, State string
+	// Label picks a menu option by its text, for menus whose options are
+	// not numbered on screen (fleet_answer).
+	Label string
 	SessionID                               string `json:"session_id"`
 	Lines, Limit, Option                    int
 	Number                                  int
