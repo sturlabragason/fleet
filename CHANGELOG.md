@@ -5,6 +5,7 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-05
+- The overview never leaves ghost tiles behind: closing several agents at once (or resizing the window) used to leave a row of half-drawn tiles and the reports of agents that were already gone; every frame now fills the pane, so the old rows are always overwritten (ADR-54)
 - Fake agents print work you can read: a task line, the reads, edits and test runs it would take, an approval it wants and a summary when it finishes, under one footer that is redrawn in place instead of a new "Thinking… step N" line every tick. Hold one in a state with `fleet send <name> "!work"`, `"!wait"`, `"!error"` or `"!done"`, each with an optional task name (ADR-52)
 - The README screenshot and `docs/img/demo.gif` show a believable fleet: a 2×2 wall of one agent working, one waiting on your approval, one failed and one done, an admiral reporting what it did, and no browser-window decoration. `scripts/screenshot.sh` composes it, so it can be regenerated the same way after a layout or palette change (ADR-52)
 - Agents spawned in the same second no longer all pick the same fake task: the name, the pid and the clock are hashed together for the seed

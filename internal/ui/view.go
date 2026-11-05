@@ -30,16 +30,17 @@ func (m *Model) View() (out string) {
 	if m.w == 0 {
 		return "loading…"
 	}
-	var b strings.Builder
-	b.WriteString(m.header())
-	b.WriteByte('\n')
+	return zone.Scan(m.fitPane(append([]string{m.header()}, m.body()...)))
+}
+
+// body is everything below the header: the help overlay, the tiers, or the
+// card grid and its overflow line.
+func (m *Model) body() []string {
 	if m.help {
-		b.WriteString(m.helpOverlay())
-		return zone.Scan(b.String())
+		return strings.Split(m.helpOverlay(), "\n")
 	}
 	if tv, ok := m.tiers(); ok { // past one screen of cards (ADR-32)
-		b.WriteString(strings.Join(m.tierLines(tv), "\n"))
-		return zone.Scan(b.String())
+		return m.tierLines(tv)
 	}
 	g := m.grid()
 	var lines []string
@@ -53,9 +54,29 @@ func (m *Model) View() (out string) {
 	if c := m.chips(m.agents[g.Cards:], g.Cards == 0); c != "" {
 		lines = append(lines, c)
 	}
-	// no trailing newline: a full pane would push the header off the top
-	b.WriteString(strings.Join(lines, "\n"))
-	return zone.Scan(b.String())
+	return lines
+}
+
+// fitPane fits the lines to the pane (ADR-54): every line is cut to the pane
+// width so nothing can wrap, and the frame is padded with blank lines to the
+// full pane height so every row is rewritten. Without the padding a frame
+// that needs fewer rows than the last one leaves the old rows on screen --
+// after four agents close, their tiles and reports stay behind.
+func (m *Model) fitPane(blocks []string) string {
+	lines := strings.Split(strings.Join(blocks, "\n"), "\n")
+	for i, l := range lines {
+		if ansi.StringWidth(l) > m.w {
+			lines[i] = ansi.Truncate(l, m.w, "")
+		}
+	}
+	for len(lines) < m.h { // bubbletea drops lines past the pane from the top
+		lines = append(lines, "")
+	}
+	// The frame is exactly m.h lines: no trailing newline (a full pane would
+	// push the header off the top) and no overflow (bubbletea would drop the
+	// top lines, header first). An over-tall frame loses its bottom rows --
+	// the "+N hidden" or "↓ more" line -- so body() must keep inside m.h-1.
+	return strings.Join(lines[:max(min(len(lines), m.h), 1)], "\n")
 }
 
 // helpLines is the hotkey list for the overlay and the rows it has (the

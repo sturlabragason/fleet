@@ -105,6 +105,79 @@ func TestOverviewNineAgentsAllCards(t *testing.T) {
 	}
 }
 
+// trimBlank drops the blank padding rows fitPane adds to fill the pane.
+func trimBlank(lines []string) []string {
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
+// The reported bug: four of six agents closed at once and the overview kept
+// the closed agents' tiles, their reports and half-drawn borders on the rows
+// the smaller grid no longer uses. A frame must fill the pane, so every row
+// of the last frame is rewritten, and no line may wrap.
+func TestOverviewLeavesNoStaleRows(t *testing.T) {
+	zone.NewGlobal()
+	for _, sz := range [][2]int{{289, 13}, {150, 14}, {130, 20}, {80, 13}} {
+		w, h := sz[0], sz[1]
+		for _, n := range []int{6, 7, 9, 20} {
+			big, before := overview(w, h, n)
+			if got := strings.Count(before, "\n") + 1; got != h {
+				t.Errorf("%dx%d n=%d: frame is %d rows, pane is %d", w, h, n, got, h)
+			}
+			big.setAgents(big.agents[:2]) // four (or more) agents close at once
+			big.sel = big.agents[1].Name
+			after := ansi.Strip(big.View())
+			lines := strings.Split(after, "\n")
+			if len(lines) != h {
+				t.Errorf("%dx%d n=%d->2: frame is %d rows, pane is %d", w, h, n, len(lines), h)
+			}
+			for _, l := range lines {
+				if ansi.StringWidth(l) > w {
+					t.Errorf("%dx%d n=%d->2: line wraps the pane (%d cells): %q", w, h, n, ansi.StringWidth(l), l)
+				}
+			}
+			for _, a := range []string{"agent-02", "agent-05"} { // closed agents
+				if strings.Contains(after, a) {
+					t.Errorf("%dx%d n=%d->2: %s still drawn:\n%s", w, h, n, a, after)
+				}
+			}
+			if got, want := cards(after), 2; got != want && !strings.Contains(after, "hidden") {
+				t.Errorf("%dx%d n=%d->2: %d cards, want %d:\n%s", w, h, n, got, want, after)
+			}
+			// the visible symptom: bottom borders of tiles the new grid no longer draws
+			if got := strings.Count(after, "╰") + strings.Count(after, "┗"); got != cards(after) {
+				t.Errorf("%dx%d n=%d->2: %d bottom borders for %d cards:\n%s", w, h, n, got, cards(after), after)
+			}
+		}
+	}
+}
+
+// fitPane is the last guard before the pane: a block that measures wider
+// than the pane (a glyph the width tables and the terminal disagree about,
+// a tile that outgrows the width the grid gave it) is cut rather than left
+// to wrap, and a short frame is filled out to the pane height.
+func TestFitPaneCutsAndFills(t *testing.T) {
+	zone.NewGlobal()
+	m, _ := overview(80, 10, 1)
+	got := strings.Split(m.fitPane([]string{strings.Repeat("x", 100), "a\nb"}), "\n")
+	if len(got) != 10 {
+		t.Fatalf("want 10 rows, got %d: %q", len(got), got)
+	}
+	if ansi.StringWidth(got[0]) != 80 {
+		t.Errorf("row 0 is %d cells, want 80", ansi.StringWidth(got[0]))
+	}
+	if got[1] != "a" || got[2] != "b" { // a multi-line block counts as its lines
+		t.Errorf("rows 1,2 = %q,%q, want \"a\",\"b\"", got[1], got[2])
+	}
+	for i, l := range got[3:] {
+		if l != "" {
+			t.Errorf("row %d not blank: %q", i+3, l)
+		}
+	}
+}
+
 func TestChipsCountWhatTheyCut(t *testing.T) {
 	zone.NewGlobal()
 	_, v := overview(60, 3, 20) // no room for a card

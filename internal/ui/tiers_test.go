@@ -65,8 +65,11 @@ func TestTiersCardsAndRows(t *testing.T) {
 		t.Errorf("want cards for 3 waiting + 1 on the wall, got %d:\n%s", got, v)
 	}
 	lines := strings.Split(v, "\n")
-	if len(lines) != 1+6+4 { // header, cards, 16 rows in 4 columns
-		t.Errorf("want 11 lines, got %d", len(lines))
+	if len(lines) != 14 { // the frame always fills the pane (no stale rows)
+		t.Errorf("want 14 lines, got %d", len(lines))
+	}
+	if got := len(trimBlank(lines)); got != 1+6+4 { // header, cards, 16 rows in 4 columns
+		t.Errorf("want 11 content lines, got %d", got)
 	}
 	for _, l := range lines {
 		if ansi.StringWidth(l) > 150 {
