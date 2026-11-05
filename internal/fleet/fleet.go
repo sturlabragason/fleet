@@ -80,8 +80,9 @@ type Fleet struct {
 	// process exits before a goroutine could finish the launch.
 	DrainSync bool
 	// Housekeeping runs the once-a-poll jobs that belong to a resident
-	// fleet: admiral wakes, the done sweep and dead-pane reaping. Only the
-	// overview TUI sets it.
+	// fleet: admiral wakes, the done sweep and dead-pane reaping. The
+	// watcher sets it (it is the resident poll, ADR-49); the overview TUI
+	// sets it too and does the work itself only while no watcher is live.
 	Housekeeping bool
 	// FreeMem reads free memory for the guard; nil = /proc/meminfo (tests
 	// replace it).
@@ -91,6 +92,8 @@ type Fleet struct {
 	SummaryModel summary.Model
 	summarizer   *summary.Summarizer
 	summaryMu    sync.Mutex
+	wakeMu       sync.Mutex
+	wakeWarn     time.Time
 	lastCap      map[string]time.Time
 	globs        map[string]string // agent -> resolved session log (WatchPaths)
 	globMu       sync.Mutex

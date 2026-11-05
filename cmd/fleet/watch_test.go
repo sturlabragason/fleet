@@ -6,9 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/tmux"
@@ -104,5 +106,151 @@ func TestWatchInUsage(t *testing.T) {
 		if !strings.Contains(u, s) {
 			t.Errorf("usage does not mention %q", s)
 		}
+	}
+}
+
+// fakeAdmiralFleet is a fleet with one agent and a scripted admiral pane:
+// typed text lands in box, Enter moves it to submitted.
+type fakeAdmiralFleet struct {
+	f         *fleet.Fleet
+	mu        sync.Mutex
+	box       string
+	submitted []string
+	idle      bool
+}
+
+func newFakeAdmiralFleet(t *testing.T) *fakeAdmiralFleet {
+	t.Helper()
+	f := hookTestFleet(t)
+	os.WriteFile(filepath.Join(f.Home, "tools.toml"),
+		[]byte("[cat]\ncommand = \"sh\"\nargs = [\"-c\", \"cat\"]\npatterns = \"fake\"\n"), 0o644)
+	f, err := fleet.New(f.T, f.Home, "/nonexistent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Spawn("a", "cat", f.Home, ""); err != nil {
+		t.Fatal(err)
+	}
+	a := &fakeAdmiralFleet{f: f}
+	f.SupPane = func() fleet.AdmiralView {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return fleet.AdmiralView{Pane: "%sup", Idle: a.idle, Box: true, Input: a.box}
+	}
+	f.TypeText = func(pane, text string) error {
+		a.mu.Lock()
+		a.box += text
+		a.mu.Unlock()
+		return nil
+	}
+	f.PressKeys = func(pane string, keys ...string) error {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		for _, k := range keys {
+			if k == "Enter" {
+				a.submitted = append(a.submitted, a.box)
+				a.box = ""
+			}
+		}
+		return nil
+	}
+	return a
+}
+
+func (a *fakeAdmiralFleet) goIdle() { a.mu.Lock(); a.idle = true; a.mu.Unlock() }
+
+func (a *fakeAdmiralFleet) lines() []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]string(nil), a.submitted...)
+}
+
+// A report that lands while the admiral is busy is typed by the watcher's
+// poll once the pane goes idle: the watcher owns the once-a-poll
+// housekeeping, so a wake is never left queued when no overview is open.
+func TestCmdWatchDeliversQueuedWake(t *testing.T) {
+	a := newFakeAdmiralFleet(t)
+	f := a.f
+	if _, err := f.Report("a", "blocked", "need creds"); err != nil {
+		t.Fatal(err)
+	}
+	if len(a.lines()) != 0 {
+		t.Fatalf("typed into a busy admiral: %q", a.lines())
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmdWatch(f, []string{"--interval", "100ms", "--tick", "50ms"}) }()
+	t.Cleanup(func() {
+		f.T.KillServer() // the watcher exits when the fleet session goes
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Error("watcher did not exit")
+		}
+	})
+	a.goIdle()
+	want := fleet.ReportLine("a", "blocked", "need creds")
+	for i := 0; i < 100 && len(a.lines()) == 0; i++ {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if got := a.lines(); len(got) != 1 || got[0] != want {
+		t.Fatalf("watcher did not deliver the queued wake: %q", got)
+	}
+}
+
+// `fleet watch --once` is a refresh, not a resident poll: it must not
+// auto-close agents, run somebody's done-check or wake the admiral.
+func TestCmdWatchOnceDoesNoHousekeeping(t *testing.T) {
+	a := newFakeAdmiralFleet(t)
+	a.goIdle()
+	if _, err := a.f.Report("a", "blocked", "need creds"); err != nil {
+		t.Fatal(err)
+	}
+	if len(a.lines()) != 1 {
+		t.Fatalf("the report itself did not wake the admiral: %q", a.lines())
+	}
+	if err := cmdWatch(a.f, []string{"--once"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.lines(); len(got) != 1 {
+		t.Fatalf("--once did housekeeping: %q", got)
+	}
+	// Nor may it claim a queued spawn: it exits before starting it, which
+	// would leave the agent claimed on the board and never launched.
+	if err := a.f.Store.Update(func(b *board.Board) error {
+		b.Agents["q"] = &board.Agent{Name: "q", Profile: "cat", Dir: a.f.Home,
+			Status: string(status.Queued), Created: time.Now(), StatusSince: time.Now()}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdWatch(a.f, []string{"--once"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.f.Store.Load().Agents["q"].Status; got != string(status.Queued) {
+		t.Fatalf("--once drained the queue: agent q is %q", got)
+	}
+}
+
+// The overview delivers wakes even on the polls where a live watcher means
+// it reads board.json instead of capturing panes itself (ADR-51).
+func TestOverviewDeliversWakeWithWatcherLive(t *testing.T) {
+	a := newFakeAdmiralFleet(t)
+	if _, err := a.f.Report("a", "blocked", "need creds"); err != nil {
+		t.Fatal(err)
+	}
+	if err := watch.WriteBeat(a.f.Home, watch.Beat{PID: os.Getpid(), Started: time.Now(), At: time.Now(), OK: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	if !watch.Live(a.f.Home, time.Now()) {
+		t.Fatal("heartbeat not live")
+	}
+	a.goIdle()
+	be := &backend{f: a.f}
+	if _, err := be.Refresh(); err != nil {
+		t.Fatal(err)
+	}
+	want := fleet.ReportLine("a", "blocked", "need creds")
+	if got := a.lines(); len(got) != 1 || got[0] != want {
+		t.Fatalf("overview did not deliver the wake: %q", got)
 	}
 }

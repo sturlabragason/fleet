@@ -48,6 +48,17 @@ func cmdWatch(f *fleet.Fleet, args []string) error {
 	// would lag by OffWallEvery (DESIGN §7a).
 	f.OffWallEvery = 0
 	f.DrainQueue = true
+	// A resident watcher owns the once-a-poll housekeeping -- admiral
+	// wakes above all, plus the done sweep, unclaimed done-checks and
+	// dead-pane reaping (ADR-51). Without it a report that landed while
+	// the admiral was busy stayed queued and was never retried, because
+	// the overview skips its own refresh while a watcher is live (ADR-49).
+	// `--once` leaves all of it alone: a one-shot must not auto-close an
+	// agent, run somebody's done-check or claim a queued spawn it will
+	// exit before starting.
+	f.Housekeeping = true
+	// Those done-checks may take minutes; off the loop they cannot stall it.
+	f.Async()
 	w := &watch.Watcher{
 		Home:     f.Home,
 		Refresh:  func() error { _, err := f.Refresh(); return err },

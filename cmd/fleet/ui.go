@@ -32,9 +32,12 @@ type backend struct {
 // Refresh reads the board when the watcher is live, and captures the panes
 // itself when it is not. One refresher at a time is what keeps the border
 // titles, the board and these cards from disagreeing (ADR-49), and it halves
-// the tmux calls while the overview is open.
+// the tmux calls while the overview is open. The admiral wake is not a
+// refresh and runs either way: skipping it here is what let reports sit
+// unseen while a watcher ran.
 func (b *backend) Refresh() ([]*board.Agent, error) {
 	if watch.Live(b.f.Home, time.Now()) {
+		b.f.DeliverWake()
 		return b.f.Store.Load().Sorted(), nil
 	}
 	return b.f.Refresh()

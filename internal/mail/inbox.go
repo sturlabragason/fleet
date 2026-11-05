@@ -182,6 +182,55 @@ func (s *Store) ClaimNudge(agent string) (unread int, ok bool, err error) {
 	return unread, ok, err
 }
 
+// ClaimNudgeUpTo claims the nudge for messages up to and including id: true
+// only when no nudge has covered id yet, and then the mark moves to it. The
+// admiral's report wake uses it, because every report deserves a wake even
+// when the admiral has not read the one before it -- the nudge mark says
+// what was announced, not what was read (the id order is the message order,
+// ADR-51). It returns the mark it replaced, which UnclaimNudgeTo winds back
+// to when the wake could not be typed.
+func (s *Store) ClaimNudgeUpTo(agent, id string) (prev string, ok bool, err error) {
+	if err := checkBox(agent); err != nil {
+		return "", false, err
+	}
+	if id == "" {
+		return "", false, nil
+	}
+	err = s.update(func(st *state) error {
+		prev = readTrim(s.nudgePath(agent))
+		if prev >= id {
+			return nil
+		}
+		ok = true
+		return writeAtomic(s.nudgePath(agent), []byte(id))
+	})
+	return prev, ok, err
+}
+
+// NudgeMark is the newest message id a nudge has announced to agent ("" =
+// none). The report wake reads it to see whether the queue holds anything
+// the admiral has not been told about yet.
+func (s *Store) NudgeMark(agent string) string {
+	if checkBox(agent) != nil {
+		return ""
+	}
+	return readTrim(s.nudgePath(agent))
+}
+
+// UnclaimNudgeTo winds the mark back to what it was before a claim, so the
+// same messages may be announced again. An empty id removes it.
+func (s *Store) UnclaimNudgeTo(agent, prev string) error {
+	if err := checkBox(agent); err != nil {
+		return err
+	}
+	if prev == "" {
+		return s.UnclaimNudge(agent)
+	}
+	return s.update(func(st *state) error {
+		return writeAtomic(s.nudgePath(agent), []byte(prev))
+	})
+}
+
 // UnclaimNudge undoes ClaimNudge when the nudge could not be typed, so the
 // same unread batch may be nudged again.
 func (s *Store) UnclaimNudge(agent string) error {

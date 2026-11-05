@@ -2,6 +2,7 @@ package fleet
 
 import (
 	"os"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -169,6 +170,69 @@ func TestWakeRetriesFailedPaste(t *testing.T) {
 	}
 }
 
+// The admiral is busy when the report lands and never reads its inbox: the
+// wake must be typed as soon as the pane goes idle, and every later report
+// must wake it again instead of being swallowed by the first one's claim.
+// This is the poll (the watcher's housekeeping) doing the retry.
+func TestWakeRetriedWhileReportsStayUnread(t *testing.T) {
+	f, pasted := mailFleet(t)
+	busy := ptr(false)
+	a := fakeAdm(f, pasted, busy)
+	f.Report("a", "done", "x")
+	if len(a.submitted) != 0 {
+		t.Fatalf("typed into a busy admiral: %q", a.submitted)
+	}
+	*busy = true
+	f.DeliverWake() // the poll
+	want := ReportLine("a", "done", "x")
+	if len(a.submitted) != 1 || a.submitted[0] != want {
+		t.Fatalf("not retried when idle: %q", a.submitted)
+	}
+	// Nothing was read, so the queue stays claimed for that batch; a poll
+	// with no new report types nothing more.
+	f.DeliverWake()
+	if len(a.submitted) != 1 {
+		t.Fatalf("woke twice for one report: %q", a.submitted)
+	}
+	// A second report, with the first still unread, is its own batch.
+	f.Report("b", "blocked", "y")
+	want = ReportLine("b", "blocked", "y")
+	if len(a.submitted) != 2 || a.submitted[1] != want {
+		t.Fatalf("second report not delivered: %q", a.submitted)
+	}
+	// A third while the admiral is busy again, then idle: still delivered.
+	*busy = false
+	f.Report("a", "question", "z")
+	*busy = true
+	f.DeliverWake()
+	want = ReportLine("a", "question", "z")
+	if len(a.submitted) != 3 || a.submitted[2] != want {
+		t.Fatalf("third report not delivered: %q", a.submitted)
+	}
+}
+
+// A wake that was typed but not submitted (the user typed into the box) is
+// queued again, not dropped: the next poll with an empty box delivers it.
+func TestWakeUnsubmittedIsRequeued(t *testing.T) {
+	f, pasted := mailFleet(t)
+	GuardWait = 50 * time.Millisecond
+	t.Cleanup(func() { GuardWait = 1500 * time.Millisecond })
+	a := fakeAdm(f, pasted, ptr(true))
+	a.beforeTyp = func(a *fakeAdmiral) { a.mu.Lock(); a.box = "mid sentence"; a.mu.Unlock() }
+	f.Report("a", "done", "x")
+	if len(a.submitted) != 0 {
+		t.Fatalf("submitted over user input: %q", a.submitted)
+	}
+	a.mu.Lock()
+	a.box, a.beforeTyp = "", nil
+	a.mu.Unlock()
+	f.DeliverWake()
+	want := ReportLine("a", "done", "x")
+	if len(a.submitted) != 1 || a.submitted[0] != want {
+		t.Fatalf("wake dropped instead of requeued: %q", a.submitted)
+	}
+}
+
 func TestBadge(t *testing.T) {
 	f, pasted := mailFleet(t)
 	fakeAdm(f, pasted, ptr(false))
@@ -223,5 +287,87 @@ func TestWakeRealPane(t *testing.T) {
 	cx, _ := f.T.Run("display-message", "-p", "-t", pane, "#{cursor_x}")
 	if !strings.Contains(out, "> "+ReportLine("a", "blocked", "need creds")) || strings.TrimSpace(cx) != "0" {
 		t.Fatalf("wake not typed and submitted (cursor_x %s):\n%s", cx, out)
+	}
+}
+
+// A box fleet types into but can never read back is not typed into for
+// ever: after WakeMaxTries it gives up and leaves the report to the badge.
+func TestWakeGivesUpAfterMaxTries(t *testing.T) {
+	f, pasted := mailFleet(t)
+	GuardWait = 20 * time.Millisecond
+	t.Cleanup(func() { GuardWait = 1500 * time.Millisecond })
+	a := fakeAdm(f, pasted, ptr(true))
+	typed := 0
+	f.TypeText = func(pane, text string) error {
+		typed++
+		a.mu.Lock()
+		a.box = "something else entirely"
+		a.mu.Unlock()
+		return nil
+	}
+	f.Report("a", "done", "x") // first try
+	for i := 0; i < 5; i++ {
+		a.mu.Lock()
+		a.box = ""
+		a.mu.Unlock()
+		f.DeliverWake()
+	}
+	if typed != WakeMaxTries {
+		t.Fatalf("typed %d times, want %d", typed, WakeMaxTries)
+	}
+	if len(a.submitted) != 0 {
+		t.Fatalf("submitted %q", a.submitted)
+	}
+	// The report is still unread and still on the badge.
+	if f.UnreadReports() != 1 {
+		t.Fatalf("unread %d, want 1", f.UnreadReports())
+	}
+}
+
+// Only one process types into the admiral pane at a time.
+func TestWakeOneTyperAtATime(t *testing.T) {
+	f, pasted := mailFleet(t)
+	a := fakeAdm(f, pasted, ptr(true))
+	release, ok := f.lockWake()
+	if !ok {
+		t.Fatal("lock not taken")
+	}
+	if _, held := f.lockWake(); held {
+		release()
+		t.Fatal("lock taken twice")
+	}
+	f.Report("a", "done", "x")
+	if len(a.submitted) != 0 {
+		t.Fatalf("typed while another process held the pane: %q", a.submitted)
+	}
+	release()
+	f.DeliverWake()
+	if len(a.submitted) != 1 {
+		t.Fatalf("not delivered after the lock went: %q", a.submitted)
+	}
+}
+
+// The queue file gained a try counter in ADR-51; a file written by the
+// previous build is read on the very next rollout, so both shapes parse.
+func TestParseWakeFormats(t *testing.T) {
+	unread := []mail.Msg{{ID: "001"}, {ID: "002"}}
+	raw := strings.Join([]string{
+		"001\ta\tdone\t[fleet] report from a",       // pre-ADR-51, four fields
+		"002\tb\tblocked\t2\t[fleet] report from b", // with a try counter
+		"003\tc\tdone\t0\tread already",             // report is no longer unread
+		"nonsense",
+		"",
+	}, "\n")
+	got := parseWake([]byte(raw), unread)
+	want := []wakeEntry{
+		{id: "001", from: "a", state: "done", line: "[fleet] report from a"},
+		{id: "002", from: "b", state: "blocked", tries: 2, line: "[fleet] report from b"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("parseWake = %+v, want %+v", got, want)
+	}
+	// A parsed entry writes back in the new shape, counter and all.
+	if l := want[1].raw(); l != "002\tb\tblocked\t2\t[fleet] report from b" {
+		t.Fatalf("raw() = %q", l)
 	}
 }

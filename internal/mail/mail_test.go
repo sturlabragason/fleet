@@ -338,3 +338,48 @@ func TestLog(t *testing.T) {
 		t.Fatalf("log n=1: %+v", l)
 	}
 }
+
+// ClaimNudgeUpTo claims per message id, not per read mark: the admiral's
+// report wake needs a second report to wake it even with the first unread.
+func TestClaimNudgeUpTo(t *testing.T) {
+	s := newStore(t)
+	s.Decide("a", "b", "grant")
+	mustSend(t, s, "a", "b", "x")
+	first := s.Peek("b")[0].ID
+	if prev, ok, _ := s.ClaimNudgeUpTo("b", first); !ok || prev != "" {
+		t.Fatalf("first claim refused (prev %q)", prev)
+	}
+	if _, ok, _ := s.ClaimNudgeUpTo("b", first); ok {
+		t.Fatal("same message claimed twice")
+	}
+	if got := s.NudgeMark("b"); got != first {
+		t.Fatalf("mark %q, want %q", got, first)
+	}
+	mustSend(t, s, "a", "b", "y")
+	un := s.Peek("b")
+	second := un[len(un)-1].ID
+	prev, ok, _ := s.ClaimNudgeUpTo("b", second)
+	if !ok || prev != first {
+		t.Fatalf("a newer message, still unread, was not claimable (prev %q)", prev)
+	}
+	if _, ok, _ := s.ClaimNudgeUpTo("b", ""); ok {
+		t.Fatal("claimed nothing")
+	}
+	// Winding back leaves the first message announced and the second not:
+	// a failed wake must not re-announce what was already typed.
+	if err := s.UnclaimNudgeTo("b", prev); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.NudgeMark("b"); got != first {
+		t.Fatalf("wound back to %q, want %q", got, first)
+	}
+	if _, ok, _ := s.ClaimNudgeUpTo("b", second); !ok {
+		t.Fatal("unclaimed message not claimable again")
+	}
+	if err := s.UnclaimNudgeTo("b", ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.NudgeMark("b"); got != "" {
+		t.Fatalf("wound back to %q, want none", got)
+	}
+}

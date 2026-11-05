@@ -14,7 +14,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/supervisor"
 )
 
-func TestReportWakesIdleSupervisorOncePerBatch(t *testing.T) {
+func TestReportWakesIdleSupervisorOncePerReport(t *testing.T) {
 	f, pasted := mailFleet(t)
 	idle := false
 	fakeAdm(f, pasted, &idle)
@@ -34,13 +34,18 @@ func TestReportWakesIdleSupervisorOncePerBatch(t *testing.T) {
 	}
 	f.Mail().Inbox(mail.Supervisor, false, 0)
 	f.Report("a", "blocked", "need creds")
-	f.Report("b", "question", "which db?")
 	if want := "%sup " + ReportLine("a", "blocked", "need creds"); len(*pasted) != 1 || (*pasted)[0] != want {
 		t.Fatalf("pasted %q, want one %q", *pasted, want)
 	}
+	// The admiral has not read that one, and the next report still wakes
+	// it: an unread report must never swallow the ones after it.
+	f.Report("b", "question", "which db?")
+	if want := "%sup " + ReportLine("b", "question", "which db?"); len(*pasted) != 2 || (*pasted)[1] != want {
+		t.Fatalf("second report did not wake: %q", *pasted)
+	}
 	f.Mail().Inbox(mail.Supervisor, false, 0)
 	f.Report("b", "question", "which db?")
-	if len(*pasted) != 2 {
+	if len(*pasted) != 3 {
 		t.Fatalf("new batch did not wake: %q", *pasted)
 	}
 	if _, err := f.Report("ghost", "done", "x"); err == nil {
