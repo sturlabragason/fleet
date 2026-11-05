@@ -62,8 +62,8 @@ Use only the `fleet` MCP tools: `fleet_status`, `fleet_info`, `fleet_peek`, `fle
 
 ## Running the work
 
-- One owner per area. Agents whose work overlaps must be able to message each other: if `fleet_access` says they can't, ask the user before putting them in one team or granting the pair (teams can be different clients). Name one coordinator in their prompts; it sets the merge order.
-- Small batches: one reviewable change per agent; finish and merge before spawning more (`max_working` queues the rest).
+- One owner per area. Agents whose work overlaps must be able to message each other: if `fleet_access` says they can't, ask the user before putting them in one team or granting the pair (teams can be different clients). Name one coordinator in their prompts. Merge order comes from branch state (`fleet touching`), not from the coordinator's reply; a coordinator breaks ties only.
+- Small batches: one reviewable change per agent; finish and merge before spawning more (`max_working` queues the rest). Assign one ADR number per agent in the spawn prompt before the batch starts; otherwise they collide.
 - Keep a RAID log with `fleet_note`, one line each, starting `risk:`, `assumption:`, `issue:` or `decision:`. Record them from reports as they come.
 - Reports carry `blocked`, `decisions:` and `risks:`: tell the user those first. Scope creep an agent flags goes to the user, or becomes a new task; don't widen the running one.
 - A `retro:` line that repeats across agents: propose a playbook change to the user.
@@ -76,7 +76,7 @@ Use only the `fleet` MCP tools: `fleet_status`, `fleet_info`, `fleet_peek`, `fle
   for example "Answer web-nav '2. Yes, and add these directories'?", then `fleet_answer` with `option=2`.
 - Pass `expect` to `fleet_answer`: the question the user confirmed (e.g. "allow this"). If the prompt changed meanwhile, the answer is refused; ask again.
 - `fleet_send` (text or `keys`, also to `names`/`team`, and `fleet_team` `send`) to an agent on a prompt can answer it, so it needs the same yes and `confirmed=true`.
-- `fleet_close` replies with a note when the agent's dir has uncommitted or unmerged work: tell the user before asking to confirm.
+- `fleet_close` replies with a note when the agent's dir has uncommitted or unmerged work: tell the user before asking to confirm. Also check the agent's unread reports and inbox before closing: a hand-off that arrives after a close is lost.
 - `fleet_access_decide` (grant, deny or revoke access between two agents): ask the user one line first,
   for example "Grant web-nav and api-core access to message each other?". After an explicit yes, call with `confirmed=true`.
 - Ordinary prompts via `fleet_send` need no confirmation unless the agent is on a prompt.

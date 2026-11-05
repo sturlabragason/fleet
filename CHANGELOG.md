@@ -5,6 +5,7 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-05
+- Agents no longer stall waiting on a coordinator: merge order is read from branch state, each agent is given its ADR number when it is spawned, and the CHANGELOG and DESIGN conflicts every batch produces are resolved by keeping both sides. Closing an agent now checks its unread reports and inbox first, so a late hand-off isn't lost
 - Fleet reads claude, agy and vibe properly: they now show working and error instead of looking idle while they think, and a report wake can type into their prompt box like it already could into Copilot's (ADR-42)
 - `fleet snap <agent> <state>` saves an agent's pane as a status fixture, so teaching fleet a new tool's screens is a capture rather than a hand-written one (ADR-42)
 - The overview header shows unread agent reports as a `✉ N reports` badge, so you can see reports are waiting without looking at the status line; it clears when you read them (ADR-36)
