@@ -347,27 +347,43 @@ func TestWakeOneTyperAtATime(t *testing.T) {
 	}
 }
 
-// The queue file gained a try counter in ADR-51; a file written by the
-// previous build is read on the very next rollout, so both shapes parse.
+// The queue line is the format every build understands: four fields, no
+// try counter (that lives in a file of its own), so a fleet from before
+// ADR-51 reading this queue during a rollout still types the right line.
 func TestParseWakeFormats(t *testing.T) {
 	unread := []mail.Msg{{ID: "001"}, {ID: "002"}}
 	raw := strings.Join([]string{
-		"001\ta\tdone\t[fleet] report from a",       // pre-ADR-51, four fields
-		"002\tb\tblocked\t2\t[fleet] report from b", // with a try counter
-		"003\tc\tdone\t0\tread already",             // report is no longer unread
+		"001\ta\tdone\t[fleet] report from a",
+		"002\tb\tblocked\t[fleet] report from b",
+		"003\tc\tdone\tread already", // report is no longer unread
 		"nonsense",
 		"",
 	}, "\n")
 	got := parseWake([]byte(raw), unread)
 	want := []wakeEntry{
 		{id: "001", from: "a", state: "done", line: "[fleet] report from a"},
-		{id: "002", from: "b", state: "blocked", tries: 2, line: "[fleet] report from b"},
+		{id: "002", from: "b", state: "blocked", line: "[fleet] report from b"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("parseWake = %+v, want %+v", got, want)
 	}
-	// A parsed entry writes back in the new shape, counter and all.
-	if l := want[1].raw(); l != "002\tb\tblocked\t2\t[fleet] report from b" {
+	e := wakeEntry{id: "002", from: "b", state: "blocked", tries: 2, line: "[fleet] report from b"}
+	if l := e.raw(); l != "002\tb\tblocked\t[fleet] report from b" {
 		t.Fatalf("raw() = %q", l)
+	}
+}
+
+// The try counter survives in its own file, so a report typed by one
+// process and left unsubmitted is not retried for ever by the next.
+func TestWakeTriesPersistAcrossProcesses(t *testing.T) {
+	f, _ := mailFleet(t)
+	es := []wakeEntry{{id: "001", from: "a", state: "done", tries: 2, line: "x"}}
+	f.writeTries(es)
+	if got := f.readTries()["001"]; got != 2 {
+		t.Fatalf("tries = %d, want 2", got)
+	}
+	f.writeTries(nil)
+	if _, err := os.Stat(f.triesPath()); !os.IsNotExist(err) {
+		t.Fatalf("counter file outlived the queue: %v", err)
 	}
 }

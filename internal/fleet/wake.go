@@ -63,15 +63,17 @@ type wakeEntry struct {
 	tries                 int
 }
 
-// raw is the queue line: id, from, state, tries, line, tab-separated.
+// raw is the queue line: id, from, state, line, tab-separated. The try
+// count is deliberately not in it: a fleet binary from before ADR-51 reads
+// the fourth field as the whole line, and during a rollout both builds read
+// this file, so an extra field would be typed into the admiral pane.
 func (e wakeEntry) raw() string {
 	clean := func(s string) string { return strings.NewReplacer("\t", " ", "\n", " ").Replace(s) }
-	return strings.Join([]string{clean(e.id), clean(e.from), clean(e.state), strconv.Itoa(e.tries), clean(e.line)}, "\t")
+	return strings.Join([]string{clean(e.id), clean(e.from), clean(e.state), clean(e.line)}, "\t")
 }
 
 // parseWake reads the queue, keeping entries whose report is still unread.
-// Lines in the pre-ADR-36 format (one bare line) are dropped; a line in the
-// pre-ADR-51 format (no try count) is read as never tried.
+// Lines in the pre-ADR-36 format (one bare line) are dropped.
 func parseWake(b []byte, unread []mail.Msg) []wakeEntry {
 	ids := map[string]bool{}
 	for _, m := range unread {
@@ -79,18 +81,55 @@ func parseWake(b []byte, unread []mail.Msg) []wakeEntry {
 	}
 	var out []wakeEntry
 	for _, l := range strings.Split(string(b), "\n") {
-		p := strings.SplitN(l, "\t", 5)
+		p := strings.SplitN(l, "\t", 4)
 		if len(p) < 4 || !ids[p[0]] {
 			continue
 		}
-		e := wakeEntry{id: p[0], from: p[1], state: p[2], line: p[3]}
-		if len(p) == 5 {
-			e.tries, _ = strconv.Atoi(p[3])
-			e.line = p[4]
-		}
-		out = append(out, e)
+		out = append(out, wakeEntry{id: p[0], from: p[1], state: p[2], line: p[3]})
 	}
 	return out
+}
+
+// triesPath holds how often each queued report has been typed without being
+// submitted. It is a file of its own so the queue keeps the format every
+// build understands; a missing or unreadable counter only costs a retry.
+func (f *Fleet) triesPath() string { return f.wakePath() + "-tries" }
+
+func (f *Fleet) readTries() map[string]int {
+	out := map[string]int{}
+	b, err := os.ReadFile(f.triesPath())
+	if err != nil {
+		return out
+	}
+	for _, l := range strings.Split(string(b), "\n") {
+		p := strings.SplitN(l, "\t", 2)
+		if len(p) != 2 {
+			continue
+		}
+		if n, err := strconv.Atoi(p[1]); err == nil {
+			out[p[0]] = n
+		}
+	}
+	return out
+}
+
+// writeTries replaces the counter file with the counts for es, forgetting
+// ids that have left the queue. It runs under lockWake.
+func (f *Fleet) writeTries(es []wakeEntry) {
+	var sb strings.Builder
+	for _, e := range es {
+		if e.tries > 0 {
+			fmt.Fprintf(&sb, "%s\t%d\n", e.id, e.tries)
+		}
+	}
+	if sb.Len() == 0 {
+		os.Remove(f.triesPath())
+		return
+	}
+	os.MkdirAll(filepath.Dir(f.triesPath()), 0o755)
+	if err := os.WriteFile(f.triesPath(), []byte(sb.String()), 0o644); err != nil {
+		logx.For("mail").Warn("admiral wake try counter not written", "err", err)
+	}
 }
 
 // newestID is the highest message id in a batch: what the nudge mark moves
@@ -121,7 +160,12 @@ func (f *Fleet) takeWake() []wakeEntry {
 		return nil // another process took it
 	}
 	b, _ := os.ReadFile(tmp.Name())
-	return parseWake(b, f.Mail().Peek(mail.Supervisor))
+	es := parseWake(b, f.Mail().Peek(mail.Supervisor))
+	tries := f.readTries()
+	for i := range es {
+		es[i].tries = tries[es[i].id]
+	}
+	return es
 }
 
 // requeueWake puts entries back at the end of the queue. A failure here is
@@ -256,7 +300,9 @@ func (f *Fleet) DeliverWake() {
 	}
 	if !f.guardEnter(v.Pane, line) {
 		f.undelivered(es, prev, "the input box did not hold exactly the wake line")
+		return
 	}
+	f.writeTries(nil) // delivered: the counters go with the entries
 }
 
 // canType reports whether the admiral pane may be typed into right now.
@@ -287,6 +333,7 @@ func (f *Fleet) undelivered(es []wakeEntry, prev, why string) {
 	if err := f.requeueWake(keep); err != nil {
 		return // already logged as an error; the claim stays, nothing to retry
 	}
+	f.writeTries(keep)
 	if len(keep) == 0 {
 		return // nothing left to announce: the mark stays where it is
 	}
