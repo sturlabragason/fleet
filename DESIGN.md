@@ -414,7 +414,7 @@ Everything sits in one tmux window, so one terminal window fills the monitor:
 - Clicking a tile in the overview (or pressing `Enter`) moves that agent's pane onto the wall with `tmux join-pane`/`swap-pane`. If the wall is full, the slot used least recently goes back to its hidden window. The process keeps running throughout. Nothing restarts.
 - **Mouse:** `set -g mouse on`. Click a live pane to type into it. Drag a border to resize. Scroll to read history. Click an overview tile to bring that agent onto the wall. Drag-select copies to the system clipboard: `fleet up` sets tmux `copy-command` to `wl-copy`, `xclip`, `xsel` or `pbcopy`, whichever the session has (ADR-28).
 - **Tiling layouts**, chosen from the overview (`1 2 4 6 9 m`), globally with `Alt+w` then the digit, or `Alt+<digit>` in terminals that don't use Alt+digit for tabs (Ptyxis and GNOME Terminal do): `1` one large pane; `2` side by side; `4` a 2×2; `6` a 3×2; `9` a 3×3; `M` main + stack (one large pane plus a column of small ones). Built from tmux's own layouts (`main-vertical`, `tiled`) plus saved custom layout strings.
-- **Pin** (`P`) keeps a pane on the wall so it is never swapped out.
+- **Pin** (`p`, §5e) keeps a pane on the wall so it is never swapped out.
 - **Zoom** (`Z`, or tmux `prefix + z`) makes one pane fill the whole wall for a moment.
 - Wall panes show a coloured border in the same colour as their tile, so status is visible in both places.
 - Named wall setups ("web-ui work", "gitops incident") save and restore which agents are on the wall and in which layout.
@@ -448,7 +448,7 @@ Within a class the least recently used pane (`@fleet_used`) goes. A pane that ne
 
 Status comes from the pane itself: `fleet refresh` already tags `@fleet_status` on every transition, and now also `@fleet_status_since` (unix nanoseconds). No board read from the wall code, so state stays in tmux (ADR-1, ADR-4).
 
-Pinning (`P` in §5a) is **specified here but not built**: class 0 exists in the ordering and `@fleet_pin` is read, so the key binding is the only missing piece.
+Pinning is built: `p` in the overview, the card menu or `fleet wall pin NAME` toggles `@fleet_pin` (§5e).
 
 **Replaced by the target slot (§5e, ADR-31).** The first version reused the pane I was last in (`#{pane_last}`), but only on a full wall, and nothing showed which pane that was. A card now replaces the visible `▶` target pane, full wall or not, and the class order below applies only when there is no target.
 
@@ -1045,7 +1045,7 @@ Rejected: `Alt-h` for help (it did not reach tmux in a live test; `Alt-?` did, a
 Decision: `spawn` delivers the first prompt through the tool's own launch flag where one exists (`copilot -i`), and otherwise waits for a *detected-ready* pane before pasting — never a fixed sleep. Starting mode (autopilot, plan, accept-edits) is `mode_args`/`mode_keys` data on the profile, selected by a per-user file at `$XDG_CONFIG_HOME/fleet/config.toml` that the repo neither ships nor commits. Repo defaults are neutral.
 Why: the fixed 1500 ms sleep lost the first prompt outright (the TUI was not in raw mode yet), and hand-switching every new agent to autopilot was the single most repeated manual step. Keeping it in a local file keeps an opinionated, blast-radius-heavy default (`--allow-all`) out of the repo while still being one line to turn on. Keeping it as profile data means Claude Code's `--permission-mode` needs no new code.
 Rejected: raising the sleep (still a race, just a slower one); auto-answering the autopilot permission dialog with keystrokes (ADR-9 — and `--allow-all` at launch makes the dialog not appear at all); committing `autopilot = true` as a repo default.
-**ADR-14: the wall evicts by status class, and never evicts a pane that needs me** (R4, R7)
+**ADR-14: the wall evicts by status class, and never evicts a pane that needs me** (R4, R7). *Amended by ADR-31: the `▶` target slot replaces the `#{pane_last}` rule.*
 Decision: when the wall is full, the incoming pane takes the slot of the wall pane the user was last in (`#{pane_last}`) via `swap-pane`, unless that pane is pinned or isn't a wall pane. Otherwise eviction orders panes pinned → waiting/error/stuck → working → idle/unknown and takes the least recently used pane of the worst class present. If every pane is protected, the new pane stays off the wall and tmux says so.
 Why: last-use order threw away exactly the pane I had come to answer. Status is already on the pane (`@fleet_status`), so this costs one tmux field, not a board read.
 Why the last-focused pane first: pressing `Enter` on a tile is an explicit choice, and the slot just left is the one the user is already looking at — replacing it in place avoids a re-tile and never surprises them by taking a different pane.
@@ -1056,7 +1056,7 @@ Decision: `internal/layout` picks rows and columns so every pane keeps at least 
 Why: a fixed 2×2 or 3×3 either wastes a wide monitor or crushes panes below a readable width. One rule covers every window size, and the `Wall9MinCols` special case disappears.
 Rejected: more presets (more keys, same problem); tmux's own `tiled` layout (can't keep the supervisor and overview sized, ADR-3's wall must stay one computed layout string); refusing to place a pane when the grid falls below the minimum (contradicts "cramped beats hidden" in the same rule; parked as §18 #15).
 
-**ADR-16: one emphasis pane at 60%, chosen by attention then focus** (R4, R9)
+**ADR-16: one emphasis pane at 60%, chosen by attention then focus** (R4, R9). *Amended by ADR-31: off by default (`fleet wall emphasis`), attention only, focus never picks it.*
 Decision: the longest-waiting pane — or the active pane when nothing waits — gets about 60% of the wall; the rest auto-grid in the remainder. Orientation is whichever remainder grids better, tie to stacked. Skipped when it would push panes under the minimum size. Moves are damped (10s dwell, 30s hold, explicit focus wins for 60s) and an unchanged layout string is never re-applied, so agent TUIs don't reflow every time a status flips. Toggled by `fleet wall emphasis`, no key binding.
 Why: tiles of equal size spend the monitor evenly on work that needs me and work that doesn't; without the damping, resizing panes on every status change costs more than it gives.
 Rejected: zoom only (all or nothing, and hides the others); sizing every pane by status (layout churns on every status change); an `M-e` binding (the hint bar is full; the next key belongs to pinning).
@@ -1131,7 +1131,7 @@ Decision: the view reads a curated `CHANGELOG.md` (dated, one line per user-faci
 Why: the git view showed whatever repo the focused pane was in, so its content changed with the pane and was mostly other projects' commits; what I wanted was "what can fleet do now". Embedding means an installed binary knows its features without a checkout; the commit fallback catches features merged without a line.
 Rejected: generating the list from commit subjects only (many fleet commits are not conventional, and subjects describe the code, not what the user can do); reading the changelog from the checkout at runtime (an installed binary may have no checkout); keeping the git review in the same view (two unrelated lists under one key).
 
-**ADR-31: a sticky target slot decides where a card goes** (R6, R7). *Amends ADR-16.*
+**ADR-31: a sticky target slot decides where a card goes** (R6, R7). *Amends ADR-14 and ADR-16.*
 Decision: the last focused wall pane is the target (`@fleet_target`), shown with `▶` on the pane and its card, kept while focus is in the overview or the admiral. A card click replaces the target whether or not the wall is full; `a` adds, `u` undoes, `Esc` clears, `Tab`/`Alt-n` send the next waiting agent there. Focus no longer moves emphasis, and emphasis is off by default.
 Why: clicking around moved panes the user had not touched. The user's model is "select a terminal, then pick what goes in it" (Grafana/OBS scene slots, VS Code editor groups). Before, the same gesture appended on a wall with room and replaced on a full one, and `#{pane_last}` was invisible and overwritten by any focus change. Emphasis on focus resized the slot the user had just chosen.
 Rejected: pick a card, then click a pane (arms a mode that eats a click meant for the agent, and is the reverse order); only showing today's rules (with room on the wall a card still appends); Shift+click to add (terminals keep it for selection, it never reaches tmux); drag and drop (tmux delivers the release to the starting pane).
