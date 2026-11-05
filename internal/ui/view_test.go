@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/sturlabragason/fleet/internal/board"
+	"github.com/sturlabragason/fleet/internal/status"
 )
 
 // overview renders n agents in a w×h pane with the last one selected.
@@ -272,5 +273,52 @@ func TestHeaderReportBadge(t *testing.T) {
 				t.Errorf("w=%d: line wider than pane: %q", w, l)
 			}
 		}
+	}
+}
+
+// TestTaskCardLineOnTile: a carded agent shows its goal, then fleet's
+// done-check verdict once it has one (DESIGN §18 #5, ADR-43).
+func TestTaskCardLineOnTile(t *testing.T) {
+	zone.NewGlobal()
+	a := &board.Agent{Name: "a1", Profile: "copilot", Status: "working", StatusSince: time.Now(),
+		Card: &board.Card{Goal: "ship the card", Result: "result.md"}}
+	m, _ := overview(90, 20, 1)
+	m.setAgents([]*board.Agent{a})
+	v := ansi.Strip(m.View())
+	if !strings.Contains(v, "◇ ship the card") {
+		t.Fatalf("no card line:\n%s", v)
+	}
+	a.Card.Checked = &board.Check{Code: 1, Want: 0}
+	m.setAgents([]*board.Agent{a})
+	v = ansi.Strip(m.View())
+	if !strings.Contains(v, "✗ done-check fail (exit 1, want 0)") {
+		t.Fatalf("no verdict line:\n%s", v)
+	}
+	if strings.Contains(v, "ship the card") {
+		t.Fatalf("goal still shown after the verdict:\n%s", v)
+	}
+	// Without a card the tile is unchanged: no card line at all.
+	a.Card = nil
+	m.setAgents([]*board.Agent{a})
+	if v := ansi.Strip(m.View()); strings.Contains(v, "◇") || strings.Contains(v, "done-check") {
+		t.Fatalf("card line without a card:\n%s", v)
+	}
+}
+
+// TestTaskCardLineSharesRowWithSubagents: the fourth line holds both, and
+// the tile keeps its height (the grid depends on it).
+func TestTaskCardLineSharesRowWithSubagents(t *testing.T) {
+	zone.NewGlobal()
+	a := &board.Agent{Name: "a1", Profile: "copilot", Status: "working", StatusSince: time.Now(),
+		Card:      &board.Card{Goal: "ship it", Result: "result.md"},
+		Subagents: []status.Subagent{{State: status.SubRunning}, {State: status.SubRunning}}}
+	m, plain := overview(90, 20, 1)
+	m.setAgents([]*board.Agent{a})
+	v := ansi.Strip(m.View())
+	if !strings.Contains(v, "◇ ship it") || !strings.Contains(v, subDot) {
+		t.Fatalf("row 4 lost one of the two:\n%s", v)
+	}
+	if got, want := strings.Count(v, "\n"), strings.Count(plain, "\n"); got != want {
+		t.Fatalf("tile height changed: %d lines, want %d\n%s", got, want, v)
 	}
 }

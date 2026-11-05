@@ -169,6 +169,58 @@ func line3(a *board.Agent, w int) string {
 	return lipgloss.NewStyle().Foreground(colText).Render(shorten(a.LastLine, w))
 }
 
+// cardMark opens the task-card line on a tile (DESIGN §18 #5, ADR-43).
+const cardMark = "◇"
+
+// cardLine is the tile's task-card line: the done-check verdict once fleet
+// has run it, else the card's goal. "" when the agent has no card or there
+// is no room. It wears roles the tile already has: idle for the goal, the
+// report colours for the verdict.
+func cardLine(a *board.Agent, w int) string {
+	c := a.Card
+	if c == nil || w < 4 {
+		return ""
+	}
+	if ch := c.Checked; ch != nil {
+		g, col := reportStyle("done")
+		if !ch.Pass {
+			g, col = reportStyle("blocked")
+		}
+		return lipgloss.NewStyle().Foreground(col).Render(ansi.Truncate(g+" done-check "+ch.Verdict(), w, "…"))
+	}
+	text := c.Goal
+	if text == "" {
+		text = c.Check
+	}
+	if text == "" {
+		return ""
+	}
+	return lipgloss.NewStyle().Foreground(colIdle).Render(ansi.Truncate(cardMark+" "+text, w, "…"))
+}
+
+// tileRow4 is the tile's fourth line, shared by the subagent dots and the
+// task-card line: dots first, at most half the width when a card wants the
+// rest. "" when the agent has neither.
+func tileRow4(a *board.Agent, w, frame int) string {
+	dotW := w
+	if a.Card != nil {
+		dotW = w / 2
+	}
+	dots := subagentRow(a.Subagents, dotW, frame)
+	rest := w
+	if dots != "" {
+		rest -= ansi.StringWidth(dots) + 2
+	}
+	cl := cardLine(a, rest)
+	switch {
+	case dots == "":
+		return cl
+	case cl == "":
+		return dots
+	}
+	return dots + "  " + cl
+}
+
 // grid is the card layout for the current pane and agent count.
 func (m *Model) grid() layout.TileGrid {
 	return m.cfg.Tiles(m.w, m.h-1, len(m.agents))
@@ -219,7 +271,7 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 		l3 = lipgloss.NewStyle().Foreground(colIdle).Render(shorten(a.Goal, inner))
 	}
 	text := l1 + "\n" + l2 + "\n" + l3
-	if l4 := subagentRow(a.Subagents, inner, m.frame); l4 != "" {
+	if l4 := tileRow4(a, inner, m.frame); l4 != "" {
 		text += "\n" + l4
 	}
 	body := lipgloss.NewStyle().Width(inner+2).Padding(0, 1).Render(text)

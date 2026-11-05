@@ -219,6 +219,8 @@ func cmdUI(f *fleet.Fleet) error {
 	f.OffWallEvery = 5 * time.Second
 	// Only the overview TUI starts queued spawns when a slot frees (§7a).
 	f.DrainQueue = true
+	// It also runs done-checks nobody else picked up, off the UI loop (ADR-43).
+	f.Async()
 	w := wall.New(f.T, fleet.Session)
 	w.KeepFocus = true // keys typed after a click/Enter/Tab/a must still reach the overview
 	be := &backend{f: f, w: w, enabled: insideFleet(f)}

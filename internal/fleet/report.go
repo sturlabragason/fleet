@@ -34,7 +34,30 @@ func (f *Fleet) Report(me, state, summary string) (note string, err error) {
 		return "", err
 	}
 	if state == "done" {
-		note = f.autoClose(me)
+		// With a done-check the verdict decides, so the wake waits for it
+		// (ADR-43). Where Go is set the check runs off this goroutine, so
+		// the agent's fleet_report returns at once; otherwise (the one-shot
+		// `fleet report` CLI, and tests) it runs here and reports its note.
+		if job, ok := f.claimCheck(me); ok {
+			if f.Go != nil {
+				f.Go(func() { f.doneCheck(job, m.ID, sum) })
+				return "done-check running: " + job.cmd, nil
+			}
+			return f.doneCheck(job, m.ID, sum), nil
+		}
+		// No claim: either this agent has no check, or one is already
+		// running or has run. A verdict that failed keeps the agent open
+		// however many times it reports done.
+		switch st := f.checkStanding(me); st {
+		case checkNone:
+			note = f.autoClose(me)
+		case checkRunning:
+			return "done-check running", nil
+		case checkFailed:
+			note = "not auto-closed: done-check failed"
+		case checkPassed:
+			note = f.autoClose(me)
+		}
 	}
 	if state == "done" || state == "blocked" || state == "question" {
 		line := ReportLine(me, state, sum)
@@ -44,6 +67,152 @@ func (f *Fleet) Report(me, state, summary string) (note string, err error) {
 		f.wakeSupervisor(m.ID, me, state, line)
 	}
 	return note, nil
+}
+
+// staleCheck is how long a claim is honoured before a sweep may take it:
+// the runner's own worst case plus a margin it can never reach, so the
+// sweep never races a live runner into a second run of the command.
+var staleCheck = CheckTimeout + checkWaitDelay + 30*time.Second
+
+// checkStanding is where an agent's done-check stands when no fresh claim
+// could be taken, so Report knows whether the verdict allows an auto-close.
+type checkStanding int
+
+const (
+	checkNone checkStanding = iota // no card, or no done-check
+	checkRunning
+	checkPassed
+	checkFailed
+)
+
+func (f *Fleet) checkStanding(me string) checkStanding {
+	a, ok := f.Store.Load().Agents[me]
+	if !ok || a.Card == nil || a.Card.Check == "" {
+		return checkNone
+	}
+	switch {
+	case a.Card.Checked == nil:
+		return checkRunning
+	case a.Card.Checked.Pass:
+		return checkPassed
+	default:
+		return checkFailed
+	}
+}
+
+// checkJob is one claimed done-check run: which agent, which incarnation of
+// it (a name can be closed and re-spawned), and the command to run.
+type checkJob struct {
+	name, dir, profile, cmd string
+	want                    int
+	created                 time.Time
+	claim                   time.Time
+}
+
+// claimCheck claims the one done-check run an agent's card gets (ADR-43).
+// It is false when there is no check, when one has already finished, and
+// when another runner holds a claim that has not gone stale — a claim older
+// than the whole timeout means its runner died with the check unfinished.
+func (f *Fleet) claimCheck(me string) (checkJob, bool) {
+	var job checkJob
+	ok := false
+	now := time.Now()
+	err := f.Store.Update(func(b *board.Board) error {
+		a := b.Agents[me]
+		if a == nil || a.Card == nil || a.Card.Check == "" || a.Card.Checked != nil {
+			return nil
+		}
+		if !a.Card.Started.IsZero() && now.Sub(a.Card.Started) < staleCheck {
+			return nil
+		}
+		a.Card.Started = now
+		job = checkJob{name: a.Name, dir: a.Dir, profile: a.Profile, cmd: a.Card.Check, want: a.Card.Want, created: a.Created, claim: now}
+		ok = true
+		return nil
+	})
+	if err != nil {
+		logx.For("fleet").Warn("done-check not claimed", "agent", me, "err", err)
+		return job, false
+	}
+	return job, ok
+}
+
+// doneCheck runs a claimed done-check, records the verdict on the board,
+// then wakes the admiral with it and decides the auto-close (ADR-43). A
+// failing check never auto-closes: the work is not finished. It returns the
+// auto-close note, for the caller that ran it inline.
+func (f *Fleet) doneCheck(job checkJob, msgID, sum string) string {
+	res := RunCheck(job.dir, &board.Card{Check: job.cmd, Want: job.want}, CheckTimeout)
+	logx.For("fleet").Info("done-check", "agent", job.name, "cmd", job.cmd,
+		"pass", res.Pass, "code", res.Code, "err", res.Err)
+	recorded := false
+	if err := f.Store.Update(func(b *board.Board) error {
+		cur := b.Agents[job.name]
+		// The agent may have been closed and the name re-spawned while the
+		// check ran: a stale verdict must not land on fresh work.
+		if cur == nil || cur.Card == nil || !cur.Created.Equal(job.created) || !cur.Card.Started.Equal(job.claim) {
+			return nil
+		}
+		cur.Card.Checked = res
+		recorded = true
+		return nil
+	}); err != nil {
+		logx.For("fleet").Warn("done-check not recorded", "agent", job.name, "err", err)
+	}
+	if !recorded {
+		logx.For("fleet").Info("done-check dropped (agent gone or replaced)", "agent", job.name)
+		return ""
+	}
+	note := ""
+	switch {
+	case res.Pass:
+		note = f.autoClose(job.name)
+	case f.Prefs.For(job.profile).AutoCloseDone:
+		note = "not auto-closed: done-check failed"
+	}
+	line := ReportLine(job.name, "done", sum) + " Done-check: " + res.Verdict() + "."
+	if note != "" {
+		line += " (" + note + ")"
+	}
+	f.wakeSupervisor(msgID, job.name, "done", line)
+	return note
+}
+
+// sweepChecks runs done-checks that nobody is running: an agent that
+// reported done and whose check was never claimed, or whose runner died
+// with it (ADR-43). The overview calls it on every refresh, so a verdict is
+// never lost when the agent's own process goes away.
+func (f *Fleet) sweepChecks(agents []*board.Agent) {
+	for _, a := range agents {
+		if a.Card == nil || a.Card.Check == "" || a.Card.Checked != nil {
+			continue
+		}
+		if a.Report == nil || a.Report.State != "done" {
+			continue
+		}
+		job, ok := f.claimCheck(a.Name)
+		if !ok {
+			continue
+		}
+		sum, id := a.Report.Summary, f.lastReportID(a.Name)
+		if f.Go != nil {
+			f.Go(func() { f.doneCheck(job, id, sum) })
+			continue
+		}
+		f.doneCheck(job, id, sum)
+	}
+}
+
+// lastReportID is the admiral's newest unread report message from name, so a
+// swept check's wake is dropped once the admiral has read that report.
+func (f *Fleet) lastReportID(name string) string {
+	id := ""
+	for _, m := range f.Mail().Peek(mail.Admiral) {
+		if m.Kind == mail.KindReport && m.From == name {
+			id = m.ID
+		}
+	}
+	return id
 }
 
 // UnreadReports counts the admiral's unread reports (DESIGN §6.7). It is

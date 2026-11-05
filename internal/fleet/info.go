@@ -125,6 +125,18 @@ func (f *Fleet) Info(name string) (string, error) {
 	kv("status", fmt.Sprintf("%s (for %s)", a.Status, now.Sub(a.StatusSince).Round(time.Second)))
 	kv("last activity", now.Sub(a.LastChange).Round(time.Second).String()+" ago")
 	kv("dir", a.Dir)
+	if c := a.Card; c != nil {
+		if c.Goal != "" {
+			kv("task goal", c.Goal)
+		}
+		if c.Check != "" {
+			kv("done-check", fmt.Sprintf("%s (want exit %d)", c.Check, c.Want))
+			kv("done-check result", CheckState(a))
+		}
+		if p, written, ok := ResultPath(a); ok {
+			kv("result file", p+map[bool]string{true: " (written)", false: " (not written yet)"}[written])
+		}
+	}
 	if w := a.Worktree; w != nil {
 		kv("agent worktree", w.Path+" on "+w.Branch)
 	}

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -57,6 +58,59 @@ type Agent struct {
 	// NoWorktree keeps a queued agent's opt-out, so the drain starts it the
 	// way the spawn asked (DESIGN §4).
 	NoWorktree bool `json:"no_worktree,omitempty"`
+	// Card is the task card the spawn attached (DESIGN §18 #5/#6, ADR-43).
+	// nil: the spawn had no card and the agent behaves as it always did.
+	Card *Card `json:"card,omitempty"`
+}
+
+// Card is a spawn's task card: what the task is, how fleet checks it is
+// done, and where the agent writes its result (DESIGN §18 #5/#6, ADR-43).
+// Every field is optional; a card with none of them is no card at all.
+type Card struct {
+	// Goal is the one-line task statement shown on the tile and in
+	// fleet_info. Agent.Goal keeps the full first prompt.
+	Goal string `json:"goal,omitempty"`
+	// Check is the done-check: a shell command fleet runs in the agent's
+	// dir when the agent reports done. "" means fleet cannot verify done.
+	Check string `json:"check,omitempty"`
+	// Want is the exit code Check must return to pass (normally 0).
+	Want int `json:"want,omitempty"`
+	// Result is the file the agent is told to write, relative to its dir.
+	Result string `json:"result,omitempty"`
+	// Checked is the last done-check run; nil until one has finished.
+	Checked *Check `json:"checked,omitempty"`
+	// Started is when a done-check run was claimed. It is the claim marker
+	// that keeps one check to one run (ADR-43): a second done report, or a
+	// sweep, sees it and stands down. A claim older than the timeout is
+	// stale — its runner died — and may be taken again.
+	Started time.Time `json:"started,omitempty"`
+}
+
+// Check is one done-check run.
+type Check struct {
+	At   time.Time `json:"at"`
+	Cmd  string    `json:"cmd"`
+	Want int       `json:"want"`
+	// Code is the exit status, or -1 when the command never finished.
+	Code int  `json:"code"`
+	Pass bool `json:"pass"`
+	// Err says why the command could not run or did not finish ("" = it did).
+	Err string `json:"err,omitempty"`
+	// Out is the tail of the combined output.
+	Out string `json:"out,omitempty"`
+}
+
+// Verdict is the one-line pass/fail an admiral, a tile or fleet info shows.
+func (c *Check) Verdict() string {
+	switch {
+	case c == nil:
+		return ""
+	case c.Pass:
+		return "pass (exit " + strconv.Itoa(c.Code) + ")"
+	case c.Err != "":
+		return "fail (" + c.Err + ")"
+	}
+	return "fail (exit " + strconv.Itoa(c.Code) + ", want " + strconv.Itoa(c.Want) + ")"
 }
 
 // Worktree is an agent's own git worktree and branch.

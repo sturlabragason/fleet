@@ -17,7 +17,9 @@ import (
 var AgentInstructions string
 
 // NewAgent returns a server in agent mode acting as agent name (DESIGN §6.6).
-func NewAgent(f *fleet.Fleet, name string) *Server { return &Server{F: f, Agent: name} }
+func NewAgent(f *fleet.Fleet, name string) *Server {
+	return &Server{F: f, Agent: name}
+}
 
 func (s *Server) instructions() string {
 	if s.Agent != "" {
