@@ -14,8 +14,11 @@ type Config struct {
 	ChipsOnlyRows int // compact overview
 	ChipsOnly     bool
 	MainPercent   int // M preset: main pane share of wall width
-	MinPaneW      int // smallest readable wall pane width
-	MinPaneH      int // smallest readable wall pane height (incl. the border-status row)
+	MinPaneW      int // comfortable wall pane width the grid scores against
+	MinPaneH      int // comfortable wall pane height (incl. the border-status row)
+	FloorDiv      int // hard floor: 1/FloorDiv of the wall rectangle (see floor.go)
+	FloorMinW     int // hard floor: absolute lower bound on pane width
+	FloorMinH     int // hard floor: absolute lower bound on pane height
 	FocusPercent  int // emphasis pane share of the wall
 	TileW, TileH  int // overview tile: minimum width and height (used by the TUI)
 	TileComfortW  int // overview tiles wrap onto more rows to reach this width
@@ -33,6 +36,9 @@ var Default = Config{
 	MainPercent:   60,
 	MinPaneW:      64,
 	MinPaneH:      17,
+	FloorDiv:      4,
+	FloorMinW:     40,
+	FloorMinH:     10,
 	FocusPercent:  60,
 	TileW:         26,
 	TileH:         6,

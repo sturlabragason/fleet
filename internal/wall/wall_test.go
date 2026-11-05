@@ -110,9 +110,15 @@ func TestHideFocused(t *testing.T) {
 // panes in hidden windows, on a throwaway socket.
 func setupWall(t *testing.T, n int) (*tmux.Client, *Wall, []string) {
 	t.Helper()
+	return setupWallSize(t, n, 300, 80)
+}
+
+// setupWallSize is setupWall on a window of a given size, for the floor tests.
+func setupWallSize(t *testing.T, n, x, y int) (*tmux.Client, *Wall, []string) {
+	t.Helper()
 	c := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
 	t.Cleanup(func() { c.KillServer() })
-	sup, err := c.Run("new-session", "-d", "-s", "f", "-n", "main", "-x", "300", "-y", "80", "-P", "-F", "#{pane_id}", "cat")
+	sup, err := c.Run("new-session", "-d", "-s", "f", "-n", "main", "-x", strconv.Itoa(x), "-y", strconv.Itoa(y), "-P", "-F", "#{pane_id}", "cat")
 	if err != nil {
 		t.Skip("tmux unavailable")
 	}

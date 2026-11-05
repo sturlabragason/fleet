@@ -100,6 +100,26 @@ func (w *Wall) apply(force bool) error {
 	if err != nil {
 		return err
 	}
+	// break-pane mutates the window, so shedding panes takes the apply lock
+	// too. The state is reread under the lock -- a pane may have been pinned
+	// or started waiting since the first read, and evicting on that stale
+	// snapshot would take away a protected pane -- and again afterwards,
+	// because the pane list changed.
+	if len(s.Wall) > s.MaxPanes() {
+		if !w.lock() {
+			return nil
+		}
+		if fresh, err := w.Read(); err == nil {
+			s = fresh
+		}
+		dropped := w.enforceFloor(s)
+		w.unlock()
+		if dropped > 0 {
+			if fresh, err := w.Read(); err == nil {
+				s = fresh
+			}
+		}
+	}
 	var ids []string
 	for _, p := range s.Wall {
 		ids = append(ids, p.ID)
@@ -222,13 +242,17 @@ func (w *Wall) show(pane string, useTarget, selectPane bool) (bool, error) {
 		w.setOpt("@fleet_undo", undoRecord(pane, t.ID, t.Agent))
 		return w.swapInto(pane, t.ID, now)
 	}
-	slots := s.Cfg.Slots(s.Preset)
+	slots := s.Slots()
 	for len(s.Wall) >= slots {
 		id, ok := EvictCandidate(s.Wall)
 		if !ok {
 			// Everything on the wall needs me: leave it alone and say so.
-			w.T.Run("display-message", "-t", w.Target, FullMsg)
-			log.Info("wall full, nothing evictable", "pane", pane, "slots", slots)
+			msg := FullMsg
+			if s.Capped() {
+				msg = FloorFullMsg
+			}
+			w.T.Run("display-message", "-t", w.Target, msg)
+			log.Info("wall full, nothing evictable", "pane", pane, "slots", slots, "capped", s.Capped())
 			return false, nil
 		}
 		w.breakOut(id)
@@ -281,11 +305,8 @@ func (w *Wall) Slots() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return s.Cfg.Slots(s.Preset), nil
+	return s.Slots(), nil
 }
-
-// FullMsg is shown when every wall pane is protected from eviction.
-const FullMsg = "wall full: every pane is waiting or failing (M-x to free one)"
 
 func remove(ps []tmux.PaneInfo, id string) []tmux.PaneInfo {
 	var out []tmux.PaneInfo
@@ -376,7 +397,10 @@ func (w *Wall) SetPreset(p string) error {
 	}
 	// Shrinking evicts only evictable panes; protected panes stay even if that
 	// leaves more panes than the cap (the grid resizes to fit them).
-	slots := s.Cfg.Slots(p)
+	slots := s.Slots()
+	if s.Capped() {
+		w.T.Run("display-message", "-t", w.Target, steppedMsg(p, slots))
+	}
 	for len(s.Wall) > slots {
 		id, ok := EvictCandidate(s.Wall)
 		if !ok {

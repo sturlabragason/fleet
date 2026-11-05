@@ -151,6 +151,12 @@ held). One level. `Esc` drops the target. Hiding the target pane (`x`, `Alt-x`) 
 target, a click on a full wall evicts by class as today, and the pane that would leave carries
 a dim `next out` mark so the outcome is visible before the click.
 
+**Small windows.** The wall has a readability floor that scales with your terminal, so a
+preset is also capped by what fits: `M-9` on a laptop puts four panes up and says so, an add
+that no preset can fit is refused rather than joined, and shrinking the terminal sheds panes
+instead of crushing them. Pinned, waiting and ▶ target panes are never the ones to go
+(DESIGN §5b.4).
+
 **Edge cases**
 
 - Waiting or failing target: replacing it is allowed, because an explicit choice beats class-1

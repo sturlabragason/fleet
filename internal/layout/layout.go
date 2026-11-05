@@ -29,10 +29,7 @@ func (c Config) Build(in Input) *Node {
 	root := &Node{W: in.W, H: in.H}
 	right := root
 	if in.Sup != "" && !c.SupHidden {
-		sw := c.SupCols(in.W)
-		if sw > in.W-20 {
-			sw = in.W / 2
-		}
+		sw := c.supWidth(in.W)
 		sup := &Node{Pane: in.Sup}
 		right = &Node{}
 		root.Horiz = true
@@ -51,11 +48,9 @@ func (c Config) Build(in Input) *Node {
 	wall := &Node{}
 	right.Horiz = false
 	right.Kids = []*Node{ov, wall}
-	oh := c.OvRows()
-	if oh > right.H-4 {
-		oh = right.H / 3
-	}
-	sizes(right, []int{oh, right.H - oh - 1}, false)
+	_, wh := c.WallRect(in.W, in.H, false)
+	oh := right.H - wh - 1
+	sizes(right, []int{oh, wh}, false)
 	// The wall rectangle is now known, so the grid can be sized against it.
 	tree := c.wallTree(in.Wall, in.Preset, in.Focus, wall.W, wall.H)
 	tree.W, tree.H, tree.X, tree.Y = wall.W, wall.H, wall.X, wall.Y

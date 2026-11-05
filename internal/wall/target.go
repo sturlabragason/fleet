@@ -56,7 +56,8 @@ func (w *Wall) Untarget() error {
 }
 
 // Add appends a pane as a new wall slot without replacing anything. On a full
-// wall the preset steps up first (1→2→4→6→9, m→6); at 9 it refuses with a
+// wall the preset steps up first (1→2→4→6→9, m→6); at 9, or once another
+// pane would fall under the readability floor (ADR-41), it refuses with a
 // message and returns false. A pane already on the wall is focused.
 func (w *Wall) Add(pane string) (bool, error) {
 	s, err := w.Read()
@@ -67,14 +68,23 @@ func (w *Wall) Add(pane string) (bool, error) {
 	if onWall(s, pane) {
 		return w.focus(pane, now, !w.KeepFocus)
 	}
-	for len(s.Wall) >= s.Cfg.Slots(s.Preset) {
+	for len(s.Wall) >= s.Slots() {
 		up, ok := presetUp[s.Preset]
 		if !ok {
 			w.T.Run("display-message", "-t", w.Target, AddFullMsg)
 			logx.For("wall").Info("add refused, wall at 9", "pane", pane)
 			return false, nil
 		}
+		prev := s.Preset
 		s.Preset = up
+		if s.Capped() && s.Slots() <= len(s.Wall) {
+			// A bigger preset cannot help: the window is what is full, not
+			// the preset (ADR-41). Don't join the pane, and say why.
+			s.Preset = prev
+			w.T.Run("display-message", "-t", w.Target, FloorFullMsg)
+			logx.For("wall").Info("add refused, below the readable floor", "pane", pane, "max", s.MaxPanes())
+			return false, nil
+		}
 	}
 	if s.Preset != w.opt("@fleet_wall") {
 		w.setOpt("@fleet_wall", s.Preset)
@@ -141,7 +151,7 @@ func (w *Wall) syncNextOut(s *State) {
 	out, _ := w.T.Run("display-message", "-p", "-t", w.Target, "#{@fleet_target}\t#{@fleet_next_out}")
 	target, cur, _ := strings.Cut(strings.TrimSpace(out), "\t")
 	want := ""
-	if _, ok := targetPane(s, target); !ok && len(s.Wall) >= s.Cfg.Slots(s.Preset) {
+	if _, ok := targetPane(s, target); !ok && len(s.Wall) >= s.Slots() {
 		want, _ = EvictCandidate(s.Wall)
 	}
 	if want != cur {

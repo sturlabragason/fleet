@@ -474,7 +474,7 @@ Presets (`M-1/2/4/6/9`) stop being fixed shapes and become **caps on the number 
 
 - A pane should be at least `MinPaneW`×`MinPaneH` = **64×17** cells. 16 usable rows plus the one row `pane-border-status top` takes for the title. 64 columns is what an agent TUI needs before it starts wrapping badly; demanding 80 would cap the reference wall at a 2×2 and make this rule a no-op exactly where it matters.
 - Given the wall rectangle and `n` panes, every row count `r` from 1 to `n` is tried. `cols = ceil(n/r)`, and the shape scores `min(cellW/MinPaneW, cellH/MinPaneH)` — not raw area, which ignores that cells are about twice as tall as they are wide and would put five panes in one row of 41 columns. **The score is clamped at 1**: once a cell clears the minimum, extra slack is worth nothing, so a shape that fits is never beaten by a roomier one with worse proportions (without the clamp, 3 panes would tile 1+2 instead of a single row of three). Shapes that divide evenly (`n % r == 0`) get a 10% bonus *after* the clamp, so 6 panes stay 3+3 instead of going ragged. Highest score wins; ties go to fewer rows, because height is the scarce axis.
-- A score below 1 means nothing fits the minimum; the best-scoring shape is used anyway. A cramped pane beats a hidden agent. (Refusing the join below some hard floor is a later question — see §18 #15.)
+- A score below 1 means nothing fits the minimum; the best-scoring shape is used anyway. A cramped pane beats a hidden agent — down to the readability floor in §5b.4, which is where that stops being true.
 - Panes spread over the rows as evenly as possible with the remainder on the **bottom** rows, and each row fills the full width. New panes join at the end, so the ragged row is where growth happens and the rows I am already reading keep their shape. 5 panes become **2 + 3**, 7 become 2 + 2 + 3, 3 sit in a single row.
 
 `M-1` still means one pane — plus any pane that refused to leave, since a waiting or failing pane is never evicted (§5b.1) and the leftovers auto-grid. `M-m` still means main + stack. `M-9` no longer needs the `Wall9MinCols` special case: a narrow window simply cannot fit three 64-column panes and the grid falls back on its own.
@@ -492,6 +492,35 @@ Equal tiles are wrong when one agent is asking a question and the rest are grind
 - `fleet wall emphasis` toggles it on and back off (window option `@fleet_emphasis`, on only when `1`). No key binding: the hint bar is already full, and the remaining key budget belongs to pinning.
 
 A pane that is merely `working` therefore shrinks on its own as soon as another pane starts waiting, and grows back when I answer it.
+
+### 5b.4 A readability floor that scales with the screen (ADR-41)
+
+`MinPaneW`×`MinPaneH` (64×17) is the *comfort* minimum the grid scores against; a pane may fall under it, because a cramped pane beats a hidden agent (ADR-15). The **floor** is where that stops being true: below it a pane is wrapped garbage, and the wall shows **fewer panes** rather than tiling smaller.
+
+The floor is not one number, because one number is wrong at both ends: 64 columns would mean a 95-column laptop wall could never hold two panes, and 40 columns is needlessly mean on a 249-column ultrawide. So it is derived from the wall rectangle:
+
+```
+floorW = clamp(wallW / FloorDiv, FloorMinW, MinPaneW)   # FloorDiv 4, FloorMinW 40
+floorH = clamp(wallH / FloorDiv, FloorMinH, MinPaneH)   # FloorDiv 4, FloorMinH 10
+```
+
+A quarter of the wall is the pane size a 2×2 would get, so the floor says "no smaller than a quarter of what you have", never below the absolute bound where text stops being readable (40 columns, 10 rows = 9 usable plus the border-status row), and never above the comfort minimum. The bigger the screen, the higher the floor.
+
+| Terminal | Wall rectangle | Floor | Panes |
+|---|---|---|---|
+| laptop 160×42 | 95×27 | 40×10 | 4 |
+| 1080p 210×52 | 145×37 | 40×10 | 9 |
+| 1440p 280×70 | 189×55 | 47×13 | 9 |
+| ultrawide 340×80 | 249×65 | 62×16 | 9 |
+| half screen 120×35 | 55×20 | 40×10 | 1 |
+
+**The grid prefers shapes that clear it.** §5b.2's search now looks at floor-clearing shapes first and only falls back to the best-scoring shape when none clears, so the grid never renders a cramped shape while a readable one exists. On a 77×21 wall two panes stack rather than sit side by side in 38 columns, even though side by side scores a hair higher.
+
+**Presets step down.** A preset is a cap on slots (§5b.2), and the floor lowers that cap: `M-9` on a laptop puts four panes up and says `preset 9: this window fits 4 readable panes`. The preset itself is never rewritten, so widening the terminal gets all nine back. `M-m` is measured against its own shape, not the grid: its stack column is only 40% of the wall, so a laptop that fits a 2×2 grid fits no main+stack at all and `M-m` means one pane there.
+
+**Adds are refused, with a reason.** `Add` (the card menu, `fleet wall add`) steps the preset up on a full wall; once a bigger preset cannot help, the pane is **not** joined and tmux says `wall full: another pane would be too small to read here (M-x to free one, or grow the window)`. A card going into the `▶` target slot is unaffected: it replaces a pane in place and the pane count does not change, so an explicit choice still beats the floor (ADR-31). The `▶` pane is also never the one shed, so the floor cannot undo the choice on the next apply.
+
+**It recomputes on resize.** Every apply enforces it, and `client-resized` runs one, so shrinking the terminal sheds panes instead of crushing them. Eviction follows the usual class + least-recently-used order (§5b.1), which means **a pinned, waiting or failing pane is never shed**: a wall of nothing but those goes cramped rather than hiding the pane that needs me. That is ADR-14 still winning over the floor.
 
 ### Out of scope here
 
@@ -1062,7 +1091,7 @@ Rejected: `Alt-h` for help (it did not reach tmux in a live test; `Alt-?` did, a
 Decision: `spawn` delivers the first prompt through the tool's own launch flag where one exists (`copilot -i`), and otherwise waits for a *detected-ready* pane before pasting — never a fixed sleep. Starting mode (autopilot, plan, accept-edits) is `mode_args`/`mode_keys` data on the profile, selected by a per-user file at `$XDG_CONFIG_HOME/fleet/config.toml` that the repo neither ships nor commits. Repo defaults are neutral.
 Why: the fixed 1500 ms sleep lost the first prompt outright (the TUI was not in raw mode yet), and hand-switching every new agent to autopilot was the single most repeated manual step. Keeping it in a local file keeps an opinionated, blast-radius-heavy default (`--allow-all`) out of the repo while still being one line to turn on. Keeping it as profile data means Claude Code's `--permission-mode` needs no new code.
 Rejected: raising the sleep (still a race, just a slower one); auto-answering the autopilot permission dialog with keystrokes (ADR-9 — and `--allow-all` at launch makes the dialog not appear at all); committing `autopilot = true` as a repo default.
-**ADR-14: the wall evicts by status class, and never evicts a pane that needs me** (R4, R7). *Amended by ADR-31: the `▶` target slot replaces the `#{pane_last}` rule.*
+**ADR-14: the wall evicts by status class, and never evicts a pane that needs me** (R4, R7). *Amended by ADR-31: the `▶` target slot replaces the `#{pane_last}` rule. Extended by ADR-41: the same order sheds panes that no longer fit the readability floor, and still protects class 0 and 1.*
 Decision: when the wall is full, the incoming pane takes the slot of the wall pane the user was last in (`#{pane_last}`) via `swap-pane`, unless that pane is pinned or isn't a wall pane. Otherwise eviction orders panes pinned → waiting/error/stuck → working → idle/unknown and takes the least recently used pane of the worst class present. If every pane is protected, the new pane stays off the wall and tmux says so.
 Why: last-use order threw away exactly the pane I had come to answer. Status is already on the pane (`@fleet_status`), so this costs one tmux field, not a board read.
 Why the last-focused pane first: pressing `Enter` on a tile is an explicit choice, and the slot just left is the one the user is already looking at — replacing it in place avoids a re-tile and never surprises them by taking a different pane.
@@ -1071,7 +1100,7 @@ Rejected: a hard LRU with a manual pin only (needs me to pin before it helps); f
 **ADR-15: the wall grid is computed from the window, presets are caps** (R7, R9)
 Decision: `internal/layout` picks rows and columns so every pane keeps at least 64×17 cells of the wall rectangle and the space is filled; shapes score `min(cellW/min, cellH/min)` rather than area; `M-1/2/4/6/9` only cap how many panes may be on the wall. 5 panes become 2+3.
 Why: a fixed 2×2 or 3×3 either wastes a wide monitor or crushes panes below a readable width. One rule covers every window size, and the `Wall9MinCols` special case disappears.
-Rejected: more presets (more keys, same problem); tmux's own `tiled` layout (can't keep the supervisor and overview sized, ADR-3's wall must stay one computed layout string); refusing to place a pane when the grid falls below the minimum (contradicts "cramped beats hidden" in the same rule; parked as §18 #15).
+Rejected: more presets (more keys, same problem); tmux's own `tiled` layout (can't keep the supervisor and overview sized, ADR-3's wall must stay one computed layout string); refusing to place a pane when the grid falls below the *comfort* minimum (contradicts "cramped beats hidden" in the same rule — a separate, lower floor does it instead, ADR-41).
 
 **ADR-16: one emphasis pane at 60%, chosen by attention then focus** (R4, R9). *Amended by ADR-31: off by default (`fleet wall emphasis`), attention only, focus never picks it.*
 Decision: the longest-waiting pane — or the active pane when nothing waits — gets about 60% of the wall; the rest auto-grid in the remainder. Orientation is whichever remainder grids better, tie to stacked. Skipped when it would push panes under the minimum size. Moves are damped (10s dwell, 30s hold, explicit focus wins for 60s) and an unchanged layout string is never re-applied, so agent TUIs don't reflow every time a status flips. Toggled by `fleet wall emphasis`, no key binding.
@@ -1198,6 +1227,11 @@ Decision: `fleet peek --summary` and `fleet_peek(summary=true)` shell out to `co
 Why: the Copilot CLI is already installed and already authenticated for the user's tool profiles, so fleet needs no API key, no key handling and no new dependency. Measured on 2026-11-05 over a 200-line pane: 4–7 s and about 6k input tokens (0.06 AI credits) per call. The lean flags are most of that: with the CLI's own instructions and tool definitions the same call is 36k tokens and 0.25 credits. A local model was the alternative in §12, and it is rejected: this machine already runs up to a dozen agents and a 30B model would take the RAM they need. `{prompt}`/`{model}` argv keeps any other non-interactive CLI (including `claude -p`) one config line away.
 Rejected: (a) local Ollama (RAM on a machine that has none to spare; the privacy argument is weak when the agent screens come from the same models anyway); (b) the Anthropic API directly (an API key in fleet's config, a key-rotation problem and an HTTP client, for the same model); (c) summarising on every refresh (a model call per agent per few seconds); (d) summarising inside the TUI's draw path (a slow model would freeze the overview).
 
+**ADR-41: the wall has a readability floor derived from the screen, and shows fewer panes rather than smaller ones** (§5b.4, R4). *Amends ADR-15, extends ADR-14.*
+Decision: a pane may never be smaller than `clamp(wall/4, 40×10, 64×17)` — a quarter of the wall rectangle, bounded below by the size where text stops being readable and above by the comfort minimum ADR-15 scores against. ADR-15's shape search prefers floor-clearing shapes and keeps its old behaviour only when none clears, so the shape rendered and the shape the floor tested are the same one; `m` is measured against main+stack instead of the grid. The preset's slot cap is stepped down to the largest pane count that clears it (`M-9` on a laptop is four panes; the preset itself is not rewritten). An add that no preset can fit is refused with a message naming the window, not the preset. Every apply enforces the floor, so the `client-resized` hook sheds panes when the terminal shrinks, in the ADR-14 class order — pinned, waiting and failing panes and the `▶` target pane are never shed, and a card into the `▶` slot never trips the floor because it changes no pane count (ADR-31).
+Why: ADR-15's "a cramped pane beats a hidden agent" is right until the pane is 41×12, where it is wrapped garbage and worse than not being shown. The user asked for a *flexible* floor rather than one number, and the two ends prove why: a fixed 64 columns would stop a 95-column laptop wall ever holding two panes, while 40 columns on a 249-column ultrawide would allow a 3×3 of unnecessarily mean panes. A quarter of the wall is the size a 2×2 already gets, so the rule reads as "never smaller than a quarter of what you have", and the absolute bound keeps it honest on small screens.
+Rejected: (a0) keeping the shape search floor-blind and testing the floor separately (the two disagree: a 77×21 wall scores two 38-column panes above two stacked ones, so the floor would pass a shape the grid then broke); (a) one fixed floor number (wrong at one end whichever number is picked — the reason this sat in §18 #15 waiting for "a floor number from live use"); (b) refusing below `MinPaneW`/`MinPaneH` themselves (that is the comfort minimum ADR-15 deliberately lets panes fall under; a second, lower number is what makes both rules true at once); (c) auto-shrinking the overview or hiding the admiral to buy wall space (the user owns those with `M-o` / `M-s`, and a layout that rearranges itself under the pointer is ADR-31's complaint); (d) evicting protected panes to honour the floor (the wall exists to show the pane that needs me; cramped-but-visible wins there); (e) rewriting `@fleet_wall` when a preset steps down (the cap must come back up by itself when the window grows).
+
 ---
 
 ## 16a. Lean admiral (R11)
@@ -1257,7 +1291,7 @@ The gap: fleet today manages **sessions**. Agentic work is about **tasks** (a go
 | 12 | **Stuck rule**: same error twice or no progress for N minutes → tile red, agent paused, admiral told | Mirrors the "same failure twice, stop" rule; stops grinding. |
 | 13 | **Waiting agents come to me**: optional auto-placement of the longest-waiting agent on the wall, plus a desktop notification | Less hunting; the wall shows what needs me. |
 | 14 | **Admiral reset key + context tile** (§6.3, §6.5). **Built 2026-11-04:** notes, handoff, context meter, `M-R`/`R` reset (ADR-11). | The lean admiral is cheap now, but long days still fill it. |
-| 15 | **A hard floor under the wall grid**: refuse to place one more pane (and say so) once the grid would drop every pane below a readable size, instead of tiling ever smaller | §5b.2 currently prefers a cramped pane to a hidden agent; past some point a 41×12 pane is just wrapped garbage. Needs a floor number from live use. |
+| 15 | **A hard floor under the wall grid**. **Built 2026-11-05:** a floor derived from the wall rectangle, presets step down, adds are refused with a reason, recomputed on resize (§5b.4, ADR-41). | §5b.2 preferred a cramped pane to a hidden agent; past some point a 41×12 pane is just wrapped garbage. |
 | 16 | **Pin a pane to the wall** (`M-p` / `@fleet_pin`): eviction class 0 already exists and is read, nothing sets it | §5b.1 is built around it; it is the one key binding worth spending (§5b.3 deliberately skipped `M-e`). |
 
 ### Not recommended
