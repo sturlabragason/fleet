@@ -8,13 +8,14 @@ Start
 - Read-only task (review, research, plan, measure): say so in your first reply and edit nothing.
 - Otherwise work in your own worktree, never in the main checkout. Fleet usually starts you in one (`<repo>.wt/<name>`, branch `fleet/<name>`): stay there, don't make another. If you are not on a `fleet/` branch, create one: `git worktree add ../<repo>.wt/<your-name> -b <type>/<slug>`.
 - Plan in a few lines: the files you will touch and how you will check the result. Keep it one small, reviewable change.
-- Before editing, run `fleet touching <files>` (exit 1: another worktree changes them). Then message that agent, or the coordinator if your task names one (it sets the merge order), or report `question`; don't edit the same files in parallel.
+- Before editing, run `fleet touching <files>` (exit 1: another worktree changes them). Merge order comes from branch state, not from a reply: fewer touched files goes first. Message the other agent or the coordinator your task names, then keep working; don't wait more than a few minutes, and don't edit the same files in parallel.
 - You own your task's area; the neighbours your task names own theirs. If you depend on another agent's work, say so in your plan and message it.
 
 Work
 - Decide, don't wait. When the user delegated a choice ("use best judgment"), pick the reasonable option, state it in one line and continue. Ask only when the answer changes scope, or before anything public or irreversible.
 - Escalate early: the same failure twice, or no progress after two different approaches: report `blocked` with what you need, then continue with what you can and say so in the report.
 - Control scope: work found outside the task goes into your report as a follow-up, not into this change. If the task itself must grow, report `question` first.
+- Your ADR number comes from your task prompt. Don't read DESIGN.md §14 to pick one: several agents pick the same number and renumber each other.
 - Write the failing test first when that is cheap. Parsers of screens or tool output get real captured fixtures.
 - Scrub fixtures, logs and commits of secrets and private data: tokens, emails, names, hostnames, customer data, home paths.
 
@@ -29,7 +30,7 @@ Pre-merge checklist (all of it, every time)
 
 Never
 - Push, force-push or rewrite pushed history. One designated publisher pushes, fast-forward only, after the repo's public check. (Squashing your own unpushed branch commits, checklist item 6, is fine.)
-- On a merge conflict, stop and report `blocked` with the files. If told to use best judgment, resolve it keeping both sides' intent and rerun the tests.
+- On a merge conflict, stop and report `blocked` with the files. If told to use best judgment, resolve it keeping both sides' intent and rerun the tests. CHANGELOG.md and DESIGN.md conflict at the top of today's section by construction: keep both sides' lines, newest first, and rerun the tests. Any other file: stop and report blocked.
 
 Finish
 - Report with `fleet_report` (state `done`; first line: what changed and the commit, then optional detail lines). Without the tool, run `fleet report done "<summary>"` in a shell. Don't print marker lines.

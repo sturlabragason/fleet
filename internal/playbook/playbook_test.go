@@ -160,4 +160,22 @@ func TestDefaultCarriesStandingRules(t *testing.T) {
 	if !strings.Contains(d, "Leave your own worktree and branch in place") {
 		t.Error("worker playbook lost the leave-the-worktree rule")
 	}
+	// Process review (docs/process-review.md): merge order is read, ADR numbers are given, and the two shared
+	// files conflict by construction.
+	if !strings.Contains(d, "Merge order comes from branch state, not from a reply: fewer touched files goes first") {
+		t.Error("worker playbook lost the merge-order rule")
+	}
+	if !strings.Contains(d, "Your ADR number comes from your task prompt") {
+		t.Error("worker playbook lost the ADR-number rule")
+	}
+	if !strings.Contains(d, "CHANGELOG.md and DESIGN.md conflict at the top of today's section by construction") {
+		t.Error("worker playbook lost the shared-file conflict rule")
+	}
+}
+
+// The playbook is paid for on every spawn, so DESIGN §4 pins its size.
+func TestDefaultStaysShort(t *testing.T) {
+	if n := strings.Count(strings.TrimSpace(Default()), "\n") + 1; n > 38 {
+		t.Errorf("playbook grew to %d lines; DESIGN §4 budgets about 38", n)
+	}
 }
