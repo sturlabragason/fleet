@@ -16,7 +16,7 @@ import (
 var reportToolDef = tool{"fleet_report", "Report to the admiral: state done, blocked, question or progress, and a summary. Start with a one-line headline (shown on your tile); add detail on later lines if useful (kept in full, up to 8000 chars). Needs no access grant.", obj([]string{"state", "summary"}, map[string]any{
 	"state": map[string]any{"type": "string", "enum": mail.ReportStates}, "summary": str("headline first (what changed, branch/commit, or what you need), then optional detail lines")})}
 
-var reportsToolDef = tool{"fleet_reports", "Read agent reports (done, blocked, question, progress): unread ones, oldest first, and mark them read; all=true shows the last N without marking.", obj(nil, map[string]any{
+var reportsToolDef = tool{"fleet_reports", "Read agent reports (done, blocked, question, progress): unread ones, oldest first, and mark them read; all=true shows the last N without marking. It ends with the task cards: fleet's own done-check verdict per agent and the result file to read.", obj(nil, map[string]any{
 	"all": map[string]any{"type": "boolean", "description": "show the last N reports, read or not"}, "limit": map[string]any{"type": "integer", "description": "N for all=true (default 20)"}})}
 
 // report is the agent-mode fleet_report.
@@ -38,7 +38,7 @@ func (s *Server) reports(all bool, limit int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return RenderReports(ms, all), nil
+	return RenderReports(ms, all) + taskCards(s.F.Store.Load().Sorted()), nil
 }
 
 // RenderReports lists reports, one line each, oldest first.
@@ -67,12 +67,25 @@ func (s *Server) reportsSuffix() string {
 	return ""
 }
 
-// reportCell is the fleet_status report column: state and summary, ~60 chars.
-func reportCell(r *board.Report) string {
+// reportCellW is the fleet_status report column width; a verdict prefix
+// gets the room it needs on top of it.
+const reportCellW = 60
+
+// reportCell is the fleet_status report column: the done-check verdict when
+// fleet has one (ADR-43), then the state and summary, ~80 chars.
+func reportCell(a *board.Agent) string {
+	r := a.Report
 	if r == nil {
 		return ""
 	}
-	return ansi.Truncate(r.State+": "+r.Summary, 60, "…")
+	cell := r.State + ": " + r.Summary
+	c := a.Card
+	if c == nil || c.Checked == nil {
+		// Without a verdict the column is what it always was.
+		return ansi.Truncate(cell, reportCellW, "…")
+	}
+	cell = "[done-check " + map[bool]string{true: "pass", false: "fail"}[c.Checked.Pass] + "] " + cell
+	return ansi.Truncate(cell, reportCellW+20, "…")
 }
 
 // unreadReports is the fleet_brief section; it does not mark anything read.

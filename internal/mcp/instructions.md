@@ -58,6 +58,9 @@ Use only the `fleet` MCP tools: `fleet_status`, `fleet_info`, `fleet_peek`, `fle
 - A spawn prompt is ready when it says: the task, what is done when, which agent owns neighbouring areas (don't touch),
   what it depends on, and exceptions to the playbook (for example "read-only", "you are the publisher", "use best judgment").
 - Always spawn with the task as the prompt: an agent spawned without one gets no playbook.
+- Give a task card when the work has a machine-checkable done condition: `goal`, `check` (a shell command),
+  `check_exit` (default 0) and `result` (default `result.md`). Fleet runs that check in the agent's dir when the
+  agent reports done, shows pass/fail in `fleet_status` and `fleet_reports`, and won't auto-close a failed one.
 - In a git repo `fleet_spawn` makes that worktree for the agent itself (`<repo>.wt/<name>`, branch `fleet/<name>`);
   pass `worktree=false` only when the work must land in the user's own checkout. Closing never removes it.
 

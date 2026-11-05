@@ -61,6 +61,11 @@ type Fleet struct {
 	// CloseLater schedules closing an agent after its report returns; nil =
 	// tmux run-shell (tests replace it).
 	CloseLater func(name string) error
+	// Go runs a job off the caller's goroutine: the done-check after a done
+	// report (ADR-43), which may take minutes. The MCP servers set it so the
+	// agent's fleet_report returns at once; nil runs the job inline, which
+	// is what the one-shot CLI (the process exits on return) and tests need.
+	Go func(func())
 	// OffWallEvery is how often Refresh captures an agent pane that is not
 	// on the wall; 0 = every Refresh. The overview TUI sets it (DESIGN §7a).
 	OffWallEvery time.Duration
@@ -102,6 +107,13 @@ func New(t *tmux.Client, home, exe string) (*Fleet, error) {
 	return &Fleet{T: t, Store: board.NewStore(home), Home: home, Exe: exe, Profiles: ps, Patterns: status.Load(home), Prefs: pr, Teams: team.NewStore(home)}, nil
 }
 
+// Async makes slow work (today: a done-check, ADR-43) run on its own
+// goroutine. A process with a loop that must not stall — the MCP servers and
+// the overview — calls it; a one-shot command leaves it alone so the work
+// finishes before the process exits, which is also what keeps tests
+// deterministic.
+func (f *Fleet) Async() { f.Go = func(fn func()) { go fn() } }
+
 // errNotStarting: a queued agent was closed or changed while it was launched.
 var errNotStarting = errors.New("no longer starting (closed while launching)")
 
@@ -119,6 +131,9 @@ type SpawnOpts struct {
 	// Worktree overrides [defaults]/[profile.<name>] worktree: the agent
 	// gets its own git worktree, or works straight in dir (DESIGN §4).
 	Worktree *bool
+	// Card is the task card: goal, done-check and result file (ADR-43).
+	// nil = no card, and the spawn behaves as it did before cards.
+	Card *board.Card
 }
 
 // Spawn starts an agent in its own hidden window, with the config file's
@@ -151,13 +166,14 @@ func (f *Fleet) SpawnWith(o SpawnOpts, name, profile, dir, prompt string) (*boar
 	if o.Worktree != nil {
 		wt = *o.Worktree
 	}
-	if a, err := f.enqueue(name, profile, dir, prompt, wt); a != nil || err != nil {
+	card := NormalizeCard(o.Card)
+	if a, err := f.enqueue(name, profile, dir, prompt, wt, card); a != nil || err != nil {
 		return a, err
 	}
 	// The busy count and the launch are not one critical section, so two
 	// concurrent spawns can both see the last free slot: the cap is
 	// best-effort and may be exceeded by one per racing spawn.
-	return f.launch(name, profile, dir, prompt, false, wt)
+	return f.launch(name, profile, dir, prompt, false, wt, card)
 }
 
 // agentWorktree gives the agent its own worktree and branch for a spawn into
@@ -184,13 +200,14 @@ func (f *Fleet) agentWorktree(name, dir string) *board.Worktree {
 // Spawn and the queue drain. The first prompt is built here only. claimed is
 // true for a queued agent the drain marked starting (see start). wantWT asks
 // for the agent's own git worktree; the playbook and the baseline are then
-// read from that worktree, not from the spawn dir.
-func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool) (*board.Agent, error) {
+// read from that worktree, not from the spawn dir. card is the task card
+// (ADR-43): it goes on the board and its block is appended to the prompt.
+func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, card *board.Card) (*board.Agent, error) {
 	p, ok := f.Profiles[profile]
 	if !ok {
 		return nil, fmt.Errorf("unknown profile %q (have %v)", profile, tools.Names(f.Profiles))
 	}
-	ex := startExtra{NoWorktree: !wantWT}
+	ex := startExtra{NoWorktree: !wantWT, Card: card}
 	if wantWT {
 		ex.Worktree = f.agentWorktree(name, dir)
 		if ex.Worktree != nil {
@@ -214,6 +231,14 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool) 
 		text, src := playbook.Resolve(f.Home, dir)
 		full = playbook.Compose(text, prompt)
 		logx.For("fleet").Info("playbook", "agent", name, "sources", src, "bytes", len(full)-len(prompt))
+	}
+	// The task card goes last, so it is the final thing the agent reads
+	// (ADR-43). A card with no prompt is still worth telling the agent.
+	if cp := CardPrompt(card); cp != "" {
+		if full != "" {
+			full += "\n\n"
+		}
+		full += cp
 	}
 	argv, embedded := launchArgv(name, p, tools.AgentVars(f.Exe, name, id),
 		tools.Launch{Mode: pr.Mode, Extra: pr.ExtraArgs, Prompt: full, NoPromptArgs: !pr.AutoSubmit})
@@ -296,7 +321,7 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 	now := time.Now()
 	a := &board.Agent{Name: name, Profile: profile, Patterns: p.Patterns, Dir: dir, Goal: goal, SessionID: id,
 		PaneID: pane, Status: string(status.Unknown), Created: now, StatusSince: now, LastChange: now,
-		Baseline: ex.Base, Worktree: ex.Worktree, NoWorktree: ex.NoWorktree}
+		Baseline: ex.Base, Worktree: ex.Worktree, NoWorktree: ex.NoWorktree, Card: ex.Card}
 	if err := f.Store.Update(func(b *board.Board) error {
 		old, ok := b.Agents[name]
 		if claimed {
@@ -324,6 +349,7 @@ type startExtra struct {
 	Base       *board.GitBase
 	Worktree   *board.Worktree
 	NoWorktree bool
+	Card       *board.Card
 }
 
 // afterTag, when set by a test, runs between tagging a new pane and the

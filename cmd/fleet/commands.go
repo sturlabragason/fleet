@@ -28,9 +28,14 @@ const usage = `usage:
                                             $FLEET_ADMIRAL_PROFILE, last choice, [admiral] profile, copilot
   fleet ui                                  run the overview TUI in this terminal
   fleet spawn [--worktree|--no-worktree] <name> <profile> [dir] ["prompt"]
+             [--goal "one line"] [--check "cmd"] [--check-exit N] [--result FILE]
                                             in a git repo the agent gets its own worktree,
                                             <repo>.wt/<name> on branch fleet/<name> (worktree in
                                             config.toml turns it off; --no-worktree for one spawn);
+                                            --goal/--check/--result give it a task card: fleet runs
+                                            the check in its dir when it reports done and tells the
+                                            admiral pass or fail, and the agent is told to write the
+                                            result file (default result.md);
                                             queued instead when max_working agents are busy;
                                             the overview TUI starts it when a slot frees
   fleet spawn --fake <name> [dir]           shorthand for profile "fake"
@@ -198,10 +203,15 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 	isFake := fs.Bool("fake", false, "use the fake agent profile")
 	wt := fs.Bool("worktree", false, "give the agent its own git worktree, whatever config.toml says")
 	noWT := fs.Bool("no-worktree", false, "spawn straight into dir, with no worktree of its own")
+	goal := fs.String("goal", "", "task card: the goal in one line")
+	check := fs.String("check", "", "task card: done-check command, run in the agent's dir when it reports done")
+	checkExit := fs.Int("check-exit", 0, "task card: exit code the done-check must return")
+	result := fs.String("result", "", "task card: result file the agent writes, relative to its dir (default "+fleet.DefaultResult+")")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	var o fleet.SpawnOpts
+	o.Card = fleet.NormalizeCard(&board.Card{Goal: *goal, Check: *check, Want: *checkExit, Result: *result})
 	var set []string
 	// Read which flag was passed, not just its value, so --worktree=false and
 	// --no-worktree=false mean what they say.
@@ -250,6 +260,12 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 	fmt.Printf("spawned %s (%s) in %s pane %s\n", ag.Name, ag.Profile, ag.Dir, ag.PaneID)
 	if w := ag.Worktree; w != nil {
 		fmt.Printf("worktree %s on branch %s (of %s)\n", w.Path, w.Branch, w.Repo)
+	}
+	if c := ag.Card; c != nil {
+		fmt.Printf("task card: result file %s\n", c.Result)
+		if c.Check != "" {
+			fmt.Printf("done-check on report done: %s (want exit %d)\n", c.Check, c.Want)
+		}
 	}
 	return nil
 }

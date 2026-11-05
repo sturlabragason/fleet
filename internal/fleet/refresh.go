@@ -94,6 +94,7 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 	if f.DrainQueue && perr == nil {
 		f.DeliverWake()
 		f.sweepDone(out, now)
+		f.sweepChecks(out)
 		f.reapDead(out, deadPanes, now)
 	}
 	return out, err

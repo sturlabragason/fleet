@@ -53,11 +53,15 @@ var toolDefs = []tool{
 		"name": str("agent name"), "answer": map[string]any{"type": "string", "enum": []string{"y", "n"}, "description": "y = option 1, n = the first option starting with No; plain y/n when there is no menu"},
 		"option": map[string]any{"type": "integer", "minimum": 1, "maximum": 9, "description": "menu option number; pass answer or option, not both"},
 		"expect": str("the question the user confirmed (or part of it, or of the option label); refused if the prompt on screen no longer matches"), "confirmed": confirmedProp})},
-	{"fleet_info", "Facts about one agent: profile, team, status and age, last activity, dir, git (worktree, branch, dirty files, merged into main, commits ahead), session id, context %, spend so far, mode.", obj([]string{"name"}, map[string]any{
+	{"fleet_info", "Facts about one agent: profile, team, status and age, last activity, dir, its task card (goal, done-check and its verdict, result file), git (worktree, branch, dirty files, merged into main, commits ahead), session id, context %, spend so far, mode.", obj([]string{"name"}, map[string]any{
 		"name": str("agent name")})},
-	{"fleet_spawn", "Start a new agent with a tool profile in a directory, optionally with a first prompt. In a git repo the agent gets its own worktree, <repo>.wt/<name> on branch fleet/<name>, and works there; pass worktree=false to put it straight in dir (e.g. a read-only task, or work that must land in the user's checkout).", obj([]string{"name", "profile", "dir"}, map[string]any{
+	{"fleet_spawn", "Start a new agent with a tool profile in a directory, optionally with a first prompt. In a git repo the agent gets its own worktree, <repo>.wt/<name> on branch fleet/<name>, and works there; pass worktree=false to put it straight in dir (e.g. a read-only task, or work that must land in the user's checkout). goal, check and result make a task card: fleet runs check in the agent's dir when it reports done and tells you whether it passed, and the agent is told to write the result file.", obj([]string{"name", "profile", "dir"}, map[string]any{
 		"name": str("short unique agent name"), "profile": str("tool profile, see fleet_profiles"), "dir": str("working directory (absolute)"), "prompt": str("optional first prompt"),
-		"worktree": map[string]any{"type": "boolean", "description": "give the agent its own git worktree (default: the user's config, normally true)"}})},
+		"worktree":   map[string]any{"type": "boolean", "description": "give the agent its own git worktree (default: the user's config, normally true)"},
+		"goal":       str("task card: the goal in one line (shown on the tile and in fleet_info)"),
+		"check":      str("task card: done-check shell command, run in the agent's dir when it reports done, e.g. \"go build ./... && go test ./...\""),
+		"check_exit": map[string]any{"type": "integer", "description": "exit code the done-check must return to pass (default 0)"},
+		"result":     str("task card: result file the agent must write, relative to its dir (default result.md)")})},
 	{"fleet_sessions", "Find copilot/claude sessions the user started outside fleet, newest first: id | age | profile | dir | title | flags. Use before fleet_adopt.", obj(nil, map[string]any{
 		"query": str("optional words; every word must appear in title, dir, branch or id"), "limit": map[string]any{"type": "integer", "description": "max sessions (default 15)"}})},
 	{"fleet_adopt", "Resume an existing session the user started outside fleet as a fleet agent. Pass session_id (full id or unique 8+ char prefix) or query (words that match exactly one session), not both. Refuses if the session is missing or still open elsewhere.", obj(nil, map[string]any{
@@ -101,6 +105,9 @@ type args struct {
 	Agents, Names, Keys                     []string
 	// Worktree is fleet_spawn's opt-out; nil means "whatever config says".
 	Worktree *bool
+	// Task card arguments of fleet_spawn (ADR-43).
+	Goal, Check, Result string
+	CheckExit           *int `json:"check_exit"`
 }
 
 func (s *Server) call(name string, raw json.RawMessage) (string, error) {
@@ -134,18 +141,18 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 				return "", err
 			}
 		}
-		ag, err := s.F.SpawnWith(fleet.SpawnOpts{Worktree: a.Worktree}, a.Name, a.Profile, a.Dir, a.Prompt)
+		ag, err := s.F.SpawnWith(fleet.SpawnOpts{Worktree: a.Worktree, Card: a.card()}, a.Name, a.Profile, a.Dir, a.Prompt)
 		if err != nil {
 			return "", err
 		}
 		if ag.Status == string(status.Queued) {
 			return fmt.Sprintf("queued %s (%s) in %s: %d agents busy, max_working %d; it starts when a slot frees while the overview TUI runs",
-				ag.Name, ag.Profile, ag.Dir, s.F.Busy(), s.F.Prefs.MaxWorking()), nil
+				ag.Name, ag.Profile, ag.Dir, s.F.Busy(), s.F.Prefs.MaxWorking()) + cardNote(ag), nil
 		}
 		if w := ag.Worktree; w != nil {
-			return fmt.Sprintf("spawned %s (%s) in its own worktree %s on branch %s (of %s)", ag.Name, ag.Profile, w.Path, w.Branch, w.Repo), nil
+			return fmt.Sprintf("spawned %s (%s) in its own worktree %s on branch %s (of %s)", ag.Name, ag.Profile, w.Path, w.Branch, w.Repo) + cardNote(ag), nil
 		}
-		return fmt.Sprintf("spawned %s (%s) in %s", ag.Name, ag.Profile, ag.Dir), nil
+		return fmt.Sprintf("spawned %s (%s) in %s", ag.Name, ag.Profile, ag.Dir) + cardNote(ag), nil
 	case "fleet_sessions":
 		return s.sessions(a.Query, a.Limit)
 	case "fleet_adopt":
@@ -285,7 +292,7 @@ func (s *Server) status() (string, error) {
 			sp = x.Short()
 			total.Add(x)
 		}
-		fmt.Fprintf(&b, "%s | %s | %s | %s | %s | %s | %s | %s | %s | %s\n", a.Name, teams[a.Name].Team, a.Profile, a.Status, sub, w, time.Since(a.StatusSince).Round(time.Second), sp, wf, reportCell(a.Report))
+		fmt.Fprintf(&b, "%s | %s | %s | %s | %s | %s | %s | %s | %s | %s\n", a.Name, teams[a.Name].Team, a.Profile, a.Status, sub, w, time.Since(a.StatusSince).Round(time.Second), sp, wf, reportCell(a))
 	}
 	if total.Any() {
 		fmt.Fprintf(&b, "fleet spend so far: %s over %d model calls (%s); %s\n",

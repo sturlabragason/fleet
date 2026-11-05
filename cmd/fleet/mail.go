@@ -174,6 +174,8 @@ func cmdMCP(f *fleet.Fleet, args []string) error {
 	if err != nil {
 		return err
 	}
+	// A done-check must never stall the MCP loop (ADR-43).
+	f.Async()
 	in, reloaded := mcp.ResumeInput(os.Stdin)
 	s := mcp.New(f, wall.New(f.T, fleet.Session))
 	if me != "" {
