@@ -193,7 +193,41 @@ func TestHelpColumns(t *testing.T) {
 // TestDesignTableInSync fails when the DESIGN.md keys block drifts from the
 // registry. Regenerate with `fleet keys --markdown`.
 func TestDesignTableInSync(t *testing.T) {
-	b, err := os.ReadFile("../../DESIGN.md")
+	if got := markedBlock(t, "../../DESIGN.md"); got != Markdown() {
+		t.Errorf("DESIGN.md keys block is stale; replace it with `fleet keys --markdown` output.\n got:\n%s\nwant:\n%s", got, Markdown())
+	}
+}
+
+// TestKeysDocInSync fails when the docs/keys.md table drifts from the
+// registry. Regenerate with `fleet keys --markdown`.
+func TestKeysDocInSync(t *testing.T) {
+	if got := markedBlock(t, "../../docs/keys.md"); got != Markdown() {
+		t.Errorf("docs/keys.md keys block is stale; replace it with `fleet keys --markdown` output.\n got:\n%s\nwant:\n%s", got, Markdown())
+	}
+}
+
+// TestEveryBindingDocumented fails when a registry entry has no line in
+// docs/keys.md, so a new key can't be added without documenting it. It names
+// the missing key, which the whole-block comparison above does not.
+func TestEveryBindingDocumented(t *testing.T) {
+	b, err := os.ReadFile("../../docs/keys.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := string(b)
+	for _, bind := range Bindings {
+		row := "| " + string(bind.Group) + " | `" + bind.Key + "` | " + bind.Desc + " |"
+		if !strings.Contains(doc, row+"\n") {
+			t.Errorf("docs/keys.md has no line for %s %q; expected row:\n%s", bind.Group, bind.Key, row)
+		}
+	}
+}
+
+// markedBlock returns the text between the keys:begin and keys:end markers
+// in the file at path.
+func markedBlock(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,9 +235,7 @@ func TestDesignTableInSync(t *testing.T) {
 	const begin, end = "<!-- keys:begin -->\n", "<!-- keys:end -->"
 	i, j := strings.Index(s, begin), strings.Index(s, end)
 	if i < 0 || j < i {
-		t.Fatal("DESIGN.md keys markers missing")
+		t.Fatalf("%s keys markers missing", path)
 	}
-	if got := s[i+len(begin) : j]; got != Markdown() {
-		t.Errorf("DESIGN.md keys block is stale; replace it with `fleet keys --markdown` output.\n got:\n%s\nwant:\n%s", got, Markdown())
-	}
+	return s[i+len(begin) : j]
 }

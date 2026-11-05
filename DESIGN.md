@@ -311,7 +311,7 @@ Built in **Go with Bubble Tea and Lip Gloss** (see ADR-10). It's one binary, the
 │  … more rows, grouped by repo …                                                      │
 ├ admiral ─ ctx 34% 🟢 ─────────────────────────────────────────────────────────────┤
 │ > 3 agents are waiting. web-nav wants to run `npm test` — approve?            │
-└ ←↑↓→ move · ⏎ attach · Tab next waiting · s send · p peek · z park · ? help ─────────┘
+└ ←↑↓→ select · ⏎ replace ▶ · a add · Space preview · Tab next waiting · x take off wall · ? all keys ─┘
 ```
 
 ### Tile states
@@ -331,22 +331,24 @@ Motion stays rare on purpose. If everything moves, nothing stands out. Only work
 
 ### Keyboard (yes, arrow driven)
 
-| Key | Action |
-|---|---|
-| `←` `↑` `↓` `→` (also `h` `j` `k` `l`) | Move between tiles |
-| `Enter` | Attach to that agent's tmux window. Return to the grid with a tmux key (for example `prefix + g`). |
-| `Tab` / `Shift+Tab` | Jump to the next/previous waiting tile, longest wait first |
-| `Space` | Peek: overlay with the 5-line summary. Press `r` in the overlay for raw output. |
-| `s` | Send a prompt to the selected agent (one-line input) |
-| `a` / `x` | Approve / reject when the agent is at a y/n prompt |
-| `n` | Spawn wizard: name, tool, directory, first prompt |
-| `z` / `w` | Park / wake |
-| `f` | Focus session on this agent (see 6.4) |
-| `c` | Move the cursor to the admiral input |
-| `R` | Reset the admiral, after a y/n confirm (see 6.3, 6.5; tmux `M-R` does the same) |
-| `/` | Filter tiles by name, repo or status |
-| `1`–`9` | Jump to a repo group |
-| `?` | Help overlay |
+Every key that exists is in the registry (`internal/keys`) and in the generated table
+under "Hotkey hints and help" below; that table, not this section, is the list. In short:
+`←↑↓→` / `hjkl` select a tile, `⏎` puts the selected agent into the `▶` pane, `a` adds it
+as another pane, `Space` previews it in a popup, `Tab` / `Shift-Tab` walk the waiting
+agents, `x` takes a pane off the wall, `p` pins it, `u` undoes the last replace,
+`1/2/4/6/9/m` pick the wall layout, `R` and `P` reset and re-profile the admiral, `g`
+shows what's new and `?` shows the whole list.
+
+Planned, not built. Nothing below is bound yet, and each has to find a free key:
+
+| Key | Action | Note |
+|---|---|---|
+| `z` / `w` | Park / wake the selected agent | planned, §7 |
+| `a` / `x` | Approve / reject when the agent is at a y/n prompt | planned, not specified yet; both keys are taken (`a` adds a pane, `x` takes one off the wall), so approve/reject needs different keys or a mode |
+| `s` | Send a prompt to the selected agent (one-line input) | planned, not specified yet |
+| `n` | Spawn wizard: name, tool, directory, first prompt | planned, not specified yet |
+| `/` | Filter tiles by name, repo or status | planned, not specified yet |
+| `f` | Focus session on this agent | planned, §6.4 |
 
 ### Hotkey hints and help (built)
 
