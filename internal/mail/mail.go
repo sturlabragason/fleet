@@ -149,6 +149,7 @@ func (s *Store) mkAgentDir(a string) error {
 func (s *Store) inboxPath(a string) string { return filepath.Join(s.agentDir(a), "inbox.jsonl") }
 func (s *Store) readPath(a string) string  { return filepath.Join(s.agentDir(a), "read") }
 func (s *Store) nudgePath(a string) string { return filepath.Join(s.agentDir(a), "nudged") }
+func (s *Store) wokenPath(a string) string { return filepath.Join(s.agentDir(a), "woken") }
 func (s *Store) grantsPath() string        { return filepath.Join(s.Dir, "grants.json") }
 func (s *Store) lastPath() string          { return filepath.Join(s.Dir, "last_id") }
 

@@ -201,6 +201,9 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := leaderScope(f, commandName(cmd), rest); err != nil {
+		return err
+	}
 	switch commandName(cmd) {
 	case "spawn":
 		return cmdSpawn(f, rest)
@@ -374,7 +377,13 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 	// admiral. Give it the squad member it meant (ADR-58).
 	spawn := f.SpawnWith
 	squadNote := ""
-	if me := f.Whoami(""); me != "" && f.IsLeader(me) {
+	me := f.Whoami("")
+	if a, ok := f.Store.Load().Agents[me]; ok && me != "" && a.LeadBy != "" && *leader {
+		// A top-level leader started from inside a squad would step
+		// around max_depth (ADR-59).
+		return fmt.Errorf("you are in %s's squad; your agents may not lead squads. Report to your leader instead", a.LeadBy)
+	}
+	if me != "" && f.IsLeader(me) {
 		if *leader {
 			return fmt.Errorf("you lead a squad; your agents may not lead squads of their own. Spawn with the fleet_squad_spawn tool")
 		}
@@ -407,6 +416,43 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 		if c.Check != "" {
 			fmt.Printf("done-check on report done: %s (want exit %d)\n", c.Check, c.Want)
 		}
+	}
+	return nil
+}
+
+// leaderScope keeps the CLI run from inside a leader's pane to that
+// leader's own squad, the same scope its fleet_squad_* tools have: it may
+// close, send to, park and wake its members and nobody else, and it may not
+// type into a member's prompt (ADR-53, ADR-59). Outside an agent pane, or
+// in a plain agent's, nothing changes.
+func leaderScope(f *fleet.Fleet, cmd string, rest []string) error {
+	switch cmd {
+	case "close", "kill", "send", "park", "wake":
+	default:
+		return nil
+	}
+	me := f.Whoami("")
+	if me == "" || !f.IsLeader(me) {
+		return nil
+	}
+	// The target is the first non-flag argument: none of these commands
+	// has a flag that takes a value. One that does must be skipped here.
+	target := ""
+	for _, a := range rest {
+		if !strings.HasPrefix(a, "-") {
+			target = a
+			break
+		}
+	}
+	if target == "" {
+		return nil // the command's own usage error says what is missing
+	}
+	m, err := f.SquadMember(me, target)
+	if err != nil {
+		return fmt.Errorf("you lead a squad, so fleet %s acts only on your own agents: %w", cmd, err)
+	}
+	if cmd == "send" && m.Status == string(status.Waiting) {
+		return fmt.Errorf("%s is on a prompt; report it to the admiral, you may not answer prompts", target)
 	}
 	return nil
 }

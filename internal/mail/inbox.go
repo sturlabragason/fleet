@@ -182,14 +182,15 @@ func (s *Store) ClaimNudge(agent string) (unread int, ok bool, err error) {
 	return unread, ok, err
 }
 
-// ClaimNudgeUpTo claims the nudge for messages up to and including id: true
-// only when no nudge has covered id yet, and then the mark moves to it. The
-// admiral's report wake uses it, because every report deserves a wake even
-// when the admiral has not read the one before it -- the nudge mark says
-// what was announced, not what was read (the id order is the message order,
-// ADR-51). It returns the mark it replaced, which UnclaimNudgeTo winds back
-// to when the wake could not be typed.
-func (s *Store) ClaimNudgeUpTo(agent, id string) (prev string, ok bool, err error) {
+// ClaimWakeUpTo claims the report wake for messages up to and including id:
+// true only when no wake has covered id yet, and then the wake mark moves to
+// it. Every report deserves a wake even when the box owner has not read the
+// one before it -- the mark says what was announced, not what was read (the
+// id order is the message order, ADR-51). The mark is mail/<box>/woken, apart
+// from the peer-mail nudge mark, so a peer message nudged into a leader's
+// pane cannot swallow a squad report's wake (ADR-59). It returns the mark it
+// replaced, which UnclaimWakeTo winds back to when the wake could not be typed.
+func (s *Store) ClaimWakeUpTo(agent, id string) (prev string, ok bool, err error) {
 	if err := checkBox(agent); err != nil {
 		return "", false, err
 	}
@@ -197,37 +198,40 @@ func (s *Store) ClaimNudgeUpTo(agent, id string) (prev string, ok bool, err erro
 		return "", false, nil
 	}
 	err = s.update(func(st *state) error {
-		prev = readTrim(s.nudgePath(agent))
+		prev = readTrim(s.wokenPath(agent))
 		if prev >= id {
 			return nil
 		}
 		ok = true
-		return writeAtomic(s.nudgePath(agent), []byte(id))
+		return writeAtomic(s.wokenPath(agent), []byte(id))
 	})
 	return prev, ok, err
 }
 
-// NudgeMark is the newest message id a nudge has announced to agent ("" =
-// none). The report wake reads it to see whether the queue holds anything
-// the admiral has not been told about yet.
-func (s *Store) NudgeMark(agent string) string {
+// WakeMark is the newest message id a report wake has announced to agent
+// ("" = none). The wake reads it to see whether the queue holds anything the
+// box owner has not been told about yet.
+func (s *Store) WakeMark(agent string) string {
 	if checkBox(agent) != nil {
 		return ""
 	}
-	return readTrim(s.nudgePath(agent))
+	return readTrim(s.wokenPath(agent))
 }
 
-// UnclaimNudgeTo winds the mark back to what it was before a claim, so the
-// same messages may be announced again. An empty id removes it.
-func (s *Store) UnclaimNudgeTo(agent, prev string) error {
+// UnclaimWakeTo winds the wake mark back to what it was before a claim, so
+// the same reports may be announced again. An empty id removes it.
+func (s *Store) UnclaimWakeTo(agent, prev string) error {
 	if err := checkBox(agent); err != nil {
 		return err
 	}
-	if prev == "" {
-		return s.UnclaimNudge(agent)
-	}
 	return s.update(func(st *state) error {
-		return writeAtomic(s.nudgePath(agent), []byte(prev))
+		if prev == "" {
+			if err := os.Remove(s.wokenPath(agent)); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			return nil
+		}
+		return writeAtomic(s.wokenPath(agent), []byte(prev))
 	})
 }
 

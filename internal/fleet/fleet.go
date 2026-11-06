@@ -566,12 +566,14 @@ func (f *Fleet) Peek(name string, n int) (string, error) {
 // Close stops the agent and drops it from the board. Closing a leader
 // leaves its members running and hands them back to the admiral (ADR-53).
 func (f *Fleet) Close(name string) error {
-	f.disband(name)
 	if p := f.paneOf(name); p != "" {
 		if err := f.T.KillPane(p); err != nil {
 			return err
 		}
 	}
+	// After the kill, so a close that failed leaves the squad whole, and a
+	// report that reached the leader while it died is still re-filed.
+	f.disband(name)
 	logx.For("fleet").Info("closed", "agent", name)
 	f.forgetMail(name)
 	f.forgetHook(name)

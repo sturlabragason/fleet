@@ -269,6 +269,36 @@ func TestLevelsCarryTheirOwnRules(t *testing.T) {
 	}
 }
 
+// safetyCore is the rule set no effort level may drop (ADR-59): light is the
+// default for a worktree=false spawn, which lands in the user's own checkout.
+var safetyCore = map[string]string{
+	"read-only":       "say so in your first reply and edit nothing",
+	"never push":      "never push, force-push or rewrite pushed history",
+	"assisted-by":     "an `assisted-by: <tool>` trailer",
+	"no ai co-author": "never a `co-authored-by:` for an ai",
+	"no secrets":      "secrets and private data",
+	"own branch":      "if you are not on a `fleet/` branch, create one",
+}
+
+func TestEveryLevelCarriesTheSafetyCore(t *testing.T) {
+	for _, l := range Levels {
+		txt := strings.ToLower(Text(l))
+		for rule, want := range safetyCore {
+			if !strings.Contains(txt, want) {
+				t.Errorf("%s playbook lost the %s rule (%q)", l, rule, want)
+			}
+		}
+	}
+}
+
+// standard used to say both "stay in the directory" and "never work in the
+// user's main checkout", with no way out for an agent started in one.
+func TestStandardDoesNotContradictItself(t *testing.T) {
+	if strings.Contains(Text(Standard), "never work in the user's main checkout") {
+		t.Error("standard still forbids the dir it tells the agent to stay in")
+	}
+}
+
 // The playbook is paid for on every spawn; the lighter levels exist to be
 // small, so their size is pinned too (DESIGN §4, ADR-57).
 func TestLightAndStandardStayShort(t *testing.T) {

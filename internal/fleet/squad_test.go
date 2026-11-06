@@ -263,3 +263,89 @@ func TestSquadMailIsFree(t *testing.T) {
 		t.Fatalf("outsider got free access: %q", r)
 	}
 }
+
+// A question a member put to its leader must not die with the leader: the
+// close re-files the squad's unread reports to the admiral (ADR-59).
+func TestSquadCloseRefilesUnreadReports(t *testing.T) {
+	f := squadFleet(t)
+	f.SupPane = func() AdmiralView { return AdmiralView{} }
+	spawnLeader(t, f, "lead")
+	spawnMember(t, f, "lead", "m1")
+	if _, err := f.Report("m1", "question", "which database?"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close("lead"); err != nil {
+		t.Fatal(err)
+	}
+	ms := f.Mail().Peek(mail.Admiral)
+	if len(ms) != 1 || ms[0].From != "m1" || ms[0].Kind != mail.KindReport ||
+		!strings.HasPrefix(ms[0].Text, "question: which database?") {
+		t.Fatalf("admiral inbox after the leader closed: %+v", ms)
+	}
+	b, err := os.ReadFile(f.wakePath(mail.Admiral))
+	if err != nil || !strings.Contains(string(b), ms[0].ID+"\tm1\tquestion\t") {
+		t.Fatalf("re-filed question not queued to wake the admiral: %q, %v", b, err)
+	}
+}
+
+// A leader that happens to share a name with the user's own team must not
+// join it, and closing it must not delete it (ADR-59).
+func TestSquadCloseKeepsAUserTeamOfTheSameName(t *testing.T) {
+	f := squadFleet(t)
+	if _, err := f.Spawn("outsider", "cat", t.TempDir(), ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Teams.Add("lead", "outsider"); err != nil {
+		t.Fatal(err)
+	}
+	spawnLeader(t, f, "lead")
+	spawnMember(t, f, "lead", "m1")
+	if f.Teams.SameTeam("m1", "outsider") || f.Teams.SameTeam("lead", "outsider") {
+		t.Error("the squad was mirrored into the user's team")
+	}
+	if err := f.Close("lead"); err != nil {
+		t.Fatal(err)
+	}
+	ms, err := f.Teams.Members("lead")
+	if err != nil || len(ms) != 1 || ms[0] != "outsider" {
+		t.Fatalf("user's team after the leader closed: %v, %v", ms, err)
+	}
+}
+
+// A peer nudge moves the inbox's nudge mark past a queued report; the
+// report wake must still be typed (ADR-59).
+func TestPeerNudgeDoesNotSuppressSquadWake(t *testing.T) {
+	f := squadFleet(t)
+	if _, err := f.SpawnWith(SpawnOpts{Role: Role{Leader: true}}, "lead", "box", t.TempDir(), ""); err != nil {
+		t.Fatal(err)
+	}
+	spawnMember(t, f, "lead", "m1")
+	var typed []string
+	pane := f.Store.Load().Agents["lead"].PaneID
+	f.SupPane = func() AdmiralView { return AdmiralView{} }
+	f.PressKeys = func(p string, keys ...string) error {
+		for _, k := range keys {
+			if k == "Enter" && p == pane {
+				typed = append(typed, f.boxView("lead").Input)
+			}
+		}
+		return nil
+	}
+	m, err := f.Mail().ReportTo("m1", "lead", "blocked", "needs a decision")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// What nudge() does when a peer message lands in the same inbox.
+	if _, ok, err := f.Mail().ClaimNudge("lead"); !ok || err != nil {
+		t.Fatalf("peer nudge claim: %v %v", ok, err)
+	}
+	line := ReportLineTo("lead", "m1", "blocked", "needs a decision")
+	f.wakeBox("lead", m.ID, "m1", "blocked", line)
+	for i := 0; i < 50 && len(typed) == 0; i++ {
+		f.DeliverWake()
+		time.Sleep(100 * time.Millisecond)
+	}
+	if len(typed) != 1 || typed[0] != line {
+		t.Fatalf("typed %q, want the report wake %q", typed, line)
+	}
+}

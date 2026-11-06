@@ -23,6 +23,10 @@ type Team struct {
 	Color   string    `json:"color"`
 	Members []string  `json:"members"`
 	Created time.Time `json:"created"`
+	// Squad is the leader whose squad this team mirrors, set only when
+	// fleet created the team for it. A team without it is the user's, and
+	// fleet never puts a squad into it or deletes it (ADR-59).
+	Squad string `json:"squad,omitempty"`
 }
 
 // File is the whole teams.json.
@@ -255,6 +259,58 @@ func (s *Store) Add(name string, agents ...string) (moved map[string]string, err
 		return nil
 	})
 	return moved, err
+}
+
+// ErrNotSquad is AddSquad refusing a team that exists but is not leader's
+// squad mirror: the user's own team of the same name.
+var ErrNotSquad = errors.New("team exists and is not this squad's")
+
+// AddSquad puts agents into leader's squad mirror team, creating it (marked
+// as that leader's) if missing. A team of that name that fleet did not make
+// for this leader is left untouched and ErrNotSquad is returned.
+func (s *Store) AddSquad(name, leader string, agents ...string) error {
+	if err := checkName("team", name); err != nil {
+		return err
+	}
+	for _, a := range agents {
+		if err := checkName("agent", a); err != nil {
+			return err
+		}
+	}
+	return s.Update(func(f *File) error {
+		t, ok := f.Teams[name]
+		if !ok {
+			t = &Team{Color: autoColor(f), Members: []string{}, Created: time.Now(), Squad: leader}
+			f.Teams[name] = t
+		}
+		if t.Squad != leader {
+			return fmt.Errorf("%w: %q", ErrNotSquad, name)
+		}
+		for _, a := range agents {
+			old := f.Of(a)
+			if old == name {
+				continue
+			}
+			if old != "" {
+				f.Teams[old].Members = without(f.Teams[old].Members, a)
+			}
+			t.Members = append(t.Members, a)
+		}
+		return nil
+	})
+}
+
+// DeleteSquad deletes leader's squad mirror team. A missing team, or one
+// that is not that leader's mirror, is left alone.
+func (s *Store) DeleteSquad(name, leader string) error {
+	return s.Update(func(f *File) error {
+		t, ok := f.Teams[name]
+		if !ok || t.Squad == "" || t.Squad != leader {
+			return errSkip
+		}
+		delete(f.Teams, name)
+		return nil
+	})
 }
 
 // Remove takes agents out of a team.

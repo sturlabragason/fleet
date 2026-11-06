@@ -8,7 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/tmux"
 )
 
@@ -93,5 +95,65 @@ func TestCLISpawnOutsideALeaderStaysASibling(t *testing.T) {
 		if to := f.ReportsTo(n); to != "" {
 			t.Errorf("%s reports to %q, want the admiral", n, to)
 		}
+	}
+}
+
+// From a leader's pane the CLI acts only on the leader's own squad, as its
+// MCP tools do, and never types into a member's prompt (ADR-59).
+func TestCLIFromALeaderIsScopedToItsSquad(t *testing.T) {
+	f := spawnFleet(t)
+	if _, err := f.SpawnWith(fleet.SpawnOpts{Role: fleet.Role{Leader: true}}, "lead", "cat", t.TempDir(), ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.SquadSpawn("lead", fleet.SpawnOpts{}, "m1", "cat", t.TempDir(), ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Spawn("outsider", "cat", t.TempDir(), ""); err != nil {
+		t.Fatal(err)
+	}
+	// From the user's shell nothing is scoped.
+	os.Unsetenv("TMUX_PANE")
+	os.Unsetenv("TMUX")
+	if err := leaderScope(f, "close", []string{"outsider"}); err != nil {
+		t.Fatalf("user's shell scoped: %v", err)
+	}
+	pane, _ := f.Pane("lead")
+	t.Setenv("TMUX_PANE", pane)
+	t.Setenv("TMUX", f.T.SocketPath()+",1,0")
+	for _, c := range []string{"close", "kill", "send", "park", "wake"} {
+		if err := leaderScope(f, c, []string{"outsider", "x"}); err == nil {
+			t.Errorf("leader ran %s on an outsider", c)
+		}
+		if err := leaderScope(f, c, []string{"m1", "x"}); err != nil {
+			t.Errorf("leader refused %s on its own member: %v", c, err)
+		}
+	}
+	if err := leaderScope(f, "close", []string{"lead", "--squad"}); err == nil {
+		t.Error("leader closed itself through the CLI")
+	}
+	f.Store.Update(func(b *board.Board) error { b.Agents["m1"].Status = string(status.Waiting); return nil })
+	if err := leaderScope(f, "send", []string{"m1", "y"}); err == nil || !strings.Contains(err.Error(), "prompt") {
+		t.Errorf("leader typed into a member's prompt: %v", err)
+	}
+}
+
+// A squad member's `fleet spawn --leader` would start a top-level leader
+// and step around max_depth (ADR-59).
+func TestCLISpawnLeaderFromAMemberIsRefused(t *testing.T) {
+	f := spawnFleet(t)
+	if _, err := f.SpawnWith(fleet.SpawnOpts{Role: fleet.Role{Leader: true}}, "lead", "cat", t.TempDir(), ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.SquadSpawn("lead", fleet.SpawnOpts{}, "m1", "cat", t.TempDir(), ""); err != nil {
+		t.Fatal(err)
+	}
+	pane, _ := f.Pane("m1")
+	t.Setenv("TMUX_PANE", pane)
+	t.Setenv("TMUX", f.T.SocketPath()+",1,0")
+	if err := cmdSpawn(f, []string{"--leader", "l2", "cat", t.TempDir()}); err == nil {
+		t.Fatal("a squad member started a leader of its own")
+	}
+	if _, ok := f.Store.Load().Agents["l2"]; ok {
+		t.Fatal("l2 is on the board")
 	}
 }

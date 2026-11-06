@@ -284,7 +284,7 @@ func (f *Fleet) DeliverWakeTo(box string) {
 	// Already announced: the admiral was told about every queued report and
 	// has not read them yet. Leave the queue alone -- no rename, no log --
 	// so the next new report coalesces these into its line.
-	if newestID(es) <= f.Mail().NudgeMark(box) {
+	if newestID(es) <= f.Mail().WakeMark(box) {
 		return
 	}
 	if !f.canType(f.boxView(box)) {
@@ -306,7 +306,7 @@ func (f *Fleet) DeliverWakeTo(box string) {
 	if len(es) == 0 {
 		return
 	}
-	prev, ok, err := f.Mail().ClaimNudgeUpTo(box, newestID(es))
+	prev, ok, err := f.Mail().ClaimWakeUpTo(box, newestID(es))
 	if err != nil {
 		f.requeueWake(box, es)
 		f.stalledWake("wake not claimed", "box", box, "err", err, "queued", len(es))
@@ -361,7 +361,7 @@ func (f *Fleet) undelivered(box string, es []wakeEntry, prev, why string) {
 		return // nothing left to announce: the mark stays where it is
 	}
 	log.Warn("wake not delivered, queued for a retry", "box", box, "why", why, "queued", len(keep))
-	if err := f.Mail().UnclaimNudgeTo(box, prev); err != nil {
+	if err := f.Mail().UnclaimWakeTo(box, prev); err != nil {
 		// The entries are back on the queue but the mark still covers
 		// them, so no poll will type them again: the badge is all the
 		// admiral has left.

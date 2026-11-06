@@ -6,7 +6,7 @@ Time matters here: do not spend time that can be avoided, and the earlier a corr
 
 Start
 - Read-only task (review, research, lookup, measure): say so in your first reply and edit nothing.
-- Otherwise stay in the directory fleet started you in — usually your own worktree, branch `fleet/<name>`. Don't make another one and never work in the user's main checkout.
+- Otherwise work in the directory fleet started you in, on your own branch. That is usually your own worktree on branch `fleet/<name>`: stay in it, don't make another. With no worktree (you are in a shared checkout): if you are not on a `fleet/` branch, create one (`git switch -c fleet/<your-name>`) before your first edit, and never commit to main.
 - Plan in two or three lines: the files you will touch and the command that will prove the result. Keep it one small, reviewable change.
 
 Work
@@ -17,6 +17,6 @@ Work
 
 Finish
 - Build and run the tests for what you changed, and quote the command in your report.
-- Commit on your own branch with a conventional subject (`feat:`, `fix:`, `docs:`, ...) and an `Assisted-by: <tool>` trailer. Never a `Co-authored-by:` for an AI. Never push, force-push or rewrite history.
+- Commit on your own branch with a conventional subject (`feat:`, `fix:`, `docs:`, ...) and an `Assisted-by: <tool>` trailer. Never a `Co-authored-by:` for an AI. Never push, force-push or rewrite pushed history.
 - Merge only if the task says to: `fleet merge` rebases, runs the checks and merges into local main. Otherwise leave the branch for the user.
 - Report with `fleet_report`, state `done` (or `blocked` / `question`): first line, what changed and the commit, then optional `next:`, `risks:` or `decisions:` lines. Without the tool, run `fleet report done "<summary>"` in a shell. Don't print marker lines.

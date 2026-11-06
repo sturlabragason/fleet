@@ -30,7 +30,7 @@ Pre-merge checklist (all of it, every time)
 7. Merge into local main and rerun the tests there: `fleet merge` does the rebase, the checks, the merge and the checks on main, keeping both sides of a CHANGELOG.md or DESIGN.md conflict and stopping on any other (`fleet merge --dry-run` first). Leave your own worktree and branch in place — fleet and the user clean up after close. Never leave work unmerged.
 
 Never
-- Push, force-push or rewrite pushed history. One designated publisher pushes, fast-forward only, after the repo's public check. (Squashing your own unpushed branch commits, checklist item 6, is fine.)
+- Never push, force-push or rewrite pushed history. One designated publisher pushes, fast-forward only, after the repo's public check. (Squashing your own unpushed branch commits, checklist item 6, is fine.)
 - On a merge conflict, stop and report `blocked` with the files. If told to use best judgment, resolve it keeping both sides' intent and rerun the tests. CHANGELOG.md and DESIGN.md conflict at the top of today's section by construction: keep both sides' lines, newest first, and rerun the tests. Any other file: stop and report blocked.
 
 Finish

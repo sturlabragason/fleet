@@ -174,7 +174,7 @@ func (f *Fleet) MakeLeader(name string) {
 	if f.Teams == nil {
 		return
 	}
-	if _, err := f.Teams.Add(SquadTeam(name), name); err != nil {
+	if err := f.Teams.AddSquad(SquadTeam(name), name, name); err != nil {
 		logx.For("fleet").Warn("squad team not created", "leader", name, "err", err)
 	}
 }
@@ -192,7 +192,7 @@ func (f *Fleet) SquadSpawn(leader string, o SpawnOpts, name, profile, dir, promp
 		return nil, err
 	}
 	if f.Teams != nil {
-		if _, err := f.Teams.Add(SquadTeam(leader), name); err != nil {
+		if err := f.Teams.AddSquad(SquadTeam(leader), leader, name); err != nil {
 			logx.For("fleet").Warn("squad team not joined", "leader", leader, "agent", name, "err", err)
 		}
 	}
@@ -249,36 +249,54 @@ func (f *Fleet) disband(name string) {
 	// The mirror team goes with the leader: left behind it would keep the
 	// ex-members one colour and messaging each other freely forever, and an
 	// agent later spawned with the leader's name would join them (ADR-53).
+	// Only the team fleet made for this squad goes; a user's team that
+	// happens to share the name stays (ADR-59).
 	if f.Teams != nil {
-		var ns []string
-		for _, m := range members {
-			ns = append(ns, m.Name)
-		}
-		if len(ns) > 0 {
-			if err := f.Teams.Remove(SquadTeam(name), ns...); err != nil {
-				logx.For("fleet").Warn("squad team not emptied", "leader", name, "err", err)
-			}
-		}
-		if err := f.Teams.Delete(SquadTeam(name)); err != nil {
+		if err := f.Teams.DeleteSquad(SquadTeam(name), name); err != nil {
 			logx.For("fleet").Warn("squad team not deleted", "leader", name, "err", err)
 		}
 	}
 	f.clearBox(name)
 }
 
-// clearBox retires a closed leader's mailbox: its squad's reports are
-// marked read and the wake queue is removed, so nothing is left to type
-// into the pane of whatever agent is next given this name (ADR-53).
+// clearBox retires a closed leader's mailbox: its unread messages are
+// marked read, the squad's reports among them re-filed to the admiral, and
+// the wake queue is removed, so nothing is left to type into the pane of
+// whatever agent is next given this name (ADR-53). The drain returns
+// exactly what it marked read, so no report is lost in between (ADR-59).
 func (f *Fleet) clearBox(name string) {
 	if ms := f.Mail(); ms != nil {
-		if _, err := ms.Inbox(name, false, 0); err != nil {
+		drained, err := ms.Inbox(name, false, 0)
+		if err != nil {
 			logx.For("fleet").Warn("leader mailbox not drained", "leader", name, "err", err)
+		}
+		for _, m := range drained {
+			if m.Kind == mail.KindReport {
+				f.refile(name, m)
+			}
 		}
 	}
 	for _, p := range []string{f.wakePath(name), f.triesPath(name), f.wakePath(name) + ".lock"} {
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
 			logx.For("fleet").Warn("leader wake queue not removed", "leader", name, "path", p, "err", err)
 		}
+	}
+}
+
+// refile hands one unread squad report from a closed leader's mailbox to
+// the admiral, and wakes it for done, blocked and question like any report.
+func (f *Fleet) refile(leader string, m mail.Msg) {
+	log := logx.For("fleet")
+	st, sum, _ := strings.Cut(m.Text, ": ")
+	sum += " (re-filed: its leader " + leader + " was closed before reading it)"
+	nm, err := f.Mail().ReportTo(m.From, mail.Admiral, st, sum)
+	if err != nil {
+		log.Error("squad report lost with its closed leader", "leader", leader, "agent", m.From, "state", st, "err", err)
+		return
+	}
+	log.Info("squad report re-filed to the admiral", "leader", leader, "agent", m.From, "state", st)
+	if st == "done" || st == "blocked" || st == "question" {
+		f.wakeSupervisor(nm.ID, m.From, st, ReportLineTo(mail.Supervisor, m.From, st, mail.FoldSummary(sum)))
 	}
 }
 

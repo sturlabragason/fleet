@@ -17,4 +17,5 @@ Use those tools, never the `fleet` CLI or a shell: they are what puts an agent i
 and your team. If you have `fleet_*` tools but no `fleet_squad_*` among them, that is a fleet
 bug: `fleet_report` with `state=blocked` saying the squad tools are missing, and do not
 improvise around it. Only if your session has no `fleet_*` tools at all does your profile run
-without them, and then the CLI is yours: a `fleet spawn` from your own pane joins your squad.
+without them, and then the CLI is yours: a `fleet spawn` from your own pane joins your squad,
+and `fleet close/send/park/wake` act only on your own agents.
