@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -70,31 +71,55 @@ func DropBeat(home string) {
 	_ = os.Remove(BeatPath(home))
 }
 
-// Claim takes ownership of the heartbeat for this process. It fails while
-// the lock names a process that still exists, which is what stops two
-// `fleet up`s racing into two watchers on one home. Freshness is not the
-// test: a watcher wedged in a capture, or one whose refreshes are failing,
-// is still the watcher, and a second one would only double the scraping.
+// held is the open watch.lock of each home this process has claimed. The
+// flock lives as long as the file stays open: the kernel drops it when the
+// process dies or execs (Go opens files close-on-exec), so nothing has to
+// clean it up and a recycled pid can never hold it.
+var (
+	heldMu sync.Mutex
+	held   = map[string]*os.File{}
+)
+
+// Claim takes ownership of the watcher role on home for this process: an
+// exclusive flock on watch.lock, kept until Release or exit (ADR-62). It
+// fails while anyone else holds it, which is what stops two `fleet up`s from
+// racing into two watchers. A watcher from before ADR-62 holds no flock, so
+// its fresh heartbeat from a live pid also counts as held.
 func Claim(home string, now time.Time) (Beat, error) {
 	if err := os.MkdirAll(home, 0o755); err != nil {
 		return Beat{}, err
 	}
-	f, err := os.OpenFile(lockPath(home), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
-	switch {
-	case err == nil:
-		fmt.Fprintf(f, "%d\n", os.Getpid())
-		f.Close()
-	case !os.IsExist(err):
+	f, err := os.OpenFile(lockPath(home), os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
 		return Beat{}, err
-	default:
-		if pid, ok := lockPID(home); ok && pid != os.Getpid() && alive(pid) {
+	}
+	err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	if err != nil {
+		// Running probes with a brief shared lock; give such a probe time to let go.
+		time.Sleep(50 * time.Millisecond)
+		err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	}
+	if err != nil {
+		f.Close()
+		if pid, ok := lockPID(home); ok {
 			return Beat{}, fmt.Errorf("another watcher is running (pid %d)", pid)
 		}
-		// The lock is stale (crash, reboot, recycled pid): take it over.
-		if err := writeLock(home); err != nil {
-			return Beat{}, err
-		}
+		return Beat{}, fmt.Errorf("another watcher is running")
 	}
+	if b, ok := ReadBeat(home); ok && b.PID != os.Getpid() && fresh(b.At, now) && alive(b.PID) {
+		f.Close()
+		return Beat{}, fmt.Errorf("another watcher is running (pid %d)", b.PID)
+	}
+	pid := []byte(strconv.Itoa(os.Getpid()) + "\n")
+	if _, err := f.WriteAt(pid, 0); err == nil {
+		_ = f.Truncate(int64(len(pid)))
+	}
+	heldMu.Lock()
+	if old := held[home]; old != nil {
+		old.Close()
+	}
+	held[home] = f
+	heldMu.Unlock()
 	b := Beat{PID: os.Getpid(), Started: now, At: now, OK: now}
 	if err := WriteBeat(home, b); err != nil {
 		return Beat{}, err
@@ -102,43 +127,79 @@ func Claim(home string, now time.Time) (Beat, error) {
 	return b, nil
 }
 
-// Release drops this process's claim.
+// Release drops this process's claim. watch.lock itself stays: removing a
+// lock file another process may have just opened would let a third one lock
+// a fresh inode beside it.
 func Release(home string) {
-	if b, ok := ReadBeat(home); ok && b.PID != 0 && b.PID != os.Getpid() {
+	heldMu.Lock()
+	f := held[home]
+	delete(held, home)
+	heldMu.Unlock()
+	if f == nil {
 		return
 	}
-	_ = os.Remove(lockPath(home))
 	DropBeat(home)
+	f.Close()
 }
 
-// Clear removes a dead watcher's claim, whoever is asking. It is for a
-// command that has just found the pid gone; a live watcher's claim stays.
+// Clear removes a dead watcher's heartbeat, whoever is asking. It is for a
+// command that has just found the pid gone; a held claim, or a live older
+// watcher's fresh heartbeat, stays.
 func Clear(home string) {
-	if pid, ok := lockPID(home); ok && pid != os.Getpid() && alive(pid) {
+	if _, ok := flockHolder(home); ok {
 		return
 	}
-	if b, ok := ReadBeat(home); ok && b.PID != 0 && b.PID != os.Getpid() && alive(b.PID) {
+	if b, ok := ReadBeat(home); ok && b.PID != os.Getpid() && fresh(b.At, time.Now()) && alive(b.PID) {
 		return
 	}
-	_ = os.Remove(lockPath(home))
 	_ = os.Remove(BeatPath(home))
 }
 
 // Running reports the pid of a watcher process that still exists, live or
 // wedged, so `fleet watch --stop` can signal one whose refreshes are failing
-// instead of calling it absent.
+// instead of calling it absent. The flock decides; an older watcher without
+// one is recognised by a fresh heartbeat from a live pid, never by a pid
+// alone, which may have been recycled.
 func Running(home string) (int, bool) {
-	if b, ok := ReadBeat(home); ok && b.PID != 0 && alive(b.PID) {
-		return b.PID, true
+	if pid, ok := flockHolder(home); ok {
+		return pid, pid > 0
 	}
-	if pid, ok := lockPID(home); ok && alive(pid) {
-		return pid, true
+	if b, ok := ReadBeat(home); ok && fresh(b.At, time.Now()) && alive(b.PID) {
+		return b.PID, true
 	}
 	return 0, false
 }
 
-func writeLock(home string) error {
-	return os.WriteFile(lockPath(home), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644)
+// flockHolder reports whether watch.lock is flocked by anyone, and the pid
+// written in it.
+func flockHolder(home string) (int, bool) {
+	f, err := os.Open(lockPath(home))
+	if err != nil {
+		return 0, false
+	}
+	defer f.Close()
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err == nil {
+		syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		return 0, false
+	}
+	pid, _ := lockPID(home)
+	return pid, true
+}
+
+// StaleExe reports whether process pid runs another binary than exe: one
+// that has been deleted or replaced since it started. `fleet up` restarts a
+// watcher like that, which is how a watcher from before ADR-62 (which does
+// not re-exec itself) gets replaced.
+func StaleExe(pid int, exe string) bool {
+	running, err := os.Stat(filepath.Join("/proc", strconv.Itoa(pid), "exe"))
+	if err != nil {
+		return false
+	}
+	want, err := os.Stat(exe)
+	if err != nil {
+		return false
+	}
+	return !sameFile(running, want)
 }
 
 // lockPID is the pid written into the lock file.

@@ -383,3 +383,18 @@ func TestClaimWakeUpTo(t *testing.T) {
 		t.Fatalf("wound back to %q, want none", got)
 	}
 }
+
+// A pair's unknown key in grants.json survives a write (ADR-62).
+func TestGrantsKeepUnknownKeys(t *testing.T) {
+	s := &Store{Dir: t.TempDir()}
+	raw := `[{"a":"x","b":"y","state":"granted","k_pair":1}]`
+	if err := writeAtomic(s.grantsPath(), []byte(raw)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.update(func(st *state) error { st.dirty = true; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if b := readTrim(s.grantsPath()); !strings.Contains(b, `"k_pair"`) {
+		t.Fatalf("unknown key dropped: %s", b)
+	}
+}

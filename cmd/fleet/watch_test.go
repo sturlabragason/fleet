@@ -254,3 +254,22 @@ func TestOverviewDeliversWakeWithWatcherLive(t *testing.T) {
 		t.Fatalf("overview did not deliver the wake: %q", got)
 	}
 }
+
+// A rebuilt binary that does not answer `watch --probe` with ok is never
+// exec'd into: the watcher keeps its old code (ADR-62).
+func TestReexecWatcherProbes(t *testing.T) {
+	dir := t.TempDir()
+	bad := filepath.Join(dir, "fleet")
+	os.WriteFile(bad, []byte("#!/bin/sh\necho nope\n"), 0o755)
+	if err := reexecWatcher(bad); err == nil || !strings.Contains(err.Error(), "probe") {
+		t.Fatalf("bad probe: %v", err)
+	}
+	if err := reexecWatcher(filepath.Join(dir, "missing")); err == nil {
+		t.Fatal("missing binary exec'd")
+	}
+	f := hookTestFleet(t)
+	out := captureOut(t, func() error { return cmdWatch(f, []string{"--probe"}) })
+	if strings.TrimSpace(out) != "ok" {
+		t.Fatalf("--probe printed %q", out)
+	}
+}

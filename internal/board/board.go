@@ -3,16 +3,16 @@
 package board
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"reflect"
 	"sort"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/jsonx"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/status"
 )
@@ -86,69 +86,7 @@ type Agent struct {
 
 	// extra holds board keys this build does not know, so they survive a
 	// round trip (ADR-58).
-	extra map[string]json.RawMessage
-}
-
-// agentJSON is Agent without its methods, so the marshallers below can use
-// the ordinary struct encoding without recursing.
-type agentJSON Agent
-
-// knownAgentKeys are the json names of Agent's own fields.
-var knownAgentKeys = func() map[string]bool {
-	m := map[string]bool{}
-	t := reflect.TypeOf(Agent{})
-	for i := 0; i < t.NumField(); i++ {
-		tag, _, _ := strings.Cut(t.Field(i).Tag.Get("json"), ",")
-		if tag != "" && tag != "-" {
-			m[tag] = true
-		}
-	}
-	return m
-}()
-
-// UnmarshalJSON keeps the keys this build has no field for. Several
-// processes of different vintages write board.json — a resident watcher, the
-// overview, every MCP server — and before ADR-58 the oldest of them silently
-// erased whatever a newer one had written, which is how a leader lost its
-// `leader` flag seconds after being spawned.
-func (a *Agent) UnmarshalJSON(b []byte) error {
-	var base agentJSON
-	if err := json.Unmarshal(b, &base); err != nil {
-		return err
-	}
-	*a = Agent(base)
-	var all map[string]json.RawMessage
-	if err := json.Unmarshal(b, &all); err != nil {
-		return err
-	}
-	for k := range all {
-		if knownAgentKeys[k] {
-			delete(all, k)
-		}
-	}
-	if len(all) > 0 {
-		a.extra = all
-	}
-	return nil
-}
-
-// MarshalJSON writes the known fields plus any unknown keys read back in.
-func (a Agent) MarshalJSON() ([]byte, error) {
-	b, err := json.Marshal(agentJSON(a))
-	if err != nil || len(a.extra) == 0 {
-		return b, err
-	}
-	var all map[string]json.RawMessage
-	if err := json.Unmarshal(b, &all); err != nil {
-		return b, nil
-	}
-	for k, v := range a.extra {
-		if _, dup := all[k]; dup || knownAgentKeys[k] {
-			continue
-		}
-		all[k] = v
-	}
-	return json.Marshal(all)
+	extra jsonx.Extra
 }
 
 // Card is a spawn's task card: what the task is, how fleet checks it is
@@ -172,6 +110,7 @@ type Card struct {
 	// sweep, sees it and stands down. A claim older than the timeout is
 	// stale — its runner died — and may be taken again.
 	Started time.Time `json:"started,omitempty"`
+	extra   jsonx.Extra
 }
 
 // Check is one done-check run.
@@ -185,7 +124,8 @@ type Check struct {
 	// Err says why the command could not run or did not finish ("" = it did).
 	Err string `json:"err,omitempty"`
 	// Out is the tail of the combined output.
-	Out string `json:"out,omitempty"`
+	Out   string `json:"out,omitempty"`
+	extra jsonx.Extra
 }
 
 // Verdict is the one-line pass/fail an admiral, a tile or fleet info shows.
@@ -206,6 +146,7 @@ type Worktree struct {
 	Path   string `json:"path"`
 	Branch string `json:"branch"`
 	Repo   string `json:"repo,omitempty"` // main worktree it was made from
+	extra  jsonx.Extra
 }
 
 // Exit is how an agent's process ended, as tmux reported it.
@@ -215,6 +156,7 @@ type Exit struct {
 	// Signal is the signal number that ended it, 0 for none.
 	Signal int       `json:"signal,omitempty"`
 	At     time.Time `json:"at"`
+	extra  jsonx.Extra
 }
 
 // Clean reports an exit with status 0 and no signal.
@@ -235,6 +177,7 @@ type GitBase struct {
 	Head      string            `json:"head"`
 	Dirty     map[string]string `json:"dirty,omitempty"` // path -> "XY fingerprint"
 	Worktrees []string          `json:"worktrees,omitempty"`
+	extra     jsonx.Extra
 }
 
 // Report is one agent report: done, blocked, question or progress.
@@ -242,11 +185,13 @@ type Report struct {
 	State   string    `json:"state"`
 	Summary string    `json:"summary"`
 	At      time.Time `json:"at"`
+	extra   jsonx.Extra
 }
 
 // Board is the whole file.
 type Board struct {
 	Agents map[string]*Agent `json:"agents"`
+	extra  jsonx.Extra
 }
 
 // Store reads and writes the board under a directory.
@@ -259,23 +204,32 @@ func (s *Store) path() string { return filepath.Join(s.Dir, "board.json") }
 
 // Load reads the board. Broken JSON is logged, backed up and treated as empty.
 func (s *Store) Load() *Board {
+	b, _ := s.load()
+	return b
+}
+
+// load is Load plus the bytes it read, so Update can tell a no-op.
+func (s *Store) load() (*Board, []byte) {
 	b := &Board{Agents: map[string]*Agent{}}
 	data, err := os.ReadFile(s.path())
 	if err != nil {
-		return b
+		return b, nil
 	}
 	if err := json.Unmarshal(data, b); err != nil {
 		logx.For("board").Error("broken board.json, starting empty", "err", err)
 		_ = os.WriteFile(s.path()+".broken", data, 0o644)
-		return &Board{Agents: map[string]*Agent{}}
+		return &Board{Agents: map[string]*Agent{}}, nil
 	}
 	if b.Agents == nil {
 		b.Agents = map[string]*Agent{}
 	}
-	return b
+	return b, data
 }
 
 // Update runs fn on the board under an exclusive lock and saves the result.
+// A result identical to the file on disk is not written: the watcher
+// refreshes every second, and an idle fleet would otherwise rewrite the
+// board each time (ADR-62).
 func (s *Store) Update(fn func(*Board) error) error {
 	if err := os.MkdirAll(s.Dir, 0o755); err != nil {
 		return err
@@ -289,11 +243,14 @@ func (s *Store) Update(fn func(*Board) error) error {
 		return err
 	}
 	defer syscall.Flock(int(lf.Fd()), syscall.LOCK_UN)
-	b := s.Load()
+	b, old := s.load()
 	if err := fn(b); err != nil {
 		return err
 	}
 	data, _ := json.MarshalIndent(b, "", "  ")
+	if old != nil && bytes.Equal(data, old) {
+		return nil
+	}
 	tmp := s.path() + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return err

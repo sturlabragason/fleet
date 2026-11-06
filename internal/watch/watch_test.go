@@ -178,9 +178,11 @@ func TestBeatLive(t *testing.T) {
 	}
 }
 
-// Claim is the token two fleets racing to start a watcher fight over: the
-// lock's own pid decides, so a watcher that is merely wedged or failing —
-// not just a live one — still keeps the claim, and only a dead pid loses it.
+// Claim is an flock on watch.lock held for the watcher's life (ADR-62): the
+// kernel drops it when the process dies, so a pid written in the file is
+// never the test. A lock file naming a live pid that holds no flock (a crash
+// left it, and the pid was recycled) is free; an older fleet's watcher, which
+// holds no flock either, still counts while its heartbeat is fresh.
 func TestClaim(t *testing.T) {
 	home := t.TempDir()
 	now := time.Now()
@@ -190,8 +192,12 @@ func TestClaim(t *testing.T) {
 	if !Live(home, now) {
 		t.Error("claiming did not make a live heartbeat")
 	}
-	if _, ok := Running(home); !ok {
-		t.Error("a claimed home has no running watcher")
+	if pid, ok := Running(home); !ok || pid != os.Getpid() {
+		t.Errorf("a claimed home has no running watcher: %d %v", pid, ok)
+	}
+	Release(home)
+	if _, ok := ReadBeat(home); ok {
+		t.Error("release left a heartbeat")
 	}
 	cases := []struct {
 		name  string
@@ -199,12 +205,9 @@ func TestClaim(t *testing.T) {
 		beat  *Beat
 		claim bool
 	}{
-		{"live holder", "1\n", &Beat{PID: 1, Started: now, At: now, OK: now}, false},
-		// Finding: a holder that has not written its first beat yet, and a
-		// holder whose beat has gone stale (wedged in a capture, or every
-		// refresh failing), both still hold the lock.
-		{"holder with no beat yet", "1\n", nil, false},
-		{"stale holder", "1\n", &Beat{PID: 1, Started: now.Add(-time.Hour), At: now.Add(-time.Minute), OK: now.Add(-time.Minute)}, false},
+		{"older watcher with a fresh beat", "1\n", &Beat{PID: 1, Started: now, At: now, OK: now}, false},
+		{"pid file with no flock and no beat", "1\n", nil, true},
+		{"pid file with no flock and a stale beat", "1\n", &Beat{PID: 1, Started: now.Add(-time.Hour), At: now.Add(-time.Minute), OK: now.Add(-time.Minute)}, true},
 		{"dead holder", "2147483647\n", &Beat{PID: 0x7FFFFFFF, Started: now, At: now, OK: now}, true},
 		{"junk lock", "\n", nil, true},
 	}
@@ -221,17 +224,116 @@ func TestClaim(t *testing.T) {
 		if !c.claim && err == nil {
 			t.Errorf("%s: claimed a home someone else holds", c.name)
 		}
+		Release(home)
 	}
-	// Our own claim is ours to release; a stranger's is not.
-	Claim(home, now)
-	Release(home)
-	if _, ok := ReadBeat(home); ok {
-		t.Error("release left a heartbeat")
-	}
+	// Clear never takes a live older watcher's heartbeat.
 	WriteBeat(home, Beat{PID: 1, Started: now, At: now, OK: now})
-	os.WriteFile(filepath.Join(home, "watch.lock"), []byte("1\n"), 0o644)
 	Clear(home)
 	if _, ok := ReadBeat(home); !ok {
 		t.Error("Clear removed a live watcher's claim")
+	}
+}
+
+// Two claims on one home cannot both hold, even from one process (flock is
+// per open file), and the second gets the holder's pid; after Release the
+// home is free again. This is what stops duplicate watchers.
+func TestClaimIsExclusive(t *testing.T) {
+	home := t.TempDir()
+	now := time.Now()
+	if _, err := Claim(home, now); err != nil {
+		t.Fatal(err)
+	}
+	// The holder's heartbeat is irrelevant: a new watcher holds the flock
+	// before its first beat.
+	os.Remove(BeatPath(home))
+	if _, err := Claim(home, now); err == nil {
+		t.Fatal("a second claim succeeded while the first is held")
+	}
+	if pid, ok := Running(home); !ok || pid != os.Getpid() {
+		t.Fatalf("Running = %d, %v", pid, ok)
+	}
+	Clear(home)
+	if _, err := os.Stat(filepath.Join(home, "watch.lock")); err != nil {
+		t.Fatal("Clear removed a held lock file")
+	}
+	Release(home)
+	if _, err := Claim(home, now); err != nil {
+		t.Fatalf("claim after release: %v", err)
+	}
+	Release(home)
+}
+
+// The watcher re-execs itself when its binary is replaced (ADR-62, like the
+// MCP reload of ADR-25), so a resident watcher never runs code older than
+// bin/fleet; a failed re-exec keeps the old code and is not retried until the
+// file changes again; with no Reexec it stops instead.
+func TestBinaryChangeReexecs(t *testing.T) {
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "fleet")
+	os.WriteFile(exe, []byte("v1"), 0o755)
+	calls := 0
+	var fail error
+	w := &Watcher{Home: t.TempDir(), Exe: exe, Reexec: func() error { calls++; return fail }}
+	w.selfExe = exe
+	now := time.Now()
+	if w.lifecycle(now) || calls != 0 {
+		t.Fatalf("unchanged binary: stop or reexec (%d)", calls)
+	}
+	replace := func(body string) {
+		tmp := exe + ".new"
+		os.WriteFile(tmp, []byte(body), 0o755)
+		os.Rename(tmp, exe)
+	}
+	replace("v2")
+	fail = os.ErrPermission
+	if w.lifecycle(now.Add(StopEvery)) || calls != 1 {
+		t.Fatalf("changed binary: calls=%d", calls)
+	}
+	if w.lifecycle(now.Add(2*StopEvery)) || calls != 1 {
+		t.Fatalf("a failed reexec was retried on the same file: calls=%d", calls)
+	}
+	replace("v3")
+	fail = nil
+	w.lifecycle(now.Add(3 * StopEvery))
+	if calls != 2 {
+		t.Fatalf("new build not re-execed: calls=%d", calls)
+	}
+	w2 := &Watcher{Home: t.TempDir(), Exe: exe}
+	w2.selfExe = exe
+	w2.lifecycle(now)
+	replace("v4")
+	if !w2.lifecycle(now.Add(StopEvery)) {
+		t.Fatal("no Reexec: a changed binary must stop the watcher")
+	}
+}
+
+// A watcher whose home was deleted stops (ADR-62).
+func TestHomeGoneStops(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "h")
+	os.MkdirAll(home, 0o755)
+	w := &Watcher{Home: home}
+	if w.lifecycle(time.Now()) {
+		t.Fatal("stopped with its home present")
+	}
+	os.RemoveAll(home)
+	if !w.lifecycle(time.Now().Add(StopEvery)) {
+		t.Fatal("kept running with its home gone")
+	}
+}
+
+// StaleExe tells `fleet up` that a running watcher runs another binary than
+// the one starting the fleet, deleted or replaced, so it is restarted.
+func TestStaleExe(t *testing.T) {
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if StaleExe(os.Getpid(), self) {
+		t.Error("own binary called stale")
+	}
+	other := filepath.Join(t.TempDir(), "fleet")
+	os.WriteFile(other, []byte("x"), 0o755)
+	if !StaleExe(os.Getpid(), other) {
+		t.Error("another binary not called stale")
 	}
 }

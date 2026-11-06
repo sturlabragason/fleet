@@ -141,3 +141,19 @@ func TestBrokenJSON(t *testing.T) {
 		t.Error("store unusable after recovery")
 	}
 }
+
+// A key this build does not know, on a team or at the top of teams.json,
+// survives a write: an old watcher's DropAgent erased `squad` (ADR-62).
+func TestUnknownKeysSurvive(t *testing.T) {
+	dir := t.TempDir()
+	raw := `{"k_file":1,"teams":{"t1":{"color":"red","members":["a1","a2"],"created":"2026-01-01T00:00:00Z","k_team":{"x":1}}}}`
+	os.WriteFile(filepath.Join(dir, "teams.json"), []byte(raw), 0o644)
+	s := NewStore(dir)
+	if err := s.DropAgent("a1"); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, "teams.json"))
+	if !strings.Contains(string(b), `"k_file"`) || !strings.Contains(string(b), `"k_team"`) {
+		t.Fatalf("unknown key dropped: %s", b)
+	}
+}

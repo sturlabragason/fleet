@@ -183,7 +183,7 @@ Agents start through `bash -lc`, so shell aliases don't apply; make a profile in
 | `fleet_wall` | Show/hide an agent on the wall, or set the layout |
 | `fleet_sessions` | List Copilot/Claude sessions started outside fleet |
 | `fleet_adopt` | Resume one of those sessions as an agent |
-| `fleet_note` | Save a note to `~/.fleet/decisions.log` |
+| `fleet_note` | Save a note to `~/.fleet/decisions.log`; `pin` keeps it in every brief |
 | `fleet_brief` | Handoff + recent notes + status, for a fresh admiral |
 | `fleet_handoff` | Write a handoff and restart the admiral fresh |
 | `fleet_team` | List, create or change teams; send, show, hide or close one |

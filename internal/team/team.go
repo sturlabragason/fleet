@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/sturlabragason/fleet/internal/jsonx"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -27,11 +28,17 @@ type Team struct {
 	// fleet created the team for it. A team without it is the user's, and
 	// fleet never puts a squad into it or deletes it (ADR-59).
 	Squad string `json:"squad,omitempty"`
+
+	// extra keeps keys this build does not know (ADR-62).
+	extra jsonx.Extra
 }
 
 // File is the whole teams.json.
 type File struct {
 	Teams map[string]*Team `json:"teams"`
+
+	// extra keeps keys this build does not know (ADR-62).
+	extra jsonx.Extra
 }
 
 // Info is an agent's team and its colour, for renderers.
@@ -404,3 +411,27 @@ func (s *Store) ByAgent() map[string]Info {
 	}
 	return out
 }
+
+// teamJSON is Team without its methods, for jsonx.
+type teamJSON Team
+
+func (x *Team) UnmarshalJSON(b []byte) error {
+	var v teamJSON
+	e, err := jsonx.Unmarshal(b, &v)
+	*x, x.extra = Team(v), e
+	return err
+}
+
+func (x Team) MarshalJSON() ([]byte, error) { return jsonx.Marshal(teamJSON(x), x.extra) }
+
+// fileJSON is File without its methods, for jsonx.
+type fileJSON File
+
+func (x *File) UnmarshalJSON(b []byte) error {
+	var v fileJSON
+	e, err := jsonx.Unmarshal(b, &v)
+	*x, x.extra = File(v), e
+	return err
+}
+
+func (x File) MarshalJSON() ([]byte, error) { return jsonx.Marshal(fileJSON(x), x.extra) }

@@ -37,7 +37,7 @@ To use a tool fleet doesn't start itself, register `fleet mcp` as a stdio MCP se
 | `fleet_reports` | `all`, `limit` | What agents reported (done, blocked, question, progress); unread first, marked read |
 | `fleet_access` | `limit` | Who may message whom, and recent agent-to-agent messages |
 | `fleet_access_decide` | `a`, `b`, `action`, `confirmed` | Grant, deny or revoke that |
-| `fleet_note` | `text`, `agent` | Append a line to `~/.fleet/decisions.log` |
+| `fleet_note` | `text`, `agent`, `pin` | Append a line to `~/.fleet/decisions.log`; `pin` also keeps it in every `fleet_brief` (`~/.fleet/pinned.log`) |
 | `fleet_brief` | none | Last handoff, recent notes, then the status table. A fresh admiral calls this first |
 | `fleet_handoff` | `summary` | Write a handoff and get replaced by a fresh admiral |
 | `fleet_admiral_profile` | `profile`, `summary` | Switch the admiral to another tool profile |
@@ -75,7 +75,7 @@ Planned ([DESIGN.md §8, ADR-9](../DESIGN.md#14-decisions-adrs)): risky actions 
 
 Fleet doesn't compact the admiral's chat; it replaces it ([DESIGN.md §6.5, ADR-11](../DESIGN.md#65-supervisor-memory-notes-handoff-context-meter-r11)):
 
-- The admiral records decisions, your preferences and promises with `fleet_note`.
+- The admiral records decisions, your preferences and promises with `fleet_note`, and pins your standing rules so they stay in every brief.
 - Its context fill is read from the tool's own session log and shown on the pane border (`admiral · ctx 34%`, green/yellow/red) and by `fleet admiral`.
 - At 70% (`FLEET_ADMIRAL_HANDOFF_PCT`) every fleet tool result ends with a warning. The admiral then calls `fleet_handoff` with open questions, promises and plans in flight. Fleet respawns the pane with a new session whose first prompt is to call `fleet_brief`.
 - `Alt-R` (tmux), `R` (overview) or `fleet admiral reset` does the same by hand, after a y/n prompt. The old session isn't deleted: `copilot --resume <id>` still opens it.

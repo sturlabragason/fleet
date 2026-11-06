@@ -77,6 +77,21 @@ func TestSpawnPrependsPlaybook(t *testing.T) {
 	}
 }
 
+// The suite is hermetic: a spawn into a temp dir reads no layer from above
+// the temp root, even when the home directory the walk stops at is not an
+// ancestor of it (a symlinked home, or a test that sets HOME) and TMPDIR sits
+// under the user's real home next to ~/.fleet/worker.md (ADR-62).
+func TestSpawnIgnoresLayersAboveTheTempRoot(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	f, out := argvFleet(t, "")
+	if _, err := f.Spawn("pb12", "pa", t.TempDir(), "fix the bug"); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := readArg(t, out), playbook.Compose(playbook.Text(playbook.Light), "fix the bug"); got != want {
+		t.Fatalf("a layer outside the test leaked in:\n%.300q", got)
+	}
+}
+
 func TestSpawnPlaybookOff(t *testing.T) {
 	f, out := argvFleet(t, "[defaults]\nplaybook = false\n")
 	if _, err := f.Spawn("pb2", "pa", t.TempDir(), "fix the bug"); err != nil {

@@ -39,7 +39,13 @@ type Watcher struct {
 	// every refresh, so a new agent's log is picked up without a restart.
 	Paths func() []string
 	// Stop ends the loop when it returns true (the fleet server is gone).
-	Stop                   func() bool
+	Stop func() bool
+	// Exe is the fleet binary on disk. When it is replaced the watcher
+	// calls Reexec, or stops when Reexec is nil (ADR-62).
+	Exe string
+	// Reexec replaces the process with the new binary (same pid). It only
+	// returns on failure; the old code then keeps running.
+	Reexec                 func() error
 	Tick, Interval, MinGap time.Duration
 	Now                    func() time.Time
 
@@ -49,6 +55,9 @@ type Watcher struct {
 	beat, ok         time.Time
 	pending          bool
 	refreshes, ticks int
+	// selfExe is where the running binary is stat'ed ("" = /proc/self/exe).
+	selfExe           string
+	exeInfo, failInfo os.FileInfo
 }
 
 func (w *Watcher) tick() time.Duration {
@@ -196,6 +205,75 @@ func contains(l []string, s string) bool {
 	return false
 }
 
+// lifecycle runs every StopEvery and reports whether the watcher should
+// stop: its home is gone, the fleet is gone, or its binary changed and there
+// is nothing to re-exec into.
+func (w *Watcher) lifecycle(now time.Time) bool {
+	if !w.lastStop.IsZero() && now.Sub(w.lastStop) < StopEvery {
+		return false
+	}
+	w.lastStop = now
+	log := logx.For("watch")
+	if _, err := os.Stat(w.Home); err != nil {
+		log.Info("stop", "reason", "home gone", "home", w.Home)
+		return true
+	}
+	if w.Stop != nil && w.Stop() {
+		log.Info("stop", "reason", "fleet gone", "refreshes", w.refreshes, "ticks", w.ticks)
+		return true
+	}
+	return w.exeChanged()
+}
+
+// initExe records the running binary's identity: the inode it was started
+// from, not whatever sits at Exe now.
+func (w *Watcher) initExe() {
+	if w.Exe == "" || w.exeInfo != nil {
+		return
+	}
+	self := w.selfExe
+	if self == "" {
+		self = "/proc/self/exe"
+	}
+	if fi, err := os.Stat(self); err == nil {
+		w.exeInfo = fi
+	}
+}
+
+// exeChanged re-execs into a replaced binary (ADR-62, as `fleet mcp` does
+// under ADR-25). A resident watcher otherwise runs the build it started with
+// for days and rewrites every store through its old structs. It reports true
+// only when the watcher should stop because there is no Reexec.
+func (w *Watcher) exeChanged() bool {
+	w.initExe()
+	if w.exeInfo == nil {
+		return false
+	}
+	fi, err := os.Stat(w.Exe)
+	if err != nil || sameFile(fi, w.exeInfo) || sameFile(fi, w.failInfo) {
+		return false
+	}
+	log := logx.For("watch")
+	if w.Reexec == nil {
+		log.Info("stop", "reason", "binary changed", "exe", w.Exe)
+		return true
+	}
+	log.Info("re-exec", "exe", w.Exe, "new_mtime", fi.ModTime(), "pid", os.Getpid())
+	if err := w.Reexec(); err != nil {
+		log.Warn("re-exec failed; keeping the old code", "exe", w.Exe, "err", err)
+		w.failInfo = fi
+		return false
+	}
+	w.exeInfo = fi
+	return false
+}
+
+// sameFile reports whether a and b are the same file with the same content
+// stamp (inode, modtime, size).
+func sameFile(a, b os.FileInfo) bool {
+	return a != nil && b != nil && os.SameFile(a, b) && a.ModTime().Equal(b.ModTime()) && a.Size() == b.Size()
+}
+
 // Run loops until ctx is done or Stop says the fleet is gone, writing the
 // heartbeat other commands read to know a watcher is live.
 func (w *Watcher) Run(ctx context.Context) error {
@@ -205,7 +283,8 @@ func (w *Watcher) Run(ctx context.Context) error {
 		return err
 	}
 	defer Release(w.Home)
-	log.Info("start", "tick", w.tick(), "interval", w.interval())
+	w.initExe()
+	log.Info("start", "tick", w.tick(), "interval", w.interval(), "exe", w.Exe)
 	t := time.NewTicker(w.tick())
 	defer t.Stop()
 	for {
@@ -222,12 +301,8 @@ func (w *Watcher) Run(ctx context.Context) error {
 					log.Warn("heartbeat", "err", err)
 				}
 			}
-			if w.Stop != nil && now.Sub(w.lastStop) >= StopEvery {
-				w.lastStop = now
-				if w.Stop() {
-					log.Info("stop", "reason", "fleet gone", "refreshes", w.refreshes, "ticks", w.ticks)
-					return nil
-				}
+			if w.lifecycle(now) {
+				return nil
 			}
 		}
 	}

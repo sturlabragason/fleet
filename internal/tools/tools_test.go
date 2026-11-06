@@ -445,7 +445,7 @@ func indexOf(ss []string, want string) int {
 
 // TestClaudeModelsAreNewest fails when a built-in or example profile starts a
 // Claude model other than the newest: the claude CLI must use an alias that
-// tracks the newest model, Copilot must use CopilotClaudeModel (ADR-58).
+// tracks the newest model, Copilot must use CopilotClaudeModel (ADR-63).
 func TestClaudeModelsAreNewest(t *testing.T) {
 	builtin, err := Load(t.TempDir())
 	if err != nil {

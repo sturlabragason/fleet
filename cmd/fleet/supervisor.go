@@ -197,12 +197,16 @@ func resetSupervisor(f *fleet.Fleet, handoff bool) (int, error) {
 func cmdNote(f *fleet.Fleet, args []string) error {
 	fs := flag.NewFlagSet("note", flag.ContinueOnError)
 	agent := fs.String("agent", "", "agent the note is about")
+	pin := fs.Bool("pin", false, "a standing rule: fleet_brief always shows it (unpin by deleting its line from ~/.fleet/pinned.log)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	text := strings.Join(fs.Args(), " ")
 	if strings.TrimSpace(text) == "" {
-		return errors.New(`usage: fleet note [--agent NAME] "text"`)
+		return errors.New(`usage: fleet note [--agent NAME] [--pin] "text"`)
+	}
+	if *pin {
+		return supervisor.AppendPinned(f.Home, *agent, text)
 	}
 	return supervisor.AppendNote(f.Home, *agent, text)
 }

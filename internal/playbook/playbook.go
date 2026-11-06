@@ -155,6 +155,13 @@ func read(path string) (string, bool) {
 	return s, s != ""
 }
 
+// Ceiling is a directory the repo-layer walk never reaches, like the home
+// directory. Tests set it to os.TempDir() so the suite reads no layer from
+// outside its own temp dirs (ADR-62): with TMPDIR under $HOME and HOME
+// overridden or reached through a symlink, the walk otherwise found the
+// user's real ~/.fleet/worker.md. "" means none.
+var Ceiling string
+
 // repoFile walks up from dir to the first directory holding a .git entry (a
 // worktree has a .git file), the user's home directory or the filesystem
 // root, and returns the first .fleet/worker.md it finds on the way, or "".
@@ -169,7 +176,7 @@ func repoFile(dir string) string {
 	}
 	userHome, _ := os.UserHomeDir()
 	for {
-		if userHome != "" && dir == userHome {
+		if (userHome != "" && dir == userHome) || (Ceiling != "" && dir == filepath.Clean(Ceiling)) {
 			return ""
 		}
 		p := filepath.Join(dir, ".fleet", "worker.md")

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/sturlabragason/fleet/internal/jsonx"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -24,6 +25,9 @@ type Claim struct {
 	N       int       `json:"n"`
 	For     string    `json:"for,omitempty"`
 	Created time.Time `json:"created"`
+
+	// extra keeps keys this build does not know (ADR-62).
+	extra jsonx.Extra
 }
 
 // File is the whole adr-claims.json. Seeded records that the hand-written
@@ -31,6 +35,9 @@ type Claim struct {
 type File struct {
 	Seeded bool    `json:"seeded"`
 	Claims []Claim `json:"claims"`
+
+	// extra keeps keys this build does not know (ADR-62).
+	extra jsonx.Extra
 }
 
 // Store reads and writes adr-claims.json under a directory.
@@ -184,3 +191,27 @@ func (s *Store) Release(n int) error {
 		return nil
 	})
 }
+
+// claimJSON is Claim without its methods, for jsonx.
+type claimJSON Claim
+
+func (x *Claim) UnmarshalJSON(b []byte) error {
+	var v claimJSON
+	e, err := jsonx.Unmarshal(b, &v)
+	*x, x.extra = Claim(v), e
+	return err
+}
+
+func (x Claim) MarshalJSON() ([]byte, error) { return jsonx.Marshal(claimJSON(x), x.extra) }
+
+// fileJSON is File without its methods, for jsonx.
+type fileJSON File
+
+func (x *File) UnmarshalJSON(b []byte) error {
+	var v fileJSON
+	e, err := jsonx.Unmarshal(b, &v)
+	*x, x.extra = File(v), e
+	return err
+}
+
+func (x File) MarshalJSON() ([]byte, error) { return jsonx.Marshal(fileJSON(x), x.extra) }
