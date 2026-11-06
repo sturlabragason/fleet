@@ -7,6 +7,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/park"
+	"github.com/sturlabragason/fleet/internal/playbook"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/tools"
 )
@@ -146,12 +147,20 @@ func (f *Fleet) Wake(name string, force bool) (*board.Agent, error) {
 		return nil, err
 	}
 	// A woken agent comes back in the mode it was spawned in: the tool is
-	// started fresh, so its permission mode has to be asked for again (ADR-56).
+	// started fresh, so its permission mode has to be asked for again
+	// (ADR-56), and so does its context level (ADR-60).
 	wpr := f.Prefs.For(old.Profile)
+	// The level is the one spawn recorded; an adopted agent has none and
+	// gets no context args, as at adopt.
+	role := Role{Leader: old.Leader, LeadBy: old.LeadBy}
+	ctx := ""
+	if old.Effort != "" {
+		ctx = contextKey(p, playbook.Level(old.Effort), role.Leader)
+	}
 	argv, _ := p.Argv(tools.AgentVars(f.Exe, name, old.SessionID),
-		tools.Launch{Resume: true, Mode: f.modeFor(name, old.Profile, p, wpr.Mode), Extra: wpr.ExtraArgs})
+		tools.Launch{Resume: true, Mode: f.modeFor(name, old.Profile, p, wpr.Mode), Extra: wpr.ExtraArgs, Context: ctx})
 	a, err := f.start(name, old.Profile, p, old.Dir, old.Goal, "", old.SessionID, argv, true,
-		startExtra{Base: old.Baseline, Worktree: old.Worktree, NoWorktree: old.NoWorktree})
+		startExtra{Base: old.Baseline, Worktree: old.Worktree, NoWorktree: old.NoWorktree, Effort: old.Effort, Role: role})
 	if err != nil {
 		f.unclaimWake(name, old)
 		return nil, err

@@ -125,6 +125,11 @@ mode = "autopilot"
 # splits each value on whitespace. Limitation: an argument that itself contains
 # a space cannot be written this way; put it in `args` or `extra_args`.
 mode_args = { autopilot = "--allow-all --autopilot", plan = "--plan" }
+# context_args has the same shape, keyed by effort level (light, standard,
+# pro, leader), and is added at spawn and wake (ADR-60). The built-in Copilot
+# profiles exclude built-in tools fleet agents don't use; setting it here
+# replaces that whole table, e.g. to also drop skills for light agents:
+# context_args = { light = "--excluded-tools sql session_store_sql task skill --disable-builtin-mcps" }
 
 # The RAM guard (DESIGN §7, ADR-44). When free memory (MemAvailable) falls
 # under min_free, fleet parks the longest-idle agent -- never a pinned,

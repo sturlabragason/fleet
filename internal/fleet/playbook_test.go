@@ -291,3 +291,24 @@ func TestNonLeaderPromptHasNoSquadOrientation(t *testing.T) {
 		t.Fatal("squad orientation in a non-leader prompt")
 	}
 }
+
+// The context level follows the effort level; a leader uses the profile's
+// leader entry when there is one (ADR-60).
+func TestContextKey(t *testing.T) {
+	withLeader := tools.Profile{ContextArgs: map[string][]string{"leader": nil, "light": nil}}
+	cases := []struct {
+		p      tools.Profile
+		lvl    playbook.Level
+		leader bool
+		want   string
+	}{
+		{withLeader, playbook.Light, false, "light"},
+		{withLeader, playbook.Light, true, "leader"},
+		{tools.Profile{}, playbook.Standard, true, "standard"},
+	}
+	for _, c := range cases {
+		if got := contextKey(c.p, c.lvl, c.leader); got != c.want {
+			t.Errorf("contextKey(%q, leader=%v) = %q, want %q", c.lvl, c.leader, got, c.want)
+		}
+	}
+}

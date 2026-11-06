@@ -480,3 +480,47 @@ func TestClaudeModelsAreNewest(t *testing.T) {
 		}
 	}
 }
+
+// The Copilot profiles start lean by default: built-in tools no fleet agent
+// uses are excluded at every level, and the subagent tools only for light
+// and standard (ADR-60). A tools.toml context_args replaces the table.
+func TestContextArgs(t *testing.T) {
+	ps, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, prof := range []string{"copilot", "claude-copilot"} {
+		for lvl, agents := range map[string]bool{"light": false, "standard": false, "pro": true, "leader": true} {
+			got, _ := ps[prof].Argv(Vars{ID: "U"}, Launch{Context: lvl})
+			i := slices.Index(got, "--excluded-tools")
+			if i < 0 || !slices.Contains(got, "sql") || !slices.Contains(got, "--disable-builtin-mcps") {
+				t.Fatalf("%s %s: %v", prof, lvl, got)
+			}
+			if slices.Contains(got, "task") != !agents {
+				t.Errorf("%s %s: task excluded=%v, want %v: %v", prof, lvl, slices.Contains(got, "task"), !agents, got)
+			}
+			// --excluded-tools is variadic: everything up to the next flag is a
+			// tool name, so nothing fleet needs may land in that run.
+			for _, a := range got[i+1:] {
+				if strings.HasPrefix(a, "-") {
+					break
+				}
+				if slices.Contains([]string{"bash", "view", "edit", "create", "grep", "glob", "skill", "web_fetch", "ask_user", "task_complete", "tool_search_tool"}, a) {
+					t.Errorf("%s %s excludes %q", prof, lvl, a)
+				}
+			}
+		}
+	}
+	if got, _ := ps["claude"].Argv(Vars{}, Launch{Context: "light"}); slices.Contains(got, "--excluded-tools") {
+		t.Errorf("claude got copilot context args: %v", got)
+	}
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "tools.toml"), []byte("[copilot]\ncontext_args = { light = \"--x\" }\n"), 0o644)
+	ps, _ = Load(dir)
+	if got, _ := ps["copilot"].Argv(Vars{}, Launch{Context: "light"}); !reflect.DeepEqual(got, []string{"copilot", "--x"}) {
+		t.Errorf("override light: %v", got)
+	}
+	if got, _ := ps["copilot"].Argv(Vars{}, Launch{Context: "pro"}); !reflect.DeepEqual(got, []string{"copilot"}) {
+		t.Errorf("override drops the other levels: %v", got)
+	}
+}

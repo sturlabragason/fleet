@@ -36,6 +36,11 @@ type Profile struct {
 	PromptArgs []string
 	// ModeArgs maps a starting-mode name to the args that select it.
 	ModeArgs map[string][]string
+	// ContextArgs maps a context level to the args that size the tool's
+	// own context: built-in tools and servers the agent at that level does
+	// not need (ADR-60). Keys are the effort levels (light, standard, pro)
+	// plus "leader", which a squad leader uses at any effort when set.
+	ContextArgs map[string][]string
 	// ModeKeys maps a starting-mode name to tmux key names sent once the pane
 	// is ready, for tools that only offer a keystroke.
 	ModeKeys map[string][]string
@@ -81,6 +86,26 @@ const (
 	ClaudeSubagentModel = "sonnet"
 )
 
+// copilotLean are the Copilot CLI built-in tools no fleet agent uses, plus
+// its built-in GitHub MCP server (ADR-60). Their schemas are sent on every
+// model call, so a fresh agent starts about 20k tokens lighter without them.
+// Nothing here is used by fleet's MCP or a worker playbook.
+const copilotLean = "--excluded-tools run_dynamic_workflow dynamic_workflows_manage sql session_store_sql " +
+	"store_memory vote_memory list_canvas_capabilities open_canvas invoke_canvas_action manage_schedule " +
+	"read_resource semantic_code_search"
+
+// copilotNoAgents also drops the subagent tools: only pro and a leader
+// review with a subagent or delegate.
+const copilotNoAgents = " task read_agent list_agents write_agent"
+
+// copilotContext is the context_args table shared by the Copilot profiles.
+// --disable-builtin-mcps comes last: --excluded-tools takes every argument
+// up to the next flag.
+const copilotContext = `context_args = { light = "` + copilotLean + copilotNoAgents + ` --disable-builtin-mcps", ` +
+	`standard = "` + copilotLean + copilotNoAgents + ` --disable-builtin-mcps", ` +
+	`pro = "` + copilotLean + ` --disable-builtin-mcps", ` +
+	`leader = "` + copilotLean + ` --disable-builtin-mcps" }`
+
 // Defaults are the built-in profiles. {fleet} is the fleet executable, {name}
 // the agent name, {peer_mcp}/{peer_mcp_claude} the agent's peer MCP config and
 // {hooks} its status-hook settings.
@@ -97,6 +122,7 @@ session_path = "~/.copilot/session-state/{id}"
 subagent_log = "~/.copilot/session-state/{id}/events.jsonl"
 patterns = "copilot"
 peer_args = ["--additional-mcp-config", "{peer_mcp}"]
+` + copilotContext + `
 
 [claude-copilot]
 command = "copilot"
@@ -109,6 +135,7 @@ session_path = "~/.copilot/session-state/{id}"
 subagent_log = "~/.copilot/session-state/{id}/events.jsonl"
 patterns = "copilot"
 peer_args = ["--additional-mcp-config", "{peer_mcp}"]
+` + copilotContext + `
 
 [claude]
 command = "claude"
@@ -220,6 +247,9 @@ func apply(p *Profile, sec map[string]conf.Value) {
 	if v := conf.Map(sec, "mode_args"); v != nil {
 		p.ModeArgs = splitModes(v)
 	}
+	if v := conf.Map(sec, "context_args"); v != nil {
+		p.ContextArgs = splitModes(v)
+	}
 	if v := conf.Map(sec, "mode_keys"); v != nil {
 		p.ModeKeys = splitModes(v)
 	}
@@ -308,10 +338,13 @@ func AgentVars(exe, name, id string) Vars {
 
 // Launch describes everything beyond the profile that shapes one command line.
 type Launch struct {
-	Resume bool     // use Resume args instead of LaunchID
-	Mode   string   // name of a ModeArgs/ModeKeys entry; "" = the tool's default
-	Extra  []string // extra args from local preferences
-	Prompt string   // initial prompt, delivered via PromptArgs when the profile has them
+	Resume bool   // use Resume args instead of LaunchID
+	Mode   string // name of a ModeArgs/ModeKeys entry; "" = the tool's default
+	// Context is a ContextArgs key (an effort level or "leader"); a key the
+	// profile lacks adds nothing.
+	Context string
+	Extra   []string // extra args from local preferences
+	Prompt  string   // initial prompt, delivered via PromptArgs when the profile has them
 	// NoPromptArgs forbids carrying the prompt in argv even when the profile
 	// has PromptArgs. Set when auto_submit is off: `copilot -i <prompt>`
 	// submits the prompt itself, so honouring "paste but don't press Enter"
@@ -338,6 +371,9 @@ func (p Profile) Argv(v Vars, l Launch) (argv []string, embedded bool) {
 		argv = append(argv, v.expand(a))
 	}
 	for _, a := range p.ModeArgs[l.Mode] {
+		argv = append(argv, v.expand(a))
+	}
+	for _, a := range p.ContextArgs[l.Context] {
 		argv = append(argv, v.expand(a))
 	}
 	switch {

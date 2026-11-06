@@ -12,6 +12,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/tmux"
+	"github.com/sturlabragason/fleet/internal/tools"
 )
 
 // resumable prints "mode=<arg> <arg>" so a captured pane shows whether the
@@ -521,4 +522,58 @@ func TestWakeRefusesWhileThePaneIsAlive(t *testing.T) {
 	if st := f.Store.Load().Agents["wa1"].Status; st == "parked" {
 		t.Errorf("a live pane stayed parked: %s", st)
 	}
+}
+
+// A woken agent gets its context level's args again, and the board keeps the
+// effort so a second wake does too. A spawn without an effort records the
+// default it got; an agent with no level on the board (adopted) gets none
+// (ADR-60).
+func TestWakeKeepsContextLevel(t *testing.T) {
+	f, _ := parkFleet(t, "")
+	os.WriteFile(filepath.Join(f.Home, "tools.toml"), []byte(`[ctx]
+command = "sh"
+args = ["-c", "echo ctx=${1:-none} ${2:-none}; echo '\u2714 Done'; cat", "sh"]
+context_args = { pro = "ctx-pro", light = "ctx-light" }
+launch_id = ["started-{id}"]
+resume = ["resumed-{id}"]
+patterns = "fake"
+`), 0o644)
+	ps, err := tools.Load(f.Home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Profiles = ps
+	a, err := f.SpawnWith(SpawnOpts{Effort: "pro"}, "c1", "ctx", f.Home, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := a.SessionID
+	waitFor(t, f, "c1", "ctx=ctx-pro started-"+id)
+	for i := 0; i < 2; i++ {
+		setState(t, f, "c1", "idle", time.Now())
+		if err := f.Park("c1", ""); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.Wake("c1", false); err != nil {
+			t.Fatal(err)
+		}
+		waitFor(t, f, "c1", "ctx=ctx-pro resumed-"+id)
+	}
+	b, err := f.Spawn("c2", "ctx", f.Home, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, f, "c2", "ctx=ctx-light started-"+b.SessionID)
+	if got := f.Store.Load().Agents["c2"].Effort; got != "light" {
+		t.Fatalf("board effort %q, want the default actually used", got)
+	}
+	setState(t, f, "c2", "idle", time.Now())
+	f.Store.Update(func(bd *board.Board) error { bd.Agents["c2"].Effort = ""; return nil })
+	if err := f.Park("c2", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Wake("c2", false); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, f, "c2", "ctx=resumed-"+b.SessionID)
 }

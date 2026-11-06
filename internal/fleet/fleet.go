@@ -257,6 +257,15 @@ func effortLevel(effort string, code bool) playbook.Level {
 	return playbook.DefaultLevel(code)
 }
 
+// contextKey picks the profile's ContextArgs entry for an agent (ADR-60): a
+// leader's own entry when the profile has one, else its effort level.
+func contextKey(p tools.Profile, lvl playbook.Level, leader bool) string {
+	if _, ok := p.ContextArgs["leader"]; ok && leader {
+		return "leader"
+	}
+	return string(lvl)
+}
+
 // launch builds the argv for a profile and starts it: the real start behind
 // Spawn and the queue drain. The first prompt is built here only. claimed is
 // true for a queued agent the drain marked starting (see start). wantWT asks
@@ -282,6 +291,10 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 			dir = ex.Worktree.Path
 		}
 	}
+	// The board records the level actually used, so wake can give the
+	// resumed process the same context args (ADR-60).
+	lvl := effortLevel(effort, code)
+	ex.Effort = string(lvl)
 	// The dir is final here (worktree or not), so this is the last moment
 	// before the tool reads it: pre-answer its trust dialog (ADR-47).
 	marked := f.TrustDir(profile, p, dir)
@@ -302,7 +315,6 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	}
 	switch {
 	case pr.Playbook && prompt != "":
-		lvl := effortLevel(effort, code)
 		text, src := playbook.Resolve(lvl, f.Home, dir)
 		if lead != "" {
 			text = strings.TrimRight(text, "\n") + "\n\n" + lead
@@ -321,7 +333,8 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 		full += cp
 	}
 	argv, embedded := launchArgv(name, p, tools.AgentVars(f.Exe, name, id),
-		tools.Launch{Mode: pr.Mode, Extra: pr.ExtraArgs, Prompt: full, NoPromptArgs: !pr.AutoSubmit})
+		tools.Launch{Mode: pr.Mode, Context: contextKey(p, lvl, role.Leader), Extra: pr.ExtraArgs,
+			Prompt: full, NoPromptArgs: !pr.AutoSubmit})
 	ex.Base = Baseline(dir) // before the agent can touch anything
 	a, err := f.start(name, profile, p, dir, prompt, full, id, argv, claimed, ex)
 	if err != nil {

@@ -69,9 +69,11 @@ type Agent struct {
 	// LeadBy is the leader this agent reports to. "" is the admiral, which
 	// is where every agent reported before ADR-53.
 	LeadBy string `json:"lead_by,omitempty"`
-	// Effort is the worker playbook level the spawn asked for: light,
-	// standard or pro (DESIGN §4, ADR-57). "" is the default for the spawn,
-	// and keeps a queued agent on that default when the drain starts it.
+	// Effort is the worker playbook level: light, standard or pro (DESIGN
+	// §4, ADR-57). A queued agent keeps what the spawn asked for, "" being
+	// the default; once started it holds the level actually used, which
+	// wake reuses for the context args (ADR-60). "" on a started agent
+	// means adopted, or started by an older fleet.
 	Effort string `json:"effort,omitempty"`
 
 	// extra holds board keys this build does not know, so they survive a
