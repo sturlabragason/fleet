@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -25,7 +26,7 @@ func TestDefaultsAndArgv(t *testing.T) {
 	}{
 		{"copilot", false, "U", []string{"copilot", "--session-id", "U"}, "copilot"},
 		{"copilot", true, "U", []string{"copilot", "--resume", "U"}, "copilot"},
-		{"claude", false, "U", []string{"claude", "--session-id", "U"}, "claude"},
+		{"claude", false, "U", []string{"claude", "--model", "opus", "--session-id", "U"}, "claude"},
 		{"agy", true, "C", []string{"agy", "--conversation", "C"}, "agy"},
 		{"agy", false, "C", []string{"agy"}, "agy"},
 		{"vibe", true, "V", []string{"vibe", "--resume", "V"}, "vibe"},
@@ -51,11 +52,11 @@ func TestExampleFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := ps["claude-work"].Argv(Vars{ID: "U"}, Launch{}); !reflect.DeepEqual(got, []string{"claude", "--model", "claude-sonnet-5", "--session-id", "U"}) {
+	if got, _ := ps["claude-work"].Argv(Vars{ID: "U"}, Launch{}); !reflect.DeepEqual(got, []string{"claude", "--model", "opus", "--session-id", "U"}) {
 		t.Errorf("claude-work: %v", got)
 	}
 	t.Setenv("HOME", "/h")
-	if env := ps["claude-personal"].EnvList(); env[0] != "CLAUDE_CONFIG_DIR=/h/.claude-personal" {
+	if env := ps["claude-personal"].EnvList(); !slices.Contains(env, "CLAUDE_CONFIG_DIR=/h/.claude-personal") {
 		t.Errorf("env not expanded: %v", env)
 	}
 }
@@ -158,7 +159,7 @@ func TestModeArgsAndPrompt(t *testing.T) {
 	}
 	// Claude takes the prompt positionally.
 	got, embedded = ps["claude"].Argv(Vars{}, Launch{Mode: "accept-edits", Prompt: "hi"})
-	want = []string{"claude", "--permission-mode", "acceptEdits", "hi"}
+	want = []string{"claude", "--model", "opus", "--permission-mode", "acceptEdits", "hi"}
 	if !reflect.DeepEqual(got, want) || !embedded {
 		t.Errorf("claude argv %v embedded=%v want %v true", got, embedded, want)
 	}
@@ -440,4 +441,42 @@ func indexOf(ss []string, want string) int {
 		}
 	}
 	return -1
+}
+
+// TestClaudeModelsAreNewest fails when a built-in or example profile starts a
+// Claude model other than the newest: the claude CLI must use an alias that
+// tracks the newest model, Copilot must use CopilotClaudeModel (ADR-58).
+func TestClaudeModelsAreNewest(t *testing.T) {
+	builtin, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile("../../examples/tools.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "tools.toml"), b, 0o644)
+	example, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for src, ps := range map[string]map[string]Profile{"built-in": builtin, "example": example} {
+		for name, p := range ps {
+			model := ""
+			for i, a := range p.Args {
+				if a == "--model" && i+1 < len(p.Args) {
+					model = p.Args[i+1]
+				}
+			}
+			switch {
+			case p.Command == "claude" && model != ClaudeModel:
+				t.Errorf("%s %s: --model %q, want the alias %q", src, name, model, ClaudeModel)
+			case p.Command == "claude" && p.Env["CLAUDE_CODE_SUBAGENT_MODEL"] != ClaudeSubagentModel:
+				t.Errorf("%s %s: subagent model %q, want %q", src, name, p.Env["CLAUDE_CODE_SUBAGENT_MODEL"], ClaudeSubagentModel)
+			case p.Command == "copilot" && strings.HasPrefix(model, "claude") && model != CopilotClaudeModel:
+				t.Errorf("%s %s: --model %q, want %q", src, name, model, CopilotClaudeModel)
+			}
+		}
+	}
 }

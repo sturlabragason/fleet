@@ -70,6 +70,17 @@ func (p Profile) HasMode(mode string) bool {
 	return a || k
 }
 
+// Models for the built-in Claude profiles (ADR-58). The claude CLI takes the
+// aliases "opus" and "sonnet", which always resolve to the newest model, so
+// they never drift. The Copilot CLI needs an exact id, so CopilotClaudeModel
+// is the one place to bump it; a test fails if a built-in or example profile
+// pins anything else.
+const (
+	CopilotClaudeModel  = "claude-opus-5.5"
+	ClaudeModel         = "opus"
+	ClaudeSubagentModel = "sonnet"
+)
+
 // Defaults are the built-in profiles. {fleet} is the fleet executable, {name}
 // the agent name, {peer_mcp}/{peer_mcp_claude} the agent's peer MCP config and
 // {hooks} its status-hook settings.
@@ -89,7 +100,7 @@ peer_args = ["--additional-mcp-config", "{peer_mcp}"]
 
 [claude-copilot]
 command = "copilot"
-args = ["--model", "claude-opus-5", "--allow-all"]
+args = ["--model", "` + CopilotClaudeModel + `", "--allow-all"]
 prompt_args = ["-i", "{prompt}"]
 mode_args = { auto = "--allow-all --autopilot", autopilot = "--allow-all --autopilot", plan = "--plan", interactive = "--mode interactive" }
 launch_id = ["--session-id", "{id}"]
@@ -101,6 +112,8 @@ peer_args = ["--additional-mcp-config", "{peer_mcp}"]
 
 [claude]
 command = "claude"
+args = ["--model", "` + ClaudeModel + `"]
+env = { CLAUDE_CODE_SUBAGENT_MODEL = "` + ClaudeSubagentModel + `" }
 prompt_args = ["{prompt}"]
 mode_args = { auto = "--permission-mode bypassPermissions", accept-edits = "--permission-mode acceptEdits", plan = "--permission-mode plan", bypass = "--permission-mode bypassPermissions" }
 launch_id = ["--session-id", "{id}"]

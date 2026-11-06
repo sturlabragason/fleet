@@ -18,7 +18,7 @@
 # Claude model through the Copilot CLI.
 [claude-copilot]
 command = "copilot"
-args = ["--model", "claude-opus-5"]
+args = ["--model", "claude-opus-5.5"]
 launch_id = ["--session-id", "{id}"]
 resume = ["--resume", "{id}"]
 patterns = "copilot"
@@ -26,9 +26,10 @@ patterns = "copilot"
 # Two Claude Code accounts, kept apart by config directory.
 [claude-personal]
 command = "claude"
+args = ["--model", "opus"]
 prompt_args = ["{prompt}"]
 mode_args = { auto = "--permission-mode bypassPermissions", accept-edits = "--permission-mode acceptEdits", plan = "--permission-mode plan", bypass = "--permission-mode bypassPermissions" }
-env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-personal" }
+env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-personal", CLAUDE_CODE_SUBAGENT_MODEL = "sonnet" }
 launch_id = ["--session-id", "{id}"]
 resume = ["--resume", "{id}"]
 session_path = "~/.claude-personal/projects/*/{id}.jsonl"
@@ -37,10 +38,10 @@ patterns = "claude"
 
 [claude-work]
 command = "claude"
-args = ["--model", "claude-sonnet-5"]
+args = ["--model", "opus"]
 prompt_args = ["{prompt}"]
 mode_args = { auto = "--permission-mode bypassPermissions", accept-edits = "--permission-mode acceptEdits", plan = "--permission-mode plan", bypass = "--permission-mode bypassPermissions" }
-env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-work" }
+env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-work", CLAUDE_CODE_SUBAGENT_MODEL = "sonnet" }
 launch_id = ["--session-id", "{id}"]
 resume = ["--resume", "{id}"]
 session_path = "~/.claude-work/projects/*/{id}.jsonl"

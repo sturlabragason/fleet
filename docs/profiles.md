@@ -40,7 +40,7 @@ Claude model through the Copilot CLI:
 ```toml
 [claude-copilot]
 command = "copilot"
-args = ["--model", "claude-opus-5"]
+args = ["--model", "claude-opus-5.5"]
 launch_id = ["--session-id", "{id}"]
 resume = ["--resume", "{id}"]
 patterns = "copilot"
@@ -51,21 +51,24 @@ Two Claude Code accounts, kept apart by `CLAUDE_CONFIG_DIR`:
 ```toml
 [claude-personal]
 command = "claude"
+args = ["--model", "opus"]
 mode_args = { auto = "--permission-mode bypassPermissions" }
-env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-personal" }
+env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-personal", CLAUDE_CODE_SUBAGENT_MODEL = "sonnet" }
 launch_id = ["--session-id", "{id}"]
 resume = ["--resume", "{id}"]
 patterns = "claude"
 
 [claude-work]
 command = "claude"
-args = ["--model", "claude-sonnet-5"]
+args = ["--model", "opus"]
 mode_args = { auto = "--permission-mode bypassPermissions" }
-env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-work" }
+env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-work", CLAUDE_CODE_SUBAGENT_MODEL = "sonnet" }
 launch_id = ["--session-id", "{id}"]
 resume = ["--resume", "{id}"]
 patterns = "claude"
 ```
+
+Prefer the claude CLI's aliases (`opus`, `sonnet`) over full ids: they always resolve to the newest model. The Copilot CLI needs an exact id; the built-in `claude-copilot` uses `CopilotClaudeModel` in `internal/tools` (ADR-58).
 
 agy or vibe with extra flags (no `launch_id`, since neither sets a session ID at launch):
 

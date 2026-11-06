@@ -5,6 +5,7 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-06
+- Agents start on the newest Claude: the built-in `claude` profile now runs `--model opus` with its subagents on `sonnet` (the claude CLI resolves both to the newest model), and `claude-copilot` runs `claude-opus-5.5` instead of `claude-opus-5`. A profile you defined in `~/.fleet/tools.toml` keeps its own `--model`, so check it (ADR-58)
 - A squad leader works from turn one: its first prompt now names its `fleet_squad_*` tools and what each is for, says its agents report to it and that it must not spawn through the `fleet` CLI, and `fleet spawn` run from inside a leader's pane puts the new agent in that leader's squad instead of creating a sibling that reports to the admiral. Fields a newer fleet writes to the board (`leader`, `effort`, …) also survive a `fleet watch` left running from an older build, which is how a leader silently lost its squad tools — restart the fleet once for that fix to take effect (ADR-58)
 
 ## 2026-11-05

@@ -153,8 +153,8 @@ A profile says how to start one tool variant. Built-ins: `copilot`, `claude`, `a
 ```toml
 [claude-work]
 command = "claude"
-args = ["--model", "claude-sonnet-5"]
-env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-work" }
+args = ["--model", "opus"]
+env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-work", CLAUDE_CODE_SUBAGENT_MODEL = "sonnet" }
 launch_id = ["--session-id", "{id}"]
 resume = ["--resume", "{id}"]
 patterns = "claude"
