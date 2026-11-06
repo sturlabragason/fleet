@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -71,6 +73,72 @@ type Agent struct {
 	// standard or pro (DESIGN §4, ADR-57). "" is the default for the spawn,
 	// and keeps a queued agent on that default when the drain starts it.
 	Effort string `json:"effort,omitempty"`
+
+	// extra holds board keys this build does not know, so they survive a
+	// round trip (ADR-58).
+	extra map[string]json.RawMessage
+}
+
+// agentJSON is Agent without its methods, so the marshallers below can use
+// the ordinary struct encoding without recursing.
+type agentJSON Agent
+
+// knownAgentKeys are the json names of Agent's own fields.
+var knownAgentKeys = func() map[string]bool {
+	m := map[string]bool{}
+	t := reflect.TypeOf(Agent{})
+	for i := 0; i < t.NumField(); i++ {
+		tag, _, _ := strings.Cut(t.Field(i).Tag.Get("json"), ",")
+		if tag != "" && tag != "-" {
+			m[tag] = true
+		}
+	}
+	return m
+}()
+
+// UnmarshalJSON keeps the keys this build has no field for. Several
+// processes of different vintages write board.json — a resident watcher, the
+// overview, every MCP server — and before ADR-58 the oldest of them silently
+// erased whatever a newer one had written, which is how a leader lost its
+// `leader` flag seconds after being spawned.
+func (a *Agent) UnmarshalJSON(b []byte) error {
+	var base agentJSON
+	if err := json.Unmarshal(b, &base); err != nil {
+		return err
+	}
+	*a = Agent(base)
+	var all map[string]json.RawMessage
+	if err := json.Unmarshal(b, &all); err != nil {
+		return err
+	}
+	for k := range all {
+		if knownAgentKeys[k] {
+			delete(all, k)
+		}
+	}
+	if len(all) > 0 {
+		a.extra = all
+	}
+	return nil
+}
+
+// MarshalJSON writes the known fields plus any unknown keys read back in.
+func (a Agent) MarshalJSON() ([]byte, error) {
+	b, err := json.Marshal(agentJSON(a))
+	if err != nil || len(a.extra) == 0 {
+		return b, err
+	}
+	var all map[string]json.RawMessage
+	if err := json.Unmarshal(b, &all); err != nil {
+		return b, nil
+	}
+	for k, v := range a.extra {
+		if _, dup := all[k]; dup || knownAgentKeys[k] {
+			continue
+		}
+		all[k] = v
+	}
+	return json.Marshal(all)
 }
 
 // Card is a spawn's task card: what the task is, how fleet checks it is

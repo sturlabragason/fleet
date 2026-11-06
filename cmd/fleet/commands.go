@@ -369,7 +369,21 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 			prompt = strings.Join(a[3:], " ")
 		}
 	}
-	ag, err := f.SpawnWith(o, name, profile, dir, prompt)
+	// A leader that reaches for the CLI instead of fleet_squad_spawn used to
+	// get a sibling: not in its squad, not in its team, reporting to the
+	// admiral. Give it the squad member it meant (ADR-58).
+	spawn := f.SpawnWith
+	squadNote := ""
+	if me := f.Whoami(""); me != "" && f.IsLeader(me) {
+		if *leader {
+			return fmt.Errorf("you lead a squad; your agents may not lead squads of their own. Spawn with the fleet_squad_spawn tool")
+		}
+		spawn = func(o fleet.SpawnOpts, name, profile, dir, prompt string) (*board.Agent, error) {
+			return f.SquadSpawn(me, o, name, profile, dir, prompt)
+		}
+		squadNote = "in your squad: it reports to you, not to the admiral. Spawn with the fleet_squad_spawn tool, not the CLI\n"
+	}
+	ag, err := spawn(o, name, profile, dir, prompt)
 	if err != nil {
 		return err
 	}
@@ -381,6 +395,7 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 		return nil
 	}
 	fmt.Printf("spawned %s (%s) in %s pane %s%s\n", ag.Name, ag.Profile, ag.Dir, ag.PaneID, dirNote(f, ag.Dir))
+	fmt.Print(squadNote)
 	if w := ag.Worktree; w != nil {
 		fmt.Printf("worktree %s on branch %s (of %s)\n", w.Path, w.Branch, w.Repo)
 	}
@@ -491,6 +506,31 @@ type lsAgent struct {
 	*board.Agent
 	Team      string `json:"team,omitempty"`
 	TeamColor string `json:"team_color,omitempty"`
+}
+
+// MarshalJSON splices the team fields onto the agent's own JSON. board.Agent
+// marshals itself (ADR-58), and an embedded type's marshaller would otherwise
+// be promoted and swallow these two fields.
+func (l lsAgent) MarshalJSON() ([]byte, error) {
+	b, err := json.Marshal(l.Agent)
+	if err != nil {
+		return nil, err
+	}
+	var extra []byte
+	for _, kv := range [][2]string{{"team", l.Team}, {"team_color", l.TeamColor}} {
+		if kv[1] == "" {
+			continue
+		}
+		v, err := json.Marshal(kv[1])
+		if err != nil {
+			return nil, err
+		}
+		extra = append(append(extra, `,"`+kv[0]+`":`...), v...)
+	}
+	if len(extra) == 0 || len(b) < 2 || b[len(b)-1] != '}' {
+		return b, nil
+	}
+	return append(append(b[:len(b)-1:len(b)-1], extra...), '}'), nil
 }
 
 // writeLs prints the agent table. The TEAM column appears only when a listed

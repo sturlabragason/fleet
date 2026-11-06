@@ -21,4 +21,7 @@ What you escalate instead of doing:
 - A permission prompt. `fleet_squad_send` refuses an agent that is waiting on one; report it to
   the admiral with `state=question`.
 - Merging or pushing to a shared branch, and applying infrastructure.
-- Anything outside your squad: you cannot see or touch agents you did not spawn.
+- Anything outside your squad: you cannot see or touch agents you did not spawn. Peers in your
+  team are reached with `fleet_agents` and `fleet_msg_send`, not with the squad tools.
+- `fleet_squad_*` missing from your tool list. That is a fleet bug, not a reason to reach for
+  the `fleet` CLI or a shell: report `state=blocked` saying the squad tools are missing.

@@ -75,6 +75,15 @@ var light string
 //go:embed standard.md
 var standard string
 
+//go:embed leader.md
+var leader string
+
+// Leader is the orientation a squad leader gets in its first prompt: which
+// squad tools it has, that its agents report to it, and that the fleet CLI
+// is not how it spawns them (ADR-58). The MCP server also sends it as
+// instructions, but only a prompt is guaranteed to be read on turn one.
+func Leader() string { return leader }
+
 // Text returns the built-in playbook for a level. An unknown level reads as
 // pro: more process is the safe way to be wrong.
 func Text(l Level) string {
@@ -139,8 +148,10 @@ func read(path string) (string, bool) {
 }
 
 // repoFile walks up from dir to the first directory holding a .git entry (a
-// worktree has a .git file) or the filesystem root, and returns the first
-// .fleet/worker.md it finds on the way, or "".
+// worktree has a .git file), the user's home directory or the filesystem
+// root, and returns the first .fleet/worker.md it finds on the way, or "".
+// The walk stops below the home directory so that ~/.fleet/worker.md stays
+// the user layer and is not also applied as a repo layer (ADR-58).
 func repoFile(dir string) string {
 	if dir == "" {
 		return ""
@@ -148,7 +159,11 @@ func repoFile(dir string) string {
 	if abs, err := filepath.Abs(dir); err == nil {
 		dir = abs
 	}
+	userHome, _ := os.UserHomeDir()
 	for {
+		if userHome != "" && dir == userHome {
+			return ""
+		}
 		p := filepath.Join(dir, ".fleet", "worker.md")
 		if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
 			return p

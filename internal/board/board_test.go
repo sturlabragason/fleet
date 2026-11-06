@@ -3,6 +3,7 @@ package board
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -42,5 +43,30 @@ func TestBrokenJSON(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "board.json.broken")); err != nil {
 		t.Fatal("no backup")
+	}
+}
+
+// An older fleet still running (a resident `fleet watch`, say) must not erase
+// board keys a newer one wrote: that is how a leader lost its `leader` flag
+// seconds after it was spawned, and with it its squad tools (ADR-58).
+func TestUnknownKeysSurviveARoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	raw := `{"agents":{"a1":{"name":"a1","profile":"fake","status":"idle","leader":true,"from_the_future":{"x":1}}}}`
+	if err := os.WriteFile(filepath.Join(dir, "board.json"), []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := NewStore(dir)
+	if err := s.Update(func(b *Board) error { b.Agents["a1"].Status = "working"; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "board.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"from_the_future"`) {
+		t.Fatalf("unknown key dropped: %s", b)
+	}
+	if a := s.Load().Agents["a1"]; !a.Leader || a.Status != "working" {
+		t.Fatalf("leader=%v status=%q", a.Leader, a.Status)
 	}
 }

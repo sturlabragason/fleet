@@ -293,13 +293,24 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	pr.Mode = f.modeFor(name, profile, p, pr.Mode)
 	// The worker playbook goes in front of the first prompt only; the board
 	// keeps the user's prompt as the goal (DESIGN §4, ADR-22). No prompt, no
-	// playbook.
+	// playbook. A leader also gets its squad orientation, at every effort
+	// level and whether or not the playbook is on (ADR-58).
 	full := prompt
-	if pr.Playbook && prompt != "" {
+	lead := ""
+	if role.Leader {
+		lead = playbook.Leader()
+	}
+	switch {
+	case pr.Playbook && prompt != "":
 		lvl := effortLevel(effort, code)
 		text, src := playbook.Resolve(lvl, f.Home, dir)
+		if lead != "" {
+			text = strings.TrimRight(text, "\n") + "\n\n" + lead
+		}
 		full = playbook.Compose(text, prompt)
 		logx.For("fleet").Info("playbook", "agent", name, "effort", lvl, "sources", src, "bytes", len(full)-len(prompt))
+	case lead != "" && prompt != "":
+		full = playbook.Compose(lead, prompt)
 	}
 	// The task card goes last, so it is the final thing the agent reads
 	// (ADR-43). A card with no prompt is still worth telling the agent.

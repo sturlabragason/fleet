@@ -254,3 +254,40 @@ func TestSpawnDefaultsToProInARepo(t *testing.T) {
 		t.Fatalf("expected the worktree to be refused, got %+v", w)
 	}
 }
+
+// A leader is told about its squad tools in its first prompt, whatever the
+// effort level and even with the playbook off: the MCP instructions alone
+// left a leader hunting for tools it could not name (ADR-58).
+func TestLeaderPromptCarriesSquadOrientation(t *testing.T) {
+	for _, tc := range []struct{ name, config, prompt string }{
+		{"playbook on", "", "run the effort"},
+		{"playbook off", "[defaults]\nplaybook = false\n", "run the effort"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, out := argvFleet(t, tc.config)
+			if _, err := f.SpawnWith(SpawnOpts{Role: Role{Leader: true}}, "ld1", "pa", t.TempDir(), tc.prompt); err != nil {
+				t.Fatal(err)
+			}
+			got := readArg(t, out)
+			for _, want := range []string{"fleet_squad_spawn", "report to **you**", "state=blocked"} {
+				if !strings.Contains(got, want) {
+					t.Errorf("leader prompt lacks %q:\n%.400q", want, got)
+				}
+			}
+			if tc.prompt != "" && !strings.HasSuffix(got, "## Your task\n\n"+tc.prompt) {
+				t.Errorf("orientation not before the task: %.120q", got)
+			}
+		})
+	}
+}
+
+// A plain agent gets none of it.
+func TestNonLeaderPromptHasNoSquadOrientation(t *testing.T) {
+	f, out := argvFleet(t, "")
+	if _, err := f.Spawn("ld2", "pa", t.TempDir(), "fix the bug"); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(readArg(t, out), "fleet_squad_spawn") {
+		t.Fatal("squad orientation in a non-leader prompt")
+	}
+}

@@ -106,6 +106,21 @@ func TestResolveWalksUpFromSubdir(t *testing.T) {
 	}
 }
 
+// ~/.fleet/worker.md is the user layer; walking up out of a non-repo dir
+// must not pick it up a second time as a repo layer (ADR-58).
+func TestResolveStopsAtTheHomeDirectory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	user := filepath.Join(home, ".fleet", "worker.md")
+	put(t, user, "USER RULE")
+	dir := filepath.Join(home, "scratch", "notes")
+	os.MkdirAll(dir, 0o755)
+	text, src := Resolve(Pro, filepath.Join(home, ".fleet"), dir)
+	if n := strings.Count(text, "USER RULE"); n != 1 || len(src) != 2 || src[1] != user {
+		t.Fatalf("user layer applied %d times, sources %v", n, src)
+	}
+}
+
 func TestResolveStopsAtGitBoundary(t *testing.T) {
 	home, root, repo := fixture(t)
 	put(t, filepath.Join(root, ".fleet", "worker.md"), "ABOVE THE REPO")
