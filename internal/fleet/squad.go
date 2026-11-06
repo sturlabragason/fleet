@@ -26,6 +26,8 @@ type Role struct {
 	Leader bool
 	// LeadBy is the leader it reports to ("" = the admiral).
 	LeadBy string
+	// Interactive: the user talks to it directly (ADR-61).
+	Interactive bool
 }
 
 // SquadTeam is the team name a leader's squad is mirrored into: the

@@ -59,8 +59,13 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 		low, free, mem = f.LowMemory()
 		limit = f.MaxWorking()
 	}
+	var cs []ClientSeen
+	if perr == nil {
+		cs = f.clients()
+	}
 	err := f.Store.Update(func(b *board.Board) error {
 		for _, a := range b.Agents {
+			noteUser(a, cs, ids[a.Name])
 			prev := a.Status
 			var next string
 			if f.skipCapture(a, byAgent[a.Name] && !dead[a.Name], onWall[a.Name], now) {

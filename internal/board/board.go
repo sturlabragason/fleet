@@ -75,6 +75,14 @@ type Agent struct {
 	// wake reuses for the context args (ADR-60). "" on a started agent
 	// means adopted, or started by an older fleet.
 	Effort string `json:"effort,omitempty"`
+	// Interactive marks an agent the user talks to directly: it is never
+	// auto-closed, and fleet_send refuses to type while the user has its
+	// pane open (ADR-61).
+	Interactive bool `json:"interactive,omitempty"`
+	// UserAt is the user's last key press seen in the agent's pane (tmux
+	// client_activity while the pane was the client's active one). For
+	// UserHold after it the agent counts as the user's (ADR-61).
+	UserAt time.Time `json:"user_at,omitempty"`
 
 	// extra holds board keys this build does not know, so they survive a
 	// round trip (ADR-58).
@@ -211,6 +219,16 @@ type Exit struct {
 
 // Clean reports an exit with status 0 and no signal.
 func (e *Exit) Clean() bool { return e != nil && e.Code != nil && *e.Code == 0 && e.Signal == 0 }
+
+// UserHold is how long after the user's last key press in an agent's pane
+// the agent still counts as theirs: no auto-close in that time (ADR-61).
+var UserHold = 10 * time.Minute
+
+// WithUser reports whether the agent is the user's right now: flagged
+// interactive, or typed in within UserHold (ADR-61).
+func (a *Agent) WithUser(now time.Time) bool {
+	return a.Interactive || (!a.UserAt.IsZero() && now.Sub(a.UserAt) < UserHold)
+}
 
 // GitBase is a work tree's state before an agent started.
 type GitBase struct {

@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -97,8 +98,14 @@ func (s *Server) send(a args) (string, error) {
 }
 
 // sendOne sends to one agent. Text or keys to an agent on a prompt need
-// confirmed=true: Enter on a picker approves it (ADR-9).
+// confirmed=true: Enter on a picker approves it (ADR-9). Text or keys to a
+// pane the user is typing in need force=true (ADR-61).
 func (s *Server) sendOne(a args, name string) error {
+	if !a.Force {
+		if r := s.F.SendBlocker(name, a.Text != "" || slices.Contains(a.Keys, "Enter")); r != "" {
+			return fleet.UserError(r)
+		}
+	}
 	if !a.Confirmed {
 		w, err := s.F.Prompting(name)
 		if err != nil {

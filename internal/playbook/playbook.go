@@ -84,6 +84,14 @@ var leader string
 // instructions, but only a prompt is guaranteed to be read on turn one.
 func Leader() string { return leader }
 
+//go:embed interactive.md
+var interactive string
+
+// Interactive is what an agent the user talks to directly is told in its
+// first prompt: it reports progress, not done, until the user ends the
+// session, because done may close it under them (ADR-61).
+func Interactive() string { return interactive }
+
 // Text returns the built-in playbook for a level. An unknown level reads as
 // pro: more process is the safe way to be wrong.
 func Text(l Level) string {

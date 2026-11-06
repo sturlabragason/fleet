@@ -390,7 +390,7 @@ func fit(s string, w int) string {
 	return s + strings.Repeat(" ", max(w-ansi.StringWidth(s), 0))
 }
 
-// rowCell is one row: glyph, name, ⚑ ▶ ▲ ◆ marks and the status age (the
+// rowCell is one row: glyph, name, ⚑ ▶ ▲ ✎ ◆ marks and the status age (the
 // queue position for a queued agent), as a tile-<name> zone.
 func (m *Model) rowCell(tv tierView, name string, w int) string {
 	dim := lipgloss.NewStyle().Foreground(colIdle)
@@ -429,6 +429,9 @@ func (m *Model) rowCell(tv tierView, name string, w int) string {
 	if a.Leader {
 		mark(leadStyle, leadMark)
 	}
+	if a.WithUser(m.now()) {
+		mark(leadStyle, userMark)
+	}
 	if ti, ok := m.teams[a.Name]; ok && ti.Team != "" {
 		mark(lipgloss.NewStyle().Foreground(lipgloss.Color(ti.Color)), teamMark)
 	}
@@ -436,7 +439,7 @@ func (m *Model) rowCell(tv tierView, name string, w int) string {
 	return zone.Mark("tile-"+a.Name, fit(row+cursorStyle(dim, cur).Render(pad+age), w))
 }
 
-// markCount is how many two-cell marks (⚑ ▶ ▲ ◆) follow an agent's name.
+// markCount is how many two-cell marks (⚑ ▶ ▲ ✎ ◆) follow an agent's name.
 func (m *Model) markCount(a *board.Agent) int {
 	n := 0
 	if m.pinned[a.Name] {
@@ -446,6 +449,9 @@ func (m *Model) markCount(a *board.Agent) int {
 		n++
 	}
 	if a.Leader {
+		n++
+	}
+	if a.WithUser(m.now()) {
 		n++
 	}
 	if ti, ok := m.teams[a.Name]; ok && ti.Team != "" {

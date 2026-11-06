@@ -259,12 +259,17 @@ func reportsTool(box string) string {
 	return "fleet_squad_reports"
 }
 
-// autoClose closes a done agent when its profile opts in and it left no
-// work behind (AgentBlocker). It returns the note for the admiral ("" = off).
+// autoClose closes a done agent when its profile opts in, the user is not
+// talking to it (ADR-61) and it left no work behind (AgentBlocker). It
+// returns the note for the admiral ("" = off).
 func (f *Fleet) autoClose(name string) string {
 	a, ok := f.Store.Load().Agents[name]
 	if !ok || !f.Prefs.For(a.Profile).AutoCloseDone {
 		return ""
+	}
+	if reason := f.userBlocker(a); reason != "" {
+		logx.For("fleet").Info("not auto-closed", "agent", name, "reason", reason)
+		return "not auto-closed: " + reason
 	}
 	if reason := AgentBlocker(a); reason != "" {
 		return "not auto-closed: " + reason

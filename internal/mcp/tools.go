@@ -46,10 +46,11 @@ var toolDefs = []tool{
 		"raw":          map[string]any{"type": "boolean", "description": "screen as captured, with borders"},
 		"last_message": map[string]any{"type": "boolean", "description": "the agent's last reply (Copilot profiles), at most 4000 chars"},
 		"summary":      map[string]any{"type": "boolean", "description": "about 5 lines from a cheap model instead of screen text (cached per screen)"}})},
-	{"fleet_send", "Send an ordinary prompt or follow-up text (pastes, presses Enter, re-presses it if the paste stays unsubmitted). Target exactly one of name, names or team; several targets get one line each. keys presses allowed keys instead of Enter (text+keys: paste, no Enter, then keys); text or keys to an agent on a prompt need confirmed=true (Enter would answer it).", obj(nil, map[string]any{
+	{"fleet_send", "Send an ordinary prompt or follow-up text (pastes, presses Enter, re-presses it if the paste stays unsubmitted). Target exactly one of name, names or team; several targets get one line each. keys presses allowed keys instead of Enter (text+keys: paste, no Enter, then keys); text or keys to an agent on a prompt need confirmed=true (Enter would answer it). Refused while the user is typing in that pane (a key press there in the last 30 s, an interactive agent whose pane they have open, or unsubmitted text in its input box): wait or ask the user; force=true types anyway.", obj(nil, map[string]any{
 		"name": str("agent name"), "names": strList("several agent names"), "team": str("send to every member of this team"),
 		"text": str("text to send"), "keys": strList("key names: Enter, Escape, Up, Down, Left, Right, Tab, BTab, Space, BSpace, 1-9, y, n"),
-		"confirmed": map[string]any{"type": "boolean", "description": "only when an agent is waiting on a prompt (text or keys would answer it), after the user said yes"}})},
+		"confirmed": map[string]any{"type": "boolean", "description": "only when an agent is waiting on a prompt (text or keys would answer it), after the user said yes"},
+		"force":     map[string]any{"type": "boolean", "description": "type even though the user is typing in that pane (it merges into their input and submits it); only after the user said so"}})},
 	{"fleet_answer", "Answer an agent's prompt: answer y/n, option N of a numbered menu, or label for a menu whose options are not numbered on screen (fleet_status lists the options either way). Ask the user first; set confirmed=true only after an explicit yes, and pass expect = the question the user confirmed.", obj([]string{"name", "confirmed"}, map[string]any{
 		"name": str("agent name"), "answer": map[string]any{"type": "string", "enum": []string{"y", "n"}, "description": "y = option 1, n = the first option starting with No; plain y/n when there is no menu"},
 		"option": map[string]any{"type": "integer", "minimum": 1, "maximum": 9, "description": "menu option number; pass exactly one of answer, option or label"},
@@ -57,15 +58,16 @@ var toolDefs = []tool{
 		"expect": str("the question the user confirmed (or part of it, or of the option label); refused if the prompt on screen no longer matches"), "confirmed": confirmedProp})},
 	{"fleet_info", "Facts about one agent: profile, team, status and age, last activity, dir, its task card (goal, done-check and its verdict, result file), git (worktree, branch, dirty files, merged into main, commits ahead), session id, context %, spend so far, mode.", obj([]string{"name"}, map[string]any{
 		"name": str("agent name")})},
-	{"fleet_spawn", "Start a new agent with a tool profile in a directory, optionally with a first prompt. Never spawn in the home directory: pass the repo or project dir, not $HOME (fleet moves a home-directory spawn to a scratch dir of its own and says so). In a git repo the agent gets its own worktree, <repo>.wt/<name> on branch fleet/<name>, and works there; pass worktree=false to put it straight in dir (e.g. a read-only task, or work that must land in the user's checkout). goal, check and result make a task card: fleet runs check in the agent's dir when it reports done and tells you whether it passed, and the agent is told to write the result file. effort sizes the worker process the agent is given: pick it per task.", obj([]string{"name", "profile", "dir"}, map[string]any{
+	{"fleet_spawn", "Start a new agent with a tool profile in a directory, optionally with a first prompt. Never spawn in the home directory: pass the repo or project dir, not $HOME (fleet moves a home-directory spawn to a scratch dir of its own and says so). In a git repo the agent gets its own worktree, <repo>.wt/<name> on branch fleet/<name>, and works there; pass worktree=false to put it straight in dir (e.g. a read-only task, or work that must land in the user's checkout). goal, check and result make a task card: fleet runs check in the agent's dir when it reports done and tells you whether it passed, and the agent is told to write the result file. effort sizes the worker process the agent is given: pick it per task. interactive=true for an agent the user will talk to directly: it is never auto-closed and reports progress, not done, until the user ends the session.", obj([]string{"name", "profile", "dir"}, map[string]any{
 		"name": str("short unique agent name"), "profile": str("tool profile, see fleet_profiles"), "dir": str("working directory (absolute)"), "prompt": str("optional first prompt"),
-		"worktree":   map[string]any{"type": "boolean", "description": "give the agent its own git worktree (default: the user's config, normally true)"},
-		"goal":       str("task card: the goal in one line (shown on the tile and in fleet_info)"),
-		"check":      str("task card: done-check shell command, run in the agent's dir when it reports done, e.g. \"go build ./... && go test ./...\""),
-		"check_exit": map[string]any{"type": "integer", "description": "exit code the done-check must return to pass (default 0)"},
-		"result":     str("task card: result file the agent must write, relative to its dir (default result.md)"),
-		"leader":     map[string]any{"type": "boolean", "description": "make it a leader: it gets squad tools and may spawn a squad of its own, whose reports come to it instead of you. Use for a job you want planned, split and summarised by one agent."},
-		"effort":     map[string]any{"type": "string", "enum": []string{"light", "standard", "pro"}, "description": "how much process the agent is given. light: an errand or a quick read-only question (a few lines: stay in your dir, no secrets, report). standard: a contained change (plan, build and test, commit on its branch; no ADR, no review, no merge). pro: professional code work in this repo (the full playbook: worktree, failing test first, subagent review, pre-merge checklist, merge into local main). Default: pro with a worktree, light without one."}})},
+		"worktree":    map[string]any{"type": "boolean", "description": "give the agent its own git worktree (default: the user's config, normally true)"},
+		"goal":        str("task card: the goal in one line (shown on the tile and in fleet_info)"),
+		"check":       str("task card: done-check shell command, run in the agent's dir when it reports done, e.g. \"go build ./... && go test ./...\""),
+		"check_exit":  map[string]any{"type": "integer", "description": "exit code the done-check must return to pass (default 0)"},
+		"result":      str("task card: result file the agent must write, relative to its dir (default result.md)"),
+		"interactive": map[string]any{"type": "boolean", "description": "the user will talk to this agent directly in its pane: never auto-closed, and told to report progress, not done, until the user ends the session"},
+		"leader":      map[string]any{"type": "boolean", "description": "make it a leader: it gets squad tools and may spawn a squad of its own, whose reports come to it instead of you. Use for a job you want planned, split and summarised by one agent."},
+		"effort":      map[string]any{"type": "string", "enum": []string{"light", "standard", "pro"}, "description": "how much process the agent is given. light: an errand or a quick read-only question (a few lines: stay in your dir, no secrets, report). standard: a contained change (plan, build and test, commit on its branch; no ADR, no review, no merge). pro: professional code work in this repo (the full playbook: worktree, failing test first, subagent review, pre-merge checklist, merge into local main). Default: pro with a worktree, light without one."}})},
 	{"fleet_sessions", "Find copilot/claude sessions the user started outside fleet, newest first: id | age | profile | dir | title | flags. Use before fleet_adopt.", obj(nil, map[string]any{
 		"query": str("optional words; every word must appear in title, dir, branch or id"), "limit": map[string]any{"type": "integer", "description": "max sessions (default 15)"}})},
 	{"fleet_adopt", "Resume an existing session the user started outside fleet as a fleet agent. Pass session_id (full id or unique 8+ char prefix) or query (words that match exactly one session), not both. Refuses if the session is missing or still open elsewhere.", obj(nil, map[string]any{
@@ -115,7 +117,9 @@ type args struct {
 	Confirmed, All, Raw, Force bool
 	// Leader makes a fleet_spawn a squad leader; Squad closes a leader's
 	// squad with it (ADR-53).
-	Leader, Squad       bool
+	Leader, Squad bool
+	// Interactive marks a fleet_spawn the user talks to directly (ADR-61).
+	Interactive         bool
 	LastMessage         bool `json:"last_message"`
 	Team, Color         string
 	Agents, Names, Keys []string
@@ -160,7 +164,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 				return "", err
 			}
 		}
-		ag, err := s.F.SpawnWith(fleet.SpawnOpts{Worktree: a.Worktree, Card: a.card(), Role: fleet.Role{Leader: a.Leader}, Effort: a.Effort}, a.Name, a.Profile, a.Dir, a.Prompt)
+		ag, err := s.F.SpawnWith(fleet.SpawnOpts{Worktree: a.Worktree, Card: a.card(), Role: fleet.Role{Leader: a.Leader, Interactive: a.Interactive}, Effort: a.Effort}, a.Name, a.Profile, a.Dir, a.Prompt)
 		if err != nil {
 			return "", err
 		}
@@ -345,7 +349,11 @@ func (s *Server) status() (string, error) {
 			sp = x.Short()
 			total.Add(x)
 		}
-		fmt.Fprintf(&b, "%s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s\n", a.Name, teams[a.Name].Team, squadCell(s.F, a), a.Profile, a.Status, sub, w, time.Since(a.StatusSince).Round(time.Second), sp, wf, reportCell(a))
+		st := a.Status
+		if a.WithUser(time.Now()) {
+			st += " (interactive)"
+		}
+		fmt.Fprintf(&b, "%s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s\n", a.Name, teams[a.Name].Team, squadCell(s.F, a), a.Profile, st, sub, w, time.Since(a.StatusSince).Round(time.Second), sp, wf, reportCell(a))
 	}
 	if total.Any() {
 		fmt.Fprintf(&b, "fleet spend so far: %s over %d model calls (%s); %s\n",

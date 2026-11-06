@@ -152,7 +152,7 @@ func (f *Fleet) Wake(name string, force bool) (*board.Agent, error) {
 	wpr := f.Prefs.For(old.Profile)
 	// The level is the one spawn recorded; an adopted agent has none and
 	// gets no context args, as at adopt.
-	role := Role{Leader: old.Leader, LeadBy: old.LeadBy}
+	role := Role{Leader: old.Leader, LeadBy: old.LeadBy, Interactive: old.Interactive}
 	ctx := ""
 	if old.Effort != "" {
 		ctx = contextKey(p, playbook.Level(old.Effort), role.Leader)
@@ -168,7 +168,7 @@ func (f *Fleet) Wake(name string, force bool) (*board.Agent, error) {
 	// start writes a fresh entry; keep the history the parked one carried.
 	f.Store.Update(func(b *board.Board) error {
 		if cur, ok := b.Agents[name]; ok {
-			cur.Created, cur.Report = old.Created, old.Report
+			cur.Created, cur.Report, cur.UserAt = old.Created, old.Report, old.UserAt
 			cur.SubLogOffset, cur.SubKnown = old.SubLogOffset, old.SubKnown
 			a = cur
 		}

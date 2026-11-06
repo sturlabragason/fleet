@@ -25,9 +25,9 @@ To use a tool fleet doesn't start itself, register `fleet mcp` as a stdio MCP se
 | `fleet_status` | none | Table of agents: name, team, profile, status, subagents, on wall, age, spend so far, what it waits for; ends with the fleet-wide spend |
 | `fleet_info` | `name` | One agent in detail: dir, git state, session id, context %, spend so far, mode |
 | `fleet_peek` | `name`, `lines` (max 80), `raw`, `last_message` | Last lines of the agent's screen, or its last reply from the session log |
-| `fleet_send` | `name` / `names` / `team`, `text`, `keys`, `confirmed` | Paste a prompt and press Enter, or press keys |
+| `fleet_send` | `name` / `names` / `team`, `text`, `keys`, `confirmed`, `force` | Paste a prompt and press Enter, or press keys; refused while you are typing in that pane unless `force` (ADR-61) |
 | `fleet_answer` | `name`, `answer` (`y`/`n`) or `option` N, `expect`, `confirmed` | Answer a y/n prompt or a numbered menu |
-| `fleet_spawn` | `name`, `profile`, `dir`, `prompt`, `worktree`, `effort`, `leader` | Start an agent; in a git repo it gets its own worktree `<repo>.wt/<name>` on branch `fleet/<name>` (`worktree: false` spawns straight into `dir`). `effort` sizes the worker playbook: `light` (errand), `standard` (contained change), `pro` (full process); default `pro` with a worktree, `light` without. `leader: true` lets it run its own squad |
+| `fleet_spawn` | `name`, `profile`, `dir`, `prompt`, `worktree`, `effort`, `leader`, `interactive` | Start an agent; in a git repo it gets its own worktree `<repo>.wt/<name>` on branch `fleet/<name>` (`worktree: false` spawns straight into `dir`). `effort` sizes the worker playbook: `light` (errand), `standard` (contained change), `pro` (full process); default `pro` with a worktree, `light` without. `leader: true` lets it run its own squad. `interactive: true` for an agent you will talk to directly: never auto-closed, reports progress until you end the session (ADR-61) |
 | `fleet_adopt` | `session_id` or `query`, optional `profile`, `dir`, `name` | Resume a session started outside fleet |
 | `fleet_sessions` | `query`, `limit` | Copilot/Claude sessions started outside fleet, newest first |
 | `fleet_profiles` | none | Profiles and their command lines |

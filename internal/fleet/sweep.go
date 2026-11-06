@@ -52,7 +52,11 @@ func (f *Fleet) sweepDone(as []*board.Agent, now time.Time) {
 		defer f.sweep.run.Unlock()
 		log := logx.For("fleet")
 		for _, a := range due {
-			if r := AgentBlocker(a); r != "" {
+			r := f.userBlocker(a)
+			if r == "" {
+				r = AgentBlocker(a)
+			}
+			if r != "" {
 				log.Debug("idle close skipped", "agent", a.Name, "reason", r)
 				continue
 			}

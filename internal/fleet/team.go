@@ -101,6 +101,10 @@ func (f *Fleet) TeamSend(team, text string, confirmed bool) ([]Result, error) {
 				continue
 			}
 		}
+		if r := f.SendBlocker(m, true); r != "" {
+			rs = append(rs, Result{m, false, "not sent: " + r + "; fleet_send name=" + m + " force=true types it anyway"})
+			continue
+		}
 		if err := f.Send(m, text); err != nil {
 			rs = append(rs, Result{m, false, err.Error()})
 			continue

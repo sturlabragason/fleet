@@ -129,6 +129,12 @@ func (f *Fleet) Info(name string) (string, error) {
 		kv("squad", "member of "+a.LeadBy+"'s squad; its reports go to "+a.LeadBy)
 	}
 	kv("status", fmt.Sprintf("%s (for %s)", a.Status, now.Sub(a.StatusSince).Round(time.Second)))
+	switch {
+	case a.Interactive:
+		kv("interactive", "yes: the user talks to it directly; never auto-closed")
+	case a.WithUser(now):
+		kv("interactive", "the user typed in its pane "+now.Sub(a.UserAt).Round(time.Second).String()+" ago; not auto-closed for now")
+	}
 	kv("last activity", now.Sub(a.LastChange).Round(time.Second).String()+" ago")
 	kv("dir", a.Dir)
 	if c := a.Card; c != nil {

@@ -61,6 +61,9 @@ type Fleet struct {
 	// CloseLater schedules closing an agent after its report returns; nil =
 	// tmux run-shell (tests replace it).
 	CloseLater func(name string) error
+	// Clients lists the attached tmux clients (active pane, last key
+	// press); nil = tmux list-clients (tests replace it, ADR-61).
+	Clients func() []ClientSeen
 	// Go runs a job off the caller's goroutine: the done-check after a done
 	// report (ADR-43), which may take minutes. The MCP servers set it so the
 	// agent's fleet_report returns at once; nil runs the job inline, which
@@ -313,6 +316,11 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	if role.Leader {
 		lead = playbook.Leader()
 	}
+	// An interactive agent is told it reports progress, not done, until
+	// the user ends the session (ADR-61), playbook on or off.
+	if role.Interactive {
+		lead = strings.TrimSpace(lead + "\n\n" + playbook.Interactive())
+	}
 	switch {
 	case pr.Playbook && prompt != "":
 		text, src := playbook.Resolve(lvl, f.Home, dir)
@@ -434,7 +442,7 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 	a := &board.Agent{Name: name, Profile: profile, Patterns: p.Patterns, Dir: dir, Goal: goal, SessionID: id,
 		PaneID: pane, Status: string(status.Unknown), Created: now, StatusSince: now, LastChange: now,
 		Baseline: ex.Base, Worktree: ex.Worktree, NoWorktree: ex.NoWorktree, Card: ex.Card, Effort: ex.Effort,
-		Leader: ex.Role.Leader, LeadBy: ex.Role.LeadBy}
+		Leader: ex.Role.Leader, LeadBy: ex.Role.LeadBy, Interactive: ex.Role.Interactive}
 	if err := f.Store.Update(func(b *board.Board) error {
 		old, ok := b.Agents[name]
 		if claimed {

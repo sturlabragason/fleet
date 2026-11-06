@@ -39,7 +39,7 @@ const usage = `usage:
                                             run the admiral under profile NAME (alone: fleet up); default
                                             $FLEET_ADMIRAL_PROFILE, last choice, [admiral] profile, copilot
   fleet ui                                  run the overview TUI in this terminal
-  fleet spawn [--worktree|--no-worktree] [--leader] [--effort LEVEL] <name> <profile> [dir] ["prompt"]
+  fleet spawn [--worktree|--no-worktree] [--leader] [--interactive] [--effort LEVEL] <name> <profile> [dir] ["prompt"]
              [--goal "one line"] [--check "cmd"] [--check-exit N] [--result FILE]
                                             in a git repo the agent gets its own worktree,
                                             <repo>.wt/<name> on branch fleet/<name> (worktree in
@@ -53,6 +53,8 @@ const usage = `usage:
                                             --leader makes it a leader: it gets squad tools, spawns a
                                             squad of its own and its agents report to it, not to the
                                             admiral ([squad] max_members, max_depth in config.toml);
+                                            --interactive: the user talks to it directly, so it is
+                                            never auto-closed and reports progress, not done;
                                             queued instead when max_working agents are busy;
                                             the overview TUI starts it when a slot frees
   fleet spawn --fake <name> [dir]           shorthand for profile "fake"
@@ -65,7 +67,9 @@ const usage = `usage:
   fleet spend [--json]                      what each agent has cost so far and the fleet total, read from
                                             the agents' own session files (AI credits for copilot, tokens
                                             for claude); no model is called
-  fleet send <name> "text"
+  fleet send [--force] <name> "text"        refused while the user is typing in that pane (keys
+                                            there in the last 30 s, unsubmitted text in its box);
+                                            --force types it anyway
   fleet peek <name> [--raw] [-n 200]
   fleet peek --summary <name>               about 5 lines from a cheap model: what it is doing, what it
                                             waits for, any error (cached per screen; [summary] in config.toml)
@@ -216,8 +220,15 @@ func run(args []string) error {
 	case "spend":
 		return cmdSpend(f, rest)
 	case "send":
+		force := len(rest) > 0 && rest[0] == "--force"
+		if force {
+			rest = rest[1:]
+		}
 		if len(rest) < 2 {
-			return fmt.Errorf("usage: fleet send <name> \"text\"")
+			return fmt.Errorf("usage: fleet send [--force] <name> \"text\"")
+		}
+		if r := f.SendBlocker(rest[0], true); r != "" && !force {
+			return fmt.Errorf("not sent: %s; fleet send --force types it anyway", r)
 		}
 		return f.Send(rest[0], strings.Join(rest[1:], " "))
 	case "peek":
@@ -327,12 +338,13 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 	checkExit := fs.Int("check-exit", 0, "task card: exit code the done-check must return")
 	result := fs.String("result", "", "task card: result file the agent writes, relative to its dir (default "+fleet.DefaultResult+")")
 	leader := fs.Bool("leader", false, "make it a leader: it may spawn a squad of its own and its agents report to it")
+	interactive := fs.Bool("interactive", false, "the user talks to it directly: never auto-closed, reports progress until the user ends the session")
 	effort := fs.String("effort", "", "worker playbook level: light, standard or pro (default: pro with a worktree, light without)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	var o fleet.SpawnOpts
-	o.Role = fleet.Role{Leader: *leader}
+	o.Role = fleet.Role{Leader: *leader, Interactive: *interactive}
 	o.Effort = *effort
 	o.Card = fleet.NormalizeCard(&board.Card{Goal: *goal, Check: *check, Want: *checkExit, Result: *result})
 	var set []string

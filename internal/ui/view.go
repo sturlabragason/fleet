@@ -271,6 +271,9 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 	if a.Leader {
 		tgt, tw2 = tgt+leadStyle.Render(" "+leadMark), tw2+2
 	}
+	if a.WithUser(m.now()) {
+		tgt, tw2 = tgt+leadStyle.Render(" "+userMark), tw2+2
+	}
 	inner := w - 4
 	st1 := cursorStyle(lipgloss.NewStyle().Foreground(col).Bold(true), a.Name == m.sel)
 	if a.Name == m.sel {
@@ -330,6 +333,9 @@ func (m *Model) chips(rest []*board.Agent, all bool) string {
 		}
 		if a.Leader {
 			c += leadStyle.Render(" " + leadMark)
+		}
+		if a.WithUser(m.now()) {
+			c += leadStyle.Render(" " + userMark)
 		}
 		if ti, ok := m.teams[a.Name]; ok && ti.Team != "" {
 			c += " " + lipgloss.NewStyle().Foreground(lipgloss.Color(ti.Color)).Render(teamMark)
@@ -391,6 +397,10 @@ const pinMark = "⚑"
 // before the team ◆; one cell wide. Its members need no mark of their own:
 // a squad is a team, so they already carry ◆ in the squad colour.
 const leadMark = "▲"
+
+// userMark follows the name of an agent the user talks to directly: flagged
+// interactive, or typed in lately (ADR-61); after ▲, before ◆; one cell.
+const userMark = "✎"
 
 func since(t, now time.Time) string {
 	if t.IsZero() {
