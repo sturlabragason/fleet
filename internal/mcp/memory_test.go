@@ -115,6 +115,27 @@ func TestNoteBriefHandoff(t *testing.T) {
 	}
 }
 
+// A pinned note stays in the brief after more than 30 later notes, and is
+// not repeated in the recent notes (ADR-62).
+func TestBriefShowsPinnedNotes(t *testing.T) {
+	s, _, _ := memServer(t)
+	if _, isErr := callText(t, s, "fleet_note", map[string]any{"text": "User rule: ask before merging", "pin": true}); isErr {
+		t.Fatal("pinned note failed")
+	}
+	for i := 0; i < 31; i++ {
+		callText(t, s, "fleet_note", map[string]any{"text": fmt.Sprintf("note %d", i)})
+	}
+	out, _ := callText(t, s, "fleet_brief", nil)
+	if !strings.Contains(out, "## Pinned\n") || strings.Count(out, "ask before merging") != 1 {
+		t.Fatalf("brief:\n%s", out)
+	}
+	callText(t, s, "fleet_note", map[string]any{"text": "User rule: two", "pin": true})
+	out, _ = callText(t, s, "fleet_brief", nil)
+	if strings.Count(out, "User rule: two") != 1 {
+		t.Fatalf("a recent pinned note was shown twice:\n%s", out)
+	}
+}
+
 func TestResetShellUsesAdmiral(t *testing.T) {
 	if got := resetShell("'/x/fleet'"); got != "sleep 2; '/x/fleet' admiral reset --handoff >/dev/null 2>&1" {
 		t.Errorf("%q", got)

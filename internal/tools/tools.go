@@ -75,7 +75,7 @@ func (p Profile) HasMode(mode string) bool {
 	return a || k
 }
 
-// Models for the built-in Claude profiles (ADR-58). The claude CLI takes the
+// Models for the built-in Claude profiles (ADR-63). The claude CLI takes the
 // aliases "opus" and "sonnet", which always resolve to the newest model, so
 // they never drift. The Copilot CLI needs an exact id, so CopilotClaudeModel
 // is the one place to bump it; a test fails if a built-in or example profile

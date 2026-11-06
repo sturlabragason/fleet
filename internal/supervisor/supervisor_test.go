@@ -267,3 +267,46 @@ func TestFreshAdmiralDirGetsLegacyLink(t *testing.T) {
 		t.Fatalf("legacy link: %q %v", dst, err)
 	}
 }
+
+// A field a newer fleet adds to session.json survives Load and Save (ADR-62).
+func TestSessionKeepsUnknownKeys(t *testing.T) {
+	home := t.TempDir()
+	os.MkdirAll(Dir(home), 0o755)
+	os.WriteFile(filepath.Join(Dir(home), "session.json"), []byte(`{"session_id":"s1","generation":2,"k_sess":1}`), 0o644)
+	s, ok := Load(home)
+	if !ok {
+		t.Fatal("not loaded")
+	}
+	s.Generation++
+	if err := Save(home, s); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(Dir(home), "session.json"))
+	if !strings.Contains(string(b), `"k_sess"`) || !strings.Contains(string(b), `"generation": 3`) {
+		t.Fatalf("session.json: %s", b)
+	}
+}
+
+// A pinned note is a standing rule: it is in decisions.log like any note and
+// also in pinned.log, which the brief shows whole however many notes follow
+// (ADR-62).
+func TestPinnedNotes(t *testing.T) {
+	home := t.TempDir()
+	if err := AppendPinned(home, "", "User rule: never push"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 40; i++ {
+		AppendNote(home, "", fmt.Sprintf("note %d", i))
+	}
+	pins := Pinned(home)
+	if len(pins) != 1 || !strings.HasSuffix(pins[0], " User rule: never push") {
+		t.Fatalf("pinned %q", pins)
+	}
+	if tail := TailNotes(home, 30); strings.Contains(strings.Join(tail, "\n"), "never push") {
+		t.Fatal("test setup: the rule is still in the tail")
+	}
+	b, _ := os.ReadFile(filepath.Join(home, "decisions.log"))
+	if !strings.Contains(string(b), "User rule: never push") {
+		t.Error("a pinned note is not in decisions.log")
+	}
+}

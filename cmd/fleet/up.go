@@ -240,6 +240,8 @@ func retheme(f *fleet.Fleet) {
 	if pid, ok := watch.Running(f.Home); ok {
 		if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
 			log.Error("stop watcher for the new palette", "pid", pid, "err", err)
+		} else {
+			waitWatcherGone(f.Home, pid, 5*time.Second)
 		}
 	}
 	f.T.Run("set-option", "-t", fleet.Session, "@fleet_theme", name)

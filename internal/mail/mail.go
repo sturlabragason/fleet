@@ -6,6 +6,7 @@ package mail
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/sturlabragason/fleet/internal/jsonx"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -51,6 +52,9 @@ type Pair struct {
 	DecidedBy   string    `json:"decided_by,omitempty"`
 	Requested   time.Time `json:"requested,omitzero"`
 	Decided     time.Time `json:"decided,omitzero"`
+
+	// extra keeps keys this build does not know (ADR-62).
+	extra jsonx.Extra
 }
 
 // Other returns the side of the pair that is not name.
@@ -319,3 +323,15 @@ func (s *Store) PairOf(a, b string) (Pair, bool) {
 	}
 	return Pair{}, false
 }
+
+// pairJSON is Pair without its methods, for jsonx.
+type pairJSON Pair
+
+func (x *Pair) UnmarshalJSON(b []byte) error {
+	var v pairJSON
+	e, err := jsonx.Unmarshal(b, &v)
+	*x, x.extra = Pair(v), e
+	return err
+}
+
+func (x Pair) MarshalJSON() ([]byte, error) { return jsonx.Marshal(pairJSON(x), x.extra) }

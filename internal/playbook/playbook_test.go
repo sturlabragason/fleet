@@ -121,6 +121,23 @@ func TestResolveStopsAtTheHomeDirectory(t *testing.T) {
 	}
 }
 
+// Ceiling pins where the walk stops, so a test suite never reads a layer
+// from outside its temp dir whatever HOME says (ADR-62).
+func TestResolveStopsAtTheCeiling(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	put(t, filepath.Join(root, ".fleet", "worker.md"), "OUTSIDE")
+	put(t, filepath.Join(root, "top", ".fleet", "worker.md"), "AT THE CEILING")
+	dir := filepath.Join(root, "top", "a", "b")
+	os.MkdirAll(dir, 0o755)
+	old := Ceiling
+	Ceiling = filepath.Join(root, "top")
+	t.Cleanup(func() { Ceiling = old })
+	if text, src := Resolve(Pro, t.TempDir(), dir); strings.Contains(text, "OUTSIDE") || strings.Contains(text, "CEILING") || len(src) != 1 {
+		t.Fatalf("walked past the ceiling: %v", src)
+	}
+}
+
 func TestResolveStopsAtGitBoundary(t *testing.T) {
 	home, root, repo := fixture(t)
 	put(t, filepath.Join(root, ".fleet", "worker.md"), "ABOVE THE REPO")

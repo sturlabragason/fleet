@@ -112,7 +112,7 @@ const usage = `usage:
   fleet admiral profile [NAME | --pick]     show the admiral's profile, or swap it (hands off; Alt-P picks)
   fleet admiral restart                     restart the admiral, resuming the same session
                                             ("fleet supervisor ..." still works: deprecated alias)
-  fleet note [--agent NAME] "text"          append a note to ~/.fleet/decisions.log
+  fleet note [--agent NAME] [--pin] "text"  append a note to ~/.fleet/decisions.log; --pin keeps it in every brief
   fleet playbook [--effort LEVEL] [dir]     print the worker playbook prepended to a spawn prompt in dir
                                             (built-in + ~/.fleet/worker.md + the repo's .fleet/worker.md;
                                             --effort light|standard|pro, default pro)
@@ -148,8 +148,9 @@ const usage = `usage:
   fleet watch [--interval 1s] [--tick 200ms]
                                             run the status watcher in the foreground: it keeps the board,
                                             the pane border titles, fleet ls and the overview agreeing even
-                                            with no window open. fleet up starts one in the background
-  fleet watch --once | --stop               refresh every status once / stop the running watcher
+                                            with no window open. fleet up starts one in the background;
+                                            it re-execs itself when bin/fleet is rebuilt
+  fleet watch --once | --stop | --probe     refresh every status once / stop the running watcher / print ok
   fleet hook <event> [--agent NAME] [--waiting-for TEXT]
                                             record what a tool's own hook just said (stop, notification,
                                             pretooluse, …) in ~/.fleet/status/<name>.json; fleet wires this

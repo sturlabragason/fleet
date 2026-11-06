@@ -7,6 +7,7 @@ package supervisor
 
 import (
 	"encoding/json"
+	"github.com/sturlabragason/fleet/internal/jsonx"
 	"os"
 	"path/filepath"
 	"time"
@@ -25,6 +26,9 @@ type Session struct {
 	Started    time.Time `json:"started"`
 	Generation int       `json:"generation"`
 	Previous   string    `json:"previous,omitempty"`
+
+	// extra keeps keys this build does not know (ADR-62).
+	extra jsonx.Extra
 }
 
 // Dir is <home>/admiral. A <home>/supervisor dir from before ADR-26 is moved
@@ -65,3 +69,15 @@ func Save(home string, s Session) error {
 	}
 	return os.Rename(tmp, sessionPath(home))
 }
+
+// sessionJSON is Session without its methods, for jsonx.
+type sessionJSON Session
+
+func (x *Session) UnmarshalJSON(b []byte) error {
+	var v sessionJSON
+	e, err := jsonx.Unmarshal(b, &v)
+	*x, x.extra = Session(v), e
+	return err
+}
+
+func (x Session) MarshalJSON() ([]byte, error) { return jsonx.Marshal(sessionJSON(x), x.extra) }

@@ -86,9 +86,10 @@ var toolDefs = []tool{
 		"action": map[string]any{"type": "string", "enum": []string{"list", "create", "delete", "add", "remove", "color", "send", "show", "hide", "close"}},
 		"team":   str("team name"), "agents": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "agent names for add/remove"},
 		"color": str("palette name (blue, pink, teal, mauve, sky, sapphire) or #rrggbb"), "text": str("text for send"), "confirmed": confirmedProp})},
-	{"fleet_note", "Save one line to the decisions log: a user decision, preference or promise, or a RAID entry starting risk:, assumption:, issue: or decision:. Survives an admiral reset.", obj([]string{"text"}, map[string]any{
-		"text": str("the note, one line"), "agent": str("optional agent the note is about")})},
-	{"fleet_brief", "Start-of-session brief: the last handoff, recent notes and the agent table. Call first in a fresh session.", obj(nil, map[string]any{})},
+	{"fleet_note", "Save one line to the decisions log: a user decision, preference or promise, or a RAID entry starting risk:, assumption:, issue: or decision:. Survives an admiral reset. pin=true for a standing user rule: fleet_brief always shows pinned notes, not just the last 30.", obj([]string{"text"}, map[string]any{
+		"text": str("the note, one line"), "agent": str("optional agent the note is about"),
+		"pin": map[string]any{"type": "boolean", "description": "a standing rule, always shown in fleet_brief"}})},
+	{"fleet_brief", "Start-of-session brief: the last handoff, pinned notes, recent notes and the agent table. Call first in a fresh session.", obj(nil, map[string]any{})},
 	{"fleet_access", "List agent-to-agent access: the agent_mail policy, then every explicit pair with its state (pending, granted, denied), who asked, who decided and why. limit=N adds the last N messages between agents.", obj(nil, map[string]any{
 		"limit": map[string]any{"type": "integer", "description": "also show the last N agent-to-agent messages"}})},
 	{"fleet_access_decide", "Grant, deny or revoke access between two agents. Ask the user first; set confirmed=true only after an explicit yes.", obj([]string{"a", "b", "action", "confirmed"}, map[string]any{
@@ -118,6 +119,7 @@ type args struct {
 	// Leader makes a fleet_spawn a squad leader; Squad closes a leader's
 	// squad with it (ADR-53).
 	Leader, Squad bool
+	Pin           bool
 	// Interactive marks a fleet_spawn the user talks to directly (ADR-61).
 	Interactive         bool
 	LastMessage         bool `json:"last_message"`
@@ -258,6 +260,9 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		if err := need(strings.TrimSpace(a.Text), "text"); err != nil {
 			return "", err
 		}
+		if a.Pin {
+			return "pinned", supervisor.AppendPinned(s.F.Home, a.Agent, a.Text)
+		}
 		return "noted", supervisor.AppendNote(s.F.Home, a.Agent, a.Text)
 	case "fleet_brief":
 		br, err := s.brief()
@@ -389,7 +394,8 @@ func (s *Server) sessions(query string, limit int) (string, error) {
 	return b.String(), nil
 }
 
-// brief is the handoff, the last 30 notes and the status table.
+// brief is the handoff, every pinned note, the last 30 other notes and the
+// status table.
 func (s *Server) brief() (string, error) {
 	var b strings.Builder
 	if h, at, ok := supervisor.ReadHandoff(s.F.Home); ok {
@@ -397,8 +403,12 @@ func (s *Server) brief() (string, error) {
 	} else {
 		b.WriteString("## Handoff\nnone\n\n")
 	}
+	pinned := supervisor.Pinned(s.F.Home)
+	if len(pinned) > 0 {
+		b.WriteString("## Pinned\n" + strings.Join(pinned, "\n") + "\n\n")
+	}
 	b.WriteString("## Notes\n")
-	if notes := supervisor.TailNotes(s.F.Home, 30); len(notes) > 0 {
+	if notes := unpinned(supervisor.TailNotes(s.F.Home, 30), pinned); len(notes) > 0 {
 		b.WriteString(strings.Join(notes, "\n") + "\n\n")
 	} else {
 		b.WriteString("none\n\n")
@@ -410,6 +420,24 @@ func (s *Server) brief() (string, error) {
 	}
 	b.WriteString("## Agents\n" + st)
 	return b.String(), nil
+}
+
+// unpinned drops from notes the lines already shown as pinned.
+func unpinned(notes, pinned []string) []string {
+	if len(pinned) == 0 {
+		return notes
+	}
+	pin := map[string]bool{}
+	for _, p := range pinned {
+		pin[p] = true
+	}
+	var out []string
+	for _, n := range notes {
+		if !pin[n] {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // summaryArg is the `summary` argument. fleet_handoff, fleet_admiral_profile

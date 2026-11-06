@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -264,5 +265,22 @@ func write(t *testing.T, path, text string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Unknown keys in adr-claims.json, top level and per claim, survive a claim
+// (ADR-62).
+func TestClaimsKeepUnknownKeys(t *testing.T) {
+	dir := t.TempDir()
+	raw := `{"seeded":true,"k_file":1,"claims":[{"n":5,"for":"a","created":"2026-01-01T00:00:00Z","k_claim":1}]}`
+	os.WriteFile(filepath.Join(dir, "adr-claims.json"), []byte(raw), 0o644)
+	if _, err := NewStore(dir).Claim("b", map[int]bool{1: true}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, "adr-claims.json"))
+	for _, k := range []string{"k_file", "k_claim"} {
+		if !strings.Contains(string(b), `"`+k+`"`) {
+			t.Errorf("%s dropped: %s", k, b)
+		}
 	}
 }

@@ -69,7 +69,7 @@ resume = ["--resume", "{id}"]
 patterns = "claude"
 ```
 
-Prefer the claude CLI's aliases (`opus`, `sonnet`) over full ids: they always resolve to the newest model. The Copilot CLI needs an exact id; the built-in `claude-copilot` uses `CopilotClaudeModel` in `internal/tools` (ADR-58).
+Prefer the claude CLI's aliases (`opus`, `sonnet`) over full ids: they always resolve to the newest model. The Copilot CLI needs an exact id; the built-in `claude-copilot` uses `CopilotClaudeModel` in `internal/tools` (ADR-63).
 
 agy or vibe with extra flags (no `launch_id`, since neither sets a session ID at launch):
 

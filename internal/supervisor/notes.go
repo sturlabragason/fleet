@@ -11,33 +11,73 @@ import (
 // now is replaceable in tests.
 var now = time.Now
 
-func notesPath(home string) string { return filepath.Join(home, "decisions.log") }
+func notesPath(home string) string  { return filepath.Join(home, "decisions.log") }
+func pinnedPath(home string) string { return filepath.Join(home, "pinned.log") }
 
 // AppendNote adds one line to decisions.log: `2026-11-04T21:40 [agent] text`.
 func AppendNote(home, agent, text string) error {
+	line, err := noteLine(agent, text)
+	if err != nil {
+		return err
+	}
+	return appendLine(home, notesPath(home), line)
+}
+
+// AppendPinned adds a standing rule: the same line to decisions.log, which
+// keeps the full history, and to pinned.log, which fleet_brief shows whole
+// (ADR-62). The brief shows only the last 30 notes, so a rule the user set
+// days ago would otherwise drop out of a new admiral's memory. Unpinning is
+// deleting the line from pinned.log.
+func AppendPinned(home, agent, text string) error {
+	line, err := noteLine(agent, text)
+	if err != nil {
+		return err
+	}
+	if err := appendLine(home, notesPath(home), line); err != nil {
+		return err
+	}
+	return appendLine(home, pinnedPath(home), line)
+}
+
+func noteLine(agent, text string) (string, error) {
 	text = strings.Join(strings.Fields(text), " ")
 	if text == "" {
-		return fmt.Errorf("note text is empty")
+		return "", fmt.Errorf("note text is empty")
 	}
 	line := now().Format("2006-01-02T15:04") + " "
 	if agent = strings.TrimSpace(agent); agent != "" {
 		line += "[" + agent + "] "
 	}
+	return line + text, nil
+}
+
+func appendLine(home, path, line string) error {
 	if err := os.MkdirAll(home, 0o755); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(notesPath(home), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	_, err = f.WriteString(line + text + "\n")
+	_, err = f.WriteString(line + "\n")
 	return err
 }
 
 // TailNotes returns the last n lines of decisions.log (nil if none).
 func TailNotes(home string, n int) []string {
-	b, err := os.ReadFile(notesPath(home))
+	lines := readLines(notesPath(home))
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return lines
+}
+
+// Pinned returns every line of pinned.log, oldest first (nil if none).
+func Pinned(home string) []string { return readLines(pinnedPath(home)) }
+
+func readLines(path string) []string {
+	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil
 	}
@@ -45,9 +85,5 @@ func TailNotes(home string, n int) []string {
 	if s == "" {
 		return nil
 	}
-	lines := strings.Split(s, "\n")
-	if len(lines) > n {
-		lines = lines[len(lines)-n:]
-	}
-	return lines
+	return strings.Split(s, "\n")
 }

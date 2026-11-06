@@ -29,10 +29,14 @@ func cmdWatch(f *fleet.Fleet, args []string) error {
 	stop := fs.Bool("stop", false, "ask a running watcher to stop")
 	interval := fs.Duration("interval", watch.DefaultInterval, "baseline refresh when no event fires")
 	tick := fs.Duration("tick", watch.DefaultTick, "how often event sources are checked")
+	probeOnly := fs.Bool("probe", false, "print ok and exit (a rebuilt binary is probed before the watcher re-execs into it)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	switch {
+	case *probeOnly:
+		fmt.Println("ok")
+		return nil
 	case *stop:
 		return stopWatcher(f)
 	case *once:
@@ -66,10 +70,37 @@ func cmdWatch(f *fleet.Fleet, args []string) error {
 		Stop:     func() bool { return !f.T.HasSession(fleet.Session) },
 		Interval: *interval,
 		Tick:     *tick,
+		// A rebuilt bin/fleet takes over this process (ADR-62).
+		Exe:    f.Exe,
+		Reexec: func() error { return reexecWatcher(f.Exe) },
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 	return w.Run(ctx)
+}
+
+// reexecWatcher replaces the watcher with the binary at exe, same pid and
+// arguments, once `exe watch --probe` says it runs. A half-written build
+// fails the probe and the old code keeps watching. The flock on watch.lock is
+// close-on-exec, so the new image claims it again at start.
+func reexecWatcher(exe string) error {
+	before, err := os.Stat(exe)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, exe, "watch", "--probe").Output()
+	if err != nil {
+		return fmt.Errorf("probe: %w", err)
+	}
+	if strings.TrimSpace(string(out)) != "ok" {
+		return fmt.Errorf("probe said %q", strings.TrimSpace(string(out)))
+	}
+	if now, err := os.Stat(exe); err != nil || !os.SameFile(now, before) || !now.ModTime().Equal(before.ModTime()) {
+		return fmt.Errorf("binary changed after the probe")
+	}
+	return syscall.Exec(exe, os.Args, os.Environ())
 }
 
 // stopWatcher signals a running watcher to exit (it drops its heartbeat on
@@ -97,16 +128,30 @@ func stopWatcher(f *fleet.Fleet) error {
 	return nil
 }
 
-// startWatcher launches `fleet watch` detached, unless one is already live.
-// It is best-effort: a fleet without a watcher still works, every command
-// just refreshes for itself.
+// startWatcher launches `fleet watch` detached, unless one is already
+// running from this binary. A watcher running another binary — deleted or
+// replaced by a rebuild, from before watchers re-exec themselves — is stopped
+// and replaced, so `fleet up` leaves exactly one watcher on the current code
+// (ADR-62). It is best-effort: a fleet without a watcher still works, every
+// command just refreshes for itself.
 func startWatcher(f *fleet.Fleet) {
 	log := logx.For("watch")
 	// Running, not Live: a watcher whose refreshes are failing is still the
 	// watcher, and a second one would only double the scraping.
 	if pid, ok := watch.Running(f.Home); ok {
-		log.Debug("watcher already running", "pid", pid)
-		return
+		if !watch.StaleExe(pid, f.Exe) {
+			log.Debug("watcher already running", "pid", pid)
+			return
+		}
+		log.Info("watcher runs an old binary; replacing it", "pid", pid, "exe", f.Exe)
+		if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
+			log.Error("stop old watcher", "pid", pid, "err", err)
+			return
+		}
+		if !waitWatcherGone(f.Home, pid, 5*time.Second) {
+			log.Error("old watcher did not stop; not starting another", "pid", pid)
+			return
+		}
 	}
 	cmd := exec.Command(f.Exe, "watch")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
@@ -117,6 +162,16 @@ func startWatcher(f *fleet.Fleet) {
 	}
 	log.Info("started watcher", "pid", cmd.Process.Pid)
 	_ = cmd.Process.Release()
+}
+
+// waitWatcherGone waits up to d for watcher pid to stop holding home.
+func waitWatcherGone(home string, pid int, d time.Duration) bool {
+	for end := time.Now().Add(d); time.Now().Before(end); time.Sleep(100 * time.Millisecond) {
+		if p, ok := watch.Running(home); !ok || p != pid {
+			return true
+		}
+	}
+	return false
 }
 
 // hookStdinMax caps what a hook payload may contribute; tools send a small
