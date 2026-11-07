@@ -12,8 +12,12 @@ import (
 // admiralHeader is the first line of fleet_status and fleet_brief
 // (DESIGN §6.10): `admiral: claude-personal · session 3f2a91c · gen 3`.
 func (s *Server) admiralHeader() string {
-	cur := supervisor.Current(s.F.Home, s.F.T, fleet.Session+":main")
-	return admiralLine(cur)
+	cur := supervisor.CurrentOf(s.F.Home, s.F.T, fleet.Session+":main", s.Me())
+	line := admiralLine(cur)
+	if s.Admiral != "" || len(supervisor.Admirals(s.F.Home)) > 0 { // several admirals: say which one you are
+		line = strings.Replace(line, "admiral:", "admiral "+s.Me()+":", 1)
+	}
+	return line
 }
 
 func admiralLine(cur supervisor.Session) string {
@@ -46,7 +50,7 @@ func (s *Server) admiralProfile(name, summary string) (string, error) {
 		return "", fmt.Errorf("no profile %q; have: %s", name, strings.Join(tools.Names(s.F.Profiles), ", "))
 	}
 	if strings.TrimSpace(summary) != "" {
-		if err := supervisor.WriteHandoff(s.F.Home, summary); err != nil {
+		if err := supervisor.WriteHandoffOf(s.F.Home, s.Me(), summary); err != nil {
 			return "", err
 		}
 	}

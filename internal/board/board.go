@@ -69,6 +69,9 @@ type Agent struct {
 	// LeadBy is the leader this agent reports to. "" is the admiral, which
 	// is where every agent reported before ADR-53.
 	LeadBy string `json:"lead_by,omitempty"`
+	// Admiral is the admiral that owns the agent (DESIGN §6.12, ADR-64).
+	// "" is main, which is what every agent had before several admirals.
+	Admiral string `json:"admiral,omitempty"`
 	// Effort is the worker playbook level: light, standard or pro (DESIGN
 	// §4, ADR-57). A queued agent keeps what the spawn asked for, "" being
 	// the default; once started it holds the level actually used, which
@@ -170,6 +173,26 @@ var UserHold = 10 * time.Minute
 // interactive, or typed in within UserHold (ADR-61).
 func (a *Agent) WithUser(now time.Time) bool {
 	return a.Interactive || (!a.UserAt.IsZero() && now.Sub(a.UserAt) < UserHold)
+}
+
+// Main is the name of the admiral every fleet has (DESIGN §6.12).
+const Main = "main"
+
+// Owner is the name of the admiral that owns the agent: main when none is set.
+func (a *Agent) Owner() string {
+	if a.Admiral == "" {
+		return Main
+	}
+	return a.Admiral
+}
+
+// SetOwner gives the agent to an admiral; main is stored as "" so the board
+// stays what older builds wrote.
+func (a *Agent) SetOwner(name string) {
+	if name == Main {
+		name = ""
+	}
+	a.Admiral = name
 }
 
 // GitBase is a work tree's state before an agent started.

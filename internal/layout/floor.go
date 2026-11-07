@@ -101,6 +101,17 @@ func (c Config) supWidth(w int) int {
 	return w / 2
 }
 
+// SupFit is how many admirals fit one column of a window h rows high: each
+// gets SupMinRows rows and the borders between them. At least one is shown,
+// and never more than n (DESIGN §6.12).
+func (c Config) SupFit(h, n int) int {
+	k := 1
+	for k < n && (k+1)*c.SupMinRows+k <= h {
+		k++
+	}
+	return k
+}
+
 // WallRect returns the wall rectangle of a window: the area the grid and the
 // floor are measured against, after the admiral column and the overview rows.
 // Build lays the same arithmetic out as nodes; both call this.

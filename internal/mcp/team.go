@@ -21,6 +21,19 @@ func (s *Server) team(a args) (string, error) {
 		return a.Team + ": " + fleet.FormatResults(verb, rs), nil
 	}
 	switch a.Action {
+	case "add", "remove":
+		if err := s.scope(a.Agents...); err != nil {
+			return "", err
+		}
+		if err := s.teamScope(a.Team); err != nil {
+			return "", err
+		}
+	case "send", "close", "show", "hide", "delete", "color":
+		if err := s.teamScope(a.Team); err != nil {
+			return "", err
+		}
+	}
+	switch a.Action {
 	case "list":
 		rows := s.F.TeamList()
 		if len(rows) == 0 {

@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/supervisor"
+	"github.com/sturlabragason/fleet/internal/theme"
 	"github.com/sturlabragason/fleet/internal/tools"
 )
 
@@ -60,8 +62,19 @@ func resolveAdmiralProfile(explicit string, profiles map[string]tools.Profile, e
 
 // resolveAdmiral is resolveAdmiralProfile with no flag, from this fleet's
 // env, last choice and config. Warnings go to the log and the status line.
-func resolveAdmiral(f *fleet.Fleet) string {
-	prof, warns, _ := resolveAdmiralProfile("", f.Profiles, os.Getenv, supervisor.LoadChoice(f.Home), f.Prefs.AdmiralProfile())
+func resolveAdmiral(f *fleet.Fleet) string { return resolveAdmiralOf(f, supervisor.Main) }
+
+// resolveAdmiralOf is resolveAdmiral for one admiral: its own last choice or
+// registry profile; main also reads the env and config.
+func resolveAdmiralOf(f *fleet.Fleet, adm string) string {
+	if adm != supervisor.Main {
+		if a, ok := supervisor.Find(f.Home, adm); ok && a.Profile != "" {
+			if _, ok := f.Profiles[a.Profile]; ok {
+				return a.Profile
+			}
+		}
+	}
+	prof, warns, _ := resolveAdmiralProfile("", f.Profiles, os.Getenv, supervisor.LoadChoiceOf(f.Home, adm), f.Prefs.AdmiralProfile())
 	warnAdmiral(f, warns)
 	return prof
 }
@@ -81,15 +94,41 @@ func warnAdmiral(f *fleet.Fleet, warns []string) {
 // --allowedTools is written with = so the variadic option can't swallow a
 // positional boot prompt after it.
 func admiralMCPArgs(p tools.Profile, exe string) []string {
+	return admiralMCPArgsOf(p, exe, "", supervisor.Main)
+}
+
+// admiralMCPArgsOf wires the fleet MCP server of admiral adm, whose args carry
+// --admiral adm (main included), so it never has to guess who it serves
+// (DESIGN §6.12). Claude gets the config inline. Copilot reads the workspace
+// .mcp.json of the dir it starts in: main keeps the shared supervisor/.mcp.json
+// (an untagged admiral pane is main), and any other admiral gets its own copy
+// in its directory under home, written by admiralLaunchOf, and is started there, so its
+// config holds the only "fleet" server rather than racing a same-named one.
+// FLEET_ADMIRAL_NAME and the pane tag back it up.
+func admiralMCPArgsOf(p tools.Profile, exe, home, adm string) []string {
+	mcpArgs := []string{"mcp", "--admiral", adm}
 	switch p.Patterns {
 	case "copilot":
 		return supervisorMCPArgs(p)
 	case "claude":
 		cfg, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{"fleet": map[string]any{
-			"type": "stdio", "command": exe, "args": []string{"mcp"}}}})
+			"type": "stdio", "command": exe, "args": mcpArgs}}})
 		return []string{"--mcp-config", string(cfg), "--allowedTools=mcp__fleet"}
 	}
 	return nil
+}
+
+// writeAdmiralMCP writes <admiral dir>/.mcp.json for a copilot admiral and
+// returns its path.
+func writeAdmiralMCP(home, exe, adm string) (string, error) {
+	dir := supervisor.DirOf(home, adm)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	cfg, _ := json.MarshalIndent(map[string]any{"mcpServers": map[string]any{"fleet": map[string]any{
+		"type": "local", "command": exe, "args": []string{"mcp", "--admiral", adm}, "tools": []string{"*"}}}}, "", "  ")
+	path := filepath.Join(dir, ".mcp.json")
+	return path, os.WriteFile(path, append(cfg, '\n'), 0o600)
 }
 
 // mcpCapable: the admiral gets fleet tools under this profile.
@@ -147,42 +186,53 @@ func topLevelProfile(args []string) ([]string, error) {
 
 // runningAdmiral is the profile the admiral runs under now.
 func runningAdmiral(f *fleet.Fleet, s supervisor.Session) string {
+	return runningAdmiralOf(f, supervisor.Main, s)
+}
+
+func runningAdmiralOf(f *fleet.Fleet, adm string, s supervisor.Session) string {
 	if _, ok := f.Profiles[s.Profile]; ok {
 		return s.Profile
 	}
-	return resolveAdmiral(f)
+	return resolveAdmiralOf(f, adm)
 }
 
 // cmdAdmiralProfile: `fleet admiral profile [NAME | --pick]`.
 func cmdAdmiralProfile(f *fleet.Fleet, args []string) error {
-	cur := runningAdmiral(f, supervisor.Current(f.Home, f.T, mainTarget()))
+	adm, args, err := nameFlag(f, args)
+	if err != nil {
+		return err
+	}
+	cur := runningAdmiralOf(f, adm, supervisor.CurrentOf(f.Home, f.T, mainTarget(), adm))
 	switch {
 	case len(args) == 0:
 		fmt.Print(profileList(f, cur))
 		return nil
 	case len(args) == 1 && args[0] == "--pick":
-		return cmdAdmiralPick(f, cur)
+		return cmdAdmiralPick(f, adm, cur)
 	case len(args) == 1 && !strings.HasPrefix(args[0], "-"):
 		name := args[0]
 		if p, ok := f.Profiles[name]; ok && !mcpCapable(p) {
 			fmt.Fprintf(os.Stderr, "fleet: warning: profile %s (patterns %s) gets no fleet MCP tools as admiral\n", name, p.Patterns)
 		}
-		return runSwap(f, name)
+		return runSwapOf(f, adm, name)
 	}
-	return fmt.Errorf("usage: fleet admiral profile [NAME | --pick]")
+	return fmt.Errorf("usage: fleet admiral profile [--name ADMIRAL] [NAME | --pick]")
 }
 
 // cmdAdmiralRestart: `fleet admiral restart`, a same-profile resume.
 func cmdAdmiralRestart(f *fleet.Fleet, args []string) error {
-	if len(args) > 0 {
-		return fmt.Errorf("usage: fleet admiral restart")
+	adm, args, err := nameFlag(f, args)
+	if err != nil || len(args) > 0 {
+		return fmt.Errorf("usage: fleet admiral restart [--name ADMIRAL]")
 	}
-	return runSwap(f, runningAdmiral(f, supervisor.Current(f.Home, f.T, mainTarget())))
+	return runSwapOf(f, adm, runningAdmiralOf(f, adm, supervisor.CurrentOf(f.Home, f.T, mainTarget(), adm)))
 }
 
 // runSwap swaps and reports the result on stdout and the status line.
-func runSwap(f *fleet.Fleet, name string) error {
-	msg, err := swapAdmiral(f, name)
+func runSwap(f *fleet.Fleet, name string) error { return runSwapOf(f, supervisor.Main, name) }
+
+func runSwapOf(f *fleet.Fleet, adm, name string) error {
+	msg, err := swapAdmiralOf(f, adm, name)
 	if err != nil {
 		f.T.Run("display-message", "-d", "8000", "-l", err.Error())
 		return err
@@ -211,31 +261,36 @@ func profileList(f *fleet.Fleet, cur string) string {
 // new admiral dies within the start wait, the old one is restored and
 // session.json and the last choice stay as they were.
 func swapAdmiral(f *fleet.Fleet, name string) (string, error) {
+	return swapAdmiralOf(f, supervisor.Main, name)
+}
+
+// swapAdmiralOf is swapAdmiral for admiral adm.
+func swapAdmiralOf(f *fleet.Fleet, adm, name string) (string, error) {
 	log := logx.For("admiral")
-	unlock, err := supervisor.Lock(f.Home)
+	unlock, err := supervisor.LockOf(f.Home, adm)
 	if err != nil {
 		return "", err
 	}
 	defer unlock()
-	pane, err := supervisor.FindPane(f.T, mainTarget())
+	pane, err := supervisor.FindPaneOf(f.T, mainTarget(), adm)
 	if err != nil {
 		return "", err
 	}
-	old := supervisor.Current(f.Home, f.T, mainTarget())
-	oldName := runningAdmiral(f, old)
+	old := supervisor.CurrentOf(f.Home, f.T, mainTarget(), adm)
+	oldName := runningAdmiralOf(f, adm, old)
 	np, ok := f.Profiles[name]
 	if !ok {
 		return "", fmt.Errorf("no profile %q; kept %s", name, oldName)
 	}
 	if name == oldName && len(np.Resume) > 0 && old.SessionID != "" {
-		sl, err := admiralLaunch(f, name, old.SessionID, "")
+		sl, err := admiralLaunchOf(f, adm, name, old.SessionID, "")
 		if err != nil {
 			return "", err
 		}
 		// Written only if the resume fails and a fresh admiral takes over.
 		fallback := swapHandoff(oldName, name, old.SessionID, resumeCommand(np, f.Exe, old.SessionID),
-			keptHandoff(f, old), capturedTail(f, pane), time.Now())
-		if err := startAdmiral(f, pane, sl, old, oldName, false, fallback); err != nil {
+			keptHandoffOf(f, adm, old), capturedTail(f, pane), time.Now())
+		if err := startAdmiralOf(f, adm, pane, sl, old, oldName, false, fallback); err != nil {
 			return "", err
 		}
 		ns := old
@@ -246,27 +301,27 @@ func swapAdmiral(f *fleet.Fleet, name string) (string, error) {
 		if ns.Started.IsZero() {
 			ns.Started = time.Now()
 		}
-		if err := supervisor.Save(f.Home, ns); err != nil {
+		if err := supervisor.SaveOf(f.Home, adm, ns); err != nil {
 			return "", err
 		}
-		saveChoice(f, name)
+		saveChoiceOf(f, adm, name)
 		log.Info("restart", "profile", name, "session_id", old.SessionID, "pane", pane)
 		return fmt.Sprintf("admiral restarted on %s (resumed %s)", name, shortID(old.SessionID)), nil
 	}
-	kept := keptHandoff(f, old)
+	kept := keptHandoffOf(f, adm, old)
 	tail := ""
 	if kept == "" {
 		tail = capturedTail(f, pane)
 	}
 	text := swapHandoff(oldName, name, old.SessionID, resumeCommand(f.Profiles[oldName], f.Exe, old.SessionID), kept, tail, time.Now())
-	if err := supervisor.WriteHandoff(f.Home, text); err != nil {
+	if err := supervisor.WriteHandoffOf(f.Home, adm, text); err != nil {
 		return "", err
 	}
-	sl, err := admiralLaunch(f, name, "", supervisor.BootPrompt)
+	sl, err := admiralLaunchOf(f, adm, name, "", supervisor.BootPrompt)
 	if err != nil {
 		return "", err
 	}
-	if err := startAdmiral(f, pane, sl, old, oldName, true, ""); err != nil {
+	if err := startAdmiralOf(f, adm, pane, sl, old, oldName, true, ""); err != nil {
 		return "", err
 	}
 	gen := old.Generation + 1
@@ -274,13 +329,13 @@ func swapAdmiral(f *fleet.Fleet, name string) (string, error) {
 		gen = 2
 	}
 	ns := supervisor.Session{SessionID: sl.ID, Profile: name, PaneID: pane, Started: time.Now(), Generation: gen, Previous: old.SessionID}
-	if err := supervisor.Save(f.Home, ns); err != nil {
+	if err := supervisor.SaveOf(f.Home, adm, ns); err != nil {
 		return "", err
 	}
-	saveChoice(f, name)
+	saveChoiceOf(f, adm, name)
 	pasteBoot(f, pane, sl)
 	log.Info("swap", "from", oldName, "to", name, "generation", gen, "session_id", sl.ID, "previous", old.SessionID, "kept_handoff", kept != "")
-	return fmt.Sprintf("admiral → %s · gen %d (handoff written)", name, gen), nil
+	return fmt.Sprintf("%s → %s · gen %d (handoff written)", admiralLabel(adm), name, gen), nil
 }
 
 // swapPrefix starts every automatic swap handoff.
@@ -290,7 +345,11 @@ const swapPrefix = "Admiral profile swap at"
 // any. An automatic swap handoff (a failed earlier swap) is not kept: the pane
 // tail is fresher.
 func keptHandoff(f *fleet.Fleet, old supervisor.Session) string {
-	h, at, ok := supervisor.ReadHandoff(f.Home)
+	return keptHandoffOf(f, supervisor.Main, old)
+}
+
+func keptHandoffOf(f *fleet.Fleet, adm string, old supervisor.Session) string {
+	h, at, ok := supervisor.ReadHandoffOf(f.Home, adm)
 	if !ok || old.Started.IsZero() || at.Before(old.Started) || strings.HasPrefix(h, swapPrefix) {
 		return ""
 	}
@@ -309,10 +368,14 @@ func capturedTail(f *fleet.Fleet, pane string) string {
 // when sl itself was that resume. fallback, if set, is written as the handoff
 // before a fresh old-profile admiral starts.
 func startAdmiral(f *fleet.Fleet, pane string, sl supLaunch, old supervisor.Session, oldName string, resumeOK bool, fallback string) error {
+	return startAdmiralOf(f, supervisor.Main, pane, sl, old, oldName, resumeOK, fallback)
+}
+
+func startAdmiralOf(f *fleet.Fleet, adm, pane string, sl supLaunch, old supervisor.Session, oldName string, resumeOK bool, fallback string) error {
 	if err := respawnAdmiral(f, pane, sl); err != nil {
 		return err
 	}
-	setAdmiralPaneOpts(f, pane, sl.Profile)
+	setAdmiralPaneOptsOf(f, adm, pane, sl.Profile)
 	display(f, "admiral → "+sl.Profile+": starting…")
 	if !paneDied(f, pane, startWait()) {
 		return nil
@@ -322,7 +385,7 @@ func startAdmiral(f *fleet.Fleet, pane string, sl supLaunch, old supervisor.Sess
 		err = fmt.Errorf("admiral %s could not resume %s; started a fresh %s admiral", sl.Profile, shortID(old.SessionID), oldName)
 	}
 	logx.For("admiral").Error("start failed; restoring", "profile", sl.Profile, "old", oldName, "old_session", old.SessionID)
-	if rerr := restoreAdmiral(f, pane, old, oldName, resumeOK, fallback); rerr != nil {
+	if rerr := restoreAdmiralOf(f, adm, pane, old, oldName, resumeOK, fallback); rerr != nil {
 		logx.For("admiral").Error("restore failed", "err", rerr)
 		return fmt.Errorf("%v (restore failed: %v)", err, rerr)
 	}
@@ -334,44 +397,48 @@ func startAdmiral(f *fleet.Fleet, pane string, sl supLaunch, old supervisor.Sess
 // possible) a fresh old-profile admiral with the boot prompt, saved in
 // session.json as a new generation. The persisted choice is left alone.
 func restoreAdmiral(f *fleet.Fleet, pane string, old supervisor.Session, oldName string, resumeOK bool, fallback string) error {
+	return restoreAdmiralOf(f, supervisor.Main, pane, old, oldName, resumeOK, fallback)
+}
+
+func restoreAdmiralOf(f *fleet.Fleet, adm, pane string, old supervisor.Session, oldName string, resumeOK bool, fallback string) error {
 	log := logx.For("admiral")
 	p, ok := f.Profiles[oldName]
 	if !ok {
 		return fmt.Errorf("no profile %q", oldName)
 	}
 	if resumeOK && len(p.Resume) > 0 && old.SessionID != "" {
-		sl, err := admiralLaunch(f, oldName, old.SessionID, "")
+		sl, err := admiralLaunchOf(f, adm, oldName, old.SessionID, "")
 		if err != nil {
 			return err
 		}
 		if err := respawnAdmiral(f, pane, sl); err != nil {
 			return err
 		}
-		setAdmiralPaneOpts(f, pane, oldName)
+		setAdmiralPaneOptsOf(f, adm, pane, oldName)
 		if !paneDied(f, pane, startWait()) {
 			return nil
 		}
 		log.Error("resume restore died; starting fresh", "profile", oldName, "session_id", old.SessionID)
 	}
 	if fallback != "" {
-		if err := supervisor.WriteHandoff(f.Home, fallback); err != nil {
+		if err := supervisor.WriteHandoffOf(f.Home, adm, fallback); err != nil {
 			log.Warn("write fallback handoff", "err", err)
 		}
 	}
-	sl, err := admiralLaunch(f, oldName, "", supervisor.BootPrompt)
+	sl, err := admiralLaunchOf(f, adm, oldName, "", supervisor.BootPrompt)
 	if err != nil {
 		return err
 	}
 	if err := respawnAdmiral(f, pane, sl); err != nil {
 		return err
 	}
-	setAdmiralPaneOpts(f, pane, oldName)
+	setAdmiralPaneOptsOf(f, adm, pane, oldName)
 	gen := old.Generation + 1
 	if gen < 2 {
 		gen = 2
 	}
 	ns := supervisor.Session{SessionID: sl.ID, Profile: oldName, PaneID: pane, Started: time.Now(), Generation: gen, Previous: old.SessionID}
-	if err := supervisor.Save(f.Home, ns); err != nil {
+	if err := supervisor.SaveOf(f.Home, adm, ns); err != nil {
 		return err
 	}
 	pasteBoot(f, pane, sl)
@@ -394,7 +461,18 @@ func respawnAdmiral(f *fleet.Fleet, pane string, sl supLaunch) error {
 
 // setAdmiralPaneOpts tags the admiral pane and clears the old context meter.
 func setAdmiralPaneOpts(f *fleet.Fleet, pane, prof string) {
+	setAdmiralPaneOptsOf(f, supervisor.Main, pane, prof)
+}
+
+// setAdmiralPaneOptsOf also tags a non-main admiral's pane (@fleet_admiral)
+// and sets the name and colour its border shows once there are several.
+func setAdmiralPaneOptsOf(f *fleet.Fleet, adm, pane, prof string) {
 	f.T.SetPaneOption(pane, "@role", "sup")
+	if adm != supervisor.Main {
+		f.T.SetPaneOption(pane, "@fleet_admiral", adm)
+	}
+	f.T.SetPaneOption(pane, "@fleet_admiral_name", adm)
+	f.T.SetPaneOption(pane, "@fleet_admiral_color", theme.AdmiralColor(supervisor.Slot(f.Home, adm)))
 	f.T.SetPaneOption(pane, "remain-on-exit", "on")
 	if prof != "" {
 		f.T.SetPaneOption(pane, "@fleet_admiral_profile", prof)
@@ -417,8 +495,15 @@ func pasteBoot(f *fleet.Fleet, pane string, sl supLaunch) {
 	f.PastePrompt(pane, p, sl.Paste, wait)
 }
 
-func saveChoice(f *fleet.Fleet, name string) {
-	if err := supervisor.SaveChoice(f.Home, name); err != nil {
+func saveChoice(f *fleet.Fleet, name string) { saveChoiceOf(f, supervisor.Main, name) }
+
+func saveChoiceOf(f *fleet.Fleet, adm, name string) {
+	if adm != supervisor.Main {
+		if err := supervisor.SetProfile(f.Home, adm, name); err != nil {
+			logx.For("admiral").Warn("save admiral profile", "admiral", adm, "err", err)
+		}
+	}
+	if err := supervisor.SaveChoiceOf(f.Home, adm, name); err != nil {
 		logx.For("admiral").Warn("save profile choice", "err", err)
 	}
 }

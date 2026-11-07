@@ -152,7 +152,7 @@ func (f *Fleet) Wake(name string, force bool) (*board.Agent, error) {
 	wpr := f.Prefs.For(old.Profile)
 	// The level is the one spawn recorded; an adopted agent has none and
 	// gets no context args, as at adopt.
-	role := Role{Leader: old.Leader, LeadBy: old.LeadBy, Interactive: old.Interactive}
+	role := Role{Leader: old.Leader, LeadBy: old.LeadBy, Interactive: old.Interactive, Admiral: old.Admiral}
 	ctx := ""
 	if old.Effort != "" {
 		ctx = contextKey(p, playbook.Level(old.Effort), role.Leader)

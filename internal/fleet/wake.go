@@ -10,10 +10,10 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/mail"
 	"github.com/sturlabragason/fleet/internal/status"
-	"github.com/sturlabragason/fleet/internal/supervisor"
 )
 
 // Report wakes (DESIGN §6.7, ADR-36). A report is always on disk and on the
@@ -241,6 +241,13 @@ func wakeLineTo(box string, es []wakeEntry) string {
 		seen[e.from] = len(names)
 		names = append(names, n)
 	}
+	if mail.IsAdmiralBox(box) {
+		for _, e := range es {
+			if !mail.ValidState(e.state) { // mail, not a report: both tools
+				return fmt.Sprintf("[fleet] %d new items: %s. Read them with fleet_reports and fleet_inbox.", len(es), strings.Join(names, ", "))
+			}
+		}
+	}
 	return fmt.Sprintf("[fleet] %d new reports: %s. Full text: call %s.", len(es), strings.Join(names, ", "), reportsTool(box))
 }
 
@@ -258,7 +265,9 @@ const WakeMaxTries = 3
 // could not be typed is retried on the next poll (the watcher polls,
 // DESIGN §7c) instead of being lost (ADR-51).
 func (f *Fleet) DeliverWake() {
-	f.DeliverWakeTo(mail.Supervisor)
+	for _, box := range f.AdmiralBoxes() {
+		f.DeliverWakeTo(box)
+	}
 	for _, l := range f.Leaders() {
 		f.DeliverWakeTo(l)
 	}
@@ -268,9 +277,9 @@ func (f *Fleet) DeliverWake() {
 // (ADR-53). Everything below is the same for both; only the badge is the
 // admiral's alone.
 func (f *Fleet) DeliverWakeTo(box string) {
-	unread := f.Mail().Peek(box)
+	unread := f.unreadFor(box)
 	if box == mail.Supervisor {
-		f.syncBadge(unread)
+		f.syncBadge()
 	}
 	b, err := os.ReadFile(f.wakePath(box))
 	if err != nil {
@@ -520,55 +529,47 @@ func Badge(ms []mail.Msg) string {
 }
 
 // syncBadge sets the tmux badge option to the admiral's unread reports.
-func (f *Fleet) syncBadge(unread []mail.Msg) {
-	want := Badge(unread)
-	have, _ := f.T.Run("show-options", "-gqv", BadgeOption)
-	if strings.TrimSpace(have) == want {
-		return
+func (f *Fleet) syncBadge() {
+	var all []mail.Msg
+	for _, box := range f.AdmiralBoxes() {
+		all = append(all, f.Mail().Peek(box)...)
+	}
+	changed := f.setOpt(BadgeOption, Badge(all))
+	multi := ""
+	if len(f.AdmiralNames()) > 1 {
+		multi = "1"
+	}
+	f.syncAdmiralPanes()
+	if f.setOpt(BadgeByOption, f.BadgeBy()) || f.setOpt(MultiOption, multi) || changed {
+		f.T.Run("refresh-client", "-S")
+	}
+}
+
+// setOpt sets a global tmux option, or unsets it for "", and reports a change.
+func (f *Fleet) setOpt(name, want string) bool {
+	have, _ := f.T.Run("show-options", "-gqv", name)
+	if strings.TrimSpace(have) == strings.TrimSpace(want) {
+		return false
 	}
 	if want == "" {
-		f.T.Run("set-option", "-gu", BadgeOption)
+		f.T.Run("set-option", "-gu", name)
 	} else {
-		f.T.Run("set-option", "-g", BadgeOption, want)
+		f.T.Run("set-option", "-g", name, want)
 	}
-	f.T.Run("refresh-client", "-S")
+	return true
 }
 
 // supPane finds the @role=sup pane in fleet:main and reads it with the
 // admiral profile's status patterns (default copilot).
-func (f *Fleet) supPane() AdmiralView {
-	if f.SupPane != nil {
-		return f.SupPane()
-	}
-	pane, err := supervisor.FindPane(f.T, Session+":main")
-	if err != nil {
-		return AdmiralView{}
-	}
-	prof := supervisor.Current(f.Home, f.T, Session+":main").Profile
-	if prof == "" {
-		prof = "copilot"
-	}
-	set := prof
-	if p, ok := f.Profiles[prof]; ok && p.Patterns != "" {
-		set = p.Patterns
-	}
-	text, err := f.T.Capture(pane, 0)
-	if err != nil {
-		return AdmiralView{Pane: pane}
-	}
-	ps := f.Patterns[set]
-	st, ok := ps.Detect(text)
-	in, box := ps.InputBox(text)
-	return AdmiralView{Pane: pane, Idle: ok && st == status.Idle, Box: box, Input: in}
-}
+func (f *Fleet) supPane() AdmiralView { return f.admiralView(board.Main) }
 
 // boxView is the pane fleet may type a wake into for an inbox: the admiral
 // pane for the admiral, the agent's own pane for a leader (ADR-53). A
 // leader is read with its own profile's status patterns, so an agent that
 // is busy or sitting on a prompt is never typed into.
 func (f *Fleet) boxView(box string) AdmiralView {
-	if box == mail.Supervisor {
-		return f.supPane()
+	if mail.IsAdmiralBox(box) {
+		return f.admiralView(mail.AdmiralOf(box))
 	}
 	a, ok := f.Store.Load().Agents[box]
 	if !ok || !a.Leader {

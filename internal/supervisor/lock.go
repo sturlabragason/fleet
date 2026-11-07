@@ -8,8 +8,11 @@ import (
 
 // Lock takes an exclusive lock on admiral/reset.lock so concurrent resets
 // (M-R, overview R, fleet_handoff) run one at a time. Call unlock when done.
-func Lock(home string) (unlock func(), err error) {
-	dir, err := mkdir(home)
+func Lock(home string) (unlock func(), err error) { return LockOf(home, Main) }
+
+// LockOf is Lock for one admiral (admirals/<name>/reset.lock).
+func LockOf(home, name string) (unlock func(), err error) {
+	dir, err := mkdirOf(home, name)
 	if err != nil {
 		return nil, err
 	}

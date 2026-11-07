@@ -14,7 +14,7 @@ It was called the supervisor until ADR-26. The old names still work (`fleet supe
 
 `fleet admiral` prints its profile, session id and context fill; `fleet admiral reset` replaces it with a fresh chat, `fleet admiral profile NAME` swaps the tool.
 
-To use a tool fleet doesn't start itself, register `fleet mcp` as a stdio MCP server in that tool's own config.
+To use a tool fleet doesn't start itself, register `fleet mcp --admiral main` (or another admiral's name) as a stdio MCP server in that tool's own config. Without `--admiral`, a server outside an admiral pane can't tell which admiral it serves: reads work, changes are refused.
 
 ## MCP tools
 

@@ -95,23 +95,39 @@ func New(dir string) *Store { return &Store{Dir: dir} }
 
 var nameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$`)
 
-// checkName keeps agent names safe to use as directory names.
+// checkName keeps agent names safe to use as directory names. The
+// `admiral.` prefix is reserved for admirals' mailboxes (DESIGN §6.12).
 func checkName(names ...string) error {
 	for _, n := range names {
-		if !nameRe.MatchString(n) || n == User || n == Admiral || n == LegacySupervisor {
+		if !nameRe.MatchString(n) || n == User || n == Admiral || n == LegacySupervisor || strings.HasPrefix(n, AdmiralPrefix) {
 			return fmt.Errorf("bad agent name %q", n)
 		}
 	}
 	return nil
 }
 
-// checkBox is checkName for a mailbox owner: the admiral has one too (under
-// either name; LegacySupervisor maps to the same box).
+// checkBox is checkName for a mailbox owner: an admiral has one too (main
+// under either name; LegacySupervisor maps to the same box).
 func checkBox(agent string) error {
-	if agent == Admiral || agent == LegacySupervisor {
+	if IsAdmiralBox(agent) {
 		return nil
 	}
 	return checkName(agent)
+}
+
+// checkPair validates the two sides of a mail pair: two agents, or two
+// admirals. Admirals do not mail agents and agents do not mail admirals.
+func checkPair(a, b string) error {
+	if IsAdmiralBox(a) != IsAdmiralBox(b) && b != "*" {
+		return fmt.Errorf("admirals and agents do not message each other: admirals use fleet_send, agents report")
+	}
+	if err := checkBox(a); err != nil {
+		return err
+	}
+	if b == "*" {
+		return nil
+	}
+	return checkBox(b)
 }
 
 func key(a, b string) (string, string) {
@@ -152,6 +168,9 @@ func (s *Store) mkAgentDir(a string) error {
 
 func (s *Store) inboxPath(a string) string { return filepath.Join(s.agentDir(a), "inbox.jsonl") }
 func (s *Store) readPath(a string) string  { return filepath.Join(s.agentDir(a), "read") }
+func (s *Store) msgsReadPath(a string) string {
+	return filepath.Join(s.agentDir(a), "read_msgs")
+}
 func (s *Store) nudgePath(a string) string { return filepath.Join(s.agentDir(a), "nudged") }
 func (s *Store) wokenPath(a string) string { return filepath.Join(s.agentDir(a), "woken") }
 func (s *Store) grantsPath() string        { return filepath.Join(s.Dir, "grants.json") }

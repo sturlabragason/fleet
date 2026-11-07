@@ -33,21 +33,37 @@ type Session struct {
 
 // Dir is <home>/admiral. A <home>/supervisor dir from before ADR-26 is moved
 // there and left as a symlink, so older binaries share the same files.
-func Dir(home string) string {
-	return legacy.MoveDir(filepath.Join(home, "admiral"), filepath.Join(home, "supervisor"))
+func Dir(home string) string { return DirOf(home, Main) }
+
+// DirOf is the directory of one admiral: main keeps <home>/admiral, any
+// other admiral has <home>/admirals/<name> (DESIGN §6.12).
+func DirOf(home, name string) string {
+	if isMain(name) {
+		return legacy.MoveDir(filepath.Join(home, "admiral"), filepath.Join(home, "supervisor"))
+	}
+	return filepath.Join(home, "admirals", name)
 }
 
 // mkdir creates Dir(home) (and the legacy symlink) and returns it.
-func mkdir(home string) (string, error) {
-	return legacy.MkdirAll(filepath.Join(home, "admiral"), filepath.Join(home, "supervisor"))
+func mkdir(home string) (string, error) { return mkdirOf(home, Main) }
+
+func mkdirOf(home, name string) (string, error) {
+	if isMain(name) {
+		return legacy.MkdirAll(filepath.Join(home, "admiral"), filepath.Join(home, "supervisor"))
+	}
+	d := DirOf(home, name)
+	return d, os.MkdirAll(d, 0o755)
 }
 
-func sessionPath(home string) string { return filepath.Join(Dir(home), "session.json") }
+func sessionPath(home, name string) string { return filepath.Join(DirOf(home, name), "session.json") }
 
 // Load reads session.json; ok is false when it is missing or broken.
-func Load(home string) (Session, bool) {
+func Load(home string) (Session, bool) { return LoadOf(home, Main) }
+
+// LoadOf is Load for one admiral.
+func LoadOf(home, name string) (Session, bool) {
 	var s Session
-	b, err := os.ReadFile(sessionPath(home))
+	b, err := os.ReadFile(sessionPath(home, name))
 	if err != nil || json.Unmarshal(b, &s) != nil {
 		return Session{}, false
 	}
@@ -55,19 +71,22 @@ func Load(home string) (Session, bool) {
 }
 
 // Save writes session.json atomically.
-func Save(home string, s Session) error {
-	if _, err := mkdir(home); err != nil {
+func Save(home string, s Session) error { return SaveOf(home, Main, s) }
+
+// SaveOf is Save for one admiral.
+func SaveOf(home, name string, s Session) error {
+	if _, err := mkdirOf(home, name); err != nil {
 		return err
 	}
 	b, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmp := sessionPath(home) + ".tmp"
+	tmp := sessionPath(home, name) + ".tmp"
 	if err := os.WriteFile(tmp, append(b, '\n'), 0o644); err != nil {
 		return err
 	}
-	return os.Rename(tmp, sessionPath(home))
+	return os.Rename(tmp, sessionPath(home, name))
 }
 
 // sessionJSON is Session without its methods, for jsonx.

@@ -147,6 +147,7 @@ mode_args = { autopilot = "--allow-all --autopilot", plan = "--plan" }
 # (Alt-P / fleet admiral profile NAME) > this > copilot.
 # [admiral]
 # profile = "claude-personal"
+# max = 3                # admirals on one fleet, main included; at most 3 (DESIGN §6.12)
 
 # How big a squad a leader may run, and how deep the hierarchy goes
 # (DESIGN §6.11). max_depth = 1 means a leader's own agents cannot lead.

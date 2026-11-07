@@ -32,11 +32,11 @@ func (f *Fleet) reportStuck(n stuckNote) {
 	if n.line != "" && !strings.Contains(n.reason, n.line) {
 		text += "\n" + n.line
 	}
-	up := f.ReportsTo(n.name)
+	up := f.ReportBox(n.name)
 	if m, err := f.Mail().ReportTo(n.name, up, "blocked", text); err != nil {
 		log.Error("stuck report failed", "agent", n.name, "err", err)
 	} else {
-		f.wakeBox(boxOf(up), m.ID, n.name, "blocked", StuckLine(n.name, n.reason, act))
+		f.wakeBox(up, m.ID, n.name, "blocked", StuckLine(n.name, n.reason, act))
 	}
 	if act == prefs.StuckInterrupt {
 		f.interruptStuck(n)

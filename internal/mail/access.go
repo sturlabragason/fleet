@@ -11,7 +11,7 @@ import (
 // Request asks for access from -> to and returns the resulting state:
 // pending, or granted when to already had a pending request towards from.
 func (s *Store) Request(from, to, reason string) (string, error) {
-	if err := checkName(from, to); err != nil {
+	if err := checkPair(from, to); err != nil {
 		return "", err
 	}
 	if from == to {
@@ -67,7 +67,7 @@ func orNone(s string) string {
 // its target. The requester can never answer its own request; the user
 // decides through Decide.
 func (s *Store) Respond(by, requester string, grant bool) error {
-	if err := checkName(by, requester); err != nil {
+	if err := checkPair(by, requester); err != nil {
 		return err
 	}
 	err := s.update(func(st *state) error {
@@ -111,7 +111,7 @@ func (st *state) decide(p *Pair, by string, grant bool) error {
 // Decide is the user's grant, deny or revoke of any pair. Grant and deny
 // create the pair when absent.
 func (s *Store) Decide(a, b, action string) error {
-	if err := checkName(a, b); err != nil {
+	if err := checkPair(a, b); err != nil {
 		return err
 	}
 	if a == b {
@@ -142,7 +142,7 @@ func (s *Store) Decide(a, b, action string) error {
 // Revoke ends the access between by and other (any state), told to other.
 // Where implicit access applies, the pair is kept as denied so it sticks.
 func (s *Store) Revoke(by, other string) error {
-	if err := checkName(by, other); err != nil {
+	if err := checkPair(by, other); err != nil {
 		return err
 	}
 	return s.revoke(by, by, other)

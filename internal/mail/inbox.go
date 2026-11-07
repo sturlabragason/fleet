@@ -14,13 +14,8 @@ import (
 // Send writes text from -> to ("*" = every peer from may message) and returns
 // the recipients. Sending needs a granted pair or implicit access (ADR-34).
 func (s *Store) Send(from, to, text string) ([]string, error) {
-	if err := checkName(from); err != nil {
+	if err := checkPair(from, to); err != nil {
 		return nil, err
-	}
-	if to != "*" {
-		if err := checkName(to); err != nil {
-			return nil, err
-		}
 	}
 	if strings.TrimSpace(text) == "" {
 		return nil, fmt.Errorf("empty message")
@@ -40,7 +35,7 @@ func (s *Store) Send(from, to, text string) ([]string, error) {
 			}
 			if s.Peers != nil {
 				for _, o := range s.Peers(from) {
-					if !seen[o] && checkName(o) == nil && st.allowed(from, o) {
+					if !seen[o] && checkBox(o) == nil && st.allowed(from, o) {
 						seen[o] = true
 						rcpt = append(rcpt, o)
 					}
@@ -128,16 +123,60 @@ func unreadOf(ms []Msg, read string) []Msg {
 	return nil
 }
 
+// view is what one reader of a box sees: every message, or for an admiral's
+// box only its reports or only the rest, each with a read mark of its own
+// (DESIGN §6.12): fleet_reports must not eat messages and fleet_inbox must
+// not eat reports.
+type view struct {
+	keep func(Msg) bool
+	mark string
+}
+
+func (s *Store) viewOf(box string, reports bool) view {
+	switch {
+	case !IsAdmiralBox(box):
+		return view{func(Msg) bool { return true }, s.readPath(box)}
+	case reports:
+		return view{func(m Msg) bool { return m.Kind == KindReport }, s.readPath(box)}
+	}
+	return view{func(m Msg) bool { return m.Kind != KindReport }, s.msgsReadPath(box)}
+}
+
+func (s *Store) readView(box string, reports bool) ([]Msg, view) {
+	v := s.viewOf(box, reports)
+	var out []Msg
+	for _, m := range s.read(box) {
+		if v.keep(m) {
+			out = append(out, m)
+		}
+	}
+	return out, v
+}
+
 // Inbox returns the unread messages and marks them read, or with all the
 // last n (default 20) without touching the read marker, so unread messages
-// outside that window are never skipped.
+// outside that window are never skipped. For an admiral's box these are the
+// reports; its other messages are InboxMsgs.
 func (s *Store) Inbox(agent string, all bool, n int) ([]Msg, error) {
+	return s.inbox(agent, true, all, n)
+}
+
+// InboxMsgs is Inbox for what an admiral's box holds besides reports:
+// messages from other admirals and access requests, grants and revokes.
+func (s *Store) InboxMsgs(agent string, all bool, n int) ([]Msg, error) {
+	if !IsAdmiralBox(agent) {
+		return nil, fmt.Errorf("%q is not an admiral", agent)
+	}
+	return s.inbox(agent, false, all, n)
+}
+
+func (s *Store) inbox(agent string, reports, all bool, n int) ([]Msg, error) {
 	if err := checkBox(agent); err != nil {
 		return nil, err
 	}
 	var out []Msg
 	err := s.update(func(st *state) error {
-		ms := s.read(agent)
+		ms, v := s.readView(agent, reports)
 		if all {
 			if n <= 0 {
 				n = 20
@@ -145,22 +184,21 @@ func (s *Store) Inbox(agent string, all bool, n int) ([]Msg, error) {
 			out = ms[max(0, len(ms)-n):]
 			return nil
 		}
-		out = unreadOf(ms, readTrim(s.readPath(agent)))
-		if len(out) == 0 || out[len(out)-1].ID <= readTrim(s.readPath(agent)) {
+		out = unreadOf(ms, readTrim(v.mark))
+		if len(out) == 0 || out[len(out)-1].ID <= readTrim(v.mark) {
 			return nil
 		}
-		return writeAtomic(s.readPath(agent), []byte(out[len(out)-1].ID))
+		return writeAtomic(v.mark, []byte(out[len(out)-1].ID))
 	})
 	return out, err
 }
 
-// Unread counts agent's unread messages.
-func (s *Store) Unread(agent string) int {
-	if checkBox(agent) != nil {
-		return 0
-	}
-	return len(unreadOf(s.read(agent), readTrim(s.readPath(agent))))
-}
+// Unread counts agent's unread messages (an admiral's: unread reports).
+func (s *Store) Unread(agent string) int { return len(s.Peek(agent)) }
+
+// UnreadMsgs counts the unread messages of an admiral's box that are not
+// reports.
+func (s *Store) UnreadMsgs(agent string) int { return len(s.PeekMsgs(agent)) }
 
 // ClaimNudge reports whether agent should be nudged now: it has unread
 // messages and was not nudged since it last read its inbox. A true result is

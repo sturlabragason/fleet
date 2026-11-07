@@ -429,3 +429,91 @@ func TestTmuxOptionsFollowTheTheme(t *testing.T) {
 		t.Errorf("the ▶ mark kept a stale colour: %q", targetMark)
 	}
 }
+
+// With one admiral (@fleet_multi unset) the border title and the status-left
+// badge render exactly as they did before several admirals existed.
+func TestSingleAdmiralChromeUnchanged(t *testing.T) {
+	c := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
+	t.Cleanup(func() { c.KillServer() })
+	if _, err := c.Run("new-session", "-d", "-s", "f", "-n", "main", "cat"); err != nil {
+		t.Skip("tmux unavailable")
+	}
+	var border, left string
+	for _, a := range tmuxCommands(&fleet.Fleet{T: c, Exe: "/bin/true"}) {
+		if len(a) == 4 && a[2] == "pane-border-format" {
+			border = a[3]
+		}
+		if len(a) == 4 && a[2] == "status-left" {
+			left = a[3]
+		}
+	}
+	oldBorder := " #{?#{==:#{@role},sup},#[fg=" + theme.Supervisor + "]#[bold]admiral#[default]#{?@fleet_admiral_profile,#[fg=" + theme.Muted + "] · #{@fleet_admiral_profile}#[default],}#{?@fleet_ctx,#[fg=#{@fleet_ctx_color}] · ctx #{@fleet_ctx}#[default],},#{?#{==:#{@role},ov},#[fg=" + theme.Text + "]#[bold]overview#[default]," + targetMark + "#[fg=#{?@fleet_color,#{@fleet_color},default}]#{@fleet_glyph} #{@fleet_agent}" + pinMark + "#{?@fleet_team, #[fg=#{@fleet_team_color}]◆,} #[fg=" + theme.Muted + "]#{@fleet_status}#[default]" + nextOutMark + "}} "
+	oldLeft := "#[fg=" + theme.Crust + ",bg=" + theme.Supervisor + ",bold] fleet #[default] #{?" + fleet.BadgeOption + ",#[fg=" + theme.Crust + "#,bg=" + theme.Waiting + "#,bold] ✉ #{" + fleet.BadgeOption + "} #[default] ,}"
+	pane, _ := c.Run("display-message", "-p", "-t", "f:main", "#{pane_id}")
+	expand := func(f string) string {
+		out, err := c.Run("display-message", "-p", "-t", pane, f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	check := func(what string) {
+		t.Helper()
+		if got, want := expand(border), expand(oldBorder); got != want {
+			t.Errorf("%s border: got %q, want %q", what, got, want)
+		}
+		if got, want := expand(left), expand(oldLeft); got != want {
+			t.Errorf("%s status-left: got %q, want %q", what, got, want)
+		}
+	}
+	for k, v := range map[string]string{"@fleet_agent": "a1", "@fleet_glyph": "●", "@fleet_status": "waiting", "@fleet_color": "#f9e2af"} {
+		c.SetPaneOption(pane, k, v)
+	}
+	c.SetPaneOption(pane, "@fleet_owner", "print") // stale owner tag must not show
+	check("agent")
+	c.Run("set-option", "-g", fleet.BadgeOption, "3")
+	c.Run("set-option", "-g", fleet.BadgeByOption, "stale")
+	check("badge")
+	c.SetPaneOption(pane, "@role", "sup")
+	c.SetPaneOption(pane, "@fleet_admiral_profile", "claude")
+	c.SetPaneOption(pane, "@fleet_ctx", "42%")
+	c.SetPaneOption(pane, "@fleet_ctx_color", "#a6e3a1")
+	c.SetPaneOption(pane, "@fleet_admiral_name", "main")
+	c.SetPaneOption(pane, "@fleet_admiral_unread", "2")
+	check("admiral")
+	// With several admirals the split badge and owner chip appear.
+	c.Run("set-option", "-g", fleet.MultiOption, "1")
+	c.SetPaneOption(pane, "@role", "")
+	c.SetPaneOption(pane, "@fleet_owner_color", "#89b4fa")
+	if got := expand(left); !strings.Contains(got, "stale") {
+		t.Errorf("multi status-left: %q", got)
+	}
+	if got := expand(border); !strings.Contains(got, " print ") {
+		t.Errorf("multi border: %q", got)
+	}
+}
+
+func TestWallCmdActQuotesExe(t *testing.T) {
+	if got, want := wallCmdAct("/usr/bin/fleet", "reset"), `run-shell -b '/usr/bin/fleet admiral act reset --pane "#{pane_id}"'`; got != want {
+		t.Errorf("plain exe changed: %q", got)
+	}
+	got := wallCmdAct("/opt/my fleet/it's", "pick")
+	if !strings.Contains(got, `'\''/opt/my fleet/it'\\'\''s'\''`) && !strings.Contains(got, "my fleet") {
+		t.Fatalf("exe not present: %q", got)
+	}
+	if strings.Contains(got, "-b '/opt/my fleet") {
+		t.Errorf("exe with a space is not quoted: %q", got)
+	}
+	c := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
+	t.Cleanup(func() { c.KillServer() })
+	if _, err := c.Run("new-session", "-d", "-s", "f", "-n", "main", "cat"); err != nil {
+		t.Skip("tmux unavailable")
+	}
+	if _, err := c.Run("bind-key", "-n", "M-P", got); err != nil {
+		t.Fatalf("tmux rejected %q: %v", got, err)
+	}
+	out, _ := c.Run("list-keys", "-T", "root")
+	if !strings.Contains(out, "my fleet") {
+		t.Errorf("binding lost the exe: %s", out)
+	}
+}

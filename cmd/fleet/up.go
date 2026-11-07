@@ -37,20 +37,40 @@ type supLaunch struct {
 // resolveAdmiral, DESIGN §6.10). A non-empty boot prompt goes through the
 // profile's prompt_args (copilot -i, claude positional), else into Paste.
 func supervisorCmd(f *fleet.Fleet, prof, boot string) (supLaunch, error) {
+	return supervisorCmdOf(f, supervisor.Main, prof, boot)
+}
+
+// supervisorCmdOf is supervisorCmd for admiral adm.
+func supervisorCmdOf(f *fleet.Fleet, adm, prof, boot string) (supLaunch, error) {
 	if prof == "" {
-		prof = resolveAdmiral(f)
+		prof = resolveAdmiralOf(f, adm)
 	}
-	return admiralLaunch(f, prof, "", boot)
+	return admiralLaunchOf(f, adm, prof, "", boot)
 }
 
 // admiralLaunch builds the admiral command; a non-empty resumeID resumes that
 // session with the profile's resume args instead of starting a new one.
 func admiralLaunch(f *fleet.Fleet, prof, resumeID, boot string) (supLaunch, error) {
+	return admiralLaunchOf(f, supervisor.Main, prof, resumeID, boot)
+}
+
+// admiralLaunchOf is admiralLaunch for admiral adm. Its MCP server learns who
+// it serves from --admiral in its own config (claude: inline; copilot: the
+// admiral's .mcp.json) and, for a non-main admiral, FLEET_ADMIRAL_NAME.
+func admiralLaunchOf(f *fleet.Fleet, adm, prof, resumeID, boot string) (supLaunch, error) {
 	p, ok := f.Profiles[prof]
 	if !ok {
 		return supLaunch{}, fmt.Errorf("admiral profile %q not found", prof)
 	}
 	dir := admiralEnv("DIR")
+	if p.Patterns == "copilot" && adm != supervisor.Main {
+		// Its own .mcp.json is its only fleet server; without it the
+		// admiral would start with no fleet tools at all, so fail instead.
+		if _, err := writeAdmiralMCP(f.Home, f.Exe, adm); err != nil {
+			return supLaunch{}, fmt.Errorf("admiral %s: write its MCP config: %w", adm, err)
+		}
+		dir = supervisor.DirOf(f.Home, adm)
+	}
 	if dir == "" {
 		dir = filepath.Join(filepath.Dir(filepath.Dir(f.Exe)), "supervisor")
 	}
@@ -73,10 +93,17 @@ func admiralLaunch(f *fleet.Fleet, prof, resumeID, boot string) (supLaunch, erro
 	if id == "" && len(p.LaunchID) > 0 {
 		id = tools.NewUUID()
 	}
-	argv, embedded := p.Argv(tools.Vars{Fleet: f.Exe, Name: "admiral", ID: id},
-		tools.Launch{Resume: resumeID != "", Extra: admiralMCPArgs(p, f.Exe), Prompt: boot})
+	name := "admiral"
+	if adm != supervisor.Main {
+		name += "-" + adm
+	}
+	argv, embedded := p.Argv(tools.Vars{Fleet: f.Exe, Name: name, ID: id},
+		tools.Launch{Resume: resumeID != "", Extra: admiralMCPArgsOf(p, f.Exe, f.Home, adm), Prompt: boot})
 	logx.For("up").Info("admiral", "profile", prof, "dir", dir, "argv", argv, "resume", resumeID != "")
 	sl := supLaunch{Cmd: tools.ShellCommand(argv), Dir: dir, Env: p.EnvList(), ID: id, Profile: prof}
+	if adm != supervisor.Main {
+		sl.Env = append(sl.Env, AdmiralEnv+"="+adm)
+	}
 	if boot != "" && !embedded {
 		sl.Paste = boot
 	}
@@ -177,6 +204,7 @@ func cmdUp(f *fleet.Fleet, args []string) error {
 	} else if explicit != "" {
 		upSwap(f, explicit)
 	}
+	ensureAdmirals(f)
 	retheme(f)
 	ensureOverview(f, target)
 	configure(f)
@@ -295,7 +323,7 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		// Not Select: Lavender means "target slot" and nothing else (ADR-37).
 		{"set-option", "-g", "pane-active-border-style", "fg=" + theme.Text},
 		{"set-option", "-g", "pane-border-format",
-			" #{?#{==:#{@role},sup},#[fg=" + theme.Supervisor + "]#[bold]admiral#[default]#{?@fleet_admiral_profile,#[fg=" + theme.Muted + "] · #{@fleet_admiral_profile}#[default],}#{?@fleet_ctx,#[fg=#{@fleet_ctx_color}] · ctx #{@fleet_ctx}#[default],},#{?#{==:#{@role},ov},#[fg=" + theme.Text + "]#[bold]overview#[default]," + targetMark + "#[fg=#{?@fleet_color,#{@fleet_color},default}]#{@fleet_glyph} #{@fleet_agent}" + pinMark + "#{?@fleet_team, #[fg=#{@fleet_team_color}]◆,} #[fg=" + theme.Muted + "]#{@fleet_status}#[default]" + nextOutMark + "}} "},
+			" #{?#{==:#{@role},sup},#[fg=#{?" + fleet.MultiOption + ",#{@fleet_admiral_color}," + theme.Supervisor + "}]#[bold]admiral#{?" + fleet.MultiOption + ", #{@fleet_admiral_name},}#[default]#{?@fleet_admiral_profile,#[fg=" + theme.Muted + "] · #{@fleet_admiral_profile}#[default],}#{?" + fleet.MultiOption + ",#{?@fleet_admiral_unread,#[fg=" + theme.Waiting + "] · ✉ #{@fleet_admiral_unread}#[default],},}#{?@fleet_ctx,#[fg=#{@fleet_ctx_color}] · ctx #{@fleet_ctx}#[default],},#{?#{==:#{@role},ov},#[fg=" + theme.Text + "]#[bold]overview#[default]," + targetMark + ownerMark + "#[fg=#{?@fleet_color,#{@fleet_color},default}]#{@fleet_glyph} #{@fleet_agent}" + pinMark + "#{?@fleet_team, #[fg=#{@fleet_team_color}]◆,} #[fg=" + theme.Muted + "]#{@fleet_status}#[default]" + nextOutMark + "}} "},
 		// Unfocused panes recede one step (Overlay2, 5.8:1 on Base: still
 		// readable, so an emphasised pane you are not in stays legible).
 		{"set-option", "-g", "window-style", "fg=" + theme.Overlay2 + ",bg=" + theme.Base},
@@ -310,8 +338,8 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		{"set-option", "-g", "display-panes-active-colour", theme.Text},
 		{"set-option", "-g", "clock-mode-colour", theme.Supervisor},
 		// The unread-report badge (ADR-36) is set by the overview poll.
-		{"set-option", "-g", "status-left", "#[fg=" + theme.Crust + ",bg=" + theme.Supervisor + ",bold] fleet #[default] #{?" + fleet.BadgeOption + ",#[fg=" + theme.Crust + "#,bg=" + theme.Waiting + "#,bold] ✉ #{" + fleet.BadgeOption + "} #[default] ,}"},
-		{"set-option", "-g", "status-left-length", "70"},
+		{"set-option", "-g", "status-left", "#[fg=" + theme.Crust + ",bg=" + theme.Supervisor + ",bold] fleet #[default] #{?" + fleet.BadgeOption + ",#[fg=" + theme.Crust + "#,bg=" + theme.Waiting + "#,bold]#{?#{&&:#{" + fleet.MultiOption + "},#{" + fleet.BadgeByOption + "}},#{" + fleet.BadgeByOption + "}, ✉ #{" + fleet.BadgeOption + "} }#[default] ,}"},
+		{"set-option", "-g", "status-left-length", "100"},
 		{"set-option", "-g", "window-status-separator", ""},
 		{"set-option", "-g", "window-status-format", "#[fg=" + theme.Overlay1 + "] #I #W "},
 		{"set-option", "-g", "window-status-current-format", "#[fg=" + theme.Crust + ",bg=" + theme.Select + ",bold] #I #W #[default]"},
@@ -335,8 +363,9 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		{"bind-key", "-n", "M-S", wallCmd("side")},
 		{"bind-key", "-n", "M-c", wallCmd("chips")},
 		{"bind-key", "-n", "M-o", "select-pane", "-t", "{marked}"},
-		append([]string{"bind-key", "-n", "M-R"}, confirmResetArgs(f.Exe)...),
-		append([]string{"bind-key", "-n", "M-P"}, pickPopupArgs(f)...),
+		// M-R and M-P act on the focused admiral, or ask which (DESIGN §6.12).
+		{"bind-key", "-n", "M-R", wallCmdAct(f.Exe, "reset")},
+		{"bind-key", "-n", "M-P", wallCmdAct(f.Exe, "pick")},
 		{"bind-key", "-n", keys.HelpTmuxKey, "display-popup", "-E", "-b", "rounded",
 			"-w", strconv.Itoa(keys.PopupWidth()), "-h", strconv.Itoa(keys.PopupHeight()),
 			"-T", " fleet keys · any key closes ", exe + " keys --popup"},
@@ -411,14 +440,24 @@ var (
 	// nextOutMark ends the title of the pane a card would evict (no target,
 	// full wall).
 	nextOutMark string
+	// ownerMark is the owner chip on an agent's border while several
+	// admirals exist (@fleet_owner is only set then, DESIGN §6.12).
+	ownerMark string
 )
 
 func init() {
 	theme.OnChange(func() {
 		targetMark = "#{?#{==:#{pane_id},#{@fleet_target}},#[fg=" + theme.Select + "]#[bold]▶#[nobold] ,}"
 		pinMark = "#{?@fleet_pin, #[fg=" + theme.Overlay1 + "]⚑#[fg=#{?@fleet_color,#{@fleet_color},default}],}"
+		ownerMark = "#{?" + fleet.MultiOption + ",#{?@fleet_owner,#[fg=" + theme.Crust + "#,bg=#{@fleet_owner_color}#,bold] #{@fleet_owner} #[default] ,},}"
 		nextOutMark = "#{?#{==:#{pane_id},#{@fleet_next_out}}, #[fg=" + theme.Gone + "]· next out#[default],}"
 	})
+}
+
+// wallCmdAct is the key binding that runs `fleet admiral act VERB` for the
+// focused pane.
+func wallCmdAct(exe, verb string) string {
+	return "run-shell -b " + tools.Quote(tools.Quote(exe)+" admiral act "+verb+` --pane "#{pane_id}"`)
 }
 
 // wallUsage lists the `fleet wall` verbs.

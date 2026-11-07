@@ -310,3 +310,30 @@ func TestPinnedNotes(t *testing.T) {
 		t.Error("a pinned note is not in decisions.log")
 	}
 }
+
+func TestNotesTaggedByAdmiral(t *testing.T) {
+	home := t.TempDir()
+	now = func() time.Time { return time.Date(2026, 11, 7, 21, 40, 0, 0, time.Local) }
+	t.Cleanup(func() { now = time.Now })
+	AppendNote(home, "a1", "main note")
+	AppendNoteBy(home, "print", "a2", "print note")
+	AppendPinnedBy(home, "print", "", "print rule")
+	got := TailNotes(home, 30)
+	want := []string{"2026-11-07T21:40 [a1] main note", "2026-11-07T21:40 @print [a2] print note", "2026-11-07T21:40 @print print rule"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("%q", got)
+	}
+	if pins := Pinned(home); len(pins) != 1 || pins[0] != "2026-11-07T21:40 @print print rule" {
+		t.Fatalf("pinned %q", pins)
+	}
+	for line, w := range map[string]string{
+		want[0]: Main, want[1]: "print", want[2]: "print",
+		"2026-11-04T21:40 old line without a tag": Main,
+		"2026-11-04T21:40 @":                      Main,
+		"":                                        Main,
+	} {
+		if got := NoteWriter(line); got != w {
+			t.Errorf("NoteWriter(%q) = %q, want %q", line, got, w)
+		}
+	}
+}

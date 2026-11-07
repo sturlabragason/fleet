@@ -151,3 +151,26 @@ func TestStatus(t *testing.T) {
 		}
 	}
 }
+
+// The admiral colour slots are distinct from each other, from Select (the
+// target) and from every status colour, in every palette (DESIGN §6.12).
+func TestAdmiralSlotsAreDistinct(t *testing.T) {
+	defer Load(Active().Name)
+	for _, name := range Names() {
+		Load(name)
+		p := palettes[name]
+		taken := map[string]string{p.Select: "Select", p.Working: "Working", p.Waiting: "Waiting",
+			p.Error: "Error", p.Stuck: "Stuck", p.Idle: "Idle", p.Gone: "Gone"}
+		seen := map[string]int{}
+		for slot := 0; slot <= 2; slot++ {
+			c := AdmiralColor(slot)
+			if prev, dup := seen[c]; dup {
+				t.Errorf("%s: slots %d and %d share %s", name, prev, slot, c)
+			}
+			seen[c] = slot
+			if what, bad := taken[c]; bad {
+				t.Errorf("%s: slot %d (%s) equals %s", name, slot, c, what)
+			}
+		}
+	}
+}

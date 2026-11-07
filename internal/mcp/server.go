@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/supervisor"
@@ -43,6 +44,9 @@ type Server struct {
 	// Agent, when set, is agent mode (DESIGN §6.6): only the peer tools,
 	// acting as this agent.
 	Agent string
+	// Admiral is the admiral this server speaks for: "" is main, and the
+	// only one before several admirals existed (DESIGN §6.12).
+	Admiral string
 
 	// Hot reload (DESIGN §6.9). Zero values get real defaults in Serve.
 	// ExePath is the executable to watch (default F.Exe; "" disables reload).
@@ -66,17 +70,30 @@ type Server struct {
 }
 
 // New returns a server.
-func New(f *fleet.Fleet, w *wall.Wall) *Server {
-	s := &Server{F: f, W: w}
-	s.Fill = func() (int, int, bool) { return supervisor.CurrentFill(f.Home, f.T, fleet.Session+":main") }
+func New(f *fleet.Fleet, w *wall.Wall) *Server { return NewAdmiral(f, w, "") }
+
+// Unknown is the Admiral of a server that could not tell which admiral it
+// serves: reads work, every change is refused (DESIGN §6.12).
+const Unknown = "?"
+
+// NewAdmiral is New for one admiral by name ("" or main = the first one,
+// Unknown = identity not known).
+func NewAdmiral(f *fleet.Fleet, w *wall.Wall, admiral string) *Server {
+	if admiral == board.Main {
+		admiral = ""
+	}
+	s := &Server{F: f, W: w, Admiral: admiral}
+	s.Fill = func() (int, int, bool) {
+		return supervisor.CurrentFillOf(f.Home, f.T, fleet.Session+":main", s.Me())
+	}
 	s.Reset = func() error {
 		// tmux runs the reset, so it survives this MCP server being killed with the admiral.
-		_, err := f.T.Run("run-shell", "-b", resetShell(tools.Quote(f.Exe)))
+		_, err := f.T.Run("run-shell", "-b", resetShell(tools.Quote(f.Exe), admiral))
 		return err
 	}
 	s.SwapProfile = func(name string) error {
 		// Like Reset: tmux runs the swap, which replaces this server's pane.
-		_, err := f.T.Run("run-shell", "-b", "sleep 2; "+tools.Quote(f.Exe)+" admiral profile "+tools.Quote(name)+" >/dev/null 2>&1")
+		_, err := f.T.Run("run-shell", "-b", "sleep 2; "+tools.Quote(f.Exe)+" admiral profile"+nameFlag(admiral)+" "+tools.Quote(name)+" >/dev/null 2>&1")
 		return err
 	}
 	return s

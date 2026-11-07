@@ -79,7 +79,7 @@ func (f *Fleet) guardMemory(as []*board.Agent, now time.Time, low bool, free uin
 		return
 	}
 	logx.For("fleet").Info("memory guard: parked", "agent", a.Name, "idle", idle, "free", park.Bytes(free), "min_free", park.Bytes(m.MinFree))
-	f.tellAdmiral(fmt.Sprintf("parked %s (idle %s) to free memory: %s. Wake it with fleet_park name=%s action=wake when there is room again.",
+	f.tellAdmiralBox(f.AdmiralBoxOf(a.Name), fmt.Sprintf("parked %s (idle %s) to free memory: %s. Wake it with fleet_park name=%s action=wake when there is room again.",
 		a.Name, idle, reason, a.Name))
 }
 
@@ -88,13 +88,16 @@ const guardName = "fleet"
 
 // tellAdmiral posts a report from fleet itself to the admiral's inbox and
 // nudges the pane, so an auto-park is never silent (DESIGN §6.7).
-func (f *Fleet) tellAdmiral(text string) {
-	m, err := f.Mail().Report(guardName, "progress", text)
+func (f *Fleet) tellAdmiral(text string) { f.tellAdmiralBox(mail.Admiral, text) }
+
+// tellAdmiralBox is tellAdmiral to one admiral's mailbox (DESIGN §6.12).
+func (f *Fleet) tellAdmiralBox(box, text string) {
+	m, err := f.Mail().ReportTo(guardName, box, "progress", text)
 	if err != nil {
 		logx.For("fleet").Warn("memory guard: report failed", "err", err)
 		return
 	}
-	f.wakeSupervisor(m.ID, guardName, "progress", ReportLine(guardName, "progress", mail.FoldSummary(text)))
+	f.wakeBox(box, m.ID, guardName, "progress", ReportLineTo(box, guardName, "progress", mail.FoldSummary(text)))
 }
 
 // claimGuard rate-limits the guard to one park per check_every across every

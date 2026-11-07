@@ -93,7 +93,7 @@ var graphite = Palette{
 	Select: "#ffa000", Supervisor: "#f2f2f4",
 	Team: []Swatch{
 		{"chalk", "#e6e6ea"}, {"silver", "#c3c3c8"}, {"steel", "#9a9aa2"},
-		{"slate", "#7f7f88"}, {"ash", "#6e6e76"}, {"iron", "#58585f"},
+		{"slate", "#7f7f88"}, {"ash", "#72727a"}, {"iron", "#58585f"},
 	},
 }
 

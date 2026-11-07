@@ -20,6 +20,8 @@ import (
 type AdoptOpts struct {
 	Profile, SessionID, Dir, Name string
 	Force                         bool // skip the session-exists and in-use checks
+	// Admiral owns the adopted agent ("" = main, DESIGN §6.12).
+	Admiral string
 }
 
 var (
@@ -71,7 +73,7 @@ func (f *Fleet) Adopt(o AdoptOpts) (*board.Agent, error) {
 	// worktree; when that dir is one, the board records it so close and
 	// sweep can name the work left there (DESIGN §4, ADR-39).
 	a, err := f.start(name, o.Profile, p, dir, "", "", id, argv, false,
-		startExtra{Worktree: adoptWorktree(dir), NoWorktree: true})
+		startExtra{Worktree: adoptWorktree(dir), NoWorktree: true, Role: Role{Admiral: o.Admiral}})
 	if err != nil {
 		return nil, err
 	}

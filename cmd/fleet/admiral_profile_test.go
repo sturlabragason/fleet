@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -86,7 +87,7 @@ func TestTopLevelProfile(t *testing.T) {
 
 func TestAdmiralMCPArgs(t *testing.T) {
 	got := admiralMCPArgs(tools.Profile{Patterns: "claude"}, "/opt/fleet")
-	want := []string{"--mcp-config", `{"mcpServers":{"fleet":{"args":["mcp"],"command":"/opt/fleet","type":"stdio"}}}`, "--allowedTools=mcp__fleet"}
+	want := []string{"--mcp-config", `{"mcpServers":{"fleet":{"args":["mcp","--admiral","main"],"command":"/opt/fleet","type":"stdio"}}}`, "--allowedTools=mcp__fleet"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("claude: %v", got)
 	}
@@ -447,5 +448,49 @@ func TestProfileList(t *testing.T) {
 	got := profileList(f, "res")
 	if !strings.HasPrefix(got, "admiral profile: res\n") || !strings.Contains(got, "\n* res\n") || !strings.Contains(got, "\n  fake\n") {
 		t.Errorf("%s", got)
+	}
+}
+
+func TestAdmiralMCPConfigCarriesName(t *testing.T) {
+	got := admiralMCPArgsOf(tools.Profile{Patterns: "claude"}, "/opt/fleet", "", "print")
+	if len(got) < 2 || !strings.Contains(got[1], `"args":["mcp","--admiral","print"]`) {
+		t.Errorf("claude: %v", got)
+	}
+	home := t.TempDir()
+	got = admiralMCPArgsOf(tools.Profile{Patterns: "copilot"}, "/opt/fleet", home, "print")
+	path, err := writeAdmiralMCP(home, "/opt/fleet", "print")
+	if err != nil || path != filepath.Join(home, "admirals", "print", ".mcp.json") {
+		t.Fatalf("write: %q %v", path, err)
+	}
+	if strings.Contains(strings.Join(got, " "), "--additional-mcp-config") {
+		t.Fatalf("copilot args layer a second fleet server: %v", got)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil || !regexp.MustCompile(`"--admiral",\s*"print"`).Match(b) {
+		t.Errorf("copilot config: %s %v", b, err)
+	}
+}
+
+// A non-main copilot admiral starts in its own dir, whose .mcp.json is its
+// only fleet server; main keeps the shared dir.
+func TestCopilotAdmiralStartsInOwnDir(t *testing.T) {
+	f, _ := admiralFleet(t)
+	f.Profiles["cp"] = tools.Profile{Command: "sh", Args: []string{"-c", "sleep 305"}, Patterns: "copilot"}
+	sl, err := admiralLaunchOf(f, "print", "cp", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := supervisor.DirOf(f.Home, "print"); sl.Dir != want {
+		t.Errorf("print dir %q, want %q", sl.Dir, want)
+	}
+	if _, err := os.Stat(filepath.Join(sl.Dir, ".mcp.json")); err != nil {
+		t.Errorf("no .mcp.json in the admiral's dir: %v", err)
+	}
+	m, err := admiralLaunchOf(f, supervisor.Main, "cp", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Dir == sl.Dir {
+		t.Errorf("main moved into print's dir %q", m.Dir)
 	}
 }

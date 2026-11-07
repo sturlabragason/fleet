@@ -10,8 +10,10 @@ import (
 	"text/tabwriter"
 
 	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/mail"
 	"github.com/sturlabragason/fleet/internal/mcp"
+	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/wall"
 )
 
@@ -134,14 +136,23 @@ func cmdReports(f *fleet.Fleet, args []string) error {
 	fs.IntVar(&limit, "limit", limit, "N for --all")
 	fs.IntVar(&limit, "n", limit, "alias for --limit")
 	as := fs.String("as", "", "read as this agent (default: the fleet pane you run in, else the admiral)")
+	adm := fs.String("admiral", "", "read this admiral's reports (default main)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if *adm != "" && *adm != supervisor.Main && !supervisor.Exists(f.Home, *adm) {
+		return fmt.Errorf("no admiral %q (fleet admiral ls)", *adm)
+	}
+	admBox = mail.BoxOf(*adm)
 	if fs.NArg() != 0 {
 		return fmt.Errorf("%s", reportsUsage)
 	}
+	defer func() { admBox = mail.Admiral }()
 	return writeReports(os.Stdout, f, *as, *all, limit)
 }
+
+// admBox is the admiral mailbox `fleet reports` reads (main unless --admiral).
+var admBox = mail.Admiral
 
 // writeReports renders the admiral's report mailbox, the one place reports
 // land. Only the admiral itself — a shell outside every agent pane and
@@ -158,7 +169,7 @@ func writeReports(w io.Writer, f *fleet.Fleet, as string, all bool, limit int) e
 	}
 	// A leader's squad reports land in its own mailbox, so that is the box
 	// it reads; everyone else reads the admiral's (ADR-53).
-	box := mail.Admiral
+	box := admBox
 	if me != "" && f.IsLeader(me) {
 		box = me
 	}
@@ -226,6 +237,7 @@ func cmdAccess(f *fleet.Fleet, args []string) error {
 func cmdMCP(f *fleet.Fleet, args []string) error {
 	fs := flag.NewFlagSet("mcp", flag.ContinueOnError)
 	agent := fs.String("agent", "", "serve the agent-scoped peer tools as this agent")
+	adm := fs.String("admiral", "", "serve the admiral tools as this admiral (default: main)")
 	probe := fs.Bool("probe", false, "check this binary can serve, print ok and exit (used by hot reload)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -244,7 +256,13 @@ func cmdMCP(f *fleet.Fleet, args []string) error {
 	// A done-check must never stall the MCP loop (ADR-43).
 	f.Async()
 	in, reloaded := mcp.ResumeInput(os.Stdin)
-	s := mcp.New(f, wall.New(f.T, fleet.Session))
+	name := resolveAdmiralName(*adm, os.Getenv, func() string { return paneAdmiral(f) })
+	if me == "" {
+		if name, err = checkAdmiral(f.Home, name); err != nil {
+			return err
+		}
+	}
+	s := mcp.NewAdmiral(f, wall.New(f.T, fleet.Session), name)
 	if me != "" {
 		s = mcp.NewAgent(f, me)
 	} else {
@@ -254,4 +272,64 @@ func cmdMCP(f *fleet.Fleet, args []string) error {
 	}
 	s.Reloaded = reloaded
 	return s.Serve(in, os.Stdout)
+}
+
+// resolveAdmiralName names the admiral a `fleet mcp` serves: --admiral, then
+// FLEET_ADMIRAL_NAME, then the identity of its own pane (so a copilot
+// admiral still knows who it is). "" means unknown: there is no fallback to
+// main (DESIGN §6.12).
+func resolveAdmiralName(flagVal string, getenv func(string) string, pane func() string) string {
+	if flagVal != "" {
+		return flagVal
+	}
+	if v := getenv(AdmiralEnv); v != "" {
+		return v
+	}
+	if pane != nil {
+		return pane()
+	}
+	return ""
+}
+
+// checkAdmiral turns a resolved name into what the MCP server is built with:
+// a registered admiral (main included), mcp.Unknown for "", or an error.
+func checkAdmiral(home, name string) (string, error) {
+	if name == "" {
+		return mcp.Unknown, nil
+	}
+	if name != supervisor.Main && !supervisor.Exists(home, name) {
+		if !supervisor.RegistryReadable(home) {
+			// A torn registry must not kill a running admiral's server:
+			// serve reads, refuse changes (DESIGN §6.12).
+			logx.For("mcp").Error("admiral registry unreadable; identity unknown", "admiral", name)
+			return mcp.Unknown, nil
+		}
+		return "", fmt.Errorf("fleet mcp: unknown admiral %q (fleet admiral ls)", name)
+	}
+	return name, nil
+}
+
+// paneAdmiral reads the identity of $TMUX_PANE on the fleet socket.
+func paneAdmiral(f *fleet.Fleet) string {
+	return paneAdmiralOf(os.Getenv("TMUX_PANE"), os.Getenv("TMUX"), f.T.SocketPath, f.T.PaneOption)
+}
+
+// paneAdmiralOf is paneAdmiral with tmux stubbed: the @fleet_admiral tag of an
+// admiral pane (@role=sup), "main" for a sup pane without a tag (an admiral
+// started before several admirals existed), "" (unknown) for anything else:
+// no pane, another tmux server, pane not found or not an admiral.
+func paneAdmiralOf(pane, tmuxEnv string, socket func() string, opt func(pane, key string) string) string {
+	if pane == "" {
+		return ""
+	}
+	if sock, _, _ := strings.Cut(tmuxEnv, ","); sock == "" || sock != socket() {
+		return ""
+	}
+	if opt(pane, "@role") != "sup" {
+		return ""
+	}
+	if tag := opt(pane, "@fleet_admiral"); tag != "" {
+		return tag
+	}
+	return supervisor.Main
 }

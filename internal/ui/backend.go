@@ -7,6 +7,20 @@ import (
 )
 
 // Backend is what the TUI needs from the rest of fleet (fakeable in tests).
+// AdmiralInfo is one admiral as the overview draws it (DESIGN §6.12).
+type AdmiralInfo struct {
+	Name, Profile, Color string
+}
+
+// AdmiralBackend is what a Backend adds when several admirals can exist: the
+// list, the split badge and the owner picker. Optional, so tests and single
+// admiral setups need nothing.
+type AdmiralBackend interface {
+	Admirals() []AdmiralInfo // main first; more than one turns the owner chips on
+	BadgeBy() string         // " ✉ main 1 · print 2 ", "" for none
+	PickOwner(agent string) error
+}
+
 type Backend interface {
 	Refresh() ([]*board.Agent, error)
 	OnWall() map[string]bool

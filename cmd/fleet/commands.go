@@ -17,6 +17,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/prefs"
 	"github.com/sturlabragason/fleet/internal/sessions"
 	"github.com/sturlabragason/fleet/internal/status"
+	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/team"
 	"github.com/sturlabragason/fleet/internal/theme"
 	"github.com/sturlabragason/fleet/internal/tools"
@@ -39,7 +40,7 @@ const usage = `usage:
                                             run the admiral under profile NAME (alone: fleet up); default
                                             $FLEET_ADMIRAL_PROFILE, last choice, [admiral] profile, copilot
   fleet ui                                  run the overview TUI in this terminal
-  fleet spawn [--worktree|--no-worktree] [--leader] [--interactive] [--effort LEVEL] <name> <profile> [dir] ["prompt"]
+  fleet spawn [--worktree|--no-worktree] [--leader] [--interactive] [--effort LEVEL] [--admiral NAME] <name> <profile> [dir] ["prompt"]
              [--goal "one line"] [--check "cmd"] [--check-exit N] [--result FILE]
                                             in a git repo the agent gets its own worktree,
                                             <repo>.wt/<name> on branch fleet/<name> (worktree in
@@ -102,17 +103,21 @@ const usage = `usage:
                                             list, read or decide agent-to-agent access
   fleet report [--as NAME] <done|blocked|question|progress> "summary"
                                             report to the admiral (for agents without MCP)
-  fleet reports [--all] [--limit N] [--as NAME]
+  fleet reports [--all] [--limit N] [--as NAME] [--admiral NAME]
                                             read agent reports (what fleet_reports gives the admiral):
                                             unread ones, oldest first; --all shows the last N instead.
                                             Only the admiral (a shell in no agent pane, no --as) marks
                                             them read; an agent reads the history without taking them
-  fleet admiral [--json]                    admiral session, context fill, generation, uptime
-  fleet admiral reset [--handoff]           replace the admiral with a fresh session (M-R)
-  fleet admiral profile [NAME | --pick]     show the admiral's profile, or swap it (hands off; Alt-P picks)
-  fleet admiral restart                     restart the admiral, resuming the same session
+  fleet admiral [--name N] [--json]         admiral session, context fill, generation, uptime
+  fleet admiral add NAME [--profile P]      start another admiral beside main (DESIGN §6.12)
+  fleet admiral ls                          admirals with their agents and unread reports
+  fleet admiral close NAME                  close one; its agents and unread reports go back to main
+  fleet admiral give AGENT [--to NAME]      hand an agent (and its unread reports) to another admiral (overview O)
+  fleet admiral reset [--name N] [--handoff]         replace the admiral with a fresh session (M-R)
+  fleet admiral profile [--name N] [NAME | --pick]   show the admiral's profile, or swap it (hands off; Alt-P picks)
+  fleet admiral restart [--name N]          restart the admiral, resuming the same session
                                             ("fleet supervisor ..." still works: deprecated alias)
-  fleet note [--agent NAME] [--pin] "text"  append a note to ~/.fleet/decisions.log; --pin keeps it in every brief
+  fleet note [--agent NAME] [--admiral N] [--pin] "text"  append a note to ~/.fleet/decisions.log; --pin keeps it in every brief
   fleet playbook [--effort LEVEL] [dir]     print the worker playbook prepended to a spawn prompt in dir
                                             (built-in + ~/.fleet/worker.md + the repo's .fleet/worker.md;
                                             --effort light|standard|pro, default pro)
@@ -341,11 +346,15 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 	leader := fs.Bool("leader", false, "make it a leader: it may spawn a squad of its own and its agents report to it")
 	interactive := fs.Bool("interactive", false, "the user talks to it directly: never auto-closed, reports progress until the user ends the session")
 	effort := fs.String("effort", "", "worker playbook level: light, standard or pro (default: pro with a worktree, light without)")
+	owner := fs.String("admiral", "", "admiral that owns the agent and gets its reports (default main)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if *owner != "" && *owner != supervisor.Main && !supervisor.Exists(f.Home, *owner) {
+		return fmt.Errorf("no admiral %q (fleet admiral ls)", *owner)
+	}
 	var o fleet.SpawnOpts
-	o.Role = fleet.Role{Leader: *leader, Interactive: *interactive}
+	o.Role = fleet.Role{Leader: *leader, Interactive: *interactive, Admiral: *owner}
 	o.Effort = *effort
 	o.Card = fleet.NormalizeCard(&board.Card{Goal: *goal, Check: *check, Want: *checkExit, Result: *result})
 	var set []string

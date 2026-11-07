@@ -21,7 +21,7 @@ func (f *Fleet) Report(me, state, summary string) (note string, err error) {
 	}
 	// A squad member reports to its leader, everyone else to the admiral
 	// (ADR-53). The leader's own reports still go up to the admiral.
-	up := f.ReportsTo(me)
+	up := f.ReportBox(me)
 	m, err := f.Mail().ReportTo(me, up, state, summary)
 	if err != nil {
 		return "", err
@@ -63,11 +63,11 @@ func (f *Fleet) Report(me, state, summary string) (note string, err error) {
 		}
 	}
 	if state == "done" || state == "blocked" || state == "question" {
-		line := ReportLineTo(boxOf(up), me, state, sum)
+		line := ReportLineTo(up, me, state, sum)
 		if note != "" {
 			line += " (" + note + ")"
 		}
-		f.wakeBox(boxOf(up), m.ID, me, state, line)
+		f.wakeBox(up, m.ID, me, state, line)
 	}
 	return note, nil
 }
@@ -173,11 +173,11 @@ func (f *Fleet) doneCheck(job checkJob, msgID, sum string) string {
 	case f.Prefs.For(job.profile).AutoCloseDone:
 		note = "not auto-closed: done-check failed"
 	}
-	line := ReportLineTo(boxOf(f.ReportsTo(job.name)), job.name, "done", sum) + " Done-check: " + res.Verdict() + "."
+	line := ReportLineTo(f.ReportBox(job.name), job.name, "done", sum) + " Done-check: " + res.Verdict() + "."
 	if note != "" {
 		line += " (" + note + ")"
 	}
-	f.wakeBox(boxOf(f.ReportsTo(job.name)), msgID, job.name, "done", line)
+	f.wakeBox(f.ReportBox(job.name), msgID, job.name, "done", line)
 	return note
 }
 
@@ -210,7 +210,7 @@ func (f *Fleet) sweepChecks(agents []*board.Agent) {
 // swept check's wake is dropped once the admiral has read that report.
 func (f *Fleet) lastReportID(name string) string {
 	id := ""
-	for _, m := range f.Mail().Peek(mail.Admiral) {
+	for _, m := range f.Mail().Peek(f.AdmiralBoxOf(name)) {
 		if m.Kind == mail.KindReport && m.From == name {
 			id = m.ID
 		}
@@ -223,10 +223,8 @@ func (f *Fleet) lastReportID(name string) string {
 // them with fleet_reports marks them read and the count falls to 0 (ADR-36).
 func (f *Fleet) UnreadReports() int {
 	n := 0
-	for _, m := range f.Mail().Peek(mail.Admiral) {
-		if m.Kind == mail.KindReport {
-			n++
-		}
+	for _, c := range f.UnreadBy() {
+		n += c
 	}
 	return n
 }
@@ -253,7 +251,7 @@ func ReportLineTo(box, from, state, summary string) string {
 
 // reportsTool is the tool the owner of box reads its reports with.
 func reportsTool(box string) string {
-	if box == mail.Supervisor {
+	if mail.IsAdmiralBox(box) {
 		return "fleet_reports"
 	}
 	return "fleet_squad_reports"

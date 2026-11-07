@@ -25,11 +25,11 @@ func TestBuildShapes(t *testing.T) {
 		leaves []string
 		want   string
 	}{
-		{"no wall", Input{W: 300, H: 80, Sup: "%1", Ov: "%2"}, []string{"%1", "%2"},
+		{"no wall", Input{W: 300, H: 80, Sups: []string{"%1"}, Ov: "%2"}, []string{"%1", "%2"},
 			"300x80,0,0{90x80,0,0,1,209x80,91,0,2}"},
-		{"narrow sup", Input{W: 200, H: 50, Sup: "%1", Ov: "%2"}, []string{"%1", "%2"},
+		{"narrow sup", Input{W: 200, H: 50, Sups: []string{"%1"}, Ov: "%2"}, []string{"%1", "%2"},
 			"200x50,0,0{64x50,0,0,1,135x50,65,0,2}"},
-		{"4 wall", Input{W: 300, H: 80, Sup: "%1", Ov: "%2", Wall: []string{"%3", "%4", "%5", "%6"}, Preset: "4"},
+		{"4 wall", Input{W: 300, H: 80, Sups: []string{"%1"}, Ov: "%2", Wall: []string{"%3", "%4", "%5", "%6"}, Preset: "4"},
 			[]string{"%1", "%2", "%3", "%4", "%5", "%6"}, ""},
 		{"no sup", Input{W: 300, H: 80, Ov: "%2", Wall: []string{"%3"}, Preset: "1"}, []string{"%2", "%3"},
 			"300x80,0,0[300x14,0,0,2,300x65,0,15,3]"},
@@ -45,7 +45,7 @@ func TestBuildShapes(t *testing.T) {
 	}
 	right := Default
 	right.SupSide = "right"
-	_, leaves := right.Render(Input{W: 300, H: 80, Sup: "%1", Ov: "%2"})
+	_, leaves := right.Render(Input{W: 300, H: 80, Sups: []string{"%1"}, Ov: "%2"})
 	if leaves[1] != "%1" {
 		t.Errorf("right side leaves %v", leaves)
 	}
@@ -70,7 +70,7 @@ func TestApplyInTmux(t *testing.T) {
 	p := strings.Split(ids, "\n")
 	for _, preset := range []string{"1", "2", "4", "6", "9", "m"} {
 		wall := p[2:]
-		s, _ := Default.Render(Input{W: 300, H: 80, Sup: p[0], Ov: p[1], Wall: wall, Preset: preset})
+		s, _ := Default.Render(Input{W: 300, H: 80, Sups: []string{p[0]}, Ov: p[1], Wall: wall, Preset: preset})
 		if out, err := tm("select-layout", "-t", "t", s); err != nil {
 			t.Errorf("preset %s: %v %s (%s)", preset, err, out, s)
 		}
@@ -104,11 +104,51 @@ func TestApplyNewShapesInTmux(t *testing.T) {
 		var h int
 		fmt.Sscan(hs, &h)
 		for _, focus := range []string{"", p[2]} {
-			in := Input{W: 300, H: h, Sup: p[0], Ov: p[1], Wall: p[2:], Preset: "9", Focus: focus}
+			in := Input{W: 300, H: h, Sups: []string{p[0]}, Ov: p[1], Wall: p[2:], Preset: "9", Focus: focus}
 			s, _ := Default.Render(in)
 			if out, err := tm("select-layout", "-t", sess, s); err != nil {
 				t.Errorf("n=%d focus=%q: %v %s (%s)", n, focus, err, out, s)
 			}
 		}
+	}
+}
+
+// Several admirals stack in the left column, equal rows, and the column
+// only holds as many as keep SupMinRows (DESIGN §6.12).
+func TestSupsStack(t *testing.T) {
+	c := Default
+	for _, n := range []int{1, 2, 3} {
+		var sups []string
+		for i := 0; i < n; i++ {
+			sups = append(sups, fmt.Sprintf("%%%d", i+1))
+		}
+		root := c.Build(Input{W: 300, H: 60, Sups: sups, Ov: "%9"})
+		place(root)
+		col := root.Kids[0]
+		if n == 1 {
+			if col.Pane != "%1" {
+				t.Fatalf("n=1: %+v", col)
+			}
+			continue
+		}
+		if len(col.Kids) != n {
+			t.Fatalf("n=%d: %d rows", n, len(col.Kids))
+		}
+		sum := n - 1
+		for _, k := range col.Kids {
+			sum += k.H
+		}
+		if sum != 60 {
+			t.Errorf("n=%d rows+borders=%d, want 60", n, sum)
+		}
+	}
+	if got := c.SupFit(20, 3); got != 2 {
+		t.Errorf("SupFit(20,3)=%d, want 2", got)
+	}
+	if got := c.SupFit(5, 3); got != 1 {
+		t.Errorf("SupFit(5,3)=%d, want 1", got)
+	}
+	if got := c.SupFit(60, 3); got != 3 {
+		t.Errorf("SupFit(60,3)=%d, want 3", got)
 	}
 }
