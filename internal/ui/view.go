@@ -141,6 +141,9 @@ func (m *Model) header() string {
 	h := fmt.Sprintf(" fleet · %d agents · %d working · %d waiting · %d error", len(m.agents), counts["working"], counts["waiting"], counts["error"]+counts["stuck"])
 	idle := lipgloss.NewStyle().Foreground(colIdle)
 	badge := reportBadge(m.reports)
+	if by := strings.TrimSpace(m.badgeBy); by != "" && m.reports > 0 {
+		badge = "  " + by
+	}
 	room := m.w - ansi.StringWidth(h) - ansi.StringWidth(badge) - 2
 	var hint string
 	switch {
@@ -274,6 +277,8 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 	if a.WithUser(m.now()) {
 		tgt, tw2 = tgt+leadStyle.Render(" "+userMark), tw2+2
 	}
+	chip := m.ownerChip(a)
+	tw2 += ansi.StringWidth(chip)
 	inner := w - 4
 	st1 := cursorStyle(lipgloss.NewStyle().Foreground(col).Bold(true), a.Name == m.sel)
 	if a.Name == m.sel {
@@ -292,6 +297,7 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 		rest := lipgloss.NewStyle().Foreground(colIdle).Render(" · " + metaLine(a.Profile, state, inner-ansi.StringWidth(tn)-3))
 		l2 = ansi.Truncate(ts.Render(tn)+rest, inner, "…")
 	}
+	l1 = chip + l1
 	l3 := line3(a, inner)
 	if a.Status == "queued" { // no pane yet: the start of the goal
 		l3 = lipgloss.NewStyle().Foreground(colIdle).Render(shorten(a.Goal, inner))
@@ -324,7 +330,7 @@ func (m *Model) chips(rest []*board.Agent, all bool) string {
 			sc = cursorColor(sc)
 		}
 		st := cursorStyle(lipgloss.NewStyle().Foreground(sc), cur)
-		c := st.Render(glyph(a.Status, m.frame) + " " + a.Name + m.queueMark(a.Name))
+		c := m.ownerChip(a) + st.Render(glyph(a.Status, m.frame)+" "+a.Name+m.queueMark(a.Name))
 		if m.pinned[a.Name] {
 			c += pinStyle.Render(" " + pinMark)
 		}

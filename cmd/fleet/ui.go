@@ -15,6 +15,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/team"
+	"github.com/sturlabragason/fleet/internal/theme"
 	"github.com/sturlabragason/fleet/internal/tools"
 	"github.com/sturlabragason/fleet/internal/ui"
 	"github.com/sturlabragason/fleet/internal/wall"
@@ -23,10 +24,12 @@ import (
 
 // backend adapts fleet + wall to ui.Backend.
 type backend struct {
-	f       *fleet.Fleet
-	w       *wall.Wall
-	enabled bool
-	supProf string // last @fleet_admiral_profile set on the admiral border
+	f        *fleet.Fleet
+	w        *wall.Wall
+	enabled  bool
+	owners   map[string]string // pane -> owner chip last set on its border
+	supProf  string            // last @fleet_admiral_profile set on the admiral border
+	otherCtx map[string]string // other admirals' pane -> profile|ctx|color last set
 }
 
 // Refresh reads the board when the watcher is live, and captures the panes
@@ -134,7 +137,7 @@ func (b *backend) Menu(name string, x, y int) error {
 	var left, top int
 	fmt.Sscan(off, &left, &top)
 	target, pins := b.w.TargetAgent(), b.w.Pinned()
-	st := menuState{onWall: b.w.OnWall()[name], hasTarget: target != "", pinned: pins[name], targetPinned: pins[target]}
+	st := menuState{multi: len(b.f.AdmiralNames()) > 1, onWall: b.w.OnWall()[name], hasTarget: target != "", pinned: pins[name], targetPinned: pins[target]}
 	args := menuArgs(tools.Quote(b.f.Exe), name, x+left, y+top, st)
 	_, err = b.f.T.Run(append(args[:1:1], append([]string{"-t", pane}, args[1:]...)...)...)
 	return err
@@ -158,6 +161,7 @@ func (b *backend) SupCtx() (string, string) {
 		return "", ""
 	}
 	b.syncAdmiralProfile()
+	b.syncOtherCtx()
 	used, max, ok := supervisor.CurrentFill(b.f.Home, b.f.T, mainTarget())
 	if !ok {
 		return "", ""
@@ -183,15 +187,70 @@ func (b *backend) SetSupCtx(label, color string) error {
 	return b.f.T.SetPaneOption(pane, "@fleet_ctx", label)
 }
 
-func (b *backend) ResetSup() error {
-	_, err := b.f.T.Run(confirmResetArgs(b.f.Exe)...)
-	return err
-}
+func (b *backend) ResetSup() error { return cmdAdmiralAct(b.f, []string{"reset"}) }
 
 // PickProfile opens the admiral profile picker popup (the overview's P).
-func (b *backend) PickProfile() error {
-	_, err := b.f.T.Run(pickPopupArgs(b.f)...)
-	return err
+func (b *backend) PickProfile() error { return cmdAdmiralAct(b.f, []string{"pick"}) }
+
+// Admirals lists the admirals with their colours (the overview's owner chips).
+func (b *backend) Admirals() []ui.AdmiralInfo {
+	var out []ui.AdmiralInfo
+	for _, n := range b.f.AdmiralNames() {
+		prof := b.f.Prefs.AdmiralProfile()
+		if a, ok := supervisor.Find(b.f.Home, n); ok && a.Profile != "" {
+			prof = a.Profile
+		} else if s, ok := supervisor.LoadOf(b.f.Home, n); ok && s.Profile != "" {
+			prof = s.Profile
+		}
+		out = append(out, ui.AdmiralInfo{Name: n, Profile: prof, Color: theme.AdmiralColor(supervisor.Slot(b.f.Home, n))})
+	}
+	b.syncOwners(len(out) > 1)
+	return out
+}
+
+func (b *backend) BadgeBy() string { return b.f.BadgeBy() }
+
+// PickOwner opens the hand-over menu for agent (the overview's O).
+func (b *backend) PickOwner(agent string) error { return ownerMenu(b.f, agent) }
+
+// syncOwners tags each agent pane with its owner's chip for the wall border
+// while several admirals exist, and clears the tags when only one is left.
+// Only changes reach tmux.
+func (b *backend) syncOwners(multi bool) {
+	if !b.enabled {
+		return
+	}
+	panes, err := b.f.T.ListPanes(fleet.Session + ":")
+	if err != nil {
+		return
+	}
+	ag := b.f.Store.Load().Agents
+	names := b.f.AdmiralNames()
+	ini := ui.OwnerInitials(names)
+	if b.owners == nil {
+		b.owners = map[string]string{}
+	}
+	for _, p := range panes {
+		if p.Agent == "" || p.Role == "sup" || p.Role == "ov" {
+			continue
+		}
+		want := ""
+		if a, ok := ag[p.Agent]; ok && multi {
+			want = ini[a.Owner()] + "|" + theme.AdmiralColor(supervisor.Slot(b.f.Home, a.Owner()))
+		}
+		if b.owners[p.ID] == want {
+			continue
+		}
+		b.owners[p.ID] = want
+		if want == "" {
+			b.f.T.UnsetPaneOption(p.ID, "@fleet_owner")
+			b.f.T.UnsetPaneOption(p.ID, "@fleet_owner_color")
+			continue
+		}
+		txt, col, _ := strings.Cut(want, "|")
+		b.f.T.SetPaneOption(p.ID, "@fleet_owner", txt)
+		b.f.T.SetPaneOption(p.ID, "@fleet_owner_color", col)
+	}
 }
 
 // syncAdmiralProfile keeps the admiral border's profile in step with
@@ -207,6 +266,43 @@ func (b *backend) syncAdmiralProfile() {
 	}
 	if b.f.T.SetPaneOption(pane, "@fleet_admiral_profile", s.Profile) == nil {
 		b.supProf = s.Profile
+	}
+}
+
+// syncOtherCtx keeps the context meter and profile on every other admiral's
+// border current; main's go through SupCtx and SetSupCtx.
+func (b *backend) syncOtherCtx() {
+	for _, a := range supervisor.Admirals(b.f.Home) {
+		pane, err := supervisor.FindPaneOf(b.f.T, mainTarget(), a.Name)
+		if err != nil {
+			continue
+		}
+		var prof string
+		if s, ok := supervisor.LoadOf(b.f.Home, a.Name); ok {
+			prof = s.Profile
+		}
+		var ctx, color string
+		if used, max, ok := supervisor.CurrentFillOf(b.f.Home, b.f.T, mainTarget(), a.Name); ok {
+			pct := supervisor.Pct(used, max)
+			ctx, color = fmt.Sprintf("%d%%", pct), supervisor.Band(pct)
+		}
+		want := prof + "|" + ctx + "|" + color
+		if b.otherCtx[pane] == want {
+			continue // like syncOwners: only changes reach tmux
+		}
+		if b.otherCtx == nil {
+			b.otherCtx = map[string]string{}
+		}
+		b.otherCtx[pane] = want
+		if prof != "" {
+			b.f.T.SetPaneOption(pane, "@fleet_admiral_profile", prof)
+		}
+		if ctx == "" {
+			b.f.T.UnsetPaneOption(pane, "@fleet_ctx")
+			continue
+		}
+		b.f.T.SetPaneOption(pane, "@fleet_ctx_color", color)
+		b.f.T.SetPaneOption(pane, "@fleet_ctx", ctx)
 	}
 }
 

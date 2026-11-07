@@ -113,6 +113,8 @@ var Bindings = []Binding{
 		Desc: "same as Alt-1…9 / Alt-m"},
 	{Group: Overview, Key: "R",
 		Desc: "same as Alt-R: reset the admiral (asks y/n)"},
+	{Group: Overview, Key: "O",
+		Desc: "hand the selected agent to another admiral (several admirals only)"},
 	{Group: Overview, Key: "P",
 		Desc: "same as Alt-P: pick the admiral's profile"},
 	{Group: Overview, Key: "q",

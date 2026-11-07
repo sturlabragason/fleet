@@ -36,6 +36,7 @@ func previewPopupArgs(exe, name string, hasTarget bool) []string {
 type menuState struct {
 	onWall, hasTarget, pinned bool
 	targetPinned              bool // the ▶ pane is pinned
+	multi                     bool // several admirals: offer "Hand to ▸"
 }
 
 // menuArgs is the right-click menu for an agent card at client cell x,y (the
@@ -65,6 +66,9 @@ func menuArgs(exe, name string, x, y int, st menuState) []string {
 	}
 	if st.onWall {
 		items = append(items, [3]string{"Take off the wall", "x", run("hide")})
+	}
+	if st.multi {
+		items = append(items, [3]string{"Hand to ▸", "o", tmuxCmdString([]string{"run-shell", "-b", exe + " admiral give " + tools.Quote(name) + " >/dev/null 2>&1"})})
 	}
 	// -M: the menu takes the mouse although it is not opened from a tmux
 	// mouse event, else clicking an item does nothing (MENU_NOMOUSE).

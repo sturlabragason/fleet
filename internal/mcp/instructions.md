@@ -57,6 +57,12 @@ Use only the `fleet` MCP tools: `fleet_status`, `fleet_info`, `fleet_peek`, `fle
 - A leader escalates rather than acts: prompts, merges, pushes and infra come up to you, and to the
   user. `[squad] max_members` and `max_depth` in config cap the size and the depth.
 
+## Other admirals
+
+- You may share the fleet with other admirals (`fleet_admirals`). Write tools refuse an agent that is not yours ("belongs to admiral X"):
+  peek and status still work. `fleet_handover` gives one of yours away; only the user takes or moves another's.
+- Reports for your agents come to you only. `fleet_msg_send` and `fleet_inbox` are for admirals; "[fleet] message from admiral X" means call `fleet_inbox`.
+
 ## Memory
 
 - State lives on disk, not in this chat. Agents live on the board and in tmux.

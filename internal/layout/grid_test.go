@@ -12,7 +12,7 @@ import (
 const refW, refH = 209, 64
 
 func TestWallRectMatchesReference(t *testing.T) {
-	root := Default.Build(Input{W: 300, H: 79, Sup: "%1", Ov: "%2", Wall: []string{"%3", "%4"}, Preset: "4"})
+	root := Default.Build(Input{W: 300, H: 79, Sups: []string{"%1"}, Ov: "%2", Wall: []string{"%3", "%4"}, Preset: "4"})
 	wall := root.Kids[1].Kids[1]
 	if wall.W != refW || wall.H != refH {
 		t.Fatalf("wall rect %dx%d, want %dx%d", wall.W, wall.H, refW, refH)
@@ -93,7 +93,7 @@ func paneRects(t *testing.T, in Input) map[string]*Node {
 }
 
 func wallInput(wall []string, focus string) Input {
-	return Input{W: 300, H: 79, Sup: "%1", Ov: "%2", Wall: wall, Preset: "4", Focus: focus}
+	return Input{W: 300, H: 79, Sups: []string{"%1"}, Ov: "%2", Wall: wall, Preset: "4", Focus: focus}
 }
 
 func TestEmphasisGivesFocusPaneMostOfTheWall(t *testing.T) {

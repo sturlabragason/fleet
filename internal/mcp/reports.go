@@ -26,6 +26,9 @@ func (s *Server) report(me string, a args) (string, error) {
 		return "", err
 	}
 	to := "the admiral"
+	if o := s.F.OwnerOf(me); o != board.Main {
+		to = "admiral " + o
+	}
 	if up := s.F.ReportsTo(me); up != "" {
 		to = "your leader " + up
 	}
@@ -38,7 +41,7 @@ func (s *Server) report(me string, a args) (string, error) {
 
 // reports is the admiral's fleet_reports.
 func (s *Server) reports(all bool, limit int) (string, error) {
-	ms, err := s.F.Mail().Inbox(mail.Admiral, all, limit)
+	ms, err := s.F.Mail().Inbox(s.box(), all, limit)
 	if err != nil {
 		return "", err
 	}
@@ -65,7 +68,7 @@ func RenderReports(ms []mail.Msg, all bool) string {
 
 // reportsSuffix is appended to every admiral result but fleet_handoff.
 func (s *Server) reportsSuffix() string {
-	if n := s.F.Mail().Unread(mail.Admiral); n > 0 {
+	if n := s.F.Mail().Unread(s.box()); n > 0 {
 		return fmt.Sprintf("\n\n(%d unread reports)", n)
 	}
 	return ""
@@ -94,7 +97,7 @@ func reportCell(a *board.Agent) string {
 
 // unreadReports is the fleet_brief section; it does not mark anything read.
 func (s *Server) unreadReports() string {
-	ms := s.F.Mail().Peek(mail.Admiral)
+	ms := s.F.Mail().Peek(s.box())
 	if len(ms) == 0 {
 		return "## Unread reports\nnone\n\n"
 	}

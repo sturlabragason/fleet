@@ -10,6 +10,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/mail"
 	"github.com/sturlabragason/fleet/internal/prefs"
 	"github.com/sturlabragason/fleet/internal/status"
+	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/worktree"
 )
 
@@ -22,9 +23,23 @@ func (f *Fleet) Mail() *mail.Store {
 	m := mail.New(filepath.Join(f.Home, "mail"))
 	repos := map[string]string{} // dir -> git common dir, per store
 	policy := f.MailPolicy()
-	m.Implicit = func(a, b string) bool { return f.mailReason(policy, a, b, repos) != "" }
+	m.Implicit = func(a, b string) bool {
+		if mail.IsAdmiralBox(a) || mail.IsAdmiralBox(b) {
+			// Admirals reach each other freely only under open (§6.12).
+			return a != b && mail.IsAdmiralBox(a) && mail.IsAdmiralBox(b) && policy == prefs.MailOpen
+		}
+		return f.mailReason(policy, a, b, repos) != ""
+	}
 	m.Peers = func(a string) []string {
 		var out []string
+		if mail.IsAdmiralBox(a) {
+			for _, b := range f.AdmiralBoxes() {
+				if b != mail.BoxOf(mail.AdmiralOf(a)) {
+					out = append(out, b)
+				}
+			}
+			return out
+		}
 		for _, ag := range f.Store.Load().Sorted() {
 			if ag.Name != a {
 				out = append(out, ag.Name)
@@ -155,6 +170,12 @@ func (f *Fleet) Me(override string) (string, error) {
 func (f *Fleet) onBoard(names ...string) error {
 	b := f.Store.Load()
 	for _, n := range names {
+		if mail.IsAdmiralBox(n) { // an admiral is not on the board: it is registered
+			if !supervisor.Exists(f.Home, mail.AdmiralOf(n)) {
+				return fmt.Errorf("no admiral %q", mail.AdmiralOf(n))
+			}
+			continue
+		}
 		if _, ok := b.Agents[n]; !ok {
 			return fmt.Errorf("no agent %q", n)
 		}
@@ -209,6 +230,7 @@ func (f *Fleet) MailRequest(me, to, reason string) (string, error) {
 	st, err := f.Mail().Request(me, to, reason)
 	if err == nil {
 		f.nudge(me, to)
+		f.announceAdmiral(me, to)
 	}
 	return st, err
 }
@@ -227,6 +249,7 @@ func (f *Fleet) MailSend(me, to, text string) ([]string, error) {
 		return nil, err
 	}
 	f.nudge(me, rcpt...)
+	f.announceAdmiral(me, rcpt...)
 	return rcpt, nil
 }
 

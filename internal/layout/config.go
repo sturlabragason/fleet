@@ -10,6 +10,7 @@ type Config struct {
 	SupWidthNarr  int    // columns when window < NarrowBelow
 	NarrowBelow   int    // window width threshold
 	SupHidden     bool
+	SupMinRows    int // an admiral pane is never shorter than this when several stack
 	OverviewRows  int // full overview: 2 tile rows + header + chips
 	ChipsOnlyRows int // compact overview
 	ChipsOnly     bool
@@ -31,6 +32,7 @@ var Default = Config{
 	SupWidth:      90,
 	SupWidthNarr:  64,
 	NarrowBelow:   220,
+	SupMinRows:    8,
 	OverviewRows:  14,
 	ChipsOnlyRows: 3,
 	MainPercent:   60,

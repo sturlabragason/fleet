@@ -426,6 +426,7 @@ The bottom tmux status line and the overview header show a short hint in plain w
 | Overview | `g` | same as Alt-g: what's new in fleet |
 | Overview | `1/2/4/6/9/m` | same as Alt-1…9 / Alt-m |
 | Overview | `R` | same as Alt-R: reset the admiral (asks y/n) |
+| Overview | `O` | hand the selected agent to another admiral (several admirals only) |
 | Overview | `P` | same as Alt-P: pick the admiral's profile |
 | Overview | `q` | quit the overview |
 
@@ -922,6 +923,45 @@ One admiral cannot hold ten agents' detail at once. A **leader** is an ordinary 
 **Safety.** A leader escalates rather than acts: it may not answer a permission prompt (`fleet_squad_send` refuses an agent whose status is `waiting`), and merging, pushing and applying infra are the user's, as they are for any agent. The chain is squad → leader → admiral → user.
 
 **Shown.** `fleet_status` has a `squad` column (`leads m1,m2` / `→ lead`), the overview tile and row carry a `▲` for a leader, and `fleet info` prints a `squad:` line. `fleet close <leader>` warns about live squad agents; `--squad` (MCP `squad: true`) closes them too.
+
+### 6.12 Several admirals on one fleet (ADR-64)
+
+**Built 2026-11-07.** Code in `internal/supervisor/admirals.go` (registry), `internal/fleet/admiral.go` (give, close, scope), `internal/mail/move.go`, `internal/mcp/admirals.go`, `cmd/fleet/admiral_cmd.go`, `internal/layout` (`Sups`) and `internal/ui/owner.go`.
+
+One admiral steering two unrelated streams of work (say Bubbla and the print app) mixes both into one chat and one report queue, and fills its context twice as fast. This lets two (or a few) admirals run at once on one fleet. Each owns its own agents and gets only their reports; both see the whole board.
+
+**The model.** An admiral has a name. The admiral that exists today is `main` and keeps every path, mailbox and pane it has now, so a running admiral needs no restart. Each board agent carries `admiral = <name>`; empty means `main`, which is what every existing agent has. A squad agent (§6.11) belongs to its leader's admiral. The board, teams, decisions log, pinned notes, wall and overview stay one each, shared.
+
+**Starting one.** `fleet admiral add <name> [--profile P]` (refused past `[admiral] max`, default 3; values above 3 are clamped to 3, the palette has three admiral colours) starts a new admiral pane under the existing one in `fleet:main`'s left column (the overview stays on top and the wall on the right; `internal/layout` splits the admiral area evenly). `fleet admiral ls` lists them: name, profile, session, ctx, agents owned, unread reports. `fleet admiral close <name>` ends one: its agents go back to `main`, its unread reports are re-filed to `main`, as closing a leader does (§6.11). `main` cannot be closed. `fleet up` restarts every admiral listed on disk. Names follow agent-name rules; `user`, `admiral`, `supervisor` and agent names already on the board are refused.
+
+**Per admiral on disk.** `main` keeps `admiral/` and `mail/admiral/`. Another admiral gets `admirals/<name>/` (`session.json`, `handoff.md`, `handoffs/`, `profile`) and the mailbox `mail/admiral.<name>/`. Reset, restart, profile swap and the context meter (§6.5, §6.10) work per admiral; `fleet admiral reset|restart|profile` take `--name N` (default: the admiral whose pane runs the command, else `main`), and `M-R` / `Alt-P` act on the admiral pane that has focus, else `main`.
+
+**Identity.** Every admiral gets its own MCP config whose fleet server args carry `--admiral <name>` (claude: inline `--mcp-config`; copilot: a non-main admiral starts in its own dir, `admirals/<name>/`, whose workspace `.mcp.json` is its only `fleet` server, so it never competes with the shared `supervisor/.mcp.json` that `main` keeps), and the admiral pane is tagged `@role=sup` and `@fleet_admiral=<name>`. `fleet mcp` resolves `--admiral`, then `FLEET_ADMIRAL_NAME`, then its pane's tag; an untagged `@role=sup` pane is `main` (an admiral started before this feature, so it keeps working after the MCP hot reload, §6.9). A name that is not `main` or in the registry makes `fleet mcp` exit with `unknown admiral`. There is no fallback to `main`: with no pane, another tmux server or a pane that is not an admiral, the server runs with identity unknown, still answers reads (`fleet_status`, `fleet_peek`, `fleet_info`, `fleet_brief`, `fleet_profiles`, `fleet_sessions`, `fleet_access`) and refuses every change and every per-admiral tool (spawn, adopt, send, answer, close, park, team, wall, adr, note, reports, handoff, handover, admiral mail, access decisions) until the admiral is restarted with `fleet admiral restart --name <name>`. Like §6.6, this governs cooperation, not security.
+
+**What an admiral may do to agents.**
+- Read anything: `fleet_status`, `fleet_peek`, `fleet_info` and the overview show every agent, with an `admiral` column/mark.
+- Act only on its own: `fleet_send`, `fleet_answer`, `fleet_close`, `fleet_park` (park and wake), `fleet_team` send/close/edit and `fleet_access_decide` for a pair with one of its agents. Another admiral's agent is refused with "<agent> belongs to admiral print; ask the user to hand it over". `fleet_send` with `names`/`team` skips such agents per line, as the prompt gate does (§6.8).
+- `fleet_spawn` and `fleet_adopt` make the agent its own. A user's shell CLI spawn (`fleet spawn`) gives it to `main` unless `--admiral NAME`.
+- Teams belong to the admiral that made them; a team cannot mix agents of two admirals.
+- The user's own shell CLI is never scoped.
+
+**Reports and wakes.** `fleet_report` from an agent goes to its admiral's mailbox and wakes that admiral's pane with the §6.7/ADR-53 per-mailbox machinery; dead-pane, stuck and auto-close reports follow the same route. `fleet_reports` and `fleet_brief` show the caller's own. Each admiral pane border shows its own unread count (`admiral print · ✉ 2 · ctx 34%`); the global status line and the overview badge show the total, split by admiral when more than one has unread ("✉ main 1 · print 2").
+
+**Shared memory.** `decisions.log` and `pinned.log` stay one file each. Every new line names the writer: `2026-11-07T21:40 @print [agent] text`; lines without `@` are read as `main`. `fleet_brief` shows all pinned notes and the last 30 log lines from every admiral, the writer shown. The handoff is per admiral: a reset of `print` must not hand it `main`'s plans.
+
+**Telling them apart.** Each admiral gets a colour from the team palette, chosen at `add` and kept in its `session.json`. The admiral pane border shows the name in that colour; each overview card and row, and each wall pane border, carries a small mark in its admiral's colour when more than one admiral exists. One admiral means no mark, so today's screen does not change.
+
+**Handing an agent over.** Only the user decides:
+- CLI `fleet admiral give <agent> <admiral>` (also takes `--team T` for a whole team).
+- Overview: a key on the selected card opens a picker of admirals (the key is the designer's call; `O` is free).
+- MCP `fleet_handover(name, to)` lets an admiral *give away* its own agent (never take one); the user's yes is not needed for giving.
+The agent's unread reports move with it, and the receiving admiral gets one wake line: `[fleet] main handed you api-auth (done: …). Full text: call fleet_reports.`
+
+**Admirals message each other (§6.6 mail, same policy).** An admiral is a mail identity: `main` uses the mailbox it has (`admiral`), another uses `admiral.<name>`; agent names starting `admiral.` are reserved. Admiral MCP gains the agent-mode mail tools, limited to admiral recipients and addressed by admiral name: `fleet_admirals` (the other admirals, profile, ctx, access state with me), `fleet_msg_send(to, text)` (`to` = admiral name or `*` for every admiral I may message), `fleet_inbox`, `fleet_access_request`, `fleet_access_respond`, `fleet_access_revoke`. Access follows `[defaults] agent_mail` exactly as for agents: `open` makes every admiral pair free; `team` and `ask` give admirals no implicit access (they have no team or repo), so one asks and the other, or the user (`fleet access grant main print`), decides. The messages are in `fleet access log` and `fleet_access limit=N` like any agent mail. Messages and reports share the admiral's inbox file but not their read mark: `fleet_reports` reads reports, `fleet_inbox` reads the rest (requests, grants, messages). A message or request to an admiral is announced with the guarded wake line of §6.7 (`[fleet] message from admiral main. Read it with fleet_inbox.`), never the agent nudge, and counts in that admiral's border badge. Admirals do not mail agents (they use `fleet_send`), and agents cannot mail admirals (they report).
+
+**Settled 2026-11-07.** The second admiral stacks under the first in `fleet:main`'s left column; the handoff is per admiral; up to `[admiral] max` (default 3) admirals, built and tested for 2; an admiral may give away its own agent, only the user takes or moves another's; admirals message each other through §6.6 mail.
+
+**Out of scope:** admirals on separate fleets or machines; a separate overview or wall per admiral; per-admiral `max_working`, spend or memory budgets; routing new agents to an admiral by repo; renaming `main`; admirals mailing agents or agents mailing admirals; access control stronger than cooperation.
 
 ---
 
@@ -1516,3 +1556,7 @@ Rejected: (a) a schema version that refuses writes from an older binary (ADR-58 
 Decision: the built-in `claude` profile starts `claude --model opus` with `CLAUDE_CODE_SUBAGENT_MODEL=sonnet`; `claude-copilot` starts `copilot --model claude-opus-5.5`. The values are the constants `ClaudeModel`, `ClaudeSubagentModel` and `CopilotClaudeModel` in `internal/tools`, and a test fails if a built-in or example profile passes any other Claude model.
 Why: profiles pinned `claude-opus-5` and `claude-sonnet-5` and quietly kept agents on old models after newer ones shipped. The claude CLI's aliases always resolve to the newest model, so they cannot drift; the Copilot CLI needs an exact id, so it lives in one constant with a test.
 Rejected: (a) a `model` key per profile in config.toml — a second place for the same value; (b) pinning full claude ids such as `claude-opus-5-5` — the same drift one release later.
+
+**ADR-64: several admirals on one fleet, each owning its agents and their reports** (§6.12, §6.5, §6.6)
+Decision: an admiral has a name; `main` keeps every existing path, mailbox (`admiral`) and pane, others live in `admirals/<name>/` with box `admiral.<name>`, each admiral's MCP server is told its name (`--admiral`, never guessed: an unknown identity is read-only), and each board agent carries `admiral` (empty = main). Reports go to the owner's box, write tools refuse another admiral's agents while reads stay open, `fleet admiral add|ls|close|give` manage them, and closing one returns its agents and unread reports to main. Admiral-to-admiral mail follows the access policy.
+Why: one admiral steering unrelated streams mixes chats and report queues and burns context twice as fast; keeping main unchanged means a running admiral and older binaries keep working.

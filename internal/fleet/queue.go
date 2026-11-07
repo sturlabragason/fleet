@@ -106,6 +106,7 @@ func (f *Fleet) enqueue(name, profile, dir, prompt string, wantWT bool, card *bo
 		a = &board.Agent{Name: name, Profile: profile, Patterns: f.Profiles[profile].Patterns, Dir: dir, Goal: prompt,
 			Status: string(status.Queued), Created: now, StatusSince: now, NoWorktree: !wantWT, LastLine: note, Card: card,
 			Leader: role.Leader, LeadBy: role.LeadBy, Interactive: role.Interactive, Effort: effort}
+		a.SetOwner(role.Admiral)
 		b.Agents[name] = a
 		f.Store.AppendEvent(board.Event{Time: now, Agent: name, From: "", To: a.Status})
 		return nil
@@ -147,7 +148,7 @@ func (f *Fleet) claimQueued(b *board.Board, now time.Time, low bool, limit int) 
 // startQueued launches a claimed agent; Refresh runs it in a goroutine so the
 // poll never waits on tmux or the tool's ready check.
 func (f *Fleet) startQueued(a *board.Agent) {
-	if _, err := f.launch(a.Name, a.Profile, a.Dir, a.Goal, true, !a.NoWorktree, a.Card, Role{Leader: a.Leader, LeadBy: a.LeadBy, Interactive: a.Interactive}, a.Effort); err != nil {
+	if _, err := f.launch(a.Name, a.Profile, a.Dir, a.Goal, true, !a.NoWorktree, a.Card, Role{Leader: a.Leader, LeadBy: a.LeadBy, Interactive: a.Interactive, Admiral: a.Admiral}, a.Effort); err != nil {
 		logx.For("fleet").Error("queue start failed", "agent", a.Name, "err", err)
 		f.Store.Update(func(b *board.Board) error {
 			// Only our claim turns into an error; a closed or re-spawned

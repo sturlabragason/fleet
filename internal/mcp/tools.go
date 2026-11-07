@@ -102,6 +102,8 @@ var toolDefs = []tool{
 	adrToolDef,
 }
 
+func init() { toolDefs = append(toolDefs, admiralToolDefs...) }
+
 type args struct {
 	Name, Text, Answer, Profile, Dir, Prompt, Action, Preset, Agent, Query string
 	// Summary is text for fleet_handoff and fleet_report, true/false for
@@ -135,6 +137,17 @@ type args struct {
 	CheckExit           *int `json:"check_exit"`
 }
 
+// identityBound are the admiral tools that change something or read the
+// caller's own mail, reports or notes: refused when the admiral is unknown.
+var identityBound = map[string]bool{
+	"fleet_send": true, "fleet_answer": true, "fleet_spawn": true, "fleet_adopt": true,
+	"fleet_close": true, "fleet_park": true, "fleet_team": true, "fleet_wall": true,
+	"fleet_adr": true, "fleet_note": true, "fleet_reports": true, "fleet_handoff": true,
+	"fleet_admiral_profile": true, "fleet_access_decide": true, "fleet_handover": true,
+	"fleet_admirals": true, "fleet_msg_send": true, "fleet_inbox": true,
+	"fleet_access_request": true, "fleet_access_respond": true, "fleet_access_revoke": true,
+}
+
 func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 	var a args
 	if len(raw) > 0 {
@@ -147,6 +160,9 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 			return fmt.Errorf("%s is required", field)
 		}
 		return nil
+	}
+	if s.Admiral == Unknown && identityBound[name] {
+		return "", fmt.Errorf("admiral identity unknown: this MCP server could not tell which admiral it serves, so it refuses changes. Restart the admiral with fleet admiral restart --name <name>.")
 	}
 	switch name {
 	case "fleet_status":
@@ -166,7 +182,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 				return "", err
 			}
 		}
-		ag, err := s.F.SpawnWith(fleet.SpawnOpts{Worktree: a.Worktree, Card: a.card(), Role: fleet.Role{Leader: a.Leader, Interactive: a.Interactive}, Effort: a.Effort}, a.Name, a.Profile, a.Dir, a.Prompt)
+		ag, err := s.F.SpawnWith(fleet.SpawnOpts{Worktree: a.Worktree, Card: a.card(), Role: fleet.Role{Leader: a.Leader, Interactive: a.Interactive, Admiral: s.Me()}, Effort: a.Effort}, a.Name, a.Profile, a.Dir, a.Prompt)
 		if err != nil {
 			return "", err
 		}
@@ -181,7 +197,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 	case "fleet_sessions":
 		return s.sessions(a.Query, a.Limit)
 	case "fleet_adopt":
-		o := fleet.AdoptOpts{Profile: a.Profile, Dir: a.Dir, Name: a.Name}
+		o := fleet.AdoptOpts{Profile: a.Profile, Dir: a.Dir, Name: a.Name, Admiral: s.Me()}
 		id, q := strings.TrimSpace(a.SessionID), strings.TrimSpace(a.Query)
 		var res sessions.Session
 		switch {
@@ -219,6 +235,9 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		if err := need(a.Name, "name"); err != nil {
 			return "", err
 		}
+		if err := s.scope(a.Name); err != nil {
+			return "", err
+		}
 		switch a.Action {
 		case "wake":
 			ag, err := s.F.Wake(a.Name, a.Force)
@@ -233,6 +252,8 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 			return fmt.Sprintf("parked %s; fleet_park name=%s action=wake resumes it", a.Name, a.Name), nil
 		}
 		return "", fmt.Errorf("action must be park or wake")
+	case "fleet_handover", "fleet_admirals", "fleet_msg_send", "fleet_inbox", "fleet_access_request", "fleet_access_respond", "fleet_access_revoke":
+		return s.admiralCall(name, a)
 	case "fleet_wall":
 		switch a.Action {
 		case "preset":
@@ -261,9 +282,9 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 			return "", err
 		}
 		if a.Pin {
-			return "pinned", supervisor.AppendPinned(s.F.Home, a.Agent, a.Text)
+			return "pinned", supervisor.AppendPinnedBy(s.F.Home, s.Me(), a.Agent, a.Text)
 		}
-		return "noted", supervisor.AppendNote(s.F.Home, a.Agent, a.Text)
+		return "noted", supervisor.AppendNoteBy(s.F.Home, s.Me(), a.Agent, a.Text)
 	case "fleet_brief":
 		br, err := s.brief()
 		return s.admiralHeader() + "\n" + br, err
@@ -284,6 +305,9 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		if !a.Confirmed {
 			return "", fmt.Errorf("not confirmed: ask the user, then call again with confirmed=true")
 		}
+		if err := s.scope(a.A, a.B); err != nil {
+			return "", err
+		}
 		if err := s.F.AccessDecide(a.A, a.B, a.Action); err != nil {
 			return "", err
 		}
@@ -292,7 +316,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		if err := need(strings.TrimSpace(a.Summary.Text), "summary"); err != nil {
 			return "", err
 		}
-		if err := supervisor.WriteHandoff(s.F.Home, a.Summary.Text); err != nil {
+		if err := supervisor.WriteHandoffOf(s.F.Home, s.Me(), a.Summary.Text); err != nil {
 			return "", err
 		}
 		if err := s.Reset(); err != nil {
@@ -334,7 +358,12 @@ func (s *Server) status() (string, error) {
 	on := s.W.OnWall()
 	var b strings.Builder
 	teams := s.F.Teams.ByAgent()
-	b.WriteString("name | team | squad | profile | status | subagents | wall | age | spend | waiting_for | report\n")
+	many := len(s.F.AdmiralNames()) > 1 // several admirals: say whose each agent is (§6.12)
+	b.WriteString("name | team | squad | profile | status | subagents | wall | age | spend | waiting_for | report")
+	if many {
+		b.WriteString(" | admiral")
+	}
+	b.WriteString("\n")
 	var total spend.Spend
 	for _, a := range as {
 		wf := ""
@@ -358,7 +387,11 @@ func (s *Server) status() (string, error) {
 		if a.WithUser(time.Now()) {
 			st += " (interactive)"
 		}
-		fmt.Fprintf(&b, "%s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s\n", a.Name, teams[a.Name].Team, squadCell(s.F, a), a.Profile, st, sub, w, time.Since(a.StatusSince).Round(time.Second), sp, wf, reportCell(a))
+		fmt.Fprintf(&b, "%s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s", a.Name, teams[a.Name].Team, squadCell(s.F, a), a.Profile, st, sub, w, time.Since(a.StatusSince).Round(time.Second), sp, wf, reportCell(a))
+		if many {
+			fmt.Fprintf(&b, " | %s", s.F.OwnerOf(a.Name))
+		}
+		b.WriteString("\n")
 	}
 	if total.Any() {
 		fmt.Fprintf(&b, "fleet spend so far: %s over %d model calls (%s); %s\n",
@@ -398,7 +431,7 @@ func (s *Server) sessions(query string, limit int) (string, error) {
 // status table.
 func (s *Server) brief() (string, error) {
 	var b strings.Builder
-	if h, at, ok := supervisor.ReadHandoff(s.F.Home); ok {
+	if h, at, ok := supervisor.ReadHandoffOf(s.F.Home, s.Me()); ok {
 		fmt.Fprintf(&b, "## Handoff (%s)\n%s\n\n", at.Format("2006-01-02 15:04"), h)
 	} else {
 		b.WriteString("## Handoff\nnone\n\n")

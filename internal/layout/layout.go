@@ -17,7 +17,7 @@ type Node struct {
 // Input describes the window to lay out.
 type Input struct {
 	W, H   int
-	Sup    string   // admiral pane id ("" if hidden/absent)
+	Sups   []string // admiral pane ids, main first (none if hidden/absent), stacked in one column (DESIGN §6.12)
 	Ov     string   // overview pane id
 	Wall   []string // wall pane ids in slot order
 	Preset string
@@ -28,9 +28,15 @@ type Input struct {
 func (c Config) Build(in Input) *Node {
 	root := &Node{W: in.W, H: in.H}
 	right := root
-	if in.Sup != "" && !c.SupHidden {
+	if len(in.Sups) > 0 && !c.SupHidden {
 		sw := c.supWidth(in.W)
-		sup := &Node{Pane: in.Sup}
+		sup := &Node{Pane: in.Sups[0]}
+		if len(in.Sups) > 1 { // equal rows, 1-row borders between; place() sizes them
+			sup = &Node{}
+			for _, p := range in.Sups {
+				sup.Kids = append(sup.Kids, leaf(p))
+			}
+		}
 		right = &Node{}
 		root.Horiz = true
 		if c.SupSide == "right" {

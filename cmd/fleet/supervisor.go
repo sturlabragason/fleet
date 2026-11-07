@@ -17,13 +17,20 @@ import (
 )
 
 // confirmResetArgs is the tmux command behind M-R and the overview's R.
-func confirmResetArgs(exe string) []string {
+func confirmResetArgs(exe string) []string { return confirmResetArgsOf(exe, supervisor.Main) }
+
+// confirmResetArgsOf is confirmResetArgs for admiral adm.
+func confirmResetArgsOf(exe, adm string) []string {
+	flag, label := "", "admiral"
+	if adm != supervisor.Main {
+		flag, label = " --name "+tools.Quote(adm), "admiral "+adm
+	}
 	// Output is discarded: run-shell would show it in view mode over the pane;
 	// the result reaches the user via display-message.
 	// tmux parses the run-shell argument again: double-quote it for tmux and
 	// shell-quote the exe for sh.
-	sh := strings.NewReplacer(`\`, `\\`, `"`, `\"`, `$`, `\$`).Replace(tools.Quote(exe) + " admiral reset >/dev/null 2>&1")
-	return []string{"confirm-before", "-p", "reset admiral? (y/n)", `run-shell -b "` + sh + `"`}
+	sh := strings.NewReplacer(`\`, `\\`, `"`, `\"`, `$`, `\$`).Replace(tools.Quote(exe) + " admiral reset" + flag + " >/dev/null 2>&1")
+	return []string{"confirm-before", "-p", "reset " + label + "? (y/n)", `run-shell -b "` + sh + `"`}
 }
 
 // stderr is where deprecation warnings go (replaced in tests).
@@ -62,6 +69,20 @@ func display(f *fleet.Fleet, msg string) { f.T.Run("display-message", "-l", msg)
 func mainTarget() string { return fleet.Session + ":main" }
 
 func cmdSupervisor(f *fleet.Fleet, args []string) error {
+	if len(args) > 0 {
+		switch args[0] {
+		case "add":
+			return cmdAdmiralAdd(f, args[1:])
+		case "ls":
+			return cmdAdmiralLs(f)
+		case "close":
+			return cmdAdmiralClose(f, args[1:])
+		case "give":
+			return cmdAdmiralGive(f, args[1:])
+		case "act":
+			return cmdAdmiralAct(f, args[1:])
+		}
+	}
 	if len(args) > 0 && args[0] == "profile" {
 		return cmdAdmiralProfile(f, args[1:])
 	}
@@ -71,24 +92,32 @@ func cmdSupervisor(f *fleet.Fleet, args []string) error {
 	if len(args) > 0 && args[0] == "reset" {
 		fs := flag.NewFlagSet("admiral reset", flag.ContinueOnError)
 		handoff := fs.Bool("handoff", false, "called after fleet_handoff wrote a handoff (no stub)")
-		if err := fs.Parse(args[1:]); err != nil {
+		adm, rest, err := nameFlag(f, args[1:])
+		if err != nil {
 			return err
 		}
-		gen, err := resetSupervisor(f, *handoff)
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		gen, err := resetSupervisorOf(f, adm, *handoff)
 		if err != nil {
 			display(f, err.Error())
 			return err
 		}
-		msg := fmt.Sprintf("admiral reset · gen %d", gen)
+		msg := fmt.Sprintf("%s reset · gen %d", admiralLabel(adm), gen)
 		display(f, msg)
 		fmt.Println(msg)
 		return nil
 	}
+	adm, args, err := nameFlag(f, args)
+	if err != nil {
+		return err
+	}
 	asJSON := len(args) > 0 && args[0] == "--json"
 	if len(args) > 0 && !asJSON {
-		return fmt.Errorf("usage: fleet admiral [--json] | fleet admiral reset [--handoff] | fleet admiral profile [NAME|--pick] | fleet admiral restart")
+		return fmt.Errorf("usage: fleet admiral [--name N] [--json] | add NAME [--profile P] | ls | close NAME | give AGENT --to NAME | reset [--name N] [--handoff] | profile [--name N] [NAME|--pick] | restart [--name N]")
 	}
-	s := supervisor.Current(f.Home, f.T, mainTarget())
+	s := supervisor.CurrentOf(f.Home, f.T, mainTarget(), adm)
 	used, max, ok := supervisor.Fill(supervisor.CopilotHome(), s.SessionID)
 	if asJSON {
 		out := map[string]any{"session_id": s.SessionID, "profile": s.Profile, "pane_id": s.PaneID,
@@ -145,18 +174,23 @@ func kTok(n int) string { return fmt.Sprintf("%dk", (n+500)/1000) }
 // resetSupervisor replaces the admiral with a fresh session (DESIGN.md §6.5
 // Reset steps 1–4) and returns the new generation.
 func resetSupervisor(f *fleet.Fleet, handoff bool) (int, error) {
+	return resetSupervisorOf(f, supervisor.Main, handoff)
+}
+
+// resetSupervisorOf is resetSupervisor for admiral adm.
+func resetSupervisorOf(f *fleet.Fleet, adm string, handoff bool) (int, error) {
 	log := logx.For("admiral")
-	unlock, err := supervisor.Lock(f.Home)
+	unlock, err := supervisor.LockOf(f.Home, adm)
 	if err != nil {
 		return 0, err
 	}
 	defer unlock()
-	pane, err := supervisor.FindPane(f.T, mainTarget())
+	pane, err := supervisor.FindPaneOf(f.T, mainTarget(), adm)
 	if err != nil {
 		return 0, err
 	}
-	old := supervisor.Current(f.Home, f.T, mainTarget())
-	_, hTime, hOK := supervisor.ReadHandoff(f.Home)
+	old := supervisor.CurrentOf(f.Home, f.T, mainTarget(), adm)
+	_, hTime, hOK := supervisor.ReadHandoffOf(f.Home, adm)
 	stale := !hOK || (!old.Started.IsZero() && hTime.Before(old.Started)) || (old.Started.IsZero() && !handoff)
 	if stale {
 		prev := old.SessionID
@@ -165,7 +199,7 @@ func resetSupervisor(f *fleet.Fleet, handoff bool) (int, error) {
 		}
 		stub := fmt.Sprintf("Manual reset at %s; previous admiral wrote no handoff. Previous session: %s.",
 			time.Now().Format("2006-01-02 15:04"), prev)
-		if err := supervisor.WriteHandoff(f.Home, stub); err != nil {
+		if err := supervisor.WriteHandoffOf(f.Home, adm, stub); err != nil {
 			return 0, err
 		}
 	}
@@ -173,20 +207,20 @@ func resetSupervisor(f *fleet.Fleet, handoff bool) (int, error) {
 	if _, ok := f.Profiles[prof]; !ok {
 		prof = "" // unknown or unset: FLEET_ADMIRAL_PROFILE / default
 	}
-	sl, err := supervisorCmd(f, prof, supervisor.BootPrompt)
+	sl, err := supervisorCmdOf(f, adm, prof, supervisor.BootPrompt)
 	if err != nil {
 		return 0, err
 	}
 	if err := respawnAdmiral(f, pane, sl); err != nil {
 		return 0, err
 	}
-	setAdmiralPaneOpts(f, pane, sl.Profile)
+	setAdmiralPaneOptsOf(f, adm, pane, sl.Profile)
 	gen := old.Generation + 1
 	if gen < 2 {
 		gen = 2 // an admiral existed before this one
 	}
 	ns := supervisor.Session{SessionID: sl.ID, Profile: sl.Profile, PaneID: pane, Started: time.Now(), Generation: gen, Previous: old.SessionID}
-	if err := supervisor.Save(f.Home, ns); err != nil {
+	if err := supervisor.SaveOf(f.Home, adm, ns); err != nil {
 		return 0, err
 	}
 	pasteBoot(f, pane, sl)
@@ -197,6 +231,7 @@ func resetSupervisor(f *fleet.Fleet, handoff bool) (int, error) {
 func cmdNote(f *fleet.Fleet, args []string) error {
 	fs := flag.NewFlagSet("note", flag.ContinueOnError)
 	agent := fs.String("agent", "", "agent the note is about")
+	adm := fs.String("admiral", supervisor.Main, "admiral the note is from")
 	pin := fs.Bool("pin", false, "a standing rule: fleet_brief always shows it (unpin by deleting its line from ~/.fleet/pinned.log)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -206,7 +241,7 @@ func cmdNote(f *fleet.Fleet, args []string) error {
 		return errors.New(`usage: fleet note [--agent NAME] [--pin] "text"`)
 	}
 	if *pin {
-		return supervisor.AppendPinned(f.Home, *agent, text)
+		return supervisor.AppendPinnedBy(f.Home, *adm, *agent, text)
 	}
-	return supervisor.AppendNote(f.Home, *agent, text)
+	return supervisor.AppendNoteBy(f.Home, *adm, *agent, text)
 }

@@ -28,6 +28,9 @@ type Role struct {
 	LeadBy string
 	// Interactive: the user talks to it directly (ADR-61).
 	Interactive bool
+	// Admiral owns the agent: the admiral that spawned it ("" = main,
+	// DESIGN §6.12). A squad member takes its leader's.
+	Admiral string
 }
 
 // SquadTeam is the team name a leader's squad is mirrored into: the
@@ -188,7 +191,7 @@ func (f *Fleet) SquadSpawn(leader string, o SpawnOpts, name, profile, dir, promp
 	if !f.IsLeader(leader) {
 		return nil, fmt.Errorf("agent %q does not lead a squad", leader)
 	}
-	o.Role = Role{LeadBy: leader, Leader: false}
+	o.Role = Role{LeadBy: leader, Leader: false, Admiral: f.OwnerOf(leader)}
 	a, err := f.SpawnWith(o, name, profile, dir, prompt)
 	if err != nil {
 		return nil, err
@@ -291,14 +294,15 @@ func (f *Fleet) refile(leader string, m mail.Msg) {
 	log := logx.For("fleet")
 	st, sum, _ := strings.Cut(m.Text, ": ")
 	sum += " (re-filed: its leader " + leader + " was closed before reading it)"
-	nm, err := f.Mail().ReportTo(m.From, mail.Admiral, st, sum)
+	box := f.AdmiralBoxOf(m.From)
+	nm, err := f.Mail().ReportTo(m.From, box, st, sum)
 	if err != nil {
 		log.Error("squad report lost with its closed leader", "leader", leader, "agent", m.From, "state", st, "err", err)
 		return
 	}
 	log.Info("squad report re-filed to the admiral", "leader", leader, "agent", m.From, "state", st)
 	if st == "done" || st == "blocked" || st == "question" {
-		f.wakeSupervisor(nm.ID, m.From, st, ReportLineTo(mail.Supervisor, m.From, st, mail.FoldSummary(sum)))
+		f.wakeBox(box, nm.ID, m.From, st, ReportLineTo(box, m.From, st, mail.FoldSummary(sum)))
 	}
 }
 

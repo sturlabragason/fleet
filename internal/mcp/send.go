@@ -101,6 +101,9 @@ func (s *Server) send(a args) (string, error) {
 // confirmed=true: Enter on a picker approves it (ADR-9). Text or keys to a
 // pane the user is typing in need force=true (ADR-61).
 func (s *Server) sendOne(a args, name string) error {
+	if err := s.scope(name); err != nil {
+		return err
+	}
 	if !a.Force {
 		if r := s.F.SendBlocker(name, a.Text != "" || slices.Contains(a.Keys, "Enter")); r != "" {
 			return fleet.UserError(r)
@@ -126,6 +129,9 @@ func (s *Server) sendOne(a args, name string) error {
 func (s *Server) answer(a args) (string, error) {
 	if a.Name == "" {
 		return "", fmt.Errorf("name is required")
+	}
+	if err := s.scope(a.Name); err != nil {
+		return "", err
 	}
 	given := 0
 	for _, b := range []bool{a.Answer != "", a.Option != 0, a.Label != ""} {
@@ -234,6 +240,9 @@ func lastLines(text string, n int) string {
 func (s *Server) close(a args) (string, error) {
 	if a.Name == "" {
 		return "", fmt.Errorf("name is required")
+	}
+	if err := s.scope(a.Name); err != nil {
+		return "", err
 	}
 	note := s.F.CloseNote(a.Name)
 	if note != "" {

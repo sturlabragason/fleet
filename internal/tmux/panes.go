@@ -96,9 +96,10 @@ type PaneInfo struct {
 	TeamColor              string // @fleet_team_color
 	DeadStatus             string // #{pane_dead_status}: exit code, "" if alive or killed by a signal
 	DeadSignal             string // #{pane_dead_signal}: signal number, "" if none
+	Admiral                string // @fleet_admiral: which admiral an @role=sup pane is ("" = main)
 }
 
-const paneFmt = "#{pane_id}\t#{session_name}\t#{window_id}\t#{window_name}\t#{@fleet_agent}\t#{pane_dead}\t#{pane_current_command}\t#{pane_width}\t#{pane_height}\t#{@fleet_used}\t#{@role}\t#{@fleet_status}\t#{@fleet_status_since}\t#{@fleet_pin}\t#{pane_last}\t#{@fleet_team}\t#{@fleet_team_color}\t#{pane_dead_status}\t#{pane_dead_signal}"
+const paneFmt = "#{pane_id}\t#{session_name}\t#{window_id}\t#{window_name}\t#{@fleet_agent}\t#{pane_dead}\t#{pane_current_command}\t#{pane_width}\t#{pane_height}\t#{@fleet_used}\t#{@role}\t#{@fleet_status}\t#{@fleet_status_since}\t#{@fleet_pin}\t#{pane_last}\t#{@fleet_team}\t#{@fleet_team_color}\t#{pane_dead_status}\t#{pane_dead_signal}\t#{@fleet_admiral}"
 
 // ListPanes lists panes; target "" means all (-a), otherwise -t target (a window).
 func (c *Client) ListPanes(target string) ([]PaneInfo, error) {
@@ -140,6 +141,9 @@ func (c *Client) ListPanes(target string) ([]PaneInfo, error) {
 		}
 		if len(f) > 18 {
 			p.DeadStatus, p.DeadSignal = f[17], f[18]
+		}
+		if len(f) > 19 {
+			p.Admiral = f[19]
 		}
 		ps = append(ps, p)
 	}

@@ -47,6 +47,8 @@ type Model struct {
 	supCtx    [2]string // last label/colour set on the admiral border
 	ctxSet    bool
 	reports   int // unread admiral reports behind the header's ✉ badge (ADR-36)
+	adms      []AdmiralInfo
+	badgeBy   string
 }
 
 type agentsMsg struct {
@@ -57,6 +59,8 @@ type agentsMsg struct {
 	target  string
 	supCtx  [2]string
 	reports int
+	adms    []AdmiralInfo
+	badgeBy string
 	err     error
 }
 
@@ -101,7 +105,12 @@ func (m *Model) poll() tea.Cmd {
 		// is what makes emphasis move when a pane starts waiting (§5b.3).
 		_ = be.ApplyWall()
 		l, c := be.SupCtx()
-		return agentsMsg{agents: as, onWall: be.OnWall(), pinned: be.Pinned(), teams: be.Teams(), target: be.Target(), supCtx: [2]string{l, c}, reports: be.Reports(), err: err}
+		var adms []AdmiralInfo
+		var by string
+		if ab, ok := be.(AdmiralBackend); ok {
+			adms, by = ab.Admirals(), ab.BadgeBy()
+		}
+		return agentsMsg{adms: adms, badgeBy: by, agents: as, onWall: be.OnWall(), pinned: be.Pinned(), teams: be.Teams(), target: be.Target(), supCtx: [2]string{l, c}, reports: be.Reports(), err: err}
 	}
 }
 
@@ -144,6 +153,7 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 		m.teams = msg.teams
 		m.target = msg.target
 		m.reports = msg.reports
+		m.adms, m.badgeBy = msg.adms, msg.badgeBy
 		m.setAgents(msg.agents) // tiers need the wall and teams
 		return m, tea.Batch(pollLater(), m.syncSupCtx(msg.supCtx))
 	case pollMsg:
@@ -376,6 +386,8 @@ func (m *Model) key(k string) tea.Cmd {
 			}
 			return nil
 		}
+	case "O":
+		return m.pickOwner()
 	case "P":
 		if !m.be.WallEnabled() {
 			m.msg = "P needs fleet up"
@@ -590,6 +602,27 @@ func (m *Model) syncSupCtx(v [2]string) tea.Cmd {
 	return func() tea.Msg {
 		if err := be.SetSupCtx(v[0], v[1]); err != nil {
 			logx.For("ui").Warn("set admiral ctx", "err", err)
+		}
+		return nil
+	}
+}
+
+// pickOwner is O: hand the selected agent to another admiral. With one
+// admiral there is nobody to hand to, which it says.
+func (m *Model) pickOwner() tea.Cmd {
+	ab, ok := m.be.(AdmiralBackend)
+	if !ok || len(m.adms) < 2 {
+		m.msg = "only one admiral · fleet admiral add <name>"
+		return nil
+	}
+	if m.sel == "" {
+		return nil
+	}
+	name := m.sel
+	return func() tea.Msg {
+		if err := ab.PickOwner(name); err != nil {
+			logx.For("ui").Error("owner picker", "agent", name, "err", err)
+			return infoMsg("hand over: " + err.Error())
 		}
 		return nil
 	}

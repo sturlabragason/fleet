@@ -14,7 +14,7 @@ import (
 // MaxPanes is how many panes this window can show above the floor, in the
 // shape the current preset renders.
 func (s *State) MaxPanes() int {
-	w, h := s.Cfg.WallRect(s.W, s.H, s.Sup != "")
+	w, h := s.Cfg.WallRect(s.W, s.H, len(s.Sups) > 0)
 	return s.Cfg.MaxPanes(s.Preset, w, h)
 }
 
@@ -22,7 +22,7 @@ func (s *State) MaxPanes() int {
 // The preset itself is never rewritten: growing the window takes the cap back
 // up on the next apply.
 func (s *State) Slots() int {
-	w, h := s.Cfg.WallRect(s.W, s.H, s.Sup != "")
+	w, h := s.Cfg.WallRect(s.W, s.H, len(s.Sups) > 0)
 	return s.Cfg.FitSlots(s.Preset, w, h)
 }
 
@@ -77,4 +77,20 @@ func evictable(ps []tmux.PaneInfo, target string) []tmux.PaneInfo {
 		return ps
 	}
 	return remove(ps, target)
+}
+
+// fitSups is the admirals that fit one column of this window: main first, the
+// rest while each keeps its minimum rows (DESIGN §6.12).
+func (s *State) fitSups() []string {
+	if len(s.Sups) == 0 {
+		return nil
+	}
+	return s.Sups[:s.Cfg.SupFit(s.H, len(s.Sups))]
+}
+
+func (s *State) firstSup() string {
+	if len(s.Sups) == 0 {
+		return ""
+	}
+	return s.Sups[0]
 }

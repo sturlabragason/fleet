@@ -91,6 +91,7 @@ type Prefs struct {
 	maxWorking int
 	theme      string
 	admiral    string
+	admiralMax int
 	agentMail  string
 	summary    Summary
 	memory     Memory
@@ -104,6 +105,22 @@ func (p *Prefs) AdmiralProfile() string {
 		return ""
 	}
 	return p.admiral
+}
+
+// DefaultAdmiralMax is [admiral] max: how many admirals one fleet may run,
+// main included (DESIGN §6.12).
+const DefaultAdmiralMax = 3
+
+// MaxAdmirals is the most [admiral] max may ask for: the palette has three
+// admiral colour slots (main and two more).
+const MaxAdmirals = 3
+
+// AdmiralMax is [admiral] max, DefaultAdmiralMax when unset.
+func (p *Prefs) AdmiralMax() int {
+	if p == nil || p.admiralMax == 0 {
+		return DefaultAdmiralMax
+	}
+	return min(p.admiralMax, MaxAdmirals)
 }
 
 // MaxWorking is [defaults] max_working: the working-agent cap, 0 = no cap.
@@ -160,6 +177,13 @@ func Load() (*Prefs, error) {
 	}
 	if sec, ok := d["admiral"]; ok {
 		p.admiral = strings.TrimSpace(conf.Str(sec, "profile"))
+		if v := strings.TrimSpace(conf.Str(sec, "max")); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 1 {
+				return nil, fmt.Errorf("%s: [admiral] max %q: want a whole number >= 1", path, v)
+			}
+			p.admiralMax = min(n, MaxAdmirals)
+		}
 	}
 	for name, sec := range d {
 		if n, ok := strings.CutPrefix(name, "profile."); ok && n != "" {

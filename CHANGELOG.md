@@ -4,6 +4,9 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
+## 2026-11-07
+- Several admirals on one fleet: `fleet admiral add NAME` starts another admiral beside main; each owns its agents and gets only their reports, `O` in the overview (or `fleet admiral give`) hands an agent over, and `fleet admiral close` returns its agents to main (ADR-64).
+
 ## 2026-11-06
 - Fleet state holds up across versions: every file under `~/.fleet` (board, teams, grants, ADR claims, admiral session) keeps fields an older or newer fleet wrote instead of dropping them, an idle fleet no longer rewrites `board.json` every second, `fleet watch` re-execs itself when `bin/fleet` is rebuilt and only one can ever run, and `fleet up` replaces a watcher left on an old binary. `fleet note --pin` (or `pin: true` on `fleet_note`) keeps a standing rule in every `fleet_brief` instead of letting it scroll out after 30 notes. Restart the fleet once for this to take effect (ADR-62)
 - Fleet keeps out of a session you are talking to: `fleet spawn --interactive` (or `interactive: true` on `fleet_spawn`) marks an agent as yours, so it is never auto-closed and reports progress instead of done until you end the session. Fleet also notices by itself when you type in an agent's pane and marks it `✎`. While you are typing there, or have an interactive agent's pane open, or have unsent text in its box, `fleet_send` and `fleet send` refuse to type over you unless forced (`force: true`, `--force`) (fleet#1, ADR-61)

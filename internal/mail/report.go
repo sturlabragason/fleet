@@ -2,6 +2,7 @@ package mail
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 	"unicode"
@@ -12,6 +13,35 @@ import (
 // Admiral is the reserved recipient of agent reports (DESIGN §6.7) and the
 // name of its mailbox.
 const Admiral = "admiral"
+
+// AdmiralPrefix starts the mailbox of every admiral but main: admiral.print
+// (DESIGN §6.12). Agent names may not start with it.
+const AdmiralPrefix = "admiral."
+
+// BoxOf is the mailbox of an admiral by name; main (or "") has Admiral.
+func BoxOf(admiral string) string {
+	if admiral == "" || admiral == "main" {
+		return Admiral
+	}
+	return AdmiralPrefix + admiral
+}
+
+// AdmiralOf is the admiral name behind a mailbox ("main" for Admiral).
+func AdmiralOf(box string) string {
+	if box == Admiral || box == LegacySupervisor {
+		return "main"
+	}
+	return strings.TrimPrefix(box, AdmiralPrefix)
+}
+
+// IsAdmiralBox reports whether box is an admiral's mailbox.
+func IsAdmiralBox(box string) bool {
+	if box == Admiral || box == LegacySupervisor {
+		return true
+	}
+	rest, ok := strings.CutPrefix(box, AdmiralPrefix)
+	return ok && nameRe.MatchString(rest)
+}
 
 // LegacySupervisor is the admiral's name before ADR-26. It stays reserved and
 // maps to the admiral's mailbox.
@@ -130,10 +160,30 @@ func (s *Store) ReportTo(from, to, st, summary string) (Msg, error) {
 	return m, nil
 }
 
-// Peek returns agent's unread messages without marking them read.
-func (s *Store) Peek(agent string) []Msg {
+// Peek returns agent's unread messages without marking them read; for an
+// admiral's box that is its unread reports.
+func (s *Store) Peek(agent string) []Msg { return s.peek(agent, true) }
+
+// PeekMsgs is Peek for an admiral's messages that are not reports.
+func (s *Store) PeekMsgs(agent string) []Msg {
+	if !IsAdmiralBox(agent) {
+		return nil
+	}
+	return s.peek(agent, false)
+}
+
+// PeekAll is every unread message of a box, reports and the rest, oldest
+// first: what an admiral's wake queue still has to announce.
+func (s *Store) PeekAll(agent string) []Msg {
+	out := append(s.Peek(agent), s.PeekMsgs(agent)...)
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+func (s *Store) peek(agent string, reports bool) []Msg {
 	if checkBox(agent) != nil {
 		return nil
 	}
-	return unreadOf(s.read(agent), readTrim(s.readPath(agent)))
+	ms, v := s.readView(agent, reports)
+	return unreadOf(ms, readTrim(v.mark))
 }

@@ -50,7 +50,7 @@ func TestFiveOntoFourSlots(t *testing.T) {
 		t.Fatalf("on wall: %v (a0 should be evicted)", on)
 	}
 	s, _ := w.Read()
-	if s.Sup == "" || s.Ov == "" || len(s.Wall) != 4 {
+	if len(s.Sups) == 0 || s.Ov == "" || len(s.Wall) != 4 {
 		t.Fatalf("state %+v", s)
 	}
 	if w, _ := c.Run("display", "-p", "-t", sup, "#{pane_width}"); w != "90" {
@@ -71,13 +71,13 @@ func TestFiveOntoFourSlots(t *testing.T) {
 	if err := w.ToggleSup(); err != nil {
 		t.Fatal(err)
 	}
-	if s, _ := w.Read(); s.Sup != "" {
+	if s, _ := w.Read(); len(s.Sups) > 0 {
 		t.Error("sup still visible")
 	}
 	if err := w.ToggleSup(); err != nil {
 		t.Fatal(err)
 	}
-	if s, _ := w.Read(); s.Sup == "" {
+	if s, _ := w.Read(); len(s.Sups) == 0 {
 		t.Error("sup not restored")
 	}
 }
@@ -202,13 +202,13 @@ func TestApplyForcesThroughADriftedCache(t *testing.T) {
 	}
 	s, _ := w.Read()
 	supW := func() string {
-		out, _ := c.Run("display-message", "-p", "-t", s.Sup, "#{pane_width}")
+		out, _ := c.Run("display-message", "-p", "-t", s.Sups[0], "#{pane_width}")
 		return strings.TrimSpace(out)
 	}
 	want := supW()
 	// The user drags the admiral border; the rendered layout is unchanged,
 	// so @fleet_layout still matches and a cached apply is a no-op.
-	c.Run("resize-pane", "-t", s.Sup, "-x", "60")
+	c.Run("resize-pane", "-t", s.Sups[0], "-x", "60")
 	if supW() == want {
 		t.Skip("tmux did not drift the layout")
 	}
@@ -579,9 +579,9 @@ func TestApplyLockKeepsConcurrentAppliesOut(t *testing.T) {
 	s, _ := w.Read()
 	// Another process is mid-apply.
 	w.setOpt("@fleet_applying", strconv.FormatInt(time.Now().Add(applyLockTTL).UnixNano(), 10))
-	c.Run("resize-pane", "-t", s.Sup, "-x", "60")
+	c.Run("resize-pane", "-t", s.Sups[0], "-x", "60")
 	supW := func() string {
-		out, _ := c.Run("display-message", "-p", "-t", s.Sup, "#{pane_width}")
+		out, _ := c.Run("display-message", "-p", "-t", s.Sups[0], "#{pane_width}")
 		return strings.TrimSpace(out)
 	}
 	if supW() != "60" {
@@ -729,5 +729,34 @@ func TestNextAndKeepFocusShowLeaveTheOverviewFocused(t *testing.T) {
 	}
 	if got := w.opt("@fleet_target"); got != agents[0] {
 		t.Errorf("join: target %q", got)
+	}
+}
+
+// Admirals that do not fit the column are moved to sup-hidden by apply, and
+// the visible ones keep their window.
+func TestApplyHidesAdmiralsThatDoNotFit(t *testing.T) {
+	c := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
+	t.Cleanup(func() { c.KillServer() })
+	// A short window: only one admiral fits the column.
+	sup1, err := c.Run("new-session", "-d", "-s", "f", "-n", "main", "-x", "200", "-y", "12", "-P", "-F", "#{pane_id}", "cat")
+	if err != nil {
+		t.Skip("tmux unavailable")
+	}
+	c.SetPaneOption(sup1, "@role", "sup")
+	sup2, _ := c.Run("split-window", "-d", "-v", "-t", sup1, "-P", "-F", "#{pane_id}", "cat")
+	c.SetPaneOption(sup2, "@role", "sup")
+	c.SetPaneOption(sup2, "@fleet_admiral", "print")
+	ov, _ := c.Run("split-window", "-d", "-h", "-t", "f:main", "-P", "-F", "#{pane_id}", "cat")
+	c.SetPaneOption(ov, "@role", "ov")
+	w := New(c, "f")
+	if err := w.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	win := func(id string) string {
+		out, _ := c.Run("display-message", "-p", "-t", id, "#{window_name}")
+		return out
+	}
+	if win(sup1) != "main" || win(sup2) != "sup-hidden" {
+		t.Fatalf("windows: main admiral %q, second %q", win(sup1), win(sup2))
 	}
 }

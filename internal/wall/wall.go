@@ -36,7 +36,8 @@ func New(t *tmux.Client, session string) *Wall {
 // State is the parsed main window.
 type State struct {
 	W, H      int
-	Sup, Ov   string
+	Sups      []string // admiral panes, main first
+	Ov        string
 	Wall      []tmux.PaneInfo // in window order
 	Preset    string
 	Cfg       layout.Config
@@ -74,7 +75,11 @@ func (w *Wall) Read() (*State, error) {
 	for _, p := range panes {
 		switch p.Role {
 		case "sup":
-			s.Sup = p.ID
+			if p.Admiral == "" || p.Admiral == "main" {
+				s.Sups = append([]string{p.ID}, s.Sups...)
+			} else {
+				s.Sups = append(s.Sups, p.ID)
+			}
 		case "ov":
 			s.Ov = p.ID
 		default:
@@ -124,8 +129,17 @@ func (w *Wall) apply(force bool) error {
 	for _, p := range s.Wall {
 		ids = append(ids, p.ID)
 	}
+	// Admirals that do not fit the column move out of the window (Alt-s
+	// brings them back) so the layout covers every pane (DESIGN §6.12).
+	if fit := s.fitSups(); len(fit) < len(s.Sups) {
+		session := strings.SplitN(w.Target, ":", 2)[0]
+		for _, id := range s.Sups[len(fit):] {
+			w.T.Run("break-pane", "-d", "-s", id, "-t", session+":", "-n", "sup-hidden")
+		}
+		s.Sups = fit
+	}
 	w.syncNextOut(s)
-	lay, leaves := s.Cfg.Render(layout.Input{W: s.W, H: s.H, Sup: s.Sup, Ov: s.Ov, Wall: ids, Preset: s.Preset, Focus: w.emphasis(s)})
+	lay, leaves := s.Cfg.Render(layout.Input{W: s.W, H: s.H, Sups: s.Sups, Ov: s.Ov, Wall: ids, Preset: s.Preset, Focus: w.emphasis(s)})
 	// An unchanged layout is never re-applied: agent TUIs reflow on every resize.
 	if !force && lay == w.opt("@fleet_layout") {
 		return nil
@@ -143,8 +157,8 @@ func (w *Wall) apply(force bool) error {
 		return err
 	}
 	w.setOpt("@fleet_layout", lay)
-	if s.Sup != "" {
-		w.T.Run("resize-pane", "-t", s.Sup, "-x", strconv.Itoa(s.Cfg.SupCols(s.W)))
+	if len(s.Sups) > 0 {
+		w.T.Run("resize-pane", "-t", s.Sups[0], "-x", strconv.Itoa(s.Cfg.SupCols(s.W)))
 	}
 	return nil
 }
@@ -281,7 +295,7 @@ func (w *Wall) join(s *State, pane, now string, selectPane bool) (bool, error) {
 		target = s.Wall[len(s.Wall)-1].ID
 	}
 	if _, err := w.T.Run("join-pane", "-d", "-s", pane, "-t", target); err != nil {
-		if _, err2 := w.T.Run("join-pane", "-d", "-s", pane, "-t", s.Sup); err2 != nil {
+		if _, err2 := w.T.Run("join-pane", "-d", "-s", pane, "-t", s.firstSup()); err2 != nil {
 			return false, err
 		}
 	}
@@ -458,28 +472,45 @@ func (w *Wall) ToggleSup() error {
 		return err
 	}
 	session := strings.SplitN(w.Target, ":", 2)[0]
-	if s.Sup != "" {
-		if _, err := w.T.Run("break-pane", "-d", "-s", s.Sup, "-t", session+":", "-n", "sup-hidden"); err != nil {
-			return err
+	if len(s.Sups) > 0 {
+		for _, id := range s.Sups {
+			if _, err := w.T.Run("break-pane", "-d", "-s", id, "-t", session+":", "-n", "sup-hidden"); err != nil {
+				return err
+			}
 		}
 		return w.Apply()
 	}
 	panes, _ := w.T.ListPanes("")
+	sups := panes[:0:0]
 	for _, p := range panes {
-		if p.Role == "sup" {
+		if p.Role == "sup" && p.Session == session {
+			sups = append(sups, p)
+		}
+	}
+	sort.SliceStable(sups, func(i, j int) bool { return sups[i].Admiral == "" && sups[j].Admiral != "" })
+	for i, p := range sups {
+		{
+			target := s.Ov
+			if i > 0 {
+				target = sups[i-1].ID
+			}
 			flag := "-b"
 			if s.Cfg.SupSide == "right" {
 				flag = ""
 			}
-			args := []string{"join-pane", "-d", "-h", "-l", strconv.Itoa(s.Cfg.SupCols(s.W)), "-s", p.ID, "-t", s.Ov}
-			if flag != "" {
+			args := []string{"join-pane", "-d", "-h", "-l", strconv.Itoa(s.Cfg.SupCols(s.W)), "-s", p.ID, "-t", target}
+			if i > 0 {
+				args = []string{"join-pane", "-d", "-v", "-s", p.ID, "-t", target}
+			} else if flag != "" {
 				args = append(args, flag)
 			}
 			if _, err := w.T.Run(args...); err != nil {
 				return err
 			}
-			return w.Apply()
 		}
+	}
+	if len(sups) > 0 {
+		return w.Apply()
 	}
 	return fmt.Errorf("no admiral pane")
 }

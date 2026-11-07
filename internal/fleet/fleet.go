@@ -53,6 +53,8 @@ type Fleet struct {
 	// SupPane reads the admiral pane: idle or not and its input box; nil =
 	// tmux and the admiral profile's patterns (tests replace it).
 	SupPane func() AdmiralView
+	// AdmiralPane is SupPane for an admiral other than main (§6.12).
+	AdmiralPane func(name string) AdmiralView
 	// TypeText pastes text into a pane without Enter and PressKeys sends tmux
 	// key names; nil = tmux (tests replace them). Report wakes use them so
 	// Enter is pressed only after the input box is checked (ADR-36).
@@ -144,7 +146,8 @@ var nameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$`)
 // validName reports whether name can be an agent name. "user", "admiral" and
 // its old name "supervisor" are reserved mailbox names (DESIGN §6.6, §6.7).
 func validName(name string) bool {
-	return nameRe.MatchString(name) && name != mail.User && name != mail.Admiral && name != mail.LegacySupervisor
+	return nameRe.MatchString(name) && name != mail.User && name != mail.Admiral && name != mail.LegacySupervisor &&
+		!strings.HasPrefix(name, mail.AdmiralPrefix)
 }
 
 // SpawnOpts are the per-spawn overrides of the config file. A nil field
@@ -443,6 +446,7 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 		PaneID: pane, Status: string(status.Unknown), Created: now, StatusSince: now, LastChange: now,
 		Baseline: ex.Base, Worktree: ex.Worktree, NoWorktree: ex.NoWorktree, Card: ex.Card, Effort: ex.Effort,
 		Leader: ex.Role.Leader, LeadBy: ex.Role.LeadBy, Interactive: ex.Role.Interactive}
+	a.SetOwner(ex.Role.Admiral)
 	if err := f.Store.Update(func(b *board.Board) error {
 		old, ok := b.Agents[name]
 		if claimed {

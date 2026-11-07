@@ -182,3 +182,18 @@ func TeamHex(name string) string {
 	}
 	return ""
 }
+
+// AdmiralColor is the colour of an admiral's colour slot (DESIGN §6.12):
+// slot 0 (main) is the supervisor colour, slots 1 and 2 are the last
+// team-palette swatches but one and two, so no admiral shares a status
+// colour or Select.
+func AdmiralColor(slot int) string {
+	n := len(TeamPalette)
+	switch {
+	case slot <= 0 || n < 6:
+		return Supervisor
+	case slot == 1:
+		return TeamPalette[5].Hex
+	}
+	return TeamPalette[4].Hex
+}

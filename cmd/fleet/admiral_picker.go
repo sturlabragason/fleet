@@ -11,6 +11,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/theme"
 	"github.com/sturlabragason/fleet/internal/tools"
 )
@@ -36,15 +37,26 @@ func pickable(ps map[string]tools.Profile) []string {
 }
 
 // pickPopupArgs is the tmux display-popup that runs the picker.
-func pickPopupArgs(f *fleet.Fleet) []string {
+func pickPopupArgs(f *fleet.Fleet) []string { return pickPopupArgsOf(f, supervisor.Main) }
+
+// pickPopupArgsOf is pickPopupArgs for admiral adm.
+func pickPopupArgsOf(f *fleet.Fleet, adm string) []string {
+	name, flag := " admiral profile ", ""
+	if adm != supervisor.Main {
+		name, flag = " "+adm+" profile ", " --name "+tools.Quote(adm)
+	}
 	return []string{"display-popup", "-E", "-b", "rounded",
 		"-w", strconv.Itoa(pickWidth), "-h", strconv.Itoa(max(len(pickable(f.Profiles)), 1) + 4),
-		"-T", " admiral profile ", tools.Quote(f.Exe) + " admiral profile --pick"}
+		"-T", name, tools.Quote(f.Exe) + " admiral profile" + flag + " --pick"}
 }
 
 // swapShell is the run-shell command the picker schedules.
-func swapShell(exe, name string) string {
-	return tools.Quote(exe) + " admiral profile " + tools.Quote(name) + " >/dev/null 2>&1"
+func swapShell(exe, name string, adm ...string) string {
+	flag := ""
+	if len(adm) > 0 && adm[0] != supervisor.Main {
+		flag = " --name " + tools.Quote(adm[0])
+	}
+	return tools.Quote(exe) + " admiral profile" + flag + " " + tools.Quote(name) + " >/dev/null 2>&1"
 }
 
 type pickModel struct {
@@ -133,7 +145,7 @@ func (m *pickModel) row(i int, name string) string {
 }
 
 // cmdAdmiralPick runs the picker and schedules the swap in the background.
-func cmdAdmiralPick(f *fleet.Fleet, active string) error {
+func cmdAdmiralPick(f *fleet.Fleet, adm, active string) error {
 	m := newPick(pickable(f.Profiles), active)
 	if _, err := tea.NewProgram(m).Run(); err != nil {
 		return err
@@ -142,6 +154,6 @@ func cmdAdmiralPick(f *fleet.Fleet, active string) error {
 		return nil
 	}
 	logx.For("admiral").Info("picked", "profile", m.chosen, "active", active)
-	_, err := f.T.Run("run-shell", "-b", swapShell(f.Exe, m.chosen))
+	_, err := f.T.Run("run-shell", "-b", swapShell(f.Exe, m.chosen, adm))
 	return err
 }
