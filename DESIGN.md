@@ -13,7 +13,7 @@ What I asked for, in my own terms. Each one is tagged so the design and decision
 |---|---|---|
 | R1 | One central place to see and steer up to 40 sessions of Copilot, Claude Code, agy and vibe | §3, §4 |
 | R2 | A central LLM session that can reach into the other sessions, spawn new ones and run agent workflows | §6 |
-| R3 | A TUI, not a web UI | §5 |
+| R3 | A TUI, not a web UI (an optional browser view beside it since ADR-66) | §5, §5f |
 | R4 | Visual: a grid of tiles coloured green, yellow and red, with animation | §5 |
 | R5 | Keyboard driven, with arrow keys | §5 |
 | R6 | Mouse: click into session windows | §5a |
@@ -685,6 +685,19 @@ Every key above is in the key registry (`internal/keys`), so it shows in `?`, `A
 
 Drag a card onto a pane (tmux sends the release to the pane the drag started in), Shift+click and Shift+Enter (the terminal keeps Shift+click for selection; Bubble Tea v1 cannot see Shift+Enter), an interactive preview, collapsing teams, a taller overview size.
 
+## 5f. Web view: `fleet web` (ADR-66, alpha)
+
+A browser front end beside the TUI and MCP, for steering from another device (a phone through a login gateway). Package `internal/web`, stdlib only, page embedded in the binary.
+
+- **Run:** `fleet web [--listen ADDR] [--allow-host NAME,...]`, in the foreground. Default `127.0.0.1:7777` (`$FLEET_WEB_LISTEN`). Refused inside an agent pane: it acts as the user.
+- **Tiles:** every board agent with status colour, profile, last line and latest report, pushed over SSE when `board.json` changes. It only reads the board; the watcher stays the one refresher (ADR-49), and a stale heartbeat shows a banner.
+- **Peek drawer:** the agent's pane in colour (`Fleet.PeekColor`, the last 200 lines; the web package never calls tmux itself, so other backends can serve it later) turned into HTML, refreshed once a second while open. Never attaches a tmux client, so window sizes don't change.
+- **Input:** a numbered prompt shows as buttons that call `Choose` with the question as `expect` (a changed prompt is refused); a send box (`Send`, paste plus Enter); buttons for allowlisted keys. Send and keys are refused while `SendBlocker` says the user is typing there; there is no force.
+- **Auth:** a token from `$FLEET_WEB_TOKEN`, else `~/.fleet/web.json` (0600, made on first run, same across restarts; delete it to rotate). The printed URL `/?token=` trades it for an `HttpOnly`, `SameSite=Strict` cookie; a proxy can send `Authorization: Bearer <token>` instead. Every request's `Host` and every POST's `Origin` must be loopback, the listen host or a `--allow-host` name (`$FLEET_WEB_HOSTS`); POSTs must be JSON.
+- **Behind a gateway:** listen on the LAN (`--listen 0.0.0.0:7777` or the laptop's address), let the proxy inject the bearer header, and allow the gateway's host name. The token check stays on behind the gateway, because the page can type into agents that run with every permission.
+
+Out of scope for the alpha: spawn, close, park and wake, teams, the web wall, mail, starting from `fleet up`, TLS.
+
 ---
 
 ## 6. The admiral without context overload
@@ -1134,7 +1147,7 @@ The biggest maintenance risk is not the language. It's the four agent tools chan
 4. **Fail soft.** An unknown screen shows a grey "unknown" tile. It never crashes the TUI or blocks other agents.
 5. **`fleet doctor`** checks tmux version, each tool's version and resume flag, and runs the status detector against a fresh capture of each tool. It says exactly what broke.
 6. **Few dependencies, pinned.** Only the Charm libraries (Bubble Tea, Lip Gloss, bubblezone) and the standard library.
-7. **No server, no database, no daemon.** tmux, files in `~/.fleet/` and one binary. Removing it is `rm`.
+7. **No server, no database, no daemon.** tmux, files in `~/.fleet/` and one binary. Removing it is `rm`. *Exception (ADR-66): `fleet web` is an opt-in, stateless HTTP server you start by hand.*
 
 ## 12. Open questions
 
@@ -1146,7 +1159,7 @@ The biggest maintenance risk is not the language. It's the four agent tools chan
 ## 13. Not in scope (for now)
 
 - Agents talking directly to each other. All coordination goes through the board and the admiral.
-- A web UI.
+- A web UI. *Lifted by ADR-66: `fleet web` (§5f) is an optional second front end; the TUI stays primary.*
 - Running agents on other machines.
 
 ---
@@ -1567,3 +1580,8 @@ Why: one admiral steering unrelated streams mixes chats and report queues and bu
 Decision: `tmux.Client.Capture`, which every status, input-box, wake and peek reader goes through, captures with `-e` and keeps plain text, minus any faint (SGR 2) run that only spaces follow on its line. Faint text with normal text after it on the same line stays.
 Why: Claude Code draws a grey next-prompt suggestion in its empty input box after a turn. Plain `capture-pane` loses the attribute, so fleet read the suggestion as typed input. The wake guard (ADR-36) then waited for "an idle, empty input box" for as long as the suggestion stayed, so reports sat in the admiral's mailbox and the admiral never heard about them. On an agent the same text broke the empty-prompt idle pattern, the screen read as unknown, the watcher kept "working", and the stuck rule (ADR-45) reported a finished agent as stuck 10 minutes after its done. Typed input is never faint; suggestions and placeholders are. Copilot's transcript bar and Claude's diff line numbers are faint but have content after them, so trailing-only keeps them. Placeholder hints (`Try "…"`, `Ask anything`) are faint too and now vanish from captures; the `placeholder` patterns stay as a fallback and the older idle fixtures still show the hint.
 Rejected: (a) dropping all faint text, which deletes Copilot's transcript bars and Claude's line numbers; (b) a per-tool "suggestion" pattern, which can't tell a suggestion from the same words typed by the user without the attribute; (c) turning off Claude Code's prompt suggestions in the profile, which fixes one tool and leaves the reader wrong.
+
+**ADR-66: an optional web view, `fleet web`** (R3, §5f, §13, §16 rule 7)
+Decision: Sturla approved a web UI on 2026-11-08. This amends R3 and §13 (no web UI) and makes `fleet web` the one exception to §16 rule 7 (no server). The TUI stays primary. `fleet web` lives in the fleet binary (`internal/web`), uses `net/http`, `html/template`, `embed` and SSE, and calls the same `internal/fleet` methods as the CLI and MCP. The open decisions in the proposal, each taken as recommended: (1) amend R3, §13 and §16 rule 7 with this ADR; (2) start it by hand, no `fleet up` key yet; (3) draw panes server-side, ANSI to HTML, with no raw terminal; (4) bind loopback by default, a LAN bind only through `--listen`, never the default, no built-in TLS; (5) the first slice writes only send, allowlisted keys and menu answers, not spawn, close or park; (6) it acts as the user and sees every admiral's agents. Two choices go beyond the proposal: the token is stable (env or `~/.fleet/web.json`) and also accepted as a bearer header, and `--allow-host` names extra host names, so a reverse proxy behind a login gateway can be set up once; and send has no force, so the web never types over the user.
+Why: steering the fleet from a phone or another machine without moving agents off the laptop (landscape survey, option A). Stdlib plus the existing allowlist keeps the safety model the admiral already works under. Own token auth stays on behind a gateway: the page can type into agents running with bypass permissions, so one misconfigured proxy must not be enough.
+Rejected: xterm.js over a WebSocket (two new dependencies, raw keys skip the allowlist, an attached client resizes the wall); a separate binary shelling out to the CLI (fork per poll, version skew, CLI JSON turns into an API); a token that changes on every start (the proxy config would break on each restart).

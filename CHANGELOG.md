@@ -5,6 +5,7 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-08
+- See and steer the fleet from a browser: `fleet web` serves live agent tiles, an agent's screen, buttons to answer its prompt, a send box and the safe keys, behind a token. It listens on 127.0.0.1:7777; `--listen` and `--allow-host` put it behind a reverse proxy, which sends the token as a bearer header (ADR-66).
 - Rebuilding fleet no longer leaves it without a status watcher: the watcher that re-execs into the new binary keeps running instead of mistaking itself for another watcher and exiting (ADR-62).
 - Reports reach the admiral again while Claude Code shows a grey next-prompt suggestion, and an agent that finished is no longer flagged "stuck" 10 minutes later: fleet reads that suggestion as empty input, not typed text (ADR-65).
 

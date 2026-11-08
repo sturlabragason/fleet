@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fleet</title>
+<style>
+:root{ {{.}} }
+*{box-sizing:border-box}
+body{margin:0;background:var(--crust);color:var(--fg);font:14px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace}
+header{display:flex;gap:12px;align-items:baseline;padding:10px 16px;background:var(--mantle)}
+header h1{font-size:16px;margin:0}
+#count{color:var(--sub)}
+#stale{display:none;background:var(--stuck);color:var(--crust);padding:6px 16px}
+#tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;padding:16px}
+.tile{background:var(--bg);border:1px solid var(--surface);border-left:6px solid var(--idle);border-radius:6px;padding:8px 10px;cursor:pointer;text-align:left;color:inherit;font:inherit;min-width:0}
+.tile:focus-visible,.tile.sel{outline:2px solid var(--select)}
+.tile .n{font-weight:bold}
+.tile .s,.tile .l,.tile .r{color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-working{border-left-color:var(--working)} .st-waiting{border-left-color:var(--waiting)}
+.st-error{border-left-color:var(--error)} .st-stuck{border-left-color:var(--stuck)} .st-gone{border-left-color:var(--gone)}
+#drawer{display:none;position:fixed;inset:0 0 0 auto;width:min(900px,100%);background:var(--mantle);border-left:1px solid var(--surface);flex-direction:column}
+#drawer.open{display:flex}
+#dhead{display:flex;justify-content:space-between;align-items:center;padding:8px 16px}
+#screen{flex:1;margin:0;padding:8px 16px;overflow:auto;background:var(--bg);white-space:pre;font-size:12px}
+#controls{padding:8px 16px;display:flex;flex-direction:column;gap:8px}
+#menu button,#keys button,#dhead button,form button{background:var(--surface);color:var(--fg);border:1px solid var(--surface1);border-radius:4px;padding:6px 10px;font:inherit;cursor:pointer}
+#menu{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+#menu button{border-color:var(--waiting)}
+#keys{display:flex;flex-wrap:wrap;gap:6px}
+form{display:flex;gap:6px}
+form input{flex:1;min-width:0;background:var(--bg);color:var(--fg);border:1px solid var(--surface1);border-radius:4px;padding:6px;font:inherit}
+#msg{color:var(--sub);min-height:1.4em}
+#msg.err{color:var(--error)}
+</style>
+</head>
+<body>
+<header><h1>fleet</h1><span id="count"></span></header>
+<div id="stale">Status is stale: no watcher is refreshing the board. Run <code>fleet up</code> or <code>fleet watch</code>.</div>
+<main id="tiles"></main>
+<aside id="drawer" aria-label="agent">
+  <div id="dhead"><strong id="dname"></strong><button id="close" type="button">close</button></div>
+  <pre id="screen"></pre>
+  <div id="controls">
+    <div id="menu"></div>
+    <form id="send"><input id="text" placeholder="message to the agent, Enter sends" autocomplete="off"><button>send</button></form>
+    <div id="keys"></div>
+    <div id="msg" role="status"></div>
+  </div>
+</aside>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+let open = null, peekTimer = null, menu = null, lastHTML = "";
+
+function tile(a) {
+  const b = document.createElement("button");
+  b.className = "tile st-" + a.status + (a.name === open ? " sel" : "");
+  const row = (cls, t) => { const d = document.createElement("div"); d.className = cls; d.textContent = t; b.appendChild(d); };
+  row("n", a.name);
+  row("s", a.status + " · " + a.profile + (a.admiral ? " · " + a.admiral : ""));
+  row("l", a.line || a.goal || "");
+  if (a.report) row("r", "✉ " + a.report);
+  b.onclick = () => show(a.name);
+  return b;
+}
+
+const es = new EventSource("/events");
+es.onmessage = e => {
+  const v = JSON.parse(e.data);
+  $("stale").style.display = v.stale ? "block" : "none";
+  $("count").textContent = v.agents.length + " agents · " + v.agents.filter(a => a.status === "waiting").length + " waiting";
+  $("tiles").replaceChildren(...v.agents.map(tile));
+};
+
+function say(t, err) { $("msg").textContent = t; $("msg").className = err ? "err" : ""; }
+
+async function post(path, body, who) {
+  const r = await fetch(path, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(Object.assign({name: who || open}, body))});
+  const j = await r.json().catch(() => ({error: r.statusText}));
+  say(j.error || j.ok, !!j.error);
+  peek();
+}
+
+async function peek() {
+  const who = open;
+  if (!who) return;
+  const r = await fetch("/api/peek?name=" + encodeURIComponent(who));
+  const j = await r.json().catch(() => ({error: r.statusText}));
+  if (who !== open) return; // the user switched agents meanwhile
+  if (j.error) { $("screen").textContent = j.error; lastHTML = ""; menu = null; $("menu").replaceChildren(); return; }
+  if (j.html !== lastHTML) {
+    const s = $("screen"), atEnd = s.scrollTop + s.clientHeight >= s.scrollHeight - 4;
+    s.innerHTML = j.html; lastHTML = j.html;   // escaped server-side
+    if (atEnd) s.scrollTop = s.scrollHeight;
+  }
+  const key = JSON.stringify(j.menu || j.prompt || null);
+  if (key === menu) return;
+  menu = key;
+  const m = $("menu"); m.replaceChildren();
+  if (j.menu && j.menu.Question) {
+    const q = document.createElement("span"); q.textContent = j.menu.Question; m.appendChild(q);
+    j.menu.Options.forEach((o, i) => {
+      const b = document.createElement("button"); b.type = "button"; b.textContent = o;
+      b.onclick = () => post("/api/choose", {option: i + 1, expect: j.menu.Question}, who);
+      m.appendChild(b);
+    });
+  } else if (j.menu) {
+    const q = document.createElement("span"); q.textContent = "menu without a question on screen: use the keys"; m.appendChild(q);
+  } else if (j.prompt) {
+    const q = document.createElement("span"); q.textContent = "waiting: " + j.prompt; m.appendChild(q);
+  }
+}
+
+function show(name) {
+  open = name; lastHTML = ""; menu = null;
+  $("screen").replaceChildren(); $("menu").replaceChildren();
+  $("dname").textContent = name; $("drawer").classList.add("open"); say("");
+  clearInterval(peekTimer); peek(); peekTimer = setInterval(peek, 1000);
+}
+$("close").onclick = () => { open = null; clearInterval(peekTimer); $("drawer").classList.remove("open"); };
+$("send").onsubmit = e => { e.preventDefault(); const t = $("text").value; if (!t.trim()) return; post("/api/send", {text: t}).then(() => { if (!$("msg").classList.contains("err")) $("text").value = ""; }); };
+for (const k of ["Enter", "Escape", "Up", "Down", "Tab", "BTab", "y", "n", "1", "2", "3"]) {
+  const b = document.createElement("button"); b.type = "button"; b.textContent = k;
+  b.onclick = () => post("/api/keys", {keys: [k]});
+  $("keys").appendChild(b);
+}
+document.addEventListener("keydown", e => { if (e.key === "Escape" && open && document.activeElement !== $("text")) $("close").click(); });
+</script>
+</body>
+</html>
