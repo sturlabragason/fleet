@@ -588,6 +588,16 @@ func (f *Fleet) Peek(name string, n int) (string, error) {
 	return f.T.Capture(p, n)
 }
 
+// PeekColor returns the pane with its SGR colour escapes (last n lines of
+// scrollback plus the screen), for front ends that draw colour (fleet web).
+func (f *Fleet) PeekColor(name string, n int) (string, error) {
+	p, err := f.Pane(name)
+	if err != nil {
+		return "", err
+	}
+	return f.T.Run("capture-pane", "-e", "-p", "-t", p, "-S", fmt.Sprint(-n))
+}
+
 // Close stops the agent and drops it from the board. Closing a leader
 // leaves its members running and hands them back to the admiral (ADR-53).
 func (f *Fleet) Close(name string) error {

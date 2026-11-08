@@ -156,6 +156,14 @@ const usage = `usage:
                                             with no window open. fleet up starts one in the background;
                                             it re-execs itself when bin/fleet is rebuilt
   fleet watch --once | --stop | --probe     refresh every status once / stop the running watcher / print ok
+  fleet web [--listen ADDR] [--allow-host NAME,...]
+                                            browser view of the fleet: live tiles, an agent's screen,
+                                            answer its prompt, send a line or allowed keys (refused while
+                                            you type in that pane). Listens on 127.0.0.1:7777
+                                            ($FLEET_WEB_LISTEN); prints a URL with the token, kept in
+                                            ~/.fleet/web.json ($FLEET_WEB_TOKEN overrides). A proxy sends
+                                            "Authorization: Bearer <token>"; --allow-host ($FLEET_WEB_HOSTS)
+                                            names the host the browser uses through it
   fleet hook <event> [--agent NAME] [--waiting-for TEXT]
                                             record what a tool's own hook just said (stop, notification,
                                             pretooluse, …) in ~/.fleet/status/<name>.json; fleet wires this
@@ -327,6 +335,8 @@ func run(args []string) error {
 		return cmdWatch(f, rest)
 	case "hook":
 		return cmdHook(f, rest)
+	case "web":
+		return cmdWeb(f, rest)
 	case "help", "-h", "--help":
 		fmt.Println(usage)
 		return nil
