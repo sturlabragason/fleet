@@ -71,3 +71,31 @@ func TestListPanesDeadStatus(t *testing.T) {
 	}
 	t.Fatal("pane never died")
 }
+
+// TestCaptureDropsGhostText: Claude Code draws its next-prompt suggestion
+// faint in the empty input box. Read as typed text, it kept every report
+// wake out of the admiral pane and froze an idle agent at "working" until
+// fleet called it stuck. The bytes are copied from real `capture-pane -e`
+// lines (Claude's prompt, Copilot's transcript bar), text scrubbed. Faint text with normal text after it is content and stays.
+func TestCaptureDropsGhostText(t *testing.T) {
+	ghost := "\x1b[39m❯ \x1b[2mgo with the first option\x1b[0m"
+	bar := "\x1b[2m\x1b[38;2;145;152;161m│\x1b[0m \x1b[3m\x1b[38;2;145;152;161mrunning ffprobe\x1b[0m"
+	color := "\x1b[38;2;145;152;161mnot faint\x1b[0m"
+	c := testClient(t)
+	p, err := c.Spawn("s", "w1", "", nil, "printf '%s\\n%s\\n%s\\n' '"+ghost+"' '"+bar+"' '"+color+"'; sleep 30")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got string
+	for i := 0; i < 50 && !strings.Contains(got, "not faint"); i++ {
+		time.Sleep(50 * time.Millisecond)
+		got, _ = c.Capture(p, 0)
+	}
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	if len(lines) < 3 || strings.TrimSpace(lines[0]) != "❯" || lines[1] != "│ running ffprobe" || lines[2] != "not faint" {
+		t.Fatalf("capture = %q", got)
+	}
+	if strings.Contains(got, "\x1b") {
+		t.Errorf("escapes left in %q", got)
+	}
+}

@@ -4,6 +4,9 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
+## 2026-11-08
+- Reports reach the admiral again while Claude Code shows a grey next-prompt suggestion, and an agent that finished is no longer flagged "stuck" 10 minutes later: fleet reads that suggestion as empty input, not typed text (ADR-65).
+
 ## 2026-11-07
 - Several admirals on one fleet: `fleet admiral add NAME` starts another admiral beside main; each owns its agents and gets only their reports, `O` in the overview (or `fleet admiral give`) hands an agent over, and `fleet admiral close` returns its agents to main (ADR-64).
 
