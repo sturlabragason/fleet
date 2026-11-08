@@ -273,3 +273,22 @@ func TestReexecWatcherProbes(t *testing.T) {
 		t.Fatalf("--probe printed %q", out)
 	}
 }
+
+// After a re-exec the new image starts with its own pid's fresh heartbeat on
+// disk. It must take over, not exit as if another watcher ran (ADR-62).
+func TestCmdWatchAfterReexecOwnBeat(t *testing.T) {
+	f := hookTestFleet(t)
+	now := time.Now()
+	if err := watch.WriteBeat(f.Home, watch.Beat{PID: os.Getpid(), Started: now, At: now, OK: now}); err != nil {
+		t.Fatal(err)
+	}
+	// No fleet session on the test socket, so the watcher stops at its first
+	// lifecycle check; what matters is that it got that far.
+	out := captureOut(t, func() error { return cmdWatch(f, []string{"--tick", "10ms"}) })
+	if strings.Contains(out, "already running") {
+		t.Fatalf("re-exec'd watcher saw itself as another watcher: %q", out)
+	}
+	if b, err := os.ReadFile(filepath.Join(f.Home, "watch.lock")); err != nil || strings.TrimSpace(string(b)) != fmt.Sprint(os.Getpid()) {
+		t.Fatalf("watcher never claimed watch.lock: %q %v", b, err)
+	}
+}
