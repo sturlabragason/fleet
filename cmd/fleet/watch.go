@@ -43,7 +43,10 @@ func cmdWatch(f *fleet.Fleet, args []string) error {
 		_, err := f.Refresh()
 		return err
 	}
-	if b, ok := watch.ReadBeat(f.Home); ok && watch.Live(f.Home, time.Now()) {
+	// Our own pid is the watcher re-exec'ing into a rebuilt binary (ADR-62):
+	// its heartbeat is still fresh, and treating it as another watcher made
+	// the new image exit at once, leaving fleet without one.
+	if b, ok := watch.ReadBeat(f.Home); ok && b.PID != os.Getpid() && watch.Live(f.Home, time.Now()) {
 		fmt.Printf("a watcher is already running (pid %d, since %s)\n", b.PID, b.Started.Format(time.Kitchen))
 		return nil
 	}
