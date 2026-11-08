@@ -46,13 +46,18 @@ func (c *Client) UnsetPaneOption(pane, key string) error {
 	return err
 }
 
-// Capture returns the visible text of a pane (last n lines if n>0).
+// Capture returns the visible text of a pane (last n lines if n>0), without
+// ghost text: it captures with attributes and drops faint text that runs to
+// the end of a line (Plain). Claude Code's grey prompt suggestion sits in an
+// otherwise empty input box; read as typed input, it blocked every wake into
+// the admiral and froze an idle agent at "working" until it read as stuck.
 func (c *Client) Capture(pane string, n int) (string, error) {
-	args := []string{"capture-pane", "-p", "-J", "-t", pane}
+	args := []string{"capture-pane", "-p", "-e", "-J", "-t", pane}
 	if n > 0 {
 		args = append(args, "-S", "-"+strconv.Itoa(n))
 	}
-	return c.Run(args...)
+	out, err := c.Run(args...)
+	return Plain(out), err
 }
 
 // Paste pastes text into a pane via a buffer, then presses Enter.
