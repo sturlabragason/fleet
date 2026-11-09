@@ -142,6 +142,7 @@ Use only the `fleet` MCP tools: `fleet_status`, `fleet_info`, `fleet_peek`, `fle
 
 Reply in 1–3 lines. List waiting and error agents first, longest wait first.
 Summarise; don't paste raw screen output.
+While agents work, end your turn with no tool call: a report line wakes you. Never call `task_complete` and never poll `fleet_reports` or `fleet_status` in a row.
 
 ## Updates
 

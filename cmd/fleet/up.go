@@ -98,7 +98,7 @@ func admiralLaunchOf(f *fleet.Fleet, adm, prof, resumeID, boot string) (supLaunc
 		name += "-" + adm
 	}
 	argv, embedded := p.Argv(tools.Vars{Fleet: f.Exe, Name: name, ID: id},
-		tools.Launch{Resume: resumeID != "", Extra: admiralMCPArgsOf(p, f.Exe, f.Home, adm), Prompt: boot})
+		tools.Launch{Resume: resumeID != "", Mode: admiralMode(p), Extra: admiralMCPArgsOf(p, f.Exe, f.Home, adm), Prompt: boot})
 	logx.For("up").Info("admiral", "profile", prof, "dir", dir, "argv", argv, "resume", resumeID != "")
 	sl := supLaunch{Cmd: tools.ShellCommand(argv), Dir: dir, Env: p.EnvList(), ID: id, Profile: prof}
 	if adm != supervisor.Main {
@@ -108,6 +108,17 @@ func admiralLaunchOf(f *fleet.Fleet, adm, prof, resumeID, boot string) (supLaunc
 		sl.Paste = boot
 	}
 	return sl, nil
+}
+
+// admiralMode starts the admiral in its tool's interactive mode when the
+// profile names one (copilot: --mode interactive). An admiral idles while its
+// agents work; in autopilot every idle turn ends in a "not complete yet"
+// nudge that buys a full-context turn (ADR-70).
+func admiralMode(p tools.Profile) string {
+	if _, ok := p.ModeArgs["interactive"]; ok {
+		return "interactive"
+	}
+	return ""
 }
 
 // supervisorMCPArgs makes a copilot admiral lean: only the fleet MCP tools

@@ -14,6 +14,7 @@ Reporting:
 - When your task is finished, call `fleet_report` with `state=done` and a summary that starts with one headline line (what changed, branch/commit).
   Do not print FLEET-DONE or similar markers.
 - Use `blocked` or `question` when you need the admiral or the user; use `progress` sparingly.
+- In autopilot, end a `done`, `blocked` or `question` report with `fleet_report` and `task_complete` in the same response (it only ends the turn; a reply resumes you), never one after the other.
 - Without these tools, run `fleet report <state> "summary"` in a shell instead.
 
 Rules:

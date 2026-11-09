@@ -127,6 +127,21 @@ func TestAdmiralLaunchBootPrompt(t *testing.T) {
 	}
 }
 
+// A copilot admiral starts interactive, new or resumed; a profile with no
+// interactive mode (claude) gets no mode flag (ADR-70).
+func TestAdmiralStartsInteractive(t *testing.T) {
+	f := testFleet(t)
+	for _, resume := range []string{"", "sess-9"} {
+		sl, _ := admiralLaunch(f, "copilot", resume, "")
+		if !strings.Contains(sl.Cmd, "--mode interactive") || strings.Contains(sl.Cmd, "--autopilot") {
+			t.Errorf("copilot (resume %q): %s", resume, sl.Cmd)
+		}
+	}
+	if sl, _ := supervisorCmd(f, "claude", ""); strings.Contains(sl.Cmd, " --mode ") || strings.Contains(sl.Cmd, "--permission-mode") {
+		t.Errorf("claude has no interactive mode: %s", sl.Cmd)
+	}
+}
+
 func TestSwapHandoff(t *testing.T) {
 	at := time.Date(2026, 11, 5, 9, 30, 0, 0, time.UTC)
 	head := "Admiral profile swap at 2026-11-05 09:30: copilot → claude-personal. Previous session: abc (resume: copilot --resume abc)."
