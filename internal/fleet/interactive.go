@@ -17,10 +17,6 @@ import (
 // pressed a key there (client_activity); fleet's own paste and send-keys do
 // not touch it, so a recent key press in an agent's pane is the user's.
 
-// UserTyping is how recent the user's last key press in an agent's pane
-// must be for fleet_send to refuse to type there.
-var UserTyping = 30 * time.Second
-
 // ClientSeen is one attached tmux client: its active pane and its last key
 // press.
 type ClientSeen struct {
@@ -93,7 +89,7 @@ func (f *Fleet) userBlocker(a *board.Agent) string {
 
 // SendBlocker returns why typing into name now could land in the user's own
 // input ("" = fleet may type): the user pressed a key in its pane within
-// UserTyping, it is interactive and open in a client, or — when submit (the
+// board.UserTyping, it is interactive and open in a client, or — when submit (the
 // send pastes text or presses Enter) — its input box already holds text
 // that is not fleet's own pending paste. fleet_send, `fleet send` and a team
 // send refuse on it unless forced (ADR-61).
@@ -108,7 +104,7 @@ func (f *Fleet) SendBlocker(name string, submit bool) string {
 		last = a.UserAt
 	}
 	switch {
-	case !last.IsZero() && time.Since(last) < UserTyping:
+	case !last.IsZero() && time.Since(last) < board.UserTyping:
 		return fmt.Sprintf("the user typed in %s's pane %s ago", name, sessions.Age(time.Since(last)))
 	case open && a.Interactive:
 		return fmt.Sprintf("%s is interactive and the user has its pane open", name)

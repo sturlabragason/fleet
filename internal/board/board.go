@@ -93,6 +93,11 @@ type Agent struct {
 	// NoReportTold is when the owner was told this agent stopped without a
 	// report; once per task, so a newer PromptAt re-arms it (ADR-68).
 	NoReportTold time.Time `json:"no_report_told,omitempty"`
+	// TurnAt is when the agent's latest turn began: the refresher's last
+	// switch to working after an idle of at least NoReportAfter (a shorter
+	// idle is a boundary inside one turn). It is what the user's agents are
+	// judged by, since what the user types sets no PromptAt (ADR-68).
+	TurnAt time.Time `json:"turn_at,omitempty"`
 
 	// extra holds board keys this build does not know, so they survive a
 	// round trip (ADR-58).
@@ -197,6 +202,37 @@ func (a *Agent) NoReport(now time.Time) bool {
 	}
 	r := a.Report
 	return r == nil || r.At.Before(a.PromptAt) || r.State == "progress"
+}
+
+// UserTyping is how recent the user's last key press in an agent's pane
+// must be to count as typing there right now (ADR-61, ADR-68).
+var UserTyping = 30 * time.Second
+
+// UserNoReport is NoReport for an agent the user is talking to: its latest
+// turn ended NoReportAfter ago with no report of any kind since the turn
+// began, and the user has not pressed a key in its pane for UserTyping.
+// Such an agent reports progress, not done, so any report ends a turn. The
+// board marks it softly and nobody is woken (ADR-68 amendment).
+func (a *Agent) UserNoReport(now time.Time) bool {
+	if a.Status != "idle" || a.TurnAt.IsZero() || !a.WithUser(now) || now.Sub(a.StatusSince) < NoReportAfter {
+		return false
+	}
+	if !a.UserAt.IsZero() && now.Sub(a.UserAt) < UserTyping {
+		return false
+	}
+	return a.Report == nil || a.Report.At.Before(a.TurnAt)
+}
+
+// NoReportTag is the agent's @fleet_noreport pane value: "1" for NoReport,
+// "user" for UserNoReport, "" for neither.
+func (a *Agent) NoReportTag(now time.Time) string {
+	switch {
+	case a.NoReport(now):
+		return "1"
+	case a.UserNoReport(now):
+		return "user"
+	}
+	return ""
 }
 
 // Main is the name of the admiral every fleet has (DESIGN §6.12).

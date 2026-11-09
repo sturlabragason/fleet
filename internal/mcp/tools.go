@@ -393,8 +393,11 @@ func (s *Server) status() (string, error) {
 		if a.WithUser(time.Now()) {
 			st += " (interactive)"
 		}
-		if a.NoReport(time.Now()) {
+		switch a.NoReportTag(time.Now()) {
+		case "1":
 			st += " (no report)"
+		case "user":
+			st += " (no report, the user's: don't send)"
 		}
 		fmt.Fprintf(&b, "%s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s", a.Name, teams[a.Name].Team, squadCell(s.F, a), a.Profile, st, sub, w, time.Since(a.StatusSince).Round(time.Second), sp, wf, reportCell(a))
 		if many {
