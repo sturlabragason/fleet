@@ -28,6 +28,23 @@ func TestInstructionsCarryProcessRules(t *testing.T) {
 	}
 }
 
+// Issue #3: the admiral delegated too little and drafted work inline.
+func TestInstructionsDelegateByDefault(t *testing.T) {
+	for _, want := range []string{
+		"## Delegate by default",
+		"Never draft the solution in this chat and then offer to spawn",
+		"Answer inline only fleet operations, status, relaying reports and trivial facts",
+		"the user must confirm the exact target",
+	} {
+		if !strings.Contains(Instructions, want) {
+			t.Errorf("admiral instructions lost: %s", want)
+		}
+	}
+	if strings.Index(Instructions, "## Delegate by default") > strings.Index(Instructions, "\n## Tools\n") {
+		t.Error("delegation rule must come before the Tools section")
+	}
+}
+
 // ADR-57: the admiral chooses the effort level, so its instructions and the
 // fleet_spawn schema must both offer it.
 func TestSpawnOffersEffortLevels(t *testing.T) {

@@ -1421,6 +1421,8 @@ Rejected: (a) answering the dialog on screen only (racy, tool-specific, and it h
 
 The admiral gets fleet as MCP tools (`fleet mcp`, wired in `supervisor/.mcp.json`) and nothing else. `fleet up` starts Copilot with `--no-custom-instructions --allow-all-mcp-server-instructions --available-tools fleet --allow-tool fleet`. Its rules live in `internal/mcp/instructions.md` and arrive as the MCP server instructions.
 
+The admiral delegates by default (issue #3): a request that produces an artifact or needs domain thinking (design, code, research, writing, filing, opinions) is spawned to an agent without asking first, and the admiral answers inline only fleet operations, status, relayed reports and trivial facts. On 2026-11-09 an admiral wrote a full design inline and then offered to spawn; the rule and a good/bad example sit at the top of the instructions so they outrank the tool notes. An agent writes to an external shared tracker (ADO, Jira, another org) only after the user confirms the exact target; personal and fleet issues go to GitHub `sturlabragason/fleet`.
+
 Measured on 2026-11-04 with the same one-line question: about 160k input tokens per turn with the default setup (global instructions, skills, every tool, and the fleet tools deferred behind a search, so the model fell back to bash) versus about 8–9k with the lean setup, and a direct `fleet_status` call in 4–7 seconds. The admiral can't read Go code or run shell commands, because those tools aren't available to it.
 
 ## 17. Development process (based on Anthropic's Claude Code best practices)
