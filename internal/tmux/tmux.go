@@ -20,8 +20,11 @@ type Client struct {
 // New returns a client for the given socket name.
 func New(socket string) *Client { return &Client{Socket: socket} }
 
+// base starts with -u: without a UTF-8 locale the client prints tabs in -F
+// output as '_', which breaks every tab-separated parse (#21). -u, unlike
+// LC_ALL=C.UTF-8, doesn't leak into the panes' environment.
 func (c *Client) base() []string {
-	a := []string{"-L", c.Socket}
+	a := []string{"-u", "-L", c.Socket}
 	if c.Config != "" {
 		a = append(a, "-f", c.Config)
 	}
