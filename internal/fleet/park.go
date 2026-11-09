@@ -199,6 +199,7 @@ func (f *Fleet) Wake(name string, force bool) (*board.Agent, error) {
 		if cur, ok := b.Agents[name]; ok {
 			cur.Created, cur.Report, cur.UserAt = old.Created, old.Report, old.UserAt
 			cur.PromptAt, cur.NoReportTold, cur.TurnAt = old.PromptAt, old.NoReportTold, old.TurnAt
+			cur.RecycleTold = old.RecycleTold
 			cur.SubLogOffset, cur.SubKnown = old.SubLogOffset, old.SubKnown
 			a = cur
 		}

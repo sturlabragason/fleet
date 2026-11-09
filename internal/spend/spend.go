@@ -24,6 +24,15 @@ type Spend struct {
 	// different units and cannot be added together.
 	Uncredited int64  `json:"uncredited_tokens,omitempty"`
 	Model      string `json:"model,omitempty"` // the model of the last call
+	// Compactions is how often the tool summarised a full context to go on
+	// (Copilot only). Each one means the turns before it re-read a nearly
+	// full context, which is where most spend goes (ADR-71).
+	Compactions int `json:"compactions,omitempty"`
+	// Context is how full the context window was at the last main-agent
+	// call or compaction, in percent (0 = unknown). Like Model it is the
+	// latest value, not a sum. Only `fleet spend --json` carries it; fleet
+	// info has its own context figure.
+	Context int `json:"context_pct,omitempty"`
 }
 
 // Total is every token the agent was billed for.
@@ -42,21 +51,27 @@ func (s *Spend) Add(o Spend) {
 	s.AIC += o.AIC
 	s.Uncredited += o.Uncredited
 	s.HasAIC = s.HasAIC || o.HasAIC
+	s.Compactions += o.Compactions
 }
 
 // Short is the one-column form: credits where the tool reports them, tokens
-// where it does not, and both when a total covers tools of each kind
-// ("" when nothing has been spent yet).
+// where it does not, and both when a total covers tools of each kind, then
+// "⟲N" for N compactions ("" when nothing has been spent yet).
 func (s Spend) Short() string {
-	if !s.HasAIC {
-		if !s.Any() {
-			return ""
+	var out string
+	switch {
+	case s.HasAIC:
+		out = Credits(s.AIC) + " AIC"
+		if s.Uncredited > 0 {
+			out += " + " + Tokens(s.Uncredited) + " tok"
 		}
-		return Tokens(s.Total()) + " tok"
+	case s.Any():
+		out = Tokens(s.Total()) + " tok"
+	default:
+		return ""
 	}
-	out := Credits(s.AIC) + " AIC"
-	if s.Uncredited > 0 {
-		out += " + " + Tokens(s.Uncredited) + " tok"
+	if s.Compactions > 0 {
+		out += fmt.Sprintf(" ⟲%d", s.Compactions)
 	}
 	return out
 }
@@ -77,6 +92,9 @@ func (s Spend) Long() string {
 	out += Tokens(s.Total()) + " tokens"
 	if s.CacheRead > 0 {
 		out += fmt.Sprintf(", %s cached", Tokens(s.CacheRead))
+	}
+	if s.Compactions > 0 {
+		out += fmt.Sprintf(", compacted %d×", s.Compactions)
 	}
 	return out + ")"
 }
@@ -136,7 +154,7 @@ const (
 func parserFor(k Kind) (parser, bool) {
 	switch k {
 	case Copilot:
-		return parser{tags: [][]byte{[]byte(`"session.usage_record"`)}, line: copilotLine}, true
+		return parser{tags: [][]byte{[]byte(`"session.usage_record"`), []byte(`"session.compaction_complete"`)}, line: copilotLine}, true
 	case Claude:
 		return parser{tags: [][]byte{[]byte(`"output_tokens"`), []byte(`"cost-state"`)}, line: claudeLine}, true
 	}
@@ -150,12 +168,19 @@ func copilotLine(b []byte) (record, bool) {
 	var ev struct {
 		Type string `json:"type"`
 		Data struct {
+			// session.compaction_complete
+			Success    bool  `json:"success"`
+			TokenLimit int64 `json:"tokenLimit"`
+			PostTokens int64 `json:"postCompactionTokens"`
+			// session.usage_record
 			Usage struct {
 				Model            string `json:"model"`
 				InputTokens      int64  `json:"inputTokens"`
 				OutputTokens     int64  `json:"outputTokens"`
 				CacheReadTokens  int64  `json:"cacheReadTokens"`
 				CacheWriteTokens int64  `json:"cacheWriteTokens"`
+				MaxPromptTokens  int64  `json:"maxPromptTokens"`
+				InteractionType  string `json:"interactionType"`
 				CopilotUsage     struct {
 					TotalNanoAIU float64 `json:"totalNanoAiu"`
 				} `json:"copilotUsage"`
@@ -163,10 +188,26 @@ func copilotLine(b []byte) (record, bool) {
 		} `json:"data"`
 		ID string `json:"id"` // event id: one per call, so never a duplicate
 	}
-	if json.Unmarshal(b, &ev) != nil || ev.Type != "session.usage_record" {
+	if json.Unmarshal(b, &ev) != nil {
+		return record{}, false
+	}
+	switch ev.Type {
+	case "session.compaction_complete":
+		if !ev.Data.Success {
+			return record{}, false
+		}
+		return record{sp: Spend{Compactions: 1, Context: percent(ev.Data.PostTokens, ev.Data.TokenLimit)}}, true
+	case "session.usage_record":
+	default:
 		return record{}, false
 	}
 	u := ev.Data.Usage
+	// A subagent call runs in its own context, so only the agent's own
+	// calls say how full its context is.
+	ctx := 0
+	if u.InteractionType != "conversation-subagent" {
+		ctx = percent(u.InputTokens, u.MaxPromptTokens)
+	}
 	// inputTokens already contains the cached ones; keep each in one field.
 	fresh := u.InputTokens - u.CacheReadTokens - u.CacheWriteTokens
 	if fresh < 0 {
@@ -176,7 +217,16 @@ func copilotLine(b []byte) (record, bool) {
 		Calls: 1, Input: fresh, Output: u.OutputTokens,
 		CacheRead: u.CacheReadTokens, CacheWrite: u.CacheWriteTokens,
 		AIC: u.CopilotUsage.TotalNanoAIU / nanoAIU, HasAIC: true, Model: u.Model,
+		Context: ctx,
 	}, id: ev.ID}, true
+}
+
+// percent is n of max in whole percent, 0 when max is unknown.
+func percent(n, max int64) int {
+	if max <= 0 || n <= 0 {
+		return 0
+	}
+	return int(min(n*100/max, 100))
 }
 
 func claudeLine(b []byte) (record, bool) {
@@ -265,10 +315,18 @@ func scan(p parser, buf []byte, lastID string) result {
 		if r.id != "" && r.id == out.lastID {
 			continue // another content block of a reply already counted
 		}
-		out.lastID = r.id
-		model := r.sp.Model
+		if r.id != "" {
+			out.lastID = r.id
+		}
+		model, ctx := r.sp.Model, out.add.Context
+		if r.sp.Context > 0 {
+			ctx = r.sp.Context
+		}
 		out.add.Add(r.sp)
-		out.add.Model = model
+		if model != "" {
+			out.add.Model = model
+		}
+		out.add.Context = ctx
 	}
 	return out
 }
