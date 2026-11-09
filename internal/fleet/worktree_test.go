@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/tmux"
 	"github.com/sturlabragason/fleet/internal/worktree"
 )
@@ -159,5 +160,33 @@ func TestAdoptRecordsWorktree(t *testing.T) {
 	// A plain checkout records nothing.
 	if adoptWorktree(dir) != nil {
 		t.Fatal("main worktree recorded as the agent's own")
+	}
+}
+
+// Close and fleet_info don't count the agent's own result file as
+// uncommitted work (#11).
+func TestCloseNoteIgnoresResultFile(t *testing.T) {
+	f := wtFleet(t, "[defaults]\nplaybook = false\n")
+	a, err := f.Spawn("w1", "cat", repo(t), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Store.Update(func(b *board.Board) error {
+		b.Agents["w1"].Card = &board.Card{Result: DefaultResult}
+		return nil
+	})
+	os.WriteFile(filepath.Join(a.Dir, DefaultResult), []byte("done"), 0o644)
+	if note := f.CloseNote("w1"); note != "" {
+		t.Fatalf("close note for a result file only: %q", note)
+	}
+	if info, _ := f.Info("w1"); !strings.Contains(info, "git dirty: 0 files") {
+		t.Fatalf("info:\n%s", info)
+	}
+	os.WriteFile(filepath.Join(a.Dir, "g"), []byte("mine"), 0o644)
+	if note := f.CloseNote("w1"); !strings.Contains(note, "uncommitted changes") {
+		t.Fatalf("close note with other dirt: %q", note)
+	}
+	if info, _ := f.Info("w1"); !strings.Contains(info, "git dirty: 1 files") {
+		t.Fatalf("info:\n%s", info)
 	}
 }

@@ -31,7 +31,7 @@ func cmdMerge(args []string) error {
 		return err
 	}
 	if *dry {
-		p, err := worktree.NewPlan(*dir)
+		p, err := worktree.NewPlan(*dir, resultFiles()...)
 		if err != nil {
 			return fail(err)
 		}
@@ -45,7 +45,7 @@ func cmdMerge(args []string) error {
 		}
 		return nil
 	}
-	opts := worktree.Options{Dir: *dir, Retries: *retries, Log: func(s string) {
+	opts := worktree.Options{Dir: *dir, Retries: *retries, Ignore: resultFiles(), Log: func(s string) {
 		fmt.Fprintln(os.Stderr, "fleet merge:", s)
 	}}
 	if strings.TrimSpace(*check) != "" {

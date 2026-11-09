@@ -9,9 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/spend"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/supervisor"
+	"github.com/sturlabragason/fleet/internal/worktree"
 )
 
 // GitTimeout bounds each git call made for an agent's dir.
@@ -22,14 +24,16 @@ type Git struct {
 	Repo   bool   // inside a git work tree
 	Top    string // work tree top level
 	Branch string // current branch ("" when detached)
-	Dirty  int    // lines of `git status --porcelain`; -1 if it failed
+	Dirty  int    // paths in `git status --porcelain` not ignored (untracked files one by one when ignoring); -1 if it failed
 	Base   string // local main, or master when there is no main ("" = neither)
 	Merged bool   // HEAD is an ancestor of Base
 	Ahead  int    // commits on HEAD not on Base
 }
 
 // GitInfo reads dir's git state; each git call is bounded by GitTimeout.
-func GitInfo(dir string) Git {
+// Dirty leaves out the absolute paths in ignore, such as the agent's own
+// result file (#11).
+func GitInfo(dir string, ignore ...string) Git {
 	git := func(args ...string) (string, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), GitTimeout)
 		defer cancel()
@@ -46,10 +50,19 @@ func GitInfo(dir string) Git {
 	g.Repo = true
 	g.Top, _ = git("rev-parse", "--show-toplevel")
 	g.Branch, _ = git("symbolic-ref", "--quiet", "--short", "HEAD")
-	if out, err := git("status", "--porcelain"); err != nil {
+	st := []string{"status", "--porcelain", "-z"}
+	if len(ignore) > 0 { // list files one by one, so an ignored one isn't hidden in its dir
+		st = append(st, "--untracked-files=all")
+	}
+	if out, err := gitOut(dir, st...); err != nil { // untrimmed: " M" starts with a space
 		g.Dirty = -1
-	} else if out != "" {
-		g.Dirty = len(strings.Split(out, "\n"))
+	} else {
+		skip := worktree.Ignored(dir, ignore)
+		for _, p := range statusPaths(out) {
+			if !skip[p] {
+				g.Dirty++
+			}
+		}
 	}
 	for _, b := range []string{"main", "master"} {
 		if _, err := git("rev-parse", "--verify", "--quiet", "refs/heads/"+b); err == nil {
@@ -68,6 +81,34 @@ func GitInfo(dir string) Git {
 	return g
 }
 
+// statusPaths reads `git status --porcelain -z`: one path per entry, the new
+// one for a rename or copy.
+func statusPaths(out string) []string {
+	var ps []string
+	recs := strings.Split(out, "\x00")
+	for i := 0; i < len(recs); i++ {
+		r := recs[i]
+		if len(r) < 4 {
+			continue
+		}
+		ps = append(ps, r[3:])
+		if r[0] == 'R' || r[0] == 'C' {
+			i++ // -z puts the rename source in the next record
+		}
+	}
+	return ps
+}
+
+// ownResult is the agent's task-card result file as an ignore list for
+// GitInfo and CloseBlocker: writing it is part of the task, not work left
+// behind (#11).
+func ownResult(a *board.Agent) []string {
+	if p, _, ok := ResultPath(a); ok {
+		return []string{p}
+	}
+	return nil
+}
+
 // CloseNote says what closing name could lose ("" = nothing known): its
 // work tree has uncommitted changes or is not merged. An agent with its own
 // worktree (DESIGN §4, ADR-39) has it named, with its branch: closing leaves
@@ -81,7 +122,7 @@ func (f *Fleet) CloseNote(name string) string {
 	if w := a.Worktree; w != nil {
 		where = fmt.Sprintf("worktree %s, branch %s", w.Path, w.Branch)
 	}
-	switch r := CloseBlocker(a.Dir); r {
+	switch r := CloseBlocker(a.Dir, ownResult(a)...); r {
 	case "", "not a git work tree", "no main or master branch":
 		return ""
 	case "uncommitted changes":
@@ -152,7 +193,7 @@ func (f *Fleet) Info(name string) (string, error) {
 	if w := a.Worktree; w != nil {
 		kv("agent worktree", w.Path+" on "+w.Branch)
 	}
-	if g := GitInfo(a.Dir); a.Dir == "" {
+	if g := GitInfo(a.Dir, ownResult(a)...); a.Dir == "" {
 		kv("git", "no dir")
 	} else if !g.Repo {
 		kv("git", "not a git work tree")

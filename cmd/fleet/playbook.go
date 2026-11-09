@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/sturlabragason/fleet/internal/board"
+	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/playbook"
 	"github.com/sturlabragason/fleet/internal/worktree"
@@ -47,6 +49,18 @@ func cmdPlaybook(args []string) error {
 	return nil
 }
 
+// resultFiles are the task-card result files of every agent on the board:
+// each agent writes its own, so they are never an overlap (#11).
+func resultFiles() []string {
+	var ps []string
+	for _, a := range board.NewStore(logx.Home()).Load().Agents {
+		if p, _, ok := fleet.ResultPath(a); ok {
+			ps = append(ps, p)
+		}
+	}
+	return ps
+}
+
 // cmdTouching lists the files other worktrees of this repo change; with file
 // arguments it reports only overlaps. Exit 0: no overlap, 1: overlap, 2: error
 // (so a failed check never reads as all-clear).
@@ -69,7 +83,7 @@ func touching(args []string) (int, error) {
 	if err := fs.Parse(args); err != nil {
 		return 0, err
 	}
-	ws, err := worktree.Others(*dir)
+	ws, err := worktree.Others(*dir, resultFiles()...)
 	if err != nil {
 		return 0, err
 	}

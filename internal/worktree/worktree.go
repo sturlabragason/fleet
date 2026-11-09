@@ -170,8 +170,9 @@ func CommonDir(dir string) (string, error) {
 // Others lists every worktree of the repo containing dir except the one dir
 // is in, with the files each changes, skipping bare, prunable and unchanged
 // worktrees. It fails closed: if any worktree's changes can't be read, it
-// returns an error rather than a list that might wrongly look clear.
-func Others(dir string) ([]Worktree, error) {
+// returns an error rather than a list that might wrongly look clear. ignore
+// is passed on to Changes.
+func Others(dir string, ignore ...string) ([]Worktree, error) {
 	top, err := TopLevel(dir)
 	if err != nil {
 		return nil, err
@@ -185,7 +186,7 @@ func Others(dir string) ([]Worktree, error) {
 		if w.Bare || w.Prunable || realPath(w.Path) == top {
 			continue
 		}
-		if w.Files, err = Changes(w.Path); err != nil {
+		if w.Files, err = Changes(w.Path, ignore...); err != nil {
 			logx.For("worktree").Warn("changes unreadable", "worktree", w.Path, "err", err)
 			return nil, fmt.Errorf("worktree %s: %w", w.Path, err)
 		}
@@ -200,7 +201,10 @@ func Others(dir string) ([]Worktree, error) {
 // from its merge base with main (or master; skipped if neither exists) plus
 // uncommitted ones, including untracked. Renames count as both paths. Any git
 // failure is an error, so a caller never mistakes it for "no changes".
-func Changes(wt string) ([]string, error) {
+// ignore holds absolute paths, such as agents' task-card result files (#11),
+// left out of the uncommitted part; a committed change to one still counts,
+// since it would conflict on merge.
+func Changes(wt string, ignore ...string) ([]string, error) {
 	set := map[string]bool{}
 	if base := baseBranch(wt); base != "" {
 		mb, err := git(wt, "merge-base", "HEAD", base)
@@ -221,8 +225,11 @@ func Changes(wt string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	skip := Ignored(wt, ignore)
 	for _, f := range ParseStatus(out) {
-		set[f] = true
+		if !skip[f] {
+			set[f] = true
+		}
 	}
 	files := make([]string, 0, len(set))
 	for f := range set {
@@ -230,6 +237,30 @@ func Changes(wt string) ([]string, error) {
 	}
 	sort.Strings(files)
 	return files, nil
+}
+
+// Ignored maps the absolute paths in ignore that lie inside the work tree
+// holding dir to their repo-relative form, as git status prints them.
+func Ignored(dir string, ignore []string) map[string]bool {
+	if len(ignore) == 0 {
+		return nil
+	}
+	top, err := TopLevel(dir)
+	if err != nil {
+		return nil
+	}
+	m := map[string]bool{}
+	for _, p := range ignore {
+		if p == "" || !filepath.IsAbs(p) {
+			continue
+		}
+		// The file may not exist: resolve its directory, keep its name.
+		full := filepath.Join(realPath(filepath.Dir(p)), filepath.Base(p))
+		if r, err := filepath.Rel(top, full); err == nil && r != "." && r != ".." && !strings.HasPrefix(r, ".."+string(filepath.Separator)) {
+			m[filepath.ToSlash(r)] = true
+		}
+	}
+	return m
 }
 
 // baseBranch returns "main", else "master", else "".

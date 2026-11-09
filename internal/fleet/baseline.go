@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/sturlabragason/fleet/internal/board"
+	"github.com/sturlabragason/fleet/internal/worktree"
 )
 
 // maxBaselineDirty caps how many dirty paths a baseline records; a bigger
@@ -126,7 +127,8 @@ func worktrees(dir string) []string {
 // playbook) left dirty or unmerged, and commits not merged into main (or
 // master); dirt that predates
 // the agent and an unchanged HEAD are fine. Without a baseline it is the
-// strict CloseBlocker rule.
+// strict CloseBlocker rule. The agent's own task-card result file never
+// counts (#11).
 func AgentBlocker(a *board.Agent) string {
 	switch workTree(a.Dir) {
 	case treeNo:
@@ -134,18 +136,20 @@ func AgentBlocker(a *board.Agent) string {
 	case treeUnknown:
 		return "git state unreadable"
 	}
+	own := ownResult(a)
 	base := a.Baseline
 	if base == nil {
-		return CloseBlocker(a.Dir)
+		return CloseBlocker(a.Dir, own...)
 	}
-	g := GitInfo(a.Dir)
+	g := GitInfo(a.Dir, own...)
 	now, ok := dirtyPrints(a.Dir)
 	if !g.Repo || !ok {
 		return "git state unreadable"
 	}
+	skip := worktree.Ignored(a.Dir, own)
 	var mine []string
 	for p, fp := range now {
-		if base.Dirty[p] != fp {
+		if base.Dirty[p] != fp && !skip[p] {
 			mine = append(mine, p)
 		}
 	}
@@ -157,7 +161,7 @@ func AgentBlocker(a *board.Agent) string {
 		if contains(base.Worktrees, w) || filepath.Base(w) != a.Name {
 			continue
 		}
-		if r := CloseBlocker(w); r != "" && r != "no main or master branch" {
+		if r := CloseBlocker(w, worktreeResult(a, w)...); r != "" && r != "no main or master branch" {
 			return "worktree left behind (" + r + "): " + w
 		}
 	}
@@ -174,6 +178,16 @@ func AgentBlocker(a *board.Agent) string {
 		return "not merged into " + g.Base
 	}
 	return ""
+}
+
+// worktreeResult is the agent's result file inside its own worktree w, for
+// an agent whose dir is the main checkout but who wrote the file where it
+// worked.
+func worktreeResult(a *board.Agent, w string) []string {
+	if a.Card == nil || a.Card.Result == "" || filepath.IsAbs(a.Card.Result) {
+		return nil
+	}
+	return []string{filepath.Join(w, a.Card.Result)}
 }
 
 type treeState int

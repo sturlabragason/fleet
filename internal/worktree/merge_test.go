@@ -314,3 +314,40 @@ func TestMergeGivesUpWhenMainNeverSettles(t *testing.T) {
 		t.Fatalf("left mid-rebase: %v %v", u, e)
 	}
 }
+
+// Result files (task-card output, #11) are not an overlap and don't count
+// toward the merge order; a real shared file still does.
+func TestPlanIgnoresResultFiles(t *testing.T) {
+	_, wts := mergeRepo(t, "a", "b")
+	write(t, wts["a"], "result.md", "a's result\n")
+	write(t, wts["b"], "result.md", "b's result\n")
+	write(t, wts["b"], "b.go", "package b\n")
+	ign := []string{filepath.Join(wts["a"], "result.md"), filepath.Join(wts["b"], "result.md")}
+
+	p, err := NewPlan(wts["b"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Neighbours) != 1 {
+		t.Fatalf("without ignore paths the result files overlap: %+v", p.Neighbours)
+	}
+	if p, err = NewPlan(wts["b"], ign...); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Neighbours) != 0 || strings.Join(p.Files, ",") != "b.go" {
+		t.Fatalf("plan %+v", p)
+	}
+	ws, err := Others(wts["b"], ign...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range ws {
+		if w.Path == wts["a"] {
+			t.Fatalf("a changes only its result file but is listed: %+v", w)
+		}
+	}
+	write(t, wts["a"], "b.go", "package b // a\n")
+	if p, _ = NewPlan(wts["b"], ign...); len(p.Neighbours) != 1 || strings.Join(p.Neighbours[0].Files, ",") != "b.go" {
+		t.Fatalf("real overlap: %+v", p.Neighbours)
+	}
+}
