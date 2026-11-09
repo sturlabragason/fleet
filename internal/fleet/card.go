@@ -21,8 +21,26 @@ import (
 // the done-check itself when the agent reports done.
 
 // DefaultResult is the result file a carded agent is told to write, relative
-// to its dir (DESIGN §18 #6).
+// to its dir (DESIGN §18 #6). An agent without a worktree of its own shares
+// its dir, so it gets SharedResult instead (see ResultFor).
 const DefaultResult = "result.md"
+
+// SharedResult is the default result file of an agent that shares its dir:
+// one per agent, so agents in one dir do not overwrite each other's.
+func SharedResult(name string) string { return "result-" + name + ".md" }
+
+// ResultFor fixes a card's default result file once the spawn knows whether
+// the agent got a worktree of its own: without one, the default becomes
+// SharedResult(name). Any other result file is kept. It returns a copy and
+// never changes c.
+func ResultFor(c *board.Card, name string, ownWorktree bool) *board.Card {
+	if c == nil || ownWorktree || c.Result != DefaultResult {
+		return c
+	}
+	n := *c
+	n.Result = SharedResult(name)
+	return &n
+}
 
 // CheckTimeout bounds one done-check run. A check that outlives it fails
 // with "timed out", so a hanging command never holds an agent open.
@@ -123,7 +141,9 @@ func tailRunes(s string, n int) string {
 }
 
 // ResultPath is the absolute path of an agent's result file, and whether it
-// exists. ok is false when the agent has no card.
+// was written: it exists and was modified after the agent was spawned, so a
+// stale file from an earlier task does not count. ok is false when the agent
+// has no card.
 func ResultPath(a *board.Agent) (path string, written, ok bool) {
 	if a == nil || a.Card == nil || a.Card.Result == "" {
 		return "", false, false
@@ -133,7 +153,8 @@ func ResultPath(a *board.Agent) (path string, written, ok bool) {
 		path = filepath.Join(a.Dir, path)
 	}
 	st, err := os.Stat(path)
-	return path, err == nil && !st.IsDir(), true
+	written = err == nil && !st.IsDir() && (a.Created.IsZero() || st.ModTime().After(a.Created))
+	return path, written, true
 }
 
 // CheckState is how an agent's done-check stands, in one line: its verdict

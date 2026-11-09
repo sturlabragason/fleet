@@ -48,7 +48,8 @@ const usage = `usage:
                                             --goal/--check/--result give it a task card: fleet runs
                                             the check in its dir when it reports done and tells the
                                             admiral pass or fail, and the agent is told to write the
-                                            result file (default result.md);
+                                            result file (default result.md, or result-<name>.md
+                                            when the agent has no worktree of its own);
                                             --effort light|standard|pro sizes the worker playbook
                                             (default: pro with a worktree, light without one);
                                             --leader makes it a leader: it gets squad tools, spawns a
@@ -355,7 +356,7 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 	goal := fs.String("goal", "", "task card: the goal in one line")
 	check := fs.String("check", "", "task card: done-check command, run in the agent's dir when it reports done")
 	checkExit := fs.Int("check-exit", 0, "task card: exit code the done-check must return")
-	result := fs.String("result", "", "task card: result file the agent writes, relative to its dir (default "+fleet.DefaultResult+")")
+	result := fs.String("result", "", "task card: result file the agent writes, relative to its dir (default "+fleet.DefaultResult+", or result-<name>.md without a worktree of its own; result.md given explicitly is renamed the same way)")
 	leader := fs.Bool("leader", false, "make it a leader: it may spawn a squad of its own and its agents report to it")
 	interactive := fs.Bool("interactive", false, "the user talks to it directly: never auto-closed, reports progress until the user ends the session")
 	effort := fs.String("effort", "", "worker playbook level: light, standard or pro (default: pro with a worktree, light without)")

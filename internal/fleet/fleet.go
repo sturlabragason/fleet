@@ -284,7 +284,7 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	if !ok {
 		return nil, fmt.Errorf("unknown profile %q (have %v)", profile, tools.Names(f.Profiles))
 	}
-	ex := startExtra{NoWorktree: !wantWT, Card: card, Role: role, Effort: effort}
+	ex := startExtra{NoWorktree: !wantWT, Role: role, Effort: effort}
 	// code is "the agent works on a git repo of its own": a worktree was
 	// asked for and the dir is one. It is what picks the playbook level when
 	// the spawn did not (ADR-57), so a worktree git refused still gets the
@@ -298,6 +298,10 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 			dir = ex.Worktree.Path
 		}
 	}
+	// Only now is it known whether the agent shares its dir, which decides
+	// its default result file.
+	card = ResultFor(card, name, ex.Worktree != nil)
+	ex.Card = card
 	// The board records the level actually used, so wake can give the
 	// resumed process the same context args (ADR-60).
 	lvl := effortLevel(effort, code)

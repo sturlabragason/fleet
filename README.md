@@ -231,7 +231,7 @@ Shipped so far: fake agents, scraped status and the overview; the live wall (scr
 
 In progress:
 
-- Task cards on spawn (goal, done-check, result file) and `result.md` per agent
+- Task cards on spawn (goal, done-check, result file) and a result file per agent (`result.md`, or `result-<name>.md` in a shared dir)
 - Park/wake with resume by session ID, a live cap and a RAM guard
 - Spend per agent on the tile, with an optional per-task cap
 - A stuck rule: same error twice, or no progress for N minutes
