@@ -5,6 +5,7 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-09
+- Read one agent's result without wading through the rest: `fleet_reports name=<agent>` returns only its reports and leaves the others unread, `all=true` lists one headline per report instead of every full text, and task cards are shown only for the agents in the result.
 - An agent whose screen is still changing is no longer reported to its owner as "stopped mid-task without a report", even if its status reads idle (an agy agent editing files did this) (ADR-68, #12).
 - Agents no longer all read `gone` when fleet runs without a UTF-8 locale (`LANG` unset or `C`, as in `env -i`, cron or minimal containers): fleet now always talks to tmux in UTF-8 mode (#21).
 - Agents no longer run the full test suite on your machine: they test only the packages they changed, push their own `fleet/<name>` branch and merge once GitHub Actions (build, vet, full tests and `-race`) is green on it (ADR-69).

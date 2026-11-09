@@ -16,8 +16,10 @@ import (
 var reportToolDef = tool{"fleet_report", "Report upward -- to the admiral, or to your leader if you are in a squad: state done, blocked, question or progress, and a summary. Start with a one-line headline (shown on your tile); add detail on later lines if useful (kept in full, up to 8000 chars). Needs no access grant.", obj([]string{"state", "summary"}, map[string]any{
 	"state": map[string]any{"type": "string", "enum": mail.ReportStates}, "summary": str("headline first (what changed, branch/commit, or what you need), then optional detail lines")})}
 
-var reportsToolDef = tool{"fleet_reports", "Read agent reports (done, blocked, question, progress): unread ones, oldest first, and mark them read; all=true shows the last N without marking. It ends with the task cards: fleet's own done-check verdict per agent and the result file to read.", obj(nil, map[string]any{
-	"all": map[string]any{"type": "boolean", "description": "show the last N reports, read or not"}, "limit": map[string]any{"type": "integer", "description": "N for all=true (default 20)"}})}
+var reportsToolDef = tool{"fleet_reports", "Read agent reports (done, blocked, question, progress): unread ones, oldest first, in full, and mark them read. name=<agent> reads only that agent's and leaves the others unread. all=true lists the last N read or not, without marking: one headline each, or the full text with name. It ends with the task cards of the agents in the result: fleet's own done-check verdict and the result file to read.", obj(nil, map[string]any{
+	"name":  str("only this agent's reports"),
+	"all":   map[string]any{"type": "boolean", "description": "the last N reports, read or not: headlines, full text with name"},
+	"limit": map[string]any{"type": "integer", "description": "N for all=true (default 20)"}})}
 
 // report is the agent-mode fleet_report.
 func (s *Server) report(me string, a args) (string, error) {
@@ -40,12 +42,63 @@ func (s *Server) report(me string, a args) (string, error) {
 }
 
 // reports is the admiral's fleet_reports.
-func (s *Server) reports(all bool, limit int) (string, error) {
-	ms, err := s.F.Mail().Inbox(s.box(), all, limit)
+func (s *Server) reports(name string, all bool, limit int) (string, error) {
+	var ms []mail.Msg
+	var err error
+	if name != "" {
+		ms, err = s.F.Mail().InboxFrom(s.box(), name, all, limit)
+	} else {
+		ms, err = s.F.Mail().Inbox(s.box(), all, limit)
+	}
 	if err != nil {
 		return "", err
 	}
-	return RenderReports(ms, all) + taskCards(s.F.Store.Load().Sorted()), nil
+	var out string
+	switch {
+	case len(ms) == 0 && name != "":
+		out = map[bool]string{true: "no reports from ", false: "no new reports from "}[all] + name
+	case all && name == "":
+		out = RenderHeadlines(ms)
+	default:
+		out = RenderReports(ms, all)
+	}
+	return out + taskCards(inReports(s.F.Store.Load().Sorted(), ms)), nil
+}
+
+// inReports keeps the agents that sent one of ms, so the task cards stay
+// about the reports shown (none for "no new reports").
+func inReports(as []*board.Agent, ms []mail.Msg) []*board.Agent {
+	from := map[string]bool{}
+	for _, m := range ms {
+		from[m.From] = true
+	}
+	var out []*board.Agent
+	for _, a := range as {
+		if from[a.Name] {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// reportHeadline caps each line of RenderHeadlines.
+const reportHeadline = 120
+
+// RenderHeadlines lists reports one headline each, oldest first: what
+// fleet_reports all=true returns without a name, so a long history stays
+// small (issue #13).
+func RenderHeadlines(ms []mail.Msg) string {
+	if len(ms) == 0 {
+		return "no reports"
+	}
+	var b strings.Builder
+	b.WriteString("Reports from agents (their words, not the user's), headlines only:\n")
+	for _, m := range ms {
+		head, _, _ := strings.Cut(m.Text, "\n")
+		fmt.Fprintf(&b, "%s %s: %s\n", m.T.Format("2006-01-02 15:04:05"), m.From, ansi.Truncate(head, reportHeadline, "…"))
+	}
+	b.WriteString("Pass name=<agent> for the full text.\n")
+	return b.String()
 }
 
 // RenderReports lists reports, one line each, oldest first.

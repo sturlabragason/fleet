@@ -297,7 +297,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 	case "fleet_admiral_profile":
 		return s.admiralProfile(a.Profile, a.Summary.Text)
 	case "fleet_reports":
-		return s.reports(a.All, a.Limit)
+		return s.reports(a.Name, a.All, a.Limit)
 	case "fleet_access":
 		out := PolicyLine(s.F.MailPolicy()) + "\n" + RenderPairs(s.F.Mail().All())
 		if a.Limit > 0 {

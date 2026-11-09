@@ -22,7 +22,7 @@ func (s *Store) MoveReports(from, to string, who func(sender string) bool) ([]Ms
 		all := s.read(from)
 		ms, v := s.readView(from, true)
 		pick := map[string]bool{}
-		for _, m := range unreadOf(ms, readTrim(v.mark)) {
+		for _, m := range v.unread(ms) {
 			if who == nil || who(m.From) {
 				pick[m.ID+"\x00"+m.From] = true
 			}

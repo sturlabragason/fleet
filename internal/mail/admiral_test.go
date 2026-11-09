@@ -118,3 +118,39 @@ func TestMoveReports(t *testing.T) {
 		t.Errorf("move to self: %+v %v", m, err)
 	}
 }
+
+func TestInboxFromMarksOnlyThatSender(t *testing.T) {
+	s := newStore(t)
+	s.Report("a", "done", "a1")
+	s.Report("b", "done", "b1")
+	s.Report("a", "done", "a2")
+	s.Report("b", "done", "b2")
+	texts := func(ms []Msg) (out []string) {
+		for _, m := range ms {
+			out = append(out, strings.TrimPrefix(m.Text, "done: "))
+		}
+		return out
+	}
+	if got, _ := s.InboxFrom(Admiral, "a", true, 1); strings.Join(texts(got), ",") != "a2" {
+		t.Fatalf("all from a, n=1: %v", texts(got))
+	}
+	if s.Unread(Admiral) != 4 {
+		t.Fatal("all=true marked something read")
+	}
+	if got, _ := s.InboxFrom(Admiral, "a", false, 0); strings.Join(texts(got), ",") != "a1,a2" {
+		t.Fatalf("from a: %v", texts(got))
+	}
+	if got := texts(s.Peek(Admiral)); strings.Join(got, ",") != "b1,b2" {
+		t.Fatalf("b must stay unread: %v", got)
+	}
+	s.Report("a", "done", "a3")
+	if got, _ := s.Inbox(Admiral, false, 0); strings.Join(texts(got), ",") != "b1,b2,a3" {
+		t.Fatalf("plain read after a filtered one: %v", texts(got))
+	}
+	if _, err := os.Stat(filepath.Join(s.Dir, Admiral, "read.ids")); !os.IsNotExist(err) {
+		t.Errorf("read.ids left behind: %v", err)
+	}
+	if s.Unread(Admiral) != 0 {
+		t.Error("still unread")
+	}
+}
