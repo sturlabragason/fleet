@@ -62,7 +62,7 @@ var toolDefs = []tool{
 		"name": str("short unique agent name"), "profile": str("tool profile, see fleet_profiles"), "dir": str("working directory (absolute)"), "prompt": str("optional first prompt"),
 		"worktree":    map[string]any{"type": "boolean", "description": "give the agent its own git worktree (default: the user's config, normally true)"},
 		"goal":        str("task card: the goal in one line (shown on the tile and in fleet_info)"),
-		"check":       str("task card: done-check shell command, run in the agent's dir when it reports done, e.g. \"go build ./... && go test ./...\""),
+		"check":       str("task card: done-check shell command, run in the agent's dir when it reports done, keep it cheap: a build plus the touched packages' tests, e.g. \"go build ./... && go test ./internal/x/...\", or a check that CI passed on the branch head (the full suite runs in CI, ADR-69)"),
 		"check_exit":  map[string]any{"type": "integer", "description": "exit code the done-check must return to pass (default 0)"},
 		"result":      str("task card: result file the agent must write, relative to its dir (default result.md)"),
 		"interactive": map[string]any{"type": "boolean", "description": "the user will talk to this agent directly in its pane: never auto-closed, and told to report progress, not done, until the user ends the session"},

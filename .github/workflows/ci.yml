@@ -1,22 +1,47 @@
 name: ci
 
+# Agents push fleet/* branches and merge into local main only once this is
+# green, so the heavy checks run here instead of on the user's laptop (ADR-69).
 on:
   push:
+    branches: [main, "fleet/**"]
+    tags: ["v*"]
   pull_request:
+    branches: [main]
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: true
       - name: Install tmux
         run: sudo apt-get update && sudo apt-get install -y tmux
+      - run: make build
       - run: go vet ./...
       - run: go build ./...
       - run: go test ./...
+
+  race:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install tmux
+        run: sudo apt-get update && sudo apt-get install -y tmux
+      - run: go test -race ./...

@@ -114,7 +114,7 @@ cd <repo-main> && make build && go vet ./... && go test ./...
 Rerun the checks **on main after the merge**, not only on your branch: your change and the one that
 landed while you rebased have never been tested together. That is the merge's whole risk.
 
-Leave your worktree and branch in place (ADR-39). Never push (`fleet-release` does that).
+Leave your worktree and branch in place (ADR-39). Never push main (`fleet-release` does that), and don't push your branch again after this rebase: CI already ran on what you pushed (ADR-69).
 
 If the rebase conflicts outside the two files above: `git rebase --abort`, report `blocked` with the
 files and the other worktree's name, and continue with anything else you can do.
