@@ -207,8 +207,8 @@ func TestDefaultCarriesStandingRules(t *testing.T) {
 
 // The playbook is paid for on every spawn, so DESIGN §4 pins its size.
 func TestDefaultStaysShort(t *testing.T) {
-	if n := strings.Count(strings.TrimSpace(Default()), "\n") + 1; n > 39 {
-		t.Errorf("playbook grew to %d lines; DESIGN §4 budgets about 39", n)
+	if n := strings.Count(strings.TrimSpace(Default()), "\n") + 1; n > 40 {
+		t.Errorf("playbook grew to %d lines; DESIGN §4 budgets about 40", n)
 	}
 }
 
@@ -279,7 +279,7 @@ func TestLevelsCarryTheirOwnRules(t *testing.T) {
 			t.Errorf("standard must not carry %q", unwanted)
 		}
 	}
-	for _, want := range []string{"Assisted-by:", "Never push", "Plan in two or three lines"} {
+	for _, want := range []string{"Assisted-by:", "Never push main", "Plan in two or three lines"} {
 		if !strings.Contains(std, want) {
 			t.Errorf("standard lost %q", want)
 		}
@@ -290,7 +290,8 @@ func TestLevelsCarryTheirOwnRules(t *testing.T) {
 // default for a worktree=false spawn, which lands in the user's own checkout.
 var safetyCore = map[string]string{
 	"read-only":       "say so in your first reply and edit nothing",
-	"never push":      "never push, force-push or rewrite pushed history",
+	"never push main": "never push main",
+	"no force-push":   "never force-push or rewrite pushed history",
 	"assisted-by":     "an `assisted-by: <tool>` trailer",
 	"no ai co-author": "never a `co-authored-by:` for an ai",
 	"no secrets":      "secrets and private data",
@@ -340,5 +341,21 @@ func TestResolveLayersOntoEveryLevel(t *testing.T) {
 		if src[0] != BuiltIn+" ("+string(l)+")" {
 			t.Errorf("%s: sources %v", l, src)
 		}
+	}
+}
+
+// Heavy checks run in CI on the agent's pushed branch (ADR-69): pro and
+// standard push only their own fleet/ branch and test locally by package.
+func TestProAndStandardPushOnlyTheirBranch(t *testing.T) {
+	for _, l := range []Level{Pro, Standard} {
+		txt := Text(l)
+		for _, want := range []string{"git push -u origin fleet/<name>", "never push main", "go test ./<pkg>/...", "gh run watch"} {
+			if !strings.Contains(strings.ToLower(txt), strings.ToLower(want)) {
+				t.Errorf("%s playbook lost %q", l, want)
+			}
+		}
+	}
+	if !strings.Contains(Text(Light), "Never push main or any branch") {
+		t.Error("light must push nothing")
 	}
 }

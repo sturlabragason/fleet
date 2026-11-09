@@ -93,7 +93,7 @@ Use only the `fleet` MCP tools: `fleet_status`, `fleet_info`, `fleet_peek`, `fle
 - Every agent spawned with a prompt automatically gets the fleet worker playbook before its task. Don't repeat
   its rules in prompts. `effort` sizes it per task: `light` for an errand or a quick read-only question (stay in
   your dir, no secrets, report), `standard` for a contained change (plan, build, test, commit on its branch),
-  `pro` for professional code work (worktree, review, pre-merge checklist, merge into local main, no push).
+  `pro` for professional code work (worktree, review, pre-merge checklist, merge into local main; it pushes only its own `fleet/` branch, for CI).
   Default: `pro` with a worktree, `light` without one. Pick it deliberately: `pro` over-steers a small job.
 - A spawn prompt is ready when it says: the task, what is done when, which agent owns neighbouring areas (don't touch),
   what it depends on, and exceptions to the playbook (for example "read-only", "you are the publisher", "use best judgment").
@@ -101,6 +101,9 @@ Use only the `fleet` MCP tools: `fleet_status`, `fleet_info`, `fleet_peek`, `fle
 - Give a task card when the work has a machine-checkable done condition: `goal`, `check` (a shell command),
   `check_exit` (default 0) and `result` (default `result.md`). Fleet runs that check in the agent's dir when the
   agent reports done, shows pass/fail in `fleet_status` and `fleet_reports`, and won't auto-close a failed one.
+  Keep the check cheap, since several agents share the machine: a build plus the tests of the touched packages (`make build && go test ./internal/x/...`),
+  or that CI passed on the branch head (`test "$(gh run list --branch fleet/<name> -L1 --json headSha,conclusion -q '.[0].headSha+" "+.[0].conclusion')" = "$(git rev-parse HEAD) success"`),
+  not the full suite. The full suite runs in CI on the pushed branch (ADR-69).
 - When the task will add an ADR, call `fleet_adr` `claim` first (with the agent's name and the repo `dir`) and put the
   number in the prompt: "you own ADR-NN". That is what stops two agents from writing the same number; `list` shows the
   live claims, and a claim frees itself once its ADR is on main.

@@ -21,16 +21,17 @@ Work
 - If your tools include `fleet_squad_*` you lead a squad: split the task, spawn one agent per piece, collect their reports and send **one** summary upward. A prompt, merge, push or infra apply escalates; you never answer it for them.
 
 Pre-merge checklist (all of it, every time)
-1. Build, vet/lint and the full test suite pass. Run them yourself and quote the command.
+1. Locally, build and run only the tests for the packages you changed (`go test ./<pkg>/...`), never the full suite: several agents share the machine. Quote the command.
 2. A subagent reviewed the diff and you fixed or answered every finding.
 3. Docs describe the new behaviour; a decision others will ask "why?" about gets a short ADR. If the repo keeps a changelog, a user-facing change adds its line there in the same commit.
 4. The diff has no secrets, private data, stray files or debug output.
 5. Commit with a conventional subject (`feat:`, `fix:`, `docs:`, ...) and an `Assisted-by: <tool>` trailer. Never a `Co-authored-by:` for an AI.
-6. Before merging, squash fixups into their logical commits (interactive or autosquash rebase on your branch); one reviewable commit per change is the default, and published main is never rewritten.
-7. Merge into local main and rerun the tests there: `fleet merge` does the rebase, the checks, the merge and the checks on main, keeping both sides of a CHANGELOG.md or DESIGN.md conflict and stopping on any other (`fleet merge --dry-run` first). Leave your own worktree and branch in place — fleet and the user clean up after close. Never leave work unmerged.
+6. Before your first push, squash fixups into their logical commits (interactive or autosquash rebase on your branch); one reviewable commit per change is the default, and published main is never rewritten. After a push, fixes go on top as new commits.
+7. The full suite, vet and race run in CI: push your branch (`git push -u origin fleet/<name>`, a normal push) and wait for the run on your head commit (`gh run watch`, or `gh run list --branch fleet/<name> --json headSha,conclusion`). Merge only on green; on red, fix, commit and push again. Open a PR only if a push starts no run. If the repo's CI doesn't run on `fleet/*` branches, or you are offline, run the full suite locally instead and say so in your report.
+8. Merge into local main: `fleet merge` does the rebase, the checks, the merge and the checks on main, keeping both sides of a CHANGELOG.md or DESIGN.md conflict and stopping on any other (`fleet merge --dry-run` first). After green CI, pass a cheap check (`--check '<build> && go test ./<pkg>/...'`); its rebase of your pushed branch is fine, but don't push the branch again after it. Leave your own worktree and branch in place — fleet and the user clean up after close. Never leave work unmerged.
 
 Never
-- Never push, force-push or rewrite pushed history. One designated publisher pushes, fast-forward only, after the repo's public check. (Squashing your own unpushed branch commits, checklist item 6, is fine.)
+- Never push main, never force-push or rewrite pushed history. The only push you make is your own `fleet/` branch, for CI (checklist 7). One designated publisher pushes main, fast-forward only, after the repo's public check.
 - On a merge conflict, stop and report `blocked` with the files. If told to use best judgment, resolve it keeping both sides' intent and rerun the tests. CHANGELOG.md and DESIGN.md conflict at the top of today's section by construction: keep both sides' lines, newest first, and rerun the tests. Any other file: stop and report blocked.
 
 Finish

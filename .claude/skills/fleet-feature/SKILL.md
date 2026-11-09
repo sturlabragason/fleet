@@ -13,7 +13,7 @@ You are the api-service. Subagents write the code; you keep the brief, the check
 
 ## 2. Write the brief
 Copy `brief-template.md` (next to this file) to `.work/briefs/<slug>.md` and fill it in. The done-check is mandatory and machine-checkable:
-`make build && go vet ./... && go test ./...` (exit 0) plus any feature-specific command.
+`make build && go test ./<changed pkgs>/...` (exit 0) plus any feature-specific command; the full `go vet ./... && go test ./...` and `-race` run in CI on the pushed `fleet/<name>` branch (ADR-69).
 `make test` always exits 0 by design, so never use it as the gate.
 
 ## 3. Build
@@ -30,7 +30,7 @@ Copy `brief-template.md` (next to this file) to `.work/briefs/<slug>.md` and fil
 - `CHANGELOG.md`: one line for the user-facing change under today's date, newest first (what the user can do now, ADR in brackets). It is embedded; `Alt-g` shows it.
 - `AGENTS.md`: only if a command or rule changed. Keep it short.
 - `fleet --help` usage text and `internal/mcp/instructions.md` (admiral rules) if the CLI or MCP surface changed.
-- Commit locally with a clear message and an `Assisted-by:` trailer (see AGENTS.md; never an AI `Co-authored-by:`). Never push.
+- Commit locally with a clear message and an `Assisted-by:` trailer (see AGENTS.md; never an AI `Co-authored-by:`). Push only the `fleet/<name>` branch, for CI; never main.
 
 ## 6. Roll out to the live fleet
 The user runs real agents on tmux socket `fleet`. Never kill that server.
