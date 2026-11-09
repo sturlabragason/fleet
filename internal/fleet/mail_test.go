@@ -178,6 +178,25 @@ func TestMailPolicy(t *testing.T) {
 	if r, err := f.MailSend("c", "*", "all"); err != nil || len(r) != 1 || r[0] != "a" {
 		t.Fatalf("broadcast: %v %v", r, err)
 	}
+	// A squad leader on the same repo is reachable from outside its team,
+	// and a refusal to one of its members names it (fleet#35).
+	if _, err := f.Spawn("e", "cat", repo, ""); err != nil {
+		t.Fatal(err)
+	}
+	f.Store.Update(func(b *board.Board) error {
+		b.Agents["d"].Leader, b.Agents["e"].LeadBy = true, "d"
+		return nil
+	})
+	if _, err := f.MailSend("c", "d", "hand-off"); err != nil || access("c", "d") != "free (lead)" || access("d", "c") != "free (lead)" {
+		t.Fatalf("to a lead: %v %q %q", err, access("c", "d"), access("d", "c"))
+	}
+	want := "no access to e: request it with fleet_access_request (to e), or message d (lead of e's team), who you may reach freely"
+	if _, err := f.MailSend("c", "e", "x"); err == nil || err.Error() != want {
+		t.Fatalf("to a lead's member: %v", err)
+	}
+	if _, err := f.MailSend("a", "b", "x"); err == nil || err.Error() != "no access to b: request it with fleet_access_request" {
+		t.Fatalf("no lead to name: %v", err)
+	}
 	// "open" allows everything; "ask" is the old request-first flow.
 	os.WriteFile(f.Prefs.Path, []byte("[defaults]\nagent_mail = \"open\"\n"), 0o644)
 	f.Prefs, _ = prefs.Load()

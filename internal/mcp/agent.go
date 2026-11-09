@@ -32,7 +32,7 @@ func (s *Server) instructions() string {
 }
 
 var agentToolDefs = []tool{
-	{"fleet_agents", "List the other fleet agents: name, profile, status, dir and your access with each (\"free (team|repo|open)\" = message without asking).", obj(nil, map[string]any{})},
+	{"fleet_agents", "List the other fleet agents: name, profile, status, dir and your access with each (\"free (squad|team|repo|lead|open)\" = message without asking; a refusal names a lead you may reach instead).", obj(nil, map[string]any{})},
 	{"fleet_access_request", "Ask another agent for access to message each other, only when fleet_agents doesn't show it as free. Give a short reason; the agent or the user decides.", obj([]string{"to", "reason"}, map[string]any{
 		"to": str("agent name"), "reason": str("why you need to talk, one line")})},
 	{"fleet_access_respond", "Grant or deny another agent's pending access request to you.", obj([]string{"from", "decision"}, map[string]any{

@@ -30,6 +30,7 @@ func (f *Fleet) Mail() *mail.Store {
 		}
 		return f.mailReason(policy, a, b, repos) != ""
 	}
+	m.Hint = func(from, to string) string { return f.mailHint(policy, from, to, repos) }
 	m.Peers = func(a string) []string {
 		var out []string
 		if mail.IsAdmiralBox(a) {
@@ -61,9 +62,12 @@ func (f *Fleet) MailPolicy() string {
 }
 
 // mailReason says why a and b may message without a grant: "open" (policy),
-// "team" (same team) or "repo" (same repo, neither in a team); "" = they
-// must ask. Agents in different teams, or one in a team and one not, ask
-// under the team policy: teams can be different clients (ADR-34).
+// "team" (same team), "repo" (same repo, neither in a team) or "lead" (same
+// repo, one of them leads a squad); "" = they must ask. Other agents in
+// different teams, or one in a team and one not, ask under the team policy:
+// teams can be different clients (ADR-34). A lead stays reachable so a
+// hand-off need not go through the user, while its members stay private
+// (fleet#35).
 func (f *Fleet) mailReason(policy, a, b string, repos map[string]string) string {
 	ag := f.Store.Load().Agents
 	x, okA := ag[a]
@@ -87,14 +91,16 @@ func (f *Fleet) mailReason(policy, a, b string, repos map[string]string) string 
 		ta, _ = f.Teams.Of(a)
 		tb, _ = f.Teams.Of(b)
 	}
-	if ta != "" || tb != "" {
-		if ta == tb {
-			return "team"
-		}
-		return ""
+	if ta != "" && ta == tb {
+		return "team"
 	}
 	if ra, rb := repoOf(x.Dir, repos), repoOf(y.Dir, repos); ra != "" && ra == rb {
-		return "repo"
+		switch {
+		case ta == "" && tb == "":
+			return "repo"
+		case x.Leader || y.Leader:
+			return "lead"
+		}
 	}
 	return ""
 }
@@ -187,7 +193,7 @@ func (f *Fleet) onBoard(names ...string) error {
 type Peer struct {
 	Name, Profile, Status, Dir string
 	// Access: none, granted, denied, pending (you asked), pending (asks
-	// you), or free (team|repo|open) for implicit access (ADR-34).
+	// you), or free (squad|team|repo|lead|open) for implicit access (ADR-34).
 	Access string
 }
 
