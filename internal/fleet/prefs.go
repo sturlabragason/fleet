@@ -25,3 +25,7 @@ func (f *Fleet) MaxWorking() int { return f.livePrefs().MaxWorking() }
 
 // MemPrefs is the current [memory] section: the RAM guard settings.
 func (f *Fleet) MemPrefs() prefs.Memory { return f.livePrefs().Memory() }
+
+// DefaultProfile is the current [defaults] profile: what a spawn tool uses
+// when the call names no profile ("" = none set).
+func (f *Fleet) DefaultProfile() string { return f.livePrefs().DefaultProfile() }

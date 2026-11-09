@@ -25,8 +25,8 @@ var LeaderInstructions string
 // prompt, merges, pushes or applies — those escalate to the admiral.
 
 var squadToolDefs = []tool{
-	{"fleet_squad_spawn", "Start an agent of your own squad: same tool profiles, worktrees and task cards as the admiral's spawns. In a git repo it gets its own worktree <repo>.wt/<name> on branch fleet/<name>. Its reports come to your inbox, not the admiral's. Capped by [squad] max_members and the fleet-wide max_working (over the cap it queues).", obj([]string{"name", "profile", "dir"}, map[string]any{
-		"name": str("short unique agent name"), "profile": str("tool profile, see fleet_squad_profiles"), "dir": str("working directory (absolute)"), "prompt": str("optional first prompt"),
+	{"fleet_squad_spawn", "Start an agent of your own squad: same tool profiles, worktrees and task cards as the admiral's spawns. In a git repo it gets its own worktree <repo>.wt/<name> on branch fleet/<name>. Its reports come to your inbox, not the admiral's. Capped by [squad] max_members and the fleet-wide max_working (over the cap it queues).", obj([]string{"name", "dir"}, map[string]any{
+		"name": str("short unique agent name"), "profile": str("tool profile, see fleet_squad_profiles; default [defaults] profile in config.toml"), "dir": str("working directory (absolute)"), "prompt": str("optional first prompt"),
 		"worktree":   map[string]any{"type": "boolean", "description": "give the agent its own git worktree (default: the user's config, normally true)"},
 		"goal":       str("task card: the goal in one line"),
 		"check":      str("task card: done-check shell command, run in the agent's dir when it reports done"),
@@ -114,23 +114,26 @@ func (s *Server) squadCall(me, name string, raw json.RawMessage) (string, error)
 }
 
 func (s *Server) squadSpawn(me string, a args) (string, error) {
-	for f, v := range map[string]string{"name": a.Name, "profile": a.Profile, "dir": a.Dir} {
+	for f, v := range map[string]string{"name": a.Name, "dir": a.Dir} {
 		if v == "" {
 			return "", fmt.Errorf("%s is required", f)
 		}
 	}
-	ag, err := s.F.SquadSpawn(me, fleet.SpawnOpts{Worktree: a.Worktree, Card: a.card(), Effort: a.Effort}, a.Name, a.Profile, a.Dir, a.Prompt)
+	prof, err := s.spawnProfile(a.Profile, "fleet_squad_profiles")
+	if err != nil {
+		return "", err
+	}
+	ag, err := s.F.SquadSpawn(me, fleet.SpawnOpts{Worktree: a.Worktree, Card: a.card(), Effort: a.Effort}, a.Name, prof, a.Dir, a.Prompt)
 	if err != nil {
 		return "", err
 	}
 	if ag.Status == string(status.Queued) {
-		return fmt.Sprintf("queued %s (%s) in %s: %d agents busy, max_working %d; it starts when a slot frees",
-			ag.Name, ag.Profile, ag.Dir, s.F.Busy(), s.F.MaxWorking()) + cardNote(ag), nil
+		return s.queuedReply(ag) + cardNote(ag), nil
 	}
 	if w := ag.Worktree; w != nil {
-		return fmt.Sprintf("spawned %s (%s) into your squad, in its own worktree %s on branch %s", ag.Name, ag.Profile, w.Path, w.Branch) + cardNote(ag), nil
+		return fmt.Sprintf("spawned %s (%s) into your squad, in its own worktree %s on branch %s", ag.Name, s.spawnLabel(ag), w.Path, w.Branch) + cardNote(ag), nil
 	}
-	return fmt.Sprintf("spawned %s (%s) into your squad, in %s", ag.Name, ag.Profile, ag.Dir) + cardNote(ag), nil
+	return fmt.Sprintf("spawned %s (%s) into your squad, in %s", ag.Name, s.spawnLabel(ag), ag.Dir) + cardNote(ag), nil
 }
 
 func (s *Server) squadStatus(me string) string {

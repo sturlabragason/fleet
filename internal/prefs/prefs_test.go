@@ -53,6 +53,7 @@ func TestDefaultsAndProfileOverride(t *testing.T) {
 mode = "autopilot"
 auto_submit = false
 ready_timeout = "5s"
+profile = " my-copilot "
 
 [profile.copilot]
 mode = "plan"
@@ -65,6 +66,9 @@ patterns = "copilot"
 	p, err := Load()
 	if err != nil {
 		t.Fatal(err)
+	}
+	if got := p.DefaultProfile(); got != "my-copilot" {
+		t.Errorf("default profile %q", got)
 	}
 	// [defaults] reaches a profile with no section of its own.
 	got := p.For("claude")
