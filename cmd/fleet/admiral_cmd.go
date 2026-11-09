@@ -182,7 +182,7 @@ func cmdAdmiralClose(f *fleet.Fleet, args []string) error {
 		return err
 	}
 	if perr == nil {
-		f.T.KillPane(pane)
+		f.KillPane(pane)
 	}
 	wall.New(f.T, fleet.Session).Apply()
 	msg := fmt.Sprintf("admiral %s closed · %d agents and %d unread reports → main", name, agents, reports)
