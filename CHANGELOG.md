@@ -5,6 +5,7 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-09
+- Agents on one repo can message a squad leader there without asking first, so a hand-off to another team's lead no longer goes through you. A refused message names the lead the sender may message instead (#35).
 - `fleet_send` and `fleet_squad_send` to an agent still in the queue hold the text and deliver it when the agent starts, instead of failing. A leader's `fleet_squad_close confirmed=true` closes on the first call (#33).
 - Every `fleet_spawn`, `fleet_squad_spawn` and `fleet spawn` reply names the profile and model the agent got, and a queued one says how many are ahead of it. Set `[defaults] profile` in `config.toml` and spawn calls may leave out the profile (#31).
 - See how often each Copilot agent compacted its context (`⟲2` after its spend in `fleet_status`, `fleet spend` and `fleet info`), and the admiral or squad leader is told once to hand an agent over to a fresh one after 2 compactions or 1,000 AIC; set `recycle_compactions` / `recycle_aic` in config.toml, 0 turns them off (ADR-71, #27).

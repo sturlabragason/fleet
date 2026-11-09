@@ -46,7 +46,7 @@ func (s *Store) Send(from, to, text string) ([]string, error) {
 			}
 		} else {
 			if from == to || !st.allowed(from, to) {
-				return fmt.Errorf("no access to %s: request it with fleet_access_request", to)
+				return fmt.Errorf("no access to %s: request it with fleet_access_request%s", to, s.hint(from, to))
 			}
 			rcpt = []string{to}
 		}

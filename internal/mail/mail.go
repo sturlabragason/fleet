@@ -88,6 +88,9 @@ type Store struct {
 	// Peers lists the agents a broadcast from a may reach through Implicit;
 	// granted pairs are always included. nil = granted pairs only.
 	Peers func(a string) []string
+	// Hint is added to a "no access" refusal: who else from may reach
+	// freely about to (fleet#35). nil or "" = nothing.
+	Hint func(from, to string) string
 }
 
 // New returns a store rooted at dir.
