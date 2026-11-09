@@ -105,8 +105,8 @@ func TestSquadToolsRefuseNonMembers(t *testing.T) {
 	}
 }
 
-// Closing a squad agent keeps the admiral's confirmation rule: the first
-// call only says what the close would lose.
+// An unconfirmed squad close only says what the close would lose; a
+// confirmed one closes, on the first call too.
 func TestSquadCloseNeedsConfirmation(t *testing.T) {
 	f := squadHome(t)
 	s := NewAgent(f, "lead")

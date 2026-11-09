@@ -69,3 +69,15 @@ func TestSpawnWithoutProfileOrDefaultNamesTheFix(t *testing.T) {
 		t.Errorf("label %q", got)
 	}
 }
+
+// fleet_send to a queued agent holds the text for its start (fleet#33).
+func TestSendToQueuedIsHeld(t *testing.T) {
+	f, s := spawnHome(t, "")
+	msg, isErr := callText(t, s, "fleet_send", map[string]any{"name": "q0", "text": "also do y"})
+	if isErr || msg != "queued for q0: delivered when it starts" {
+		t.Fatalf("reply %q (isErr=%v)", msg, isErr)
+	}
+	if g := f.Store.Load().Agents["q0"].Goal; g != "also do y" {
+		t.Errorf("goal %q", g)
+	}
+}

@@ -70,8 +70,12 @@ func (s *Server) send(a args) (string, error) {
 		return "", err
 	}
 	if a.Name != "" {
-		if err := s.sendOne(a, a.Name); err != nil {
+		held, err := s.sendOne(a, a.Name)
+		if err != nil {
 			return "", err
+		}
+		if held {
+			return fleet.HeldNote(a.Name), nil
 		}
 		return "sent to " + a.Name, nil
 	}
@@ -88,8 +92,13 @@ func (s *Server) send(a args) (string, error) {
 	}
 	var b strings.Builder
 	for _, name := range names {
-		if err := s.sendOne(a, name); err != nil {
+		held, err := s.sendOne(a, name)
+		if err != nil {
 			fmt.Fprintf(&b, "%s: skipped (%v)\n", name, err)
+			continue
+		}
+		if held {
+			fmt.Fprintf(&b, "%s: queued, delivered when it starts\n", name)
 			continue
 		}
 		fmt.Fprintf(&b, "%s: sent\n", name)
@@ -99,29 +108,35 @@ func (s *Server) send(a args) (string, error) {
 
 // sendOne sends to one agent. Text or keys to an agent on a prompt need
 // confirmed=true: Enter on a picker approves it (ADR-9). Text or keys to a
-// pane the user is typing in need force=true (ADR-61).
-func (s *Server) sendOne(a args, name string) error {
+// pane the user is typing in need force=true (ADR-61). Text alone to a
+// queued agent is held for its start (held=true, fleet#33).
+func (s *Server) sendOne(a args, name string) (held bool, err error) {
 	if err := s.scope(name); err != nil {
-		return err
+		return false, err
+	}
+	if len(a.Keys) == 0 && a.Text != "" {
+		if held, err := s.F.HoldForQueued(name, a.Text); held || err != nil {
+			return held, err
+		}
 	}
 	if !a.Force {
 		if r := s.F.SendBlocker(name, a.Text != "" || slices.Contains(a.Keys, "Enter")); r != "" {
-			return fleet.UserError(r)
+			return false, fleet.UserError(r)
 		}
 	}
 	if !a.Confirmed {
 		w, err := s.F.Prompting(name)
 		if err != nil {
-			return err
+			return false, err
 		}
 		if w != "" {
-			return fleet.WaitingError(w)
+			return false, fleet.WaitingError(w)
 		}
 	}
 	if len(a.Keys) == 0 {
-		return s.F.Send(name, a.Text)
+		return false, s.F.Send(name, a.Text)
 	}
-	return s.F.SendKeys(name, a.Text, a.Keys)
+	return false, s.F.SendKeys(name, a.Text, a.Keys)
 }
 
 // answer runs fleet_answer: y/n, a numbered option, or an option picked by
