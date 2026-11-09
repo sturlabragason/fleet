@@ -158,6 +158,7 @@ const usage = `usage:
                                             --notify: the result goes to a tmux message, not stdout)
   fleet keys [--markdown]                   list every hotkey (Alt-? in tmux, ? in the overview)
   fleet changes [--json]                    what's new in fleet: its latest features, newest first (Alt-g)
+  fleet version                             the release tag and commit this binary was built from
   fleet watch [--interval 1s] [--tick 200ms]
                                             run the status watcher in the foreground: it keeps the board,
                                             the pane border titles, fleet ls and the overview agreeing even
@@ -219,6 +220,8 @@ func run(args []string) error {
 		return cmdADR(rest)
 	case "merge":
 		return cmdMerge(rest)
+	case "version", "--version":
+		return cmdVersion(rest)
 	}
 	if cmd == "changes" {
 		return cmdChanges(rest)

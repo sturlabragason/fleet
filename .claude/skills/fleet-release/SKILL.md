@@ -1,6 +1,6 @@
 ---
 name: fleet-release
-description: Cuts a fleet release - public check, fast-forward push of main, tag, linux binaries and SHA256SUMS, GitHub release, CI wait. Use when asked to "publish", "release vX.Y.Z", "push main", "cut a release" or "tag" in this repo, or when spawned as the designated publisher.
+description: Cuts a fleet release - public check, fast-forward push of main, CI wait, then the release workflow (tag, linux+darwin binaries, SHA256SUMS, GitHub release; ADR-73). Use when asked to "publish", "release vX.Y.Z", "push main", "cut a release" or "tag" in this repo, or when spawned as the designated publisher.
 ---
 
 # fleet-release
@@ -58,25 +58,36 @@ gh run watch -R sturlabragason/fleet "$run" --exit-status
 `gh run watch` needs a run id: without one it fails in a non-interactive shell, and the CI gate is
 silently skipped. Wait for CI green before tagging — a tag on a red commit is a tag you cannot move.
 
+The release workflow (`.github/workflows/release.yml`, ADR-73) does the rest: it picks the next
+version from the conventional commits since the last tag (`scripts/next-version.sh`), tags main's
+head, builds linux and darwin × amd64 and arm64 with goreleaser, writes `SHA256SUMS`, and takes the
+notes from the `CHANGELOG.md` lines added since the last tag (`scripts/release-notes.sh`). It
+refuses a ref other than main, a commit without green CI, or a tag that exists.
+
+Dry-run first; it is the default and publishes nothing:
+
 ```sh
-git tag -a vX.Y.Z -m "vX.Y.Z" $REL
-git push origin vX.Y.Z                      # the one tag, by name; never --tags
-
-mkdir -p dist && rm -f dist/*
-for a in amd64 arm64; do
-  CGO_ENABLED=0 GOOS=linux GOARCH=$a go build -trimpath -ldflags "-s -w" -o dist/fleet-linux-$a ./cmd/fleet
-done
-(cd dist && sha256sum fleet-* > SHA256SUMS)
-
-gh release create vX.Y.Z -R sturlabragason/fleet dist/* --title vX.Y.Z --notes "$(…)"
+gh workflow run release.yml -R sturlabragason/fleet
+run=$(gh run list -R sturlabragason/fleet -w release.yml -L1 --json databaseId -q '.[0].databaseId')
+gh run watch -R sturlabragason/fleet "$run" --exit-status
+gh run view -R sturlabragason/fleet "$run"          # the summary shows the version and notes
 ```
 
-Release notes come from `CHANGELOG.md`: the lines added since the previous tag, in the changelog's
-own words. Do not write new prose for them.
+Check that the version and the notes are what the user approved, then release:
+
+```sh
+gh workflow run release.yml -R sturlabragason/fleet -f dry_run=false          # next version
+gh workflow run release.yml -R sturlabragason/fleet -f dry_run=false -f version=vX.Y.Z  # named one
+```
+
+Watch it the same way. Without `gh workflow run` (offline Actions, a fork), the old manual steps
+are `scripts/next-version.sh`, `git tag -a`, `git push origin <tag>` and
+`goreleaser release --clean --release-notes <(scripts/release-notes.sh)`.
 
 ## After
 
-- `rm -rf dist` — literal path only.
+- Check the release: `gh release view vX.Y.Z -R sturlabragason/fleet` lists five files
+  (`fleet-{linux,darwin}-{amd64,arm64}`, `SHA256SUMS`).
 - Report: the commit pushed, the tag, the release URL, CI result, and anything the check made you
   leave out of this release.
 - Record it with `fleet note` so the next publisher knows where the line is.
