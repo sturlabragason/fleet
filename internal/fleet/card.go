@@ -66,7 +66,12 @@ func NormalizeCard(c *board.Card) *board.Card {
 		Want:   c.Want,
 		Result: strings.TrimSpace(c.Result),
 	}
-	if n.Goal == "" && n.Check == "" && n.Result == "" {
+	for _, m := range c.May {
+		if m = strings.TrimSpace(m); m != "" {
+			n.May = append(n.May, m)
+		}
+	}
+	if n.Goal == "" && n.Check == "" && n.Result == "" && len(n.May) == 0 {
 		return nil
 	}
 	if n.Result == "" {
@@ -89,6 +94,9 @@ func CardPrompt(c *board.Card) string {
 	}
 	if c.Check != "" {
 		fmt.Fprintf(&b, "\nDone-check: `%s`, run in your dir, must exit %d. fleet runs it itself when you report done and tells the admiral whether it passed, so run it yourself first.\n", c.Check, c.Want)
+	}
+	if len(c.May) > 0 {
+		fmt.Fprintf(&b, "\nPermissions: you may %s without asking. Ask before anything else public or irreversible.\n", strings.Join(c.May, ", "))
 	}
 	fmt.Fprintf(&b, "\nResult file: write `%s` in your dir before you report done: what you changed, the branch and commit, what is left and any open questions.\n", c.Result)
 	return strings.TrimRight(b.String(), "\n")

@@ -121,6 +121,9 @@ type Card struct {
 	Want int `json:"want,omitempty"`
 	// Result is the file the agent is told to write, relative to its dir.
 	Result string `json:"result,omitempty"`
+	// May lists standing permissions the user gave for this task, such as
+	// merge-local, push-main or deploy (free text, fleet#32).
+	May []string `json:"may,omitempty"`
 	// Checked is the last done-check run; nil until one has finished.
 	Checked *Check `json:"checked,omitempty"`
 	// Started is when a done-check run was claimed. It is the claim marker

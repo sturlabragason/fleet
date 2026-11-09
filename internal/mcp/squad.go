@@ -32,6 +32,7 @@ var squadToolDefs = []tool{
 		"check":      str("task card: done-check shell command, run in the agent's dir when it reports done"),
 		"check_exit": map[string]any{"type": "integer", "description": "exit code the done-check must return to pass (default 0)"},
 		"result":     str("task card: result file the agent must write, relative to its dir (default result.md)"),
+		"may":        mayProp,
 		"effort":     map[string]any{"type": "string", "enum": []string{"light", "standard", "pro"}, "description": "how much process the agent is given: light (an errand or a quick read-only question), standard (a contained change: plan, build, test, commit), pro (the full playbook, including the pre-merge checklist). Default: pro with a worktree, light without one."}})},
 	{"fleet_squad_profiles", "List the tool profiles fleet_squad_spawn accepts.", obj(nil, map[string]any{})},
 	{"fleet_squad_status", "List your squad: name, profile, status, age, what each agent waits for and its last report. Start here.", obj(nil, map[string]any{})},

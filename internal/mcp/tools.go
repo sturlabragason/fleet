@@ -65,6 +65,7 @@ var toolDefs = []tool{
 		"check":       str("task card: done-check shell command, run in the agent's dir when it reports done, keep it cheap: a build plus the touched packages' tests, e.g. \"go build ./... && go test ./internal/x/...\", or a check that CI passed on the branch head (the full suite runs in CI, ADR-69)"),
 		"check_exit":  map[string]any{"type": "integer", "description": "exit code the done-check must return to pass (default 0)"},
 		"result":      str("task card: result file the agent must write, relative to its dir (default result.md)"),
+		"may":         mayProp,
 		"interactive": map[string]any{"type": "boolean", "description": "the user will talk to this agent directly in its pane: never auto-closed, and told to report progress, not done, until the user ends the session"},
 		"leader":      map[string]any{"type": "boolean", "description": "make it a leader: it gets squad tools and may spawn a squad of its own, whose reports come to it instead of you. Use for a job you want planned, split and summarised by one agent."},
 		"effort":      map[string]any{"type": "string", "enum": []string{"light", "standard", "pro"}, "description": "how much process the agent is given. light: an errand or a quick read-only question (a few lines: stay in your dir, no secrets, report). standard: a contained change (plan, build and test, commit on its branch; no ADR, no review, no merge). pro: professional code work in this repo (the full playbook: worktree, failing test first, subagent review, pre-merge checklist, merge into local main). Default: pro with a worktree, light without one."}})},
@@ -135,6 +136,7 @@ type args struct {
 	// Task card arguments of fleet_spawn (ADR-43).
 	Goal, Check, Result string
 	CheckExit           *int `json:"check_exit"`
+	May                 []string
 	// TimeoutS is fleet_wait's timeout in seconds (ADR-72).
 	TimeoutS int `json:"timeout_s"`
 }
