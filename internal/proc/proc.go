@@ -111,6 +111,19 @@ func Kill(ps []Proc, grace time.Duration) {
 		log.Warn("SIGKILL after grace", "pid", p.PID)
 		syscall.Kill(p.PID, syscall.SIGKILL)
 	}
+	// SIGKILL is delivered asynchronously; wait briefly so callers see the tree gone.
+	for end := time.Now().Add(500 * time.Millisecond); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
+		gone := true
+		for _, p := range live {
+			if alive(p) {
+				gone = false
+				break
+			}
+		}
+		if gone {
+			break
+		}
+	}
 	log.Debug("stopped process tree", "procs", len(ps), "killed", len(live))
 }
 
