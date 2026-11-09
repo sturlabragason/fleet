@@ -106,6 +106,8 @@ func (s *Server) agentCall(name string, raw json.RawMessage) (string, error) {
 		return "sent to " + strings.Join(rcpt, ", "), nil
 	case "fleet_report":
 		return s.report(me, a)
+	case "fleet_wait":
+		return s.agentWait(me, a)
 	default: // fleet_inbox
 		ms, err := m.Inbox(me, a.All, a.Limit)
 		if err != nil {

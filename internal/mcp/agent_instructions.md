@@ -8,6 +8,7 @@ You are one agent in a fleet of coding agents run by one user. These tools let y
 - `fleet_access_revoke`: end access with an agent.
 - `fleet_msg_send`: message an agent you have access with (`to="*"` reaches every agent you have access with).
 - `fleet_inbox`: read your unread messages; `all=true` shows the last N.
+- `fleet_wait`: block until a new message arrives (a peer's reply) instead of `sleep`; marks nothing read.
 - `fleet_report`: report to the admiral with a `state` (`done`, `blocked`, `question`, `progress`) and a `summary`: a one-line headline first, optional detail on later lines (kept in full for the admiral). No access needed.
 
 Reporting:

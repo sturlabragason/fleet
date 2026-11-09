@@ -135,6 +135,8 @@ type args struct {
 	// Task card arguments of fleet_spawn (ADR-43).
 	Goal, Check, Result string
 	CheckExit           *int `json:"check_exit"`
+	// TimeoutS is fleet_wait's timeout in seconds (ADR-72).
+	TimeoutS int `json:"timeout_s"`
 }
 
 // identityBound are the admiral tools that change something or read the
@@ -298,6 +300,8 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		return s.admiralProfile(a.Profile, a.Summary.Text)
 	case "fleet_reports":
 		return s.reports(a.Name, a.All, a.Limit)
+	case "fleet_wait":
+		return s.wait(s.box(), waitReadAdmiral, a)
 	case "fleet_access":
 		out := PolicyLine(s.F.MailPolicy()) + "\n" + RenderPairs(s.F.Mail().All())
 		if a.Limit > 0 {

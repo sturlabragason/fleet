@@ -67,6 +67,12 @@ type Server struct {
 	pending  *resumedInput // input left over from the previous reload
 	noted    bool          // reload note already appended
 	mu       sync.Mutex
+
+	// out writes protocol messages; progress, while a tools/call that
+	// carries a progressToken runs, sends it a notifications/progress
+	// (fleet_wait, ADR-72). Both are used only on the serving goroutine.
+	out      *json.Encoder
+	progress func(n int, msg string)
 }
 
 // New returns a server.
@@ -179,6 +185,7 @@ func (s *Server) serveLine(line []byte, enc *json.Encoder) error {
 		logx.For("mcp").Warn("bad json", "err", err)
 		return enc.Encode(response{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &rpcError{-32700, "parse error"}})
 	}
+	s.out = enc
 	res, rerr := s.handle(req)
 	if len(req.ID) == 0 { // notification
 		return nil
@@ -219,11 +226,15 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		var p struct {
 			Name      string          `json:"name"`
 			Arguments json.RawMessage `json:"arguments"`
+			Meta      struct {
+				ProgressToken json.RawMessage `json:"progressToken"`
+			} `json:"_meta"`
 		}
 		if err := json.Unmarshal(req.Params, &p); err != nil {
 			return nil, &rpcError{-32602, "invalid params"}
 		}
 		s.mu.Lock()
+		s.progress = s.progressFor(p.Meta.ProgressToken)
 		var text string
 		var err error
 		if s.Agent != "" {
@@ -231,6 +242,7 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		} else {
 			text, err = s.call(p.Name, p.Arguments)
 		}
+		s.progress = nil
 		s.mu.Unlock()
 		log.Info("call", "tool", p.Name, "agent", s.Agent, "err", err)
 		isErr := err != nil
@@ -250,6 +262,19 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		return toolResult(text, isErr), nil
 	}
 	return nil, &rpcError{-32601, "method not found: " + req.Method}
+}
+
+// progressFor sends progress notifications for one request's token; nil
+// when the client sent none.
+func (s *Server) progressFor(tok json.RawMessage) func(int, string) {
+	if len(tok) == 0 || string(tok) == "null" || s.out == nil {
+		return nil
+	}
+	enc := s.out
+	return func(n int, msg string) {
+		enc.Encode(map[string]any{"jsonrpc": "2.0", "method": "notifications/progress",
+			"params": map[string]any{"progressToken": tok, "progress": n, "message": msg}})
+	}
 }
 
 func toolResult(text string, isErr bool) map[string]any {

@@ -84,7 +84,7 @@ func TestAgentMode(t *testing.T) {
 		names = append(names, tl.(map[string]any)["name"].(string))
 	}
 	sort.Strings(names)
-	if got := strings.Join(names, " "); got != "fleet_access_request fleet_access_respond fleet_access_revoke fleet_agents fleet_inbox fleet_msg_send fleet_report" {
+	if got := strings.Join(names, " "); got != "fleet_access_request fleet_access_respond fleet_access_revoke fleet_agents fleet_inbox fleet_msg_send fleet_report fleet_wait" {
 		t.Fatalf("agent tools: %s", got)
 	}
 	if msg, isErr := ra.tool("fleet_status", nil); !isErr || !strings.Contains(msg, "unknown tool") {

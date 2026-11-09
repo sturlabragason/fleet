@@ -109,6 +109,10 @@ const usage = `usage:
                                             unread ones, oldest first; --all shows the last N instead.
                                             Only the admiral (a shell in no agent pane, no --as) marks
                                             them read; an agent reads the history without taking them
+  fleet wait [--agents a,b] [--timeout 300s] [--as NAME] [--admiral NAME]
+                                            block until a new report or message arrives (an agent: its
+                                            own mailbox; else the admiral's), max 10m; prints the
+                                            headlines, marks nothing read. Exit 0 on news, 2 on timeout
   fleet admiral [--name N] [--json]         admiral session, context fill, generation, uptime
   fleet admiral add NAME [--profile P]      start another admiral beside main (DESIGN §6.12)
   fleet admiral ls                          admirals with their agents and unread reports
@@ -315,6 +319,8 @@ func run(args []string) error {
 		return cmdReport(f, rest)
 	case "reports":
 		return cmdReports(f, rest)
+	case "wait":
+		return cmdWait(f, rest)
 	case "profiles":
 		for _, n := range tools.Names(f.Profiles) {
 			p := f.Profiles[n]
