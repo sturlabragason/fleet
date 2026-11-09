@@ -111,6 +111,18 @@ func TestQueuedSendFailsAndCloseRemoves(t *testing.T) {
 	if err == nil || err.Error() != `agent "q1" is queued, not started yet` {
 		t.Errorf("send to queued: %v", err)
 	}
+	// The MCP sends hold text for it instead: appended to the first prompt
+	// the drain launches with. A started agent is not held for.
+	if held, err := f.HoldForQueued("q1", "hi"); !held || err != nil {
+		t.Fatalf("hold: %v %v", held, err)
+	}
+	f.HoldForQueued("q1", "and this")
+	if g := f.Store.Load().Agents["q1"].Goal; g != "hi\n\nand this" {
+		t.Errorf("held goal %q", g)
+	}
+	if held, _ := f.HoldForQueued("a1", "x"); held {
+		t.Error("held for a running agent")
+	}
 	if err := f.Close("q1"); err != nil {
 		t.Fatal(err)
 	}

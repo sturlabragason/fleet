@@ -44,8 +44,8 @@ var squadToolDefs = []tool{
 		"name": str("squad agent name, or * for all of them"), "text": str("text to send")})},
 	{"fleet_squad_reports", "Read your agents' reports (done, blocked, question, progress) without marking them read; fleet_inbox is where you mark them read. name=<agent> shows only that agent's.", obj(nil, map[string]any{
 		"name": str("only this squad agent's reports"), "limit": map[string]any{"type": "integer", "description": "how many to show (default 20)"}})},
-	{"fleet_squad_close", "Stop one of your agents and take it off the board, or with name=\"*\" all of them. The first call is refused and names any uncommitted or unmerged work: read it, and call again with confirmed=true only when that work is merged or you no longer need it.", obj([]string{"name", "confirmed"}, map[string]any{
-		"name": str("squad agent name, or * for all of them"), "confirmed": confirmedProp})},
+	{"fleet_squad_close", "Stop one of your agents and take it off the board, or with name=\"*\" all of them. Your call, not the user's: once its work is merged or no longer needed (fleet_squad_info shows it), pass confirmed=true and it closes on the first call; the reply still names any uncommitted or unmerged work left behind. confirmed=false only lists that work and closes nothing.", obj([]string{"name", "confirmed"}, map[string]any{
+		"name": str("squad agent name, or * for all of them"), "confirmed": map[string]any{"type": "boolean", "description": "true closes now; false only lists the work the close would leave behind"}})},
 }
 
 // isLeader reports whether the agent this server acts for leads a squad.
@@ -210,17 +210,22 @@ func (s *Server) squadSend(me string, a args) (string, error) {
 			r.OK, r.Note = false, "not in your squad"
 		} else if m.Status == string(status.Waiting) {
 			r.OK, r.Note = false, "on a prompt; report it to the admiral, you may not answer prompts"
-		} else if err := s.sendOne(args{Name: n, Text: a.Text}, n); err != nil {
+		} else if held, err := s.sendOne(args{Name: n, Text: a.Text}, n); err != nil {
 			r.OK, r.Note = false, err.Error()
+		} else if held && len(names) == 1 {
+			return fleet.HeldNote(n), nil
+		} else if held {
+			r.Agent += " (queued: delivered when it starts)"
 		}
 		rs = append(rs, r)
 	}
 	return fleet.FormatResults("sent", rs), nil
 }
 
-// squadClose is fleet_close for a leader's own agents. It keeps the
-// admiral's confirmation rule: the first call only reports what the close
-// would lose (ADR-29, ADR-53).
+// squadClose is fleet_close for a leader's own agents. The leader decides,
+// not the user, so confirmed=true closes on the first call and the reply
+// still names the work left behind; confirmed=false only lists that work
+// (ADR-29, ADR-53, fleet#33).
 func (s *Server) squadClose(me string, a args) (string, error) {
 	if a.Name == "" {
 		return "", fmt.Errorf("name is required (\"*\" closes the whole squad)")
