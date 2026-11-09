@@ -31,6 +31,10 @@ func TestNormalizeCardDefaultsAndEmpty(t *testing.T) {
 	if c := NormalizeCard(&board.Card{Result: "out/notes.md", Want: 2}); c.Result != "out/notes.md" || c.Want != 2 {
 		t.Fatalf("named result: %+v", c)
 	}
+	// Permissions alone make a card; blanks are dropped (fleet#32).
+	if c := NormalizeCard(&board.Card{May: []string{" merge-local ", "", "push-main"}}); c == nil || strings.Join(c.May, ",") != "merge-local,push-main" {
+		t.Fatalf("may-only card: %+v", c)
+	}
 	// A card never arrives pre-checked.
 	if c := NormalizeCard(&board.Card{Goal: "g", Checked: &board.Check{Pass: true}}); c.Checked != nil {
 		t.Fatalf("kept a stale verdict: %+v", c.Checked)
@@ -46,6 +50,13 @@ func TestCardPromptTellsGoalCheckAndResult(t *testing.T) {
 		if !strings.Contains(p, want) {
 			t.Fatalf("card prompt missing %q:\n%s", want, p)
 		}
+	}
+	if strings.Contains(p, "Permissions") {
+		t.Fatal("permissions line without may")
+	}
+	p = CardPrompt(NormalizeCard(&board.Card{May: []string{"merge-local", "push-main"}}))
+	if !strings.Contains(p, "Permissions: you may merge-local, push-main without asking. Ask before anything else public or irreversible.") {
+		t.Fatalf("no permissions line:\n%s", p)
 	}
 }
 

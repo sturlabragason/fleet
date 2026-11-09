@@ -15,12 +15,16 @@ import (
 // card builds the spawn's task card from the tool arguments; nil when the
 // call asked for none.
 func (a args) card() *board.Card {
-	c := board.Card{Goal: a.Goal, Check: a.Check, Result: a.Result}
+	c := board.Card{Goal: a.Goal, Check: a.Check, Result: a.Result, May: a.May}
 	if a.CheckExit != nil {
 		c.Want = *a.CheckExit
 	}
 	return fleet.NormalizeCard(&c)
 }
+
+// mayProp is the spawn tools' task-card permission argument (fleet#32).
+var mayProp = map[string]any{"type": "array", "items": map[string]any{"type": "string"},
+	"description": "task card: standing OKs the user gave, e.g. merge-local, push-main, deploy (free text allowed); the agent does these without asking"}
 
 // cardNote is what a fleet_spawn reply adds about the agent's task card.
 func cardNote(ag *board.Agent) string {
@@ -29,6 +33,9 @@ func cardNote(ag *board.Agent) string {
 		return ""
 	}
 	out := "\ntask card: result file " + c.Result
+	if len(c.May) > 0 {
+		out += "; may " + strings.Join(c.May, ", ")
+	}
 	if c.Check != "" {
 		out += fmt.Sprintf("; fleet runs `%s` in %s when %s reports done and must see exit %d", c.Check, ag.Dir, ag.Name, c.Want)
 	}

@@ -101,6 +101,7 @@ Use only the `fleet` MCP tools: `fleet_status`, `fleet_info`, `fleet_peek`, `fle
   what it depends on, and exceptions to the playbook (for example "read-only", "you are the publisher", "use best judgment").
 - Always spawn with the task as the prompt: an agent spawned without one gets no playbook.
 - State the profile on every spawn unless `[defaults] profile` is set; when a spawn queues, tell the user how many are ahead.
+- Put standing OKs the user gave (merge-local, push-main…) in the card's `may` instead of asking them again.
 - Give a task card when the work has a machine-checkable done condition: `goal`, `check` (a shell command),
   `check_exit` (default 0) and `result` (default `result.md`). Fleet runs that check in the agent's dir when the
   agent reports done, shows pass/fail in `fleet_status` and `fleet_reports`, and won't auto-close a failed one.

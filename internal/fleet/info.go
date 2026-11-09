@@ -186,6 +186,9 @@ func (f *Fleet) Info(name string) (string, error) {
 			kv("done-check", fmt.Sprintf("%s (want exit %d)", c.Check, c.Want))
 			kv("done-check result", CheckState(a))
 		}
+		if len(c.May) > 0 {
+			kv("may", strings.Join(c.May, ", "))
+		}
 		if p, written, ok := ResultPath(a); ok {
 			kv("result file", p+map[bool]string{true: " (written)", false: " (not written yet)"}[written])
 		}

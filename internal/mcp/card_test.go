@@ -27,7 +27,7 @@ func spawnSchema(t *testing.T) map[string]any {
 
 func TestSpawnSchemaHasTheTaskCard(t *testing.T) {
 	props := spawnSchema(t)
-	for _, k := range []string{"goal", "check", "check_exit", "result"} {
+	for _, k := range []string{"goal", "check", "check_exit", "result", "may"} {
 		p, ok := props[k].(map[string]any)
 		if !ok {
 			t.Fatalf("fleet_spawn has no %q argument", k)
@@ -53,11 +53,11 @@ func TestSpawnSchemaHasTheTaskCard(t *testing.T) {
 
 func TestSpawnArgsBuildTheCard(t *testing.T) {
 	var a args
-	if err := json.Unmarshal([]byte(`{"name":"x","profile":"p","dir":"/d","goal":"ship it","check":"make test","check_exit":2}`), &a); err != nil {
+	if err := json.Unmarshal([]byte(`{"name":"x","profile":"p","dir":"/d","goal":"ship it","check":"make test","check_exit":2,"may":["merge-local"]}`), &a); err != nil {
 		t.Fatal(err)
 	}
 	c := a.card()
-	if c == nil || c.Goal != "ship it" || c.Check != "make test" || c.Want != 2 {
+	if c == nil || c.Goal != "ship it" || c.Check != "make test" || c.Want != 2 || len(c.May) != 1 || !strings.Contains(cardNote(&board.Agent{Card: c}), "; may merge-local") {
 		t.Fatalf("card %+v", c)
 	}
 	if c.Result != fleet.DefaultResult {
