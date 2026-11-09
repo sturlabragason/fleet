@@ -270,3 +270,46 @@ patterns = "copilot"
 		t.Errorf("close: %q", out)
 	}
 }
+
+func TestWallHideAllAndRestore(t *testing.T) {
+	home := t.TempDir()
+	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
+	t.Cleanup(func() { tc.KillServer() })
+	os.WriteFile(filepath.Join(home, "tools.toml"), []byte("[c]\ncommand = \"cat\"\npatterns = \"fake\"\n"), 0o644)
+	t.Setenv("FLEET_CONFIG", filepath.Join(home, "no-config.toml"))
+	f, err := fleet.New(tc, home, "/nonexistent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Spawn("a1", "c", home, ""); err != nil {
+		t.Skipf("tmux unavailable: %v", err)
+	}
+	ov, err := tc.Run("new-window", "-d", "-t", fleet.Session+":", "-n", "main", "-P", "-F", "#{pane_id}", "cat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tc.SetPaneOption(ov, "@role", "ov")
+	r := startRPC(t, New(f, wall.New(tc, fleet.Session)))
+	r.call("initialize", map[string]any{"protocolVersion": ProtocolVersion})
+	if msg, _ := r.tool("fleet_wall", map[string]any{"action": "hide_all"}); msg != wall.NothingOnWallMsg {
+		t.Errorf("hide_all on an empty wall: %q", msg)
+	}
+	if msg, isErr := r.tool("fleet_wall", map[string]any{"action": "show", "name": "a1"}); isErr {
+		t.Fatalf("show: %q", msg)
+	}
+	if msg, isErr := r.tool("fleet_wall", map[string]any{"action": "hide_all"}); isErr || msg != wall.HiddenAllMsg(1) {
+		t.Fatalf("hide_all: %q", msg)
+	}
+	if on := wall.New(tc, fleet.Session).OnWall(); len(on) != 0 {
+		t.Fatalf("still on wall: %v", on)
+	}
+	if p, err := f.Pane("a1"); err != nil || p == "" {
+		t.Fatalf("a1 gone after hide_all: %v", err)
+	}
+	if msg, isErr := r.tool("fleet_wall", map[string]any{"action": "restore"}); isErr || msg != wall.RestoredMsg(1) {
+		t.Fatalf("restore: %q", msg)
+	}
+	if !wall.New(tc, fleet.Session).OnWall()["a1"] {
+		t.Error("a1 not back on the wall")
+	}
+}

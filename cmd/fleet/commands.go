@@ -146,6 +146,8 @@ const usage = `usage:
   fleet wall <apply|refresh|preset N|show NAME|emphasis>   wall control (used by tmux key bindings)
   fleet wall <add NAME|next|prev|untarget>  add a pane, next/previous waiting agent into the ▶ pane, clear ▶
   fleet wall <undo|pin NAME>                undo the last ▶ replace (again: redo); pin/unpin a pane
+  fleet wall <hide-all|restore|toggle-all>  take every agent pane off the wall (agents keep running),
+                                            put them back, or whichever fits (Alt-X)
                                             (--keep-focus: show/add leave keyboard focus where it is;
                                             --notify: the result goes to a tmux message, not stdout)
   fleet keys [--markdown]                   list every hotkey (Alt-? in tmux, ? in the overview)

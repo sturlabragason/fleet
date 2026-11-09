@@ -53,6 +53,7 @@ Use only the `fleet` MCP tools: `fleet_status`, `fleet_info`, `fleet_peek`, `fle
   nothing safe to evict, so the pane is *not* joined and the tool replies
   "wall full: every pane is waiting or failing (M-x to free one)". Treat that as a no-op — say so,
   and offer to hide a named pane (`fleet_wall` `hide`) first rather than retrying.
+- "Clear the wall" / "minimise everything": `fleet_wall` `hide_all` (agents keep running); `restore` brings those panes back.
 - Start with `fleet_brief` (it ends with the status table), then `fleet_status`. Use `fleet_peek` with few lines and only when you need detail.
 
 ## Leaders and squads

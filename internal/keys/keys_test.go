@@ -128,7 +128,7 @@ func TestHelpGroupsAndRows(t *testing.T) {
 
 func TestTmuxKeys(t *testing.T) {
 	k := TmuxKeys()
-	for _, want := range []string{"M-?", "M-n", "M-Left", "M-z", "M-x", "M-o", "M-1", "M-9", "M-m", "M-s", "M-S", "M-c", "M-w", "M-g"} {
+	for _, want := range []string{"M-?", "M-n", "M-Left", "M-z", "M-x", "M-X", "M-o", "M-1", "M-9", "M-m", "M-s", "M-S", "M-c", "M-w", "M-g"} {
 		if !k[want] {
 			t.Errorf("missing %s", want)
 		}
