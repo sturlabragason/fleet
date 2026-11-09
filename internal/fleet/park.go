@@ -2,12 +2,15 @@ package fleet
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/park"
 	"github.com/sturlabragason/fleet/internal/playbook"
+	"github.com/sturlabragason/fleet/internal/proc"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/tools"
 )
@@ -85,7 +88,7 @@ func (f *Fleet) Park(name, reason string) error {
 		return err
 	}
 	if pane != "" {
-		if err := f.T.KillPane(pane); err != nil {
+		if err := f.KillPane(pane); err != nil {
 			f.Store.Update(func(b *board.Board) error {
 				if cur, ok := b.Agents[name]; ok && cur.Status == string(status.Parked) {
 					cur.Status, cur.StatusSince, cur.PaneID, cur.LastLine = prev, prevSince, pane, ""
@@ -97,6 +100,32 @@ func (f *Fleet) Park(name, reason string) error {
 		}
 	}
 	logx.For("fleet").Info("parked", "agent", name, "session_id", a.SessionID, "reason", reason)
+	return nil
+}
+
+// treeGrace is how long a pane's leftover processes get between SIGTERM
+// and SIGKILL.
+const treeGrace = 2 * time.Second
+
+// KillPane kills a pane and every process that ran under it. tmux only
+// hangs up on the pane's own process, so children that ignore SIGHUP or
+// left its process group (a Copilot voice server, a build) would outlive
+// the agent (#26). The tree is read before the kill, while the parent
+// links still lead to the pane, and only stopped if the kill succeeded.
+func (f *Fleet) KillPane(pane string) error {
+	var tree []proc.Proc
+	// A dead pane's pid may already belong to another process.
+	if out, err := f.T.Run("display-message", "-p", "-t", pane, "#{pane_dead} #{pane_pid}"); err == nil {
+		if dead, p, _ := strings.Cut(strings.TrimSpace(out), " "); dead == "0" {
+			if pid, err := strconv.Atoi(p); err == nil {
+				tree = proc.Tree(pid)
+			}
+		}
+	}
+	if err := f.T.KillPane(pane); err != nil {
+		return err
+	}
+	proc.Kill(tree, treeGrace)
 	return nil
 }
 

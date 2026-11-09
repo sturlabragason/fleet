@@ -468,7 +468,7 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 		b.Agents[name] = a
 		return nil
 	}); err != nil {
-		f.T.KillPane(pane)
+		f.KillPane(pane)
 		log.Error("board write failed", "agent", name, "err", err)
 		return nil, err
 	}
@@ -626,7 +626,7 @@ func (f *Fleet) PeekColor(name string, n int) (string, error) {
 // leaves its members running and hands them back to the admiral (ADR-53).
 func (f *Fleet) Close(name string) error {
 	if p := f.paneOf(name); p != "" {
-		if err := f.T.KillPane(p); err != nil {
+		if err := f.KillPane(p); err != nil {
 			return err
 		}
 	}
