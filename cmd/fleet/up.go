@@ -359,6 +359,7 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		{"bind-key", "-n", "M-n", wallCmd("--notify next")},
 		{"bind-key", "-n", "M-z", "resize-pane", "-Z"},
 		{"bind-key", "-n", "M-x", wallCmd("hide-focused")},
+		{"bind-key", "-n", "M-X", wallCmd("--notify toggle-all")},
 		{"bind-key", "-n", "M-s", wallCmd("sup")},
 		{"bind-key", "-n", "M-S", wallCmd("side")},
 		{"bind-key", "-n", "M-c", wallCmd("chips")},
@@ -461,7 +462,7 @@ func wallCmdAct(exe, verb string) string {
 }
 
 // wallUsage lists the `fleet wall` verbs.
-const wallUsage = "fleet wall apply|refresh|preset N|sup|side|chips|emphasis|show NAME|hide NAME|add NAME|next|prev|untarget|undo|pin NAME [--keep-focus] [--notify]"
+const wallUsage = "fleet wall apply|refresh|preset N|sup|side|chips|emphasis|show NAME|hide NAME|add NAME|next|prev|untarget|undo|pin NAME|hide-all|restore|toggle-all [--keep-focus] [--notify]"
 
 // pinMsg says what a pin toggle did (the overview's p says the same).
 func pinMsg(name string, on bool) string {
@@ -544,6 +545,14 @@ func wallVerb(f *fleet.Fleet, w *wall.Wall, args []string) (string, error) {
 		return "", w.HideFocused()
 	case "untarget":
 		return "", w.Untarget()
+	case "hide-all":
+		n, err := w.HideAll()
+		return wall.HiddenAllMsg(n), err
+	case "restore":
+		n, err := w.Restore()
+		return wall.RestoredMsg(n), err
+	case "toggle-all":
+		return w.ToggleAll()
 	case "undo":
 		msg, _, err := w.Undo()
 		return msg, err

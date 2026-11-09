@@ -68,6 +68,8 @@ var Bindings = []Binding{
 		Desc: "wall: show up to N panes"},
 	{Group: Wall, Key: "Alt-m", Tmux: []string{"M-m"},
 		Desc: "wall: one main pane + stack"},
+	{Group: Wall, Key: "Alt-X", Tmux: []string{"M-X"},
+		Desc: "wall: hide all agent panes; again: put them back"},
 	{Group: Supervisor, Key: "Alt-s", Tmux: []string{"M-s"},
 		Desc: "show/hide the admiral", Hints: map[Scope]string{ScopeTmux: "Alt-s admiral"}},
 	{Group: Supervisor, Key: "Alt-S", Tmux: []string{"M-S"},

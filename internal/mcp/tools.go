@@ -80,8 +80,8 @@ var toolDefs = []tool{
 	{"fleet_park", "Free RAM without losing work: park stops an idle agent's process but keeps it on the board with its session id; wake resumes that same session in the same directory. Only an idle agent can be parked - working, waiting, prompted and pinned agents are refused. The memory guard parks the longest-idle agent by itself when free RAM runs low and reports it here.", obj([]string{"name"}, map[string]any{
 		"name": str("agent name"), "action": map[string]any{"type": "string", "enum": []string{"park", "wake"}, "description": "park (default) or wake"},
 		"force": map[string]any{"type": "boolean", "description": "wake even while free memory is still under the guard's floor"}})},
-	{"fleet_wall", "Change the live wall: show or hide an agent pane, or set the layout preset (1,2,4,6,9,m).", obj([]string{"action"}, map[string]any{
-		"action": map[string]any{"type": "string", "enum": []string{"show", "hide", "preset"}}, "name": str("agent name for show/hide"), "preset": str("1, 2, 4, 6, 9 or m")})},
+	{"fleet_wall", "Change the live wall: show or hide an agent pane, set the layout preset (1,2,4,6,9,m), hide_all to take every agent pane off the wall (agents keep running, the admiral stays), or restore to put back the panes the last hide_all took off.", obj([]string{"action"}, map[string]any{
+		"action": map[string]any{"type": "string", "enum": []string{"show", "hide", "preset", "hide_all", "restore"}}, "name": str("agent name for show/hide"), "preset": str("1, 2, 4, 6, 9 or m")})},
 	{"fleet_team", "Teams: named, coloured groups of agents (one team per agent). list; create (team, optional color); delete; add/remove (team, agents; add moves agents from another team and creates the team if missing); color (team, color); send (team, text) to every running member (members on a prompt are skipped unless confirmed=true); show/hide (team) on the wall; close (team) every member - ask the user first, confirmed=true only after an explicit yes.", obj([]string{"action"}, map[string]any{
 		"action": map[string]any{"type": "string", "enum": []string{"list", "create", "delete", "add", "remove", "color", "send", "show", "hide", "close"}},
 		"team":   str("team name"), "agents": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "agent names for add/remove"},
@@ -271,8 +271,14 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 				return a.Name + " on wall", nil
 			}
 			return a.Name + " off wall", s.W.Hide(p)
+		case "hide_all":
+			n, err := s.W.HideAll()
+			return wall.HiddenAllMsg(n), err
+		case "restore":
+			n, err := s.W.Restore()
+			return wall.RestoredMsg(n), err
 		}
-		return "", fmt.Errorf("action must be show, hide or preset")
+		return "", fmt.Errorf("action must be show, hide, preset, hide_all or restore")
 	case "fleet_team":
 		return s.team(a)
 	case "fleet_adr":
