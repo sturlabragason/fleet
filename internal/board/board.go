@@ -196,12 +196,25 @@ var NoReportAfter = 20 * time.Second
 // NoReportAfter, given work by fleet, and with no done, blocked or question
 // report since then. A progress report is not an ending. An agent the user
 // is talking to is never flagged: idle there is waiting for the user (ADR-68).
+// A screen that changed within NoReportAfter is not idle, whatever the
+// patterns read (fleet#12). Once the owner was told in this idle spell the
+// flag stays, so a ticking footer (agy's quota countdown) can't blink it.
 func (a *Agent) NoReport(now time.Time) bool {
-	if a.Status != "idle" || a.PromptAt.IsZero() || a.WithUser(now) || now.Sub(a.StatusSince) < NoReportAfter {
+	if a.Status != "idle" || a.PromptAt.IsZero() || a.WithUser(now) {
+		return false
+	}
+	told := !a.NoReportTold.Before(a.PromptAt) && !a.NoReportTold.Before(a.StatusSince)
+	if !told && !a.stillFor(now, NoReportAfter) {
 		return false
 	}
 	r := a.Report
 	return r == nil || r.At.Before(a.PromptAt) || r.State == "progress"
+}
+
+// stillFor reports whether the agent has been idle and its pane screen
+// unchanged for at least d.
+func (a *Agent) stillFor(now time.Time, d time.Duration) bool {
+	return now.Sub(a.StatusSince) >= d && now.Sub(a.LastChange) >= d
 }
 
 // UserTyping is how recent the user's last key press in an agent's pane
@@ -214,7 +227,7 @@ var UserTyping = 30 * time.Second
 // Such an agent reports progress, not done, so any report ends a turn. The
 // board marks it softly and nobody is woken (ADR-68 amendment).
 func (a *Agent) UserNoReport(now time.Time) bool {
-	if a.Status != "idle" || a.TurnAt.IsZero() || !a.WithUser(now) || now.Sub(a.StatusSince) < NoReportAfter {
+	if a.Status != "idle" || a.TurnAt.IsZero() || !a.WithUser(now) || !a.stillFor(now, NoReportAfter) {
 		return false
 	}
 	if !a.UserAt.IsZero() && now.Sub(a.UserAt) < UserTyping {
