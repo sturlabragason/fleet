@@ -5,6 +5,8 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-09
+- The board shows Copilot agents as working while they work: Copilot CLI 1.0.107's new busy footer ("ctrl+c interrupt") was being read as idle (ADR-68).
+- See which agents stopped mid-task without reporting: they get `…` on their tile and wall border, "idle (no report)" in `fleet_status`, and the admiral is told once per task. The "unread reports" note on admiral results now names the newest reports (ADR-68).
 - Clear the wall in one step: `Alt-X` takes every agent pane off it (the agents keep running), and `Alt-X` again puts them back. Also `fleet wall hide-all|restore` and the admiral's `fleet_wall` `hide_all|restore` (ADR-67).
 - Ask the admiral for a design, code, research or an opinion and it spawns an agent for it straight away instead of drafting the answer in chat; it asks you to confirm the exact target before an agent files into an external tracker such as ADO or Jira (#3).
 

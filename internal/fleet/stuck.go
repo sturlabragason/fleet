@@ -43,6 +43,31 @@ func (f *Fleet) reportStuck(n stuckNote) {
 	}
 }
 
+// NoReportLine is the wake line for an agent that went idle mid-task with
+// no report (ADR-68).
+func NoReportLine(name string) string {
+	return "[fleet] " + name + " stopped mid-task without a report. fleet_peek it, then fleet_send it to go on, or ask it to report."
+}
+
+// reportNoReport tells the agent's owner, once per task, that its turn
+// ended without a done, blocked or question report (ADR-68). The mail is
+// fleet's, like a stuck note: the agent's own report on the board is untouched.
+func (f *Fleet) reportNoReport(n stuckNote) {
+	log := logx.For("fleet")
+	log.Info("no report", "agent", n.name, "line", n.line)
+	text := "no report: the agent went idle mid-task without a done, blocked or question report"
+	if n.line != "" {
+		text += "\n" + n.line
+	}
+	up := f.ReportBox(n.name)
+	m, err := f.Mail().ReportTo(n.name, up, "blocked", text)
+	if err != nil {
+		log.Error("no-report note failed", "agent", n.name, "err", err)
+		return
+	}
+	f.wakeBox(up, m.ID, n.name, "blocked", NoReportLine(n.name))
+}
+
 // interruptStuck sends one Escape to a stuck agent's pane, under the same
 // guards as a report wake (ADR-36): the pane must still be alive and still
 // be that agent's (a recycled %id would otherwise take the key), and the

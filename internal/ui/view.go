@@ -277,6 +277,10 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 	if a.WithUser(m.now()) {
 		tgt, tw2 = tgt+leadStyle.Render(" "+userMark), tw2+2
 	}
+	noReport := a.NoReport(m.now())
+	if noReport {
+		tgt, tw2 = tgt+noReportStyle.Render(" "+noReportMark), tw2+2
+	}
 	chip := m.ownerChip(a)
 	tw2 += ansi.StringWidth(chip)
 	inner := w - 4
@@ -285,7 +289,11 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 		st1 = st1.Foreground(cursorColor(col))
 	}
 	l1 := st1.Render(glyph(a.Status, m.frame)+" "+ansi.Truncate(a.Name, inner-4-tw2, "…")) + tgt + st1.Render(wall)
-	state := strings.TrimSpace(a.Status + m.queueMark(a.Name) + " " + since(a.StatusSince, m.now()))
+	st := a.Status
+	if noReport {
+		st += " · no report"
+	}
+	state := strings.TrimSpace(st + m.queueMark(a.Name) + " " + since(a.StatusSince, m.now()))
 	l2 := lipgloss.NewStyle().Foreground(colIdle).Render(metaLine(a.Profile, state, inner))
 	if ti, ok := m.teams[a.Name]; ok && ti.Team != "" {
 		ts := lipgloss.NewStyle().Foreground(lipgloss.Color(ti.Color))
@@ -407,6 +415,10 @@ const leadMark = "▲"
 // userMark follows the name of an agent the user talks to directly: flagged
 // interactive, or typed in lately (ADR-61); after ▲, before ◆; one cell.
 const userMark = "✎"
+
+// noReportMark follows the name of an agent that went idle mid-task without
+// a report (ADR-68), in the waiting colour: it needs a nudge, not a fold.
+const noReportMark = "…"
 
 func since(t, now time.Time) string {
 	if t.IsZero() {

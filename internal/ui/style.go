@@ -21,9 +21,10 @@ var (
 	colText       lipgloss.Color
 	colWorkingDim lipgloss.Color
 
-	leadStyle   lipgloss.Style // leadMark: Overlay1, like ⚑, so no new colour role
-	pinStyle    lipgloss.Style // pinMark: Overlay1, never the select colour
-	targetStyle lipgloss.Style // targetMark: always the select colour, bold
+	leadStyle     lipgloss.Style // leadMark: Overlay1, like ⚑, so no new colour role
+	pinStyle      lipgloss.Style // pinMark: Overlay1, never the select colour
+	targetStyle   lipgloss.Style // targetMark: always the select colour, bold
+	noReportStyle lipgloss.Style // noReportMark: the waiting colour
 )
 
 func init() { theme.OnChange(applyTheme) }
@@ -43,6 +44,7 @@ func applyTheme() {
 	dim := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Overlay1))
 	leadStyle, pinStyle = dim, dim
 	targetStyle = lipgloss.NewStyle().Foreground(colSelect).Bold(true)
+	noReportStyle = lipgloss.NewStyle().Foreground(colWaitA)
 }
 
 var spinner = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}

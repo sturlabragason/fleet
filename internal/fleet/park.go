@@ -169,6 +169,7 @@ func (f *Fleet) Wake(name string, force bool) (*board.Agent, error) {
 	f.Store.Update(func(b *board.Board) error {
 		if cur, ok := b.Agents[name]; ok {
 			cur.Created, cur.Report, cur.UserAt = old.Created, old.Report, old.UserAt
+			cur.PromptAt, cur.NoReportTold = old.PromptAt, old.NoReportTold
 			cur.SubLogOffset, cur.SubKnown = old.SubLogOffset, old.SubKnown
 			a = cur
 		}
