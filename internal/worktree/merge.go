@@ -44,6 +44,7 @@ type Plan struct {
 	Behind     int         `json:"behind"`
 	Files      []string    `json:"files"`
 	Neighbours []Neighbour `json:"neighbours"`
+	ignore     []string
 }
 
 // Neighbour is another worktree that changes some of the same files. Files is
@@ -58,7 +59,9 @@ type Neighbour struct {
 
 // NewPlan reads the branch state `fleet merge` acts on. It fails when dir is
 // not a feature worktree with its own branch and a base to merge into.
-func NewPlan(dir string) (*Plan, error) {
+// ignore (absolute paths, e.g. agents' result files) is left out of every
+// worktree's uncommitted changes, as in Changes.
+func NewPlan(dir string, ignore ...string) (*Plan, error) {
 	top, err := TopLevel(dir)
 	if err != nil {
 		return nil, err
@@ -78,14 +81,14 @@ func NewPlan(dir string) (*Plan, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &Plan{Dir: top, Branch: branch, Base: base, BaseDir: baseDir}
-	if p.Files, err = Changes(top); err != nil {
+	p := &Plan{Dir: top, Branch: branch, Base: base, BaseDir: baseDir, ignore: ignore}
+	if p.Files, err = Changes(top, ignore...); err != nil {
 		return nil, err
 	}
 	if p.Ahead, p.Behind, err = aheadBehind(top, base); err != nil {
 		return nil, err
 	}
-	others, err := Others(top)
+	others, err := Others(top, ignore...)
 	if err != nil {
 		return nil, err
 	}
@@ -158,6 +161,7 @@ type Options struct {
 	Check   func(dir string) error // build/vet/test; nil skips
 	Retries int                    // rebase-and-merge attempts when the base moves (default 3)
 	Log     func(string)           // progress lines
+	Ignore  []string               // absolute paths left out of the overlap, see NewPlan
 }
 
 // Merge rebases the current branch onto the base branch, runs the checks, and
@@ -167,7 +171,7 @@ type Options struct {
 // *ConflictError. If the base moves while the checks run it starts over, up to
 // Retries times. It never pushes and never removes the worktree.
 func Merge(o Options) (*Plan, error) {
-	p, err := NewPlan(o.Dir)
+	p, err := NewPlan(o.Dir, o.Ignore...)
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +360,7 @@ func KeepBoth(content string, theirsFirst bool) (string, bool) {
 
 // othersTouching names the other worktrees that change any of files.
 func othersTouching(p *Plan, files []string) []string {
-	ws, err := Others(p.Dir)
+	ws, err := Others(p.Dir, p.ignore...)
 	if err != nil {
 		logx.For("worktree").Warn("other worktrees unreadable", "err", err)
 		return nil

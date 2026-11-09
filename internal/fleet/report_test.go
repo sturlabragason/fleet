@@ -405,3 +405,62 @@ func TestUnreadReportsCountsOnlyUnreadReports(t *testing.T) {
 		t.Fatalf("new report after reading: %d", n)
 	}
 }
+
+// The agent's own result file (its card asks for it) is not uncommitted work
+// (#11); anything else still is, and so is another agent's result file.
+func TestResultFileIsNotDirty(t *testing.T) {
+	dir := repo(t)
+	git(t, dir, "checkout", "-q", "-b", "feat")
+	a := &board.Agent{Name: "agent", Dir: dir, Card: &board.Card{Result: "out/notes.md"}, Baseline: Baseline(dir)}
+	os.MkdirAll(filepath.Join(dir, "out"), 0o755)
+	os.WriteFile(filepath.Join(dir, "out", "notes.md"), []byte("done"), 0o644)
+	if r := AgentBlocker(a); r != "" {
+		t.Fatalf("baseline, only the result file: %q", r)
+	}
+	noBase := *a
+	noBase.Baseline = nil
+	git(t, dir, "checkout", "-q", "main")
+	if r := AgentBlocker(&noBase); r != "" {
+		t.Fatalf("no baseline, only the result file: %q", r)
+	}
+	if r := CloseBlocker(dir); r != "uncommitted changes" {
+		t.Fatalf("CloseBlocker without ignore paths stays strict: %q", r)
+	}
+	if g := GitInfo(dir, filepath.Join(dir, "out", "notes.md")); g.Dirty != 0 {
+		t.Fatalf("dirty count with the result ignored: %d", g.Dirty)
+	}
+	// A tracked result file edited in place is ignored too.
+	git(t, dir, "add", "out/notes.md")
+	git(t, dir, "commit", "-q", "-m", "result")
+	os.WriteFile(filepath.Join(dir, "out", "notes.md"), []byte("again"), 0o644)
+	if r := AgentBlocker(&noBase); r != "" {
+		t.Fatalf("modified tracked result file: %q", r)
+	}
+	other := &board.Agent{Name: "other", Dir: dir, Card: &board.Card{Result: "result.md"}}
+	if r := AgentBlocker(other); r != "uncommitted changes" {
+		t.Fatalf("someone else's result file: %q", r)
+	}
+	os.WriteFile(filepath.Join(dir, "g"), []byte("y"), 0o644)
+	if r := AgentBlocker(&noBase); r != "uncommitted changes" {
+		t.Fatalf("other dirt still blocks: %q", r)
+	}
+	git(t, dir, "checkout", "-q", "-b", "feat2")
+	if r := AgentBlocker(a); r != "uncommitted changes by the agent: g" {
+		t.Fatalf("baseline, other dirt still blocks: %q", r)
+	}
+	// The result written in the agent's own new worktree, not its dir.
+	os.Remove(filepath.Join(dir, "g"))
+	git(t, dir, "checkout", "-q", "out/notes.md")
+	git(t, dir, "checkout", "-q", "main")
+	m := &board.Agent{Name: "agent", Dir: dir, Card: &board.Card{Result: "out/notes.md"}, Baseline: Baseline(dir)}
+	wt := filepath.Join(t.TempDir(), "agent")
+	git(t, dir, "worktree", "add", "-q", wt, "-b", "agent")
+	os.WriteFile(filepath.Join(wt, "out", "notes.md"), []byte("in the worktree"), 0o644)
+	if r := AgentBlocker(m); r != "" {
+		t.Fatalf("result file in own worktree: %q", r)
+	}
+	os.WriteFile(filepath.Join(wt, "w"), []byte("x"), 0o644)
+	if r := AgentBlocker(m); r != "worktree left behind (uncommitted changes): "+wt {
+		t.Fatalf("own worktree with other dirt: %q", r)
+	}
+}

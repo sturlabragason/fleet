@@ -292,9 +292,10 @@ func (f *Fleet) closeLater(name string) error {
 
 // CloseBlocker returns why dir can't be auto-closed ("" = it can): it must
 // be a git work tree with a clean status whose HEAD is merged into the
-// local main (or master when there is no main).
-func CloseBlocker(dir string) string {
-	g := GitInfo(dir)
+// local main (or master when there is no main). Dirty paths in ignore
+// (absolute, e.g. the agent's own result file) don't count.
+func CloseBlocker(dir string, ignore ...string) string {
+	g := GitInfo(dir, ignore...)
 	switch {
 	case !g.Repo:
 		return "not a git work tree"

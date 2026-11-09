@@ -123,7 +123,8 @@ const usage = `usage:
                                             --effort light|standard|pro, default pro)
   fleet touching [-C dir] [--json] [file...]
                                             files other worktrees of this repo change; with files, only
-                                            the overlaps (exit 0 none, 1 overlap, 2 error)
+                                            the overlaps (exit 0 none, 1 overlap, 2 error). Agents'
+                                            uncommitted result files don't count
   fleet adr claim [--for AGENT] [-C dir]    take the next free ADR number for DESIGN.md §14 and print it;
                                             atomic, so parallel agents never pick the same one
   fleet adr ls [--json] [-C dir]            ADR numbers claimed but not yet on main
