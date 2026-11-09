@@ -144,6 +144,18 @@ func TestNoReport(t *testing.T) {
 		{"working", idle(func(a *Agent) { a.Status = "working" }), false},
 		{"parked", idle(func(a *Agent) { a.Status = "parked" }), false},
 		{"between turns", idle(func(a *Agent) { a.StatusSince = now.Add(-time.Second) }), false},
+		{"screen still changing", idle(func(a *Agent) { a.LastChange = now.Add(-5 * time.Second) }), false},
+		{"screen still for the window", idle(func(a *Agent) { a.LastChange = now.Add(-NoReportAfter) }), true},
+		{"told this idle spell, then the footer ticked", idle(func(a *Agent) {
+			a.NoReportTold, a.LastChange = now.Add(-30*time.Second), now.Add(-time.Second)
+		}), true},
+		{"told before this idle spell, screen changing", idle(func(a *Agent) {
+			a.NoReportTold, a.LastChange = now.Add(-2*time.Minute), now.Add(-time.Second)
+		}), false},
+		{"told for an earlier task, screen changing", idle(func(a *Agent) {
+			a.NoReportTold, a.LastChange = task.Add(-time.Second), now.Add(-time.Second)
+		}), false},
+		{"told but working again", idle(func(a *Agent) { a.Status, a.NoReportTold = "working", now.Add(-30*time.Second) }), false},
 		{"interactive", idle(func(a *Agent) { a.Interactive = true }), false},
 		{"user typed lately", idle(func(a *Agent) { a.UserAt = now.Add(-time.Minute) }), false},
 	} {
@@ -179,6 +191,7 @@ func TestUserNoReport(t *testing.T) {
 		{"no report ever", idle(func(a *Agent) { a.Report = nil }), "user", "user"},
 		{"the user is typing", idle(func(a *Agent) { a.UserAt = now.Add(-5 * time.Second) }), "", ""},
 		{"between turns", idle(func(a *Agent) { a.StatusSince = now.Add(-time.Second) }), "", ""},
+		{"screen still changing", idle(func(a *Agent) { a.LastChange = now.Add(-5 * time.Second) }), "", ""},
 		{"working", idle(func(a *Agent) { a.Status = "working" }), "", ""},
 		{"no turn seen", idle(func(a *Agent) { a.TurnAt = time.Time{} }), "", ""},
 		{"not the user's any more: the hard flag", idle(func(a *Agent) { a.UserAt, a.PromptAt = now.Add(-time.Hour), turn }), "", "1"},

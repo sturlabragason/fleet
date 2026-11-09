@@ -217,3 +217,50 @@ func TestNewTurn(t *testing.T) {
 		}
 	}
 }
+
+// A pane the patterns read as idle while its screen keeps changing is still
+// at work (agy editing files, fleet#12): no flag and no note.
+func TestRefreshNoReportWaitsForAStillScreen(t *testing.T) {
+	old := board.NoReportAfter
+	board.NoReportAfter = 3 * time.Second // wide: a loaded machine can stall the loop
+	t.Cleanup(func() { board.NoReportAfter = old })
+
+	home := t.TempDir()
+	t.Setenv("FLEET_CONFIG", filepath.Join(home, "nonexistent.toml"))
+	os.WriteFile(filepath.Join(home, "tools.toml"), []byte(`[busy]
+command = "sh"
+args = ["-c", "i=0; while :; do i=$((i+1)); printf '\033[H\033[2Jedited file %d\n> \n' $i; sleep 0.1; done"]
+patterns = "fake"
+`), 0o644)
+	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
+	t.Cleanup(func() { tc.KillServer() })
+	f, err := New(tc, home, "/nonexistent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.DrainQueue, f.Housekeeping = true, true
+	f.SupPane = func() AdmiralView { return AdmiralView{} }
+	if _, err := f.Spawn("a1", "busy", home, ""); err != nil {
+		t.Fatal(err)
+	}
+	f.notePrompt("a1")
+
+	sawIdle := false
+	for end := time.Now().Add(5 * time.Second); time.Now().Before(end); time.Sleep(200 * time.Millisecond) {
+		f.Refresh()
+		a := f.Store.Load().Agents["a1"]
+		sawIdle = sawIdle || a.Status == "idle"
+		if a.NoReport(time.Now()) {
+			t.Fatalf("flagged no report while the screen changes: %+v", a)
+		}
+	}
+	if !sawIdle {
+		t.Fatal("the patterns never read the pane as idle; the test proves nothing")
+	}
+	time.Sleep(100 * time.Millisecond)
+	for _, m := range f.Mail().Peek(mail.Supervisor) {
+		if strings.Contains(m.Text, "no report:") {
+			t.Fatalf("owner told: %q", m.Text)
+		}
+	}
+}
