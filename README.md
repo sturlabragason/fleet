@@ -53,6 +53,8 @@ Planned, not built yet: park/wake to save RAM, tool hooks instead of screen scra
 go install github.com/sturlabragason/fleet/cmd/fleet@latest
 ```
 
+or download a binary for linux or macOS (amd64, arm64) from [Releases](https://github.com/sturlabragason/fleet/releases), check it against `SHA256SUMS` and put it on your `PATH`. `fleet version` says which release you have.
+
 or from a checkout:
 
 ```sh

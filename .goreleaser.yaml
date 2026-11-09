@@ -1,0 +1,37 @@
+# Release build (ADR-73). Run by .github/workflows/release.yml; locally:
+#   goreleaser release --snapshot --clean
+version: 2
+
+project_name: fleet
+
+builds:
+  - id: fleet
+    main: ./cmd/fleet
+    binary: fleet
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version=v{{ .Version }}
+
+archives:
+  - formats: [binary]
+    name_template: "fleet-{{ .Os }}-{{ .Arch }}"
+
+checksum:
+  name_template: SHA256SUMS
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ .Version }}-snapshot-{{ .ShortCommit }}"
+
+changelog:
+  disable: true # notes come from CHANGELOG.md (scripts/release-notes.sh)
+
+release:
+  github:
+    owner: sturlabragason
+    name: fleet
+  name_template: "{{ .Tag }}"

@@ -1,11 +1,13 @@
 BIN := bin
 GO ?= go
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null)
+LDFLAGS := -X main.version=$(VERSION)
 
 .PHONY: build test dev run install up clean-dev hooks
 
 build:
 	@mkdir -p $(BIN)
-	$(GO) build -o $(BIN)/fleet.tmp ./cmd/fleet && mv $(BIN)/fleet.tmp $(BIN)/fleet
+	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN)/fleet.tmp ./cmd/fleet && mv $(BIN)/fleet.tmp $(BIN)/fleet
 	$(GO) build -o $(BIN)/fakeagent.tmp ./cmd/fakeagent && mv $(BIN)/fakeagent.tmp $(BIN)/fakeagent
 
 test:

@@ -1,0 +1,124 @@
+# Tags and releases fleet from main (ADR-73).
+#   Dry run (default):  gh workflow run release.yml
+#   Release:            gh workflow run release.yml -f dry_run=false [-f version=vX.Y.Z]
+# A push to a fleet/** branch that touches the release config dry-runs it too.
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build and show the release without tagging or publishing"
+        type: boolean
+        default: true
+      version:
+        description: "Tag to cut (vX.Y.Z); empty = next from conventional commits"
+        type: string
+        default: ""
+  push:
+    branches: ["fleet/**"]
+    paths:
+      - .goreleaser.yaml
+      - .github/workflows/release.yml
+      - scripts/next-version.sh
+      - scripts/release-notes.sh
+      - cmd/fleet/version.go
+
+permissions:
+  contents: write # push the tag, create the release
+  actions: read # check CI on the release commit
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      DRY_RUN: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check the commit
+        run: |
+          sha=$(git rev-parse HEAD)
+          if [[ $DRY_RUN != true && $GITHUB_REF != refs/heads/main ]]; then
+            echo "::error::releases are cut from main, not $GITHUB_REF"; exit 1
+          fi
+          ci=$(gh run list -R "$GITHUB_REPOSITORY" -w ci.yml -c "$sha" --json conclusion -q '[.[] | select(.conclusion == "success")] | length')
+          if [[ $ci == 0 ]]; then
+            if [[ $DRY_RUN == true ]]; then
+              echo "::warning::no green ci.yml run on $sha yet; a real release would stop here"
+            else
+              echo "::error::no green ci.yml run on $sha; wait for CI before releasing"; exit 1
+            fi
+          fi
+
+      - name: Pick the version
+        id: ver
+        run: |
+          v='${{ inputs.version }}'
+          [[ -n $v ]] || v=$(scripts/next-version.sh)
+          if ! [[ $v =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version '$v' is not vX.Y.Z"; exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/$v" >/dev/null; then
+            echo "::error::tag $v already exists"; exit 1
+          fi
+          echo "version=$v" >>"$GITHUB_OUTPUT"
+          scripts/release-notes.sh >"$RUNNER_TEMP/notes.md"
+          {
+            echo "# fleet $v $( [[ $DRY_RUN == true ]] && echo '(dry run)')"
+            echo
+            cat "$RUNNER_TEMP/notes.md"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Tag
+        env:
+          V: ${{ steps.ver.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$V" -m "$V"
+          if [[ $DRY_RUN != true ]]; then
+            git push origin "refs/tags/$V"
+          fi
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: >-
+            release --clean --release-notes ${{ runner.temp }}/notes.md
+            ${{ env.DRY_RUN == 'true' && '--snapshot' || '' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Smoke test the linux/amd64 binary
+        env:
+          V: ${{ steps.ver.outputs.version }}
+        run: |
+          # goreleaser keeps binaries at dist/<target>/fleet and names them on upload;
+          # out/ holds them under their release names, as the release will.
+          mkdir out
+          jq -r '.[] | select(.name | test("^fleet-(linux|darwin)-(amd64|arm64)$")) | "\(.path) \(.name)"' dist/artifacts.json |
+            while read -r path name; do cp "$path" "out/$name"; done
+          cp dist/SHA256SUMS out/
+          ls -l out
+          (cd out && sha256sum -c SHA256SUMS)
+          got=$(out/fleet-linux-amd64 version)
+          echo "$got"
+          [[ $got == "fleet $V"* ]]
+
+      - if: env.DRY_RUN == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fleet-${{ steps.ver.outputs.version }}-dry-run
+          path: out/
