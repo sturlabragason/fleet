@@ -3,6 +3,7 @@ package tmux
 import (
 	"fmt"
 	"math/rand"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -97,5 +98,25 @@ func TestCaptureDropsGhostText(t *testing.T) {
 	}
 	if strings.Contains(got, "\x1b") {
 		t.Errorf("escapes left in %q", got)
+	}
+}
+
+// Without a UTF-8 locale the tmux client prints tabs in -F output as '_' (#21).
+func TestListPanesWithoutUTF8Locale(t *testing.T) {
+	for _, k := range []string{"LANG", "LC_ALL", "LC_CTYPE", "TMUX"} {
+		t.Setenv(k, "") // restores the original value at cleanup
+		os.Unsetenv(k)
+	}
+	c := testClient(t)
+	p, err := c.Spawn("s", "w", "", nil, "cat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SetPaneOption(p, "@fleet_agent", "a1"); err != nil {
+		t.Fatal(err)
+	}
+	ps, err := c.ListPanes("")
+	if err != nil || len(ps) != 1 || ps[0].ID != p || ps[0].Agent != "a1" {
+		t.Fatalf("list: %+v %v", ps, err)
 	}
 }
