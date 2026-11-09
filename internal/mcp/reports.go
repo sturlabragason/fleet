@@ -66,12 +66,29 @@ func RenderReports(ms []mail.Msg, all bool) string {
 	return b.String()
 }
 
-// reportsSuffix is appended to every admiral result but fleet_handoff.
+// suffixHeads is how many unread report headlines reportsSuffix names.
+const suffixHeads = 3
+
+// reportsSuffix is appended to every admiral result but fleet_handoff. It
+// names the newest unread reports, not just their count: while the admiral
+// is busy no wake line can be typed, and this is the only way it hears of a
+// report until it calls fleet_reports (ADR-68). Nothing is marked read.
 func (s *Server) reportsSuffix() string {
-	if n := s.F.Mail().Unread(s.box()); n > 0 {
-		return fmt.Sprintf("\n\n(%d unread reports)", n)
+	ms := s.F.Mail().Peek(s.box())
+	if len(ms) == 0 {
+		return ""
 	}
-	return ""
+	var b strings.Builder
+	fmt.Fprintf(&b, "\n\n(%d unread reports; fleet_reports reads them)", len(ms))
+	if len(ms) > suffixHeads {
+		fmt.Fprintf(&b, "\n- %d older", len(ms)-suffixHeads)
+		ms = ms[len(ms)-suffixHeads:]
+	}
+	for _, m := range ms {
+		head, _, _ := strings.Cut(m.Text, "\n")
+		fmt.Fprintf(&b, "\n- %s %s", m.From, ansi.Truncate(head, 100, "…"))
+	}
+	return b.String()
 }
 
 // reportCellW is the fleet_status report column width; a verdict prefix

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestUpdateLoad(t *testing.T) {
@@ -116,5 +117,38 @@ func TestNoOpUpdateDoesNotWrite(t *testing.T) {
 	s.Update(func(b *Board) error { b.Agents["a1"].Status = "working"; return nil })
 	if s.Load().Agents["a1"].Status != "working" {
 		t.Fatal("a real change was not written")
+	}
+}
+
+func TestNoReport(t *testing.T) {
+	now := time.Now()
+	task := now.Add(-time.Hour)
+	idle := func(mod func(*Agent)) *Agent {
+		a := &Agent{Status: "idle", StatusSince: now.Add(-time.Minute), PromptAt: task}
+		if mod != nil {
+			mod(a)
+		}
+		return a
+	}
+	for _, c := range []struct {
+		name string
+		a    *Agent
+		want bool
+	}{
+		{"idle after a task, no report", idle(nil), true},
+		{"progress is not an ending", idle(func(a *Agent) { a.Report = &Report{State: "progress", At: now} }), true},
+		{"done before this task", idle(func(a *Agent) { a.Report = &Report{State: "done", At: task.Add(-time.Second)} }), true},
+		{"done", idle(func(a *Agent) { a.Report = &Report{State: "done", At: now} }), false},
+		{"question", idle(func(a *Agent) { a.Report = &Report{State: "question", At: now} }), false},
+		{"never given a task (adopted)", idle(func(a *Agent) { a.PromptAt = time.Time{} }), false},
+		{"working", idle(func(a *Agent) { a.Status = "working" }), false},
+		{"parked", idle(func(a *Agent) { a.Status = "parked" }), false},
+		{"between turns", idle(func(a *Agent) { a.StatusSince = now.Add(-time.Second) }), false},
+		{"interactive", idle(func(a *Agent) { a.Interactive = true }), false},
+		{"user typed lately", idle(func(a *Agent) { a.UserAt = now.Add(-time.Minute) }), false},
+	} {
+		if got := c.a.NoReport(now); got != c.want {
+			t.Errorf("%s: NoReport = %v, want %v", c.name, got, c.want)
+		}
 	}
 }

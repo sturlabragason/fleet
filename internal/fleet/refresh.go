@@ -27,6 +27,7 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 	ids := map[string]string{}
 	var agentPanes []tmux.PaneInfo
 	tagged := map[string]string{}
+	taggedNR := map[string]bool{}
 	deadPanes := map[string]tmux.PaneInfo{}
 	for _, p := range panes {
 		if p.Agent != "" {
@@ -39,12 +40,14 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 			onWall[p.Agent] = !strings.HasPrefix(p.Window, WindowPrefix)
 			agentPanes = append(agentPanes, p)
 			tagged[p.Agent] = p.Status
+			taggedNR[p.Agent] = p.NoReport
 		}
 	}
 	now := time.Now()
 	var out []*board.Agent
 	var claimed *board.Agent
 	var stuck []stuckNote
+	var silent []stuckNote
 	// Only the overview claims and reports stuck episodes, so a one-shot
 	// `fleet ls` or the admiral's MCP server -- which now drain the queue
 	// too (ADR-44) -- neither wakes the admiral nor burns the one
@@ -87,6 +90,14 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 				// set by an older fleet): re-sync without resetting the age.
 				f.tagPane(id, next, a.StatusSince)
 			}
+			nr := a.NoReport(now)
+			if id := ids[a.Name]; id != "" && nr != taggedNR[a.Name] {
+				f.tagNoReport(id, nr)
+			}
+			if tell && nr && a.NoReportTold.Before(a.PromptAt) {
+				a.NoReportTold = now
+				silent = append(silent, stuckNote{name: a.Name, profile: a.Profile, pane: ids[a.Name], line: a.LastLine})
+			}
 			if tell && a.Stuck.Stuck() && !a.Stuck.Notified {
 				a.Stuck.Notified = true
 				stuck = append(stuck, stuckNote{name: a.Name, profile: a.Profile, pane: ids[a.Name], reason: a.Stuck.Reason, line: a.LastLine})
@@ -109,6 +120,9 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 	}
 	for _, n := range stuck {
 		go f.reportStuck(n)
+	}
+	for _, n := range silent {
+		go f.reportNoReport(n)
 	}
 	f.syncTeams(agentPanes)
 	if f.DrainQueue && perr == nil {
@@ -241,6 +255,16 @@ func (f *Fleet) classify(a *board.Agent, alive, dead bool, pane string, now time
 		Now:     now,
 	})
 	return string(st)
+}
+
+// tagNoReport sets or clears @fleet_noreport, the border's "…" mark for an
+// agent that went idle mid-task without a report (ADR-68).
+func (f *Fleet) tagNoReport(pane string, on bool) {
+	if on {
+		f.T.SetPaneOption(pane, "@fleet_noreport", "1")
+		return
+	}
+	f.T.UnsetPaneOption(pane, "@fleet_noreport")
 }
 
 var paneGlyphs = map[string]string{"working": "⠹", "waiting": "●", "error": "✖", "stuck": "⧗", "idle": "○"}

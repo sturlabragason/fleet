@@ -395,3 +395,13 @@ func TestTaskCardLineSharesRowWithSubagents(t *testing.T) {
 		t.Fatalf("tile height changed: %d lines, want %d\n%s", got, want, v)
 	}
 }
+
+func TestCardSaysNoReport(t *testing.T) {
+	m, _ := overview(120, 30, 1)
+	a := m.agents[0]
+	a.Status, a.PromptAt = "idle", a.StatusSince.Add(-time.Minute)
+	m.setAgents(m.agents)
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "idle · no report") || !strings.Contains(v, noReportMark) {
+		t.Fatalf("card should say idle · no report:\n%s", v)
+	}
+}

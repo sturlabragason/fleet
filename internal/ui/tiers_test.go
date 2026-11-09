@@ -294,3 +294,19 @@ func TestRowCellWidthAndMarks(t *testing.T) {
 		}
 	}
 }
+
+// An idle agent that stopped mid-task without a report never folds away
+// with the done ones: its row carries … (ADR-68).
+func TestNoReportAgentDoesNotFold(t *testing.T) {
+	m, _ := crowd(80)
+	for _, a := range m.agents {
+		if a.Name == "i0" {
+			a.PromptAt = a.StatusSince.Add(-time.Minute)
+		}
+	}
+	m.setAgents(m.agents)
+	v := ansi.Strip(m.View())
+	if !strings.Contains(v, "+5 idle") || !strings.Contains(v, "i0 "+noReportMark) {
+		t.Fatalf("i0 should be a row with %s, the other 5 folded:\n%s", noReportMark, v)
+	}
+}

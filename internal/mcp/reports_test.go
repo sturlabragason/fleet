@@ -32,11 +32,11 @@ func TestReportRoundTrip(t *testing.T) {
 	if !strings.Contains(st, "| report\n") || !strings.Contains(st, "| done: nav fixed on feat/nav\n") {
 		t.Fatalf("status report column: %q", st)
 	}
-	if !strings.HasSuffix(st, "\n\n(1 unread reports)") {
+	if !strings.HasSuffix(st, "\n\n(1 unread reports; fleet_reports reads them)\n- a done: nav fixed on feat/nav") {
 		t.Fatalf("status suffix: %q", st)
 	}
 	br, _ := sup.tool("fleet_brief", nil)
-	if !strings.Contains(br, "## Unread reports\n") || !strings.Contains(br, "a: done: nav fixed") || !strings.HasSuffix(br, "(1 unread reports)") {
+	if !strings.Contains(br, "## Unread reports\n") || !strings.Contains(br, "a: done: nav fixed") || !strings.HasSuffix(br, "(1 unread reports; fleet_reports reads them)\n- a done: nav fixed on feat/nav") {
 		t.Fatalf("brief must list and not mark read: %q", br)
 	}
 	msg, isErr := sup.tool("fleet_reports", nil)

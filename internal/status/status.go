@@ -91,7 +91,7 @@ pending = ['^┃ \[Paste #\d+']
 input = ['^┃(?: (.*))?$', '^❯(?: (.*))?$']
 waiting = ['needs information\.', 'Do you want to', '\[y/n\]', 'Allow .* to run', '❯ 1\. Yes', '○ Asking user', '↑/↓ (to )?(select|navigate) · enter']
 error = ['^✖', '(?i)^error:']
-working = ['(?i)esc (esc )?(to )?interrupt', '(?i)^\s*(\S+ · )*\S? ?working · ', '[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]', '(?i)^\s*\S? ?thinking']
+working = ['(?i)(esc (esc )?|ctrl\+c )(to )?interrupt', '(?i)^\s*([^·]{1,30} · )*\S? ?working · ', '[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]', '(?i)^\s*\S? ?thinking']
 idle = ['^\s*[>❯]\s*$', '(?i)type @ to mention', '(?i)hold to record', '(?i)^\s*(← open sidebar · )?(interactive|autopilot|plan) · ']
 
 [claude]

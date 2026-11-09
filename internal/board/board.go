@@ -86,6 +86,13 @@ type Agent struct {
 	// client_activity while the pane was the client's active one). For
 	// UserHold after it the agent counts as the user's (ADR-61).
 	UserAt time.Time `json:"user_at,omitempty"`
+	// PromptAt is when fleet last handed the agent work: its spawn task or a
+	// text fleet_send. A turn that ends after it with no final report is
+	// "no report" (ADR-68).
+	PromptAt time.Time `json:"prompt_at,omitempty"`
+	// NoReportTold is when the owner was told this agent stopped without a
+	// report; once per task, so a newer PromptAt re-arms it (ADR-68).
+	NoReportTold time.Time `json:"no_report_told,omitempty"`
 
 	// extra holds board keys this build does not know, so they survive a
 	// round trip (ADR-58).
@@ -173,6 +180,23 @@ var UserHold = 10 * time.Minute
 // interactive, or typed in within UserHold (ADR-61).
 func (a *Agent) WithUser(now time.Time) bool {
 	return a.Interactive || (!a.UserAt.IsZero() && now.Sub(a.UserAt) < UserHold)
+}
+
+// NoReportAfter is how long an agent must sit idle before a missing report
+// counts: a turn boundary inside one task (autopilot, a background shell
+// finishing) is idle for a moment and then works again.
+var NoReportAfter = 20 * time.Second
+
+// NoReport reports whether the agent ended its turn mid-task: idle for
+// NoReportAfter, given work by fleet, and with no done, blocked or question
+// report since then. A progress report is not an ending. An agent the user
+// is talking to is never flagged: idle there is waiting for the user (ADR-68).
+func (a *Agent) NoReport(now time.Time) bool {
+	if a.Status != "idle" || a.PromptAt.IsZero() || a.WithUser(now) || now.Sub(a.StatusSince) < NoReportAfter {
+		return false
+	}
+	r := a.Report
+	return r == nil || r.At.Before(a.PromptAt) || r.State == "progress"
 }
 
 // Main is the name of the admiral every fleet has (DESIGN §6.12).

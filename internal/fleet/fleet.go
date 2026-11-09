@@ -6,6 +6,7 @@ package fleet
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -446,6 +447,9 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 		PaneID: pane, Status: string(status.Unknown), Created: now, StatusSince: now, LastChange: now,
 		Baseline: ex.Base, Worktree: ex.Worktree, NoWorktree: ex.NoWorktree, Card: ex.Card, Effort: ex.Effort,
 		Leader: ex.Role.Leader, LeadBy: ex.Role.LeadBy, Interactive: ex.Role.Interactive}
+	if goal != "" && secret != "" {
+		a.PromptAt = now // a spawn with a task: the turn it starts should end in a report (ADR-68)
+	}
 	a.SetOwner(ex.Role.Admiral)
 	if err := f.Store.Update(func(b *board.Board) error {
 		old, ok := b.Agents[name]
@@ -533,6 +537,7 @@ func (f *Fleet) Send(name, text string) error {
 	if err := f.T.SendKeys(p, "Enter"); err != nil {
 		return err
 	}
+	f.notePrompt(name)
 	set := f.setOf(name)
 	if len(set.Pending) == 0 || !f.unsubmitted(p, set, SubmitWait) {
 		return nil
@@ -550,6 +555,21 @@ func (f *Fleet) Send(name, text string) error {
 		return fmt.Errorf("pasted but not submitted; try fleet_send keys=[Enter]")
 	}
 	return nil
+}
+
+// notePrompt records that the agent was just handed work, so a turn that
+// ends without a report after it shows as "no report" (ADR-68).
+func (f *Fleet) notePrompt(name string) {
+	now := time.Now()
+	err := f.Store.Update(func(b *board.Board) error {
+		if a, ok := b.Agents[name]; ok {
+			a.PromptAt = now
+		}
+		return nil
+	})
+	if err != nil {
+		slog.Warn("note prompt", "component", "fleet", "agent", name, "err", err)
+	}
 }
 
 // unsubmitted polls the pane for up to wait and reports whether the pending

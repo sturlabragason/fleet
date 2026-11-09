@@ -323,7 +323,7 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		// Not Select: Lavender means "target slot" and nothing else (ADR-37).
 		{"set-option", "-g", "pane-active-border-style", "fg=" + theme.Text},
 		{"set-option", "-g", "pane-border-format",
-			" #{?#{==:#{@role},sup},#[fg=#{?" + fleet.MultiOption + ",#{@fleet_admiral_color}," + theme.Supervisor + "}]#[bold]admiral#{?" + fleet.MultiOption + ", #{@fleet_admiral_name},}#[default]#{?@fleet_admiral_profile,#[fg=" + theme.Muted + "] · #{@fleet_admiral_profile}#[default],}#{?" + fleet.MultiOption + ",#{?@fleet_admiral_unread,#[fg=" + theme.Waiting + "] · ✉ #{@fleet_admiral_unread}#[default],},}#{?@fleet_ctx,#[fg=#{@fleet_ctx_color}] · ctx #{@fleet_ctx}#[default],},#{?#{==:#{@role},ov},#[fg=" + theme.Text + "]#[bold]overview#[default]," + targetMark + ownerMark + "#[fg=#{?@fleet_color,#{@fleet_color},default}]#{@fleet_glyph} #{@fleet_agent}" + pinMark + "#{?@fleet_team, #[fg=#{@fleet_team_color}]◆,} #[fg=" + theme.Muted + "]#{@fleet_status}#[default]" + nextOutMark + "}} "},
+			" #{?#{==:#{@role},sup},#[fg=#{?" + fleet.MultiOption + ",#{@fleet_admiral_color}," + theme.Supervisor + "}]#[bold]admiral#{?" + fleet.MultiOption + ", #{@fleet_admiral_name},}#[default]#{?@fleet_admiral_profile,#[fg=" + theme.Muted + "] · #{@fleet_admiral_profile}#[default],}#{?" + fleet.MultiOption + ",#{?@fleet_admiral_unread,#[fg=" + theme.Waiting + "] · ✉ #{@fleet_admiral_unread}#[default],},}#{?@fleet_ctx,#[fg=#{@fleet_ctx_color}] · ctx #{@fleet_ctx}#[default],},#{?#{==:#{@role},ov},#[fg=" + theme.Text + "]#[bold]overview#[default]," + targetMark + ownerMark + "#[fg=#{?@fleet_color,#{@fleet_color},default}]#{@fleet_glyph} #{@fleet_agent}" + pinMark + noReportMark + "#{?@fleet_team, #[fg=#{@fleet_team_color}]◆,} #[fg=" + theme.Muted + "]#{@fleet_status}#[default]" + nextOutMark + "}} "},
 		// Unfocused panes recede one step (Overlay2, 5.8:1 on Base: still
 		// readable, so an emphasised pane you are not in stays legible).
 		{"set-option", "-g", "window-style", "fg=" + theme.Overlay2 + ",bg=" + theme.Base},
@@ -438,6 +438,9 @@ var (
 	// pinMark follows the agent name on a pinned pane's border (@fleet_pin,
 	// DESIGN.md §5e): ⚑ in Overlay1, then the name colour again.
 	pinMark string
+	// noReportMark follows the pin on the border of an agent that went idle
+	// mid-task without a report (@fleet_noreport, ADR-68): … in Waiting.
+	noReportMark string
 	// nextOutMark ends the title of the pane a card would evict (no target,
 	// full wall).
 	nextOutMark string
@@ -449,6 +452,7 @@ var (
 func init() {
 	theme.OnChange(func() {
 		targetMark = "#{?#{==:#{pane_id},#{@fleet_target}},#[fg=" + theme.Select + "]#[bold]▶#[nobold] ,}"
+		noReportMark = "#{?@fleet_noreport, #[fg=" + theme.Waiting + "]…#[fg=#{?@fleet_color,#{@fleet_color},default}],}"
 		pinMark = "#{?@fleet_pin, #[fg=" + theme.Overlay1 + "]⚑#[fg=#{?@fleet_color,#{@fleet_color},default}],}"
 		ownerMark = "#{?" + fleet.MultiOption + ",#{?@fleet_owner,#[fg=" + theme.Crust + "#,bg=#{@fleet_owner_color}#,bold] #{@fleet_owner} #[default] ,},}"
 		nextOutMark = "#{?#{==:#{pane_id},#{@fleet_next_out}}, #[fg=" + theme.Gone + "]· next out#[default],}"

@@ -2,6 +2,7 @@ package fleet
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/sturlabragason/fleet/internal/logx"
@@ -85,7 +86,13 @@ func (f *Fleet) SendKeys(name, text string, keys []string) error {
 	if len(keys) == 0 {
 		return nil
 	}
-	return f.T.SendKeys(p, keys...)
+	if err := f.T.SendKeys(p, keys...); err != nil {
+		return err
+	}
+	if text != "" && slices.Contains(keys, "Enter") {
+		f.notePrompt(name)
+	}
+	return nil
 }
 
 // Menu returns the numbered prompt on the agent's screen, if any.

@@ -36,7 +36,7 @@ const (
 	tierIdle // idle and gone: these fold
 )
 
-func tierOf(a *board.Agent, onWall bool) int {
+func tierOf(a *board.Agent, onWall bool, now time.Time) int {
 	switch a.Status {
 	case "waiting":
 		return tierWaiting
@@ -48,6 +48,8 @@ func tierOf(a *board.Agent, onWall bool) int {
 	switch {
 	case onWall:
 		return tierWall
+	case a.NoReport(now):
+		return tierRest // stopped mid-task: it needs a nudge, so it never folds (ADR-68)
 	case a.Status == "idle" || a.Status == "gone":
 		return tierIdle
 	}
@@ -87,7 +89,7 @@ func (m *Model) arrange(as []*board.Agent) []*board.Agent {
 		for _, a := range as {
 			t, ok := m.tierOf[a.Name]
 			if !ok {
-				t = max(tierOf(a, m.onWall[a.Name]), tierRest) // a row until the freeze ends
+				t = max(tierOf(a, m.onWall[a.Name], m.now()), tierRest) // a row until the freeze ends
 			}
 			tiers[a.Name] = t
 		}
@@ -103,7 +105,7 @@ func (m *Model) arrange(as []*board.Agent) []*board.Agent {
 		return as
 	}
 	for _, a := range as {
-		tiers[a.Name] = tierOf(a, m.onWall[a.Name])
+		tiers[a.Name] = tierOf(a, m.onWall[a.Name], m.now())
 	}
 	stays := func(a *board.Agent) (int, bool) {
 		p, ok := pos[a.Name]
@@ -432,6 +434,9 @@ func (m *Model) rowCell(tv tierView, name string, w int) string {
 	if a.WithUser(m.now()) {
 		mark(leadStyle, userMark)
 	}
+	if a.NoReport(m.now()) {
+		mark(noReportStyle, noReportMark)
+	}
 	if ti, ok := m.teams[a.Name]; ok && ti.Team != "" {
 		mark(lipgloss.NewStyle().Foreground(lipgloss.Color(ti.Color)), teamMark)
 	}
@@ -439,7 +444,7 @@ func (m *Model) rowCell(tv tierView, name string, w int) string {
 	return zone.Mark("tile-"+a.Name, fit(row+cursorStyle(dim, cur).Render(pad+age), w))
 }
 
-// markCount is how many two-cell marks (⚑ ▶ ▲ ✎ ◆) follow an agent's name.
+// markCount is how many two-cell marks (⚑ ▶ ▲ ✎ … ◆) follow an agent's name.
 func (m *Model) markCount(a *board.Agent) int {
 	n := 0
 	if m.pinned[a.Name] {
@@ -452,6 +457,9 @@ func (m *Model) markCount(a *board.Agent) int {
 		n++
 	}
 	if a.WithUser(m.now()) {
+		n++
+	}
+	if a.NoReport(m.now()) {
 		n++
 	}
 	if ti, ok := m.teams[a.Name]; ok && ti.Team != "" {
