@@ -58,8 +58,8 @@ var toolDefs = []tool{
 		"expect": str("the question the user confirmed (or part of it, or of the option label); refused if the prompt on screen no longer matches"), "confirmed": confirmedProp})},
 	{"fleet_info", "Facts about one agent: profile, team, status and age, last activity, dir, its task card (goal, done-check and its verdict, result file), git (worktree, branch, dirty files, merged into main, commits ahead), session id, context %, spend so far, mode.", obj([]string{"name"}, map[string]any{
 		"name": str("agent name")})},
-	{"fleet_spawn", "Start a new agent with a tool profile in a directory, optionally with a first prompt. Never spawn in the home directory: pass the repo or project dir, not $HOME (fleet moves a home-directory spawn to a scratch dir of its own and says so). In a git repo the agent gets its own worktree, <repo>.wt/<name> on branch fleet/<name>, and works there; pass worktree=false to put it straight in dir (e.g. a read-only task, or work that must land in the user's checkout). goal, check and result make a task card: fleet runs check in the agent's dir when it reports done and tells you whether it passed, and the agent is told to write the result file. effort sizes the worker process the agent is given: pick it per task. interactive=true for an agent the user will talk to directly: it is never auto-closed and reports progress, not done, until the user ends the session.", obj([]string{"name", "profile", "dir"}, map[string]any{
-		"name": str("short unique agent name"), "profile": str("tool profile, see fleet_profiles"), "dir": str("working directory (absolute)"), "prompt": str("optional first prompt"),
+	{"fleet_spawn", "Start a new agent with a tool profile in a directory, optionally with a first prompt. Never spawn in the home directory: pass the repo or project dir, not $HOME (fleet moves a home-directory spawn to a scratch dir of its own and says so). In a git repo the agent gets its own worktree, <repo>.wt/<name> on branch fleet/<name>, and works there; pass worktree=false to put it straight in dir (e.g. a read-only task, or work that must land in the user's checkout). goal, check and result make a task card: fleet runs check in the agent's dir when it reports done and tells you whether it passed, and the agent is told to write the result file. effort sizes the worker process the agent is given: pick it per task. interactive=true for an agent the user will talk to directly: it is never auto-closed and reports progress, not done, until the user ends the session.", obj([]string{"name", "dir"}, map[string]any{
+		"name": str("short unique agent name"), "profile": str("tool profile, see fleet_profiles; default [defaults] profile in config.toml"), "dir": str("working directory (absolute)"), "prompt": str("optional first prompt"),
 		"worktree":    map[string]any{"type": "boolean", "description": "give the agent its own git worktree (default: the user's config, normally true)"},
 		"goal":        str("task card: the goal in one line (shown on the tile and in fleet_info)"),
 		"check":       str("task card: done-check shell command, run in the agent's dir when it reports done, keep it cheap: a build plus the touched packages' tests, e.g. \"go build ./... && go test ./internal/x/...\", or a check that CI passed on the branch head (the full suite runs in CI, ADR-69)"),
@@ -179,23 +179,26 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 	case "fleet_info":
 		return s.info(a)
 	case "fleet_spawn":
-		for f, v := range map[string]string{"name": a.Name, "profile": a.Profile, "dir": a.Dir} {
+		for f, v := range map[string]string{"name": a.Name, "dir": a.Dir} {
 			if err := need(v, f); err != nil {
 				return "", err
 			}
 		}
-		ag, err := s.F.SpawnWith(fleet.SpawnOpts{Worktree: a.Worktree, Card: a.card(), Role: fleet.Role{Leader: a.Leader, Interactive: a.Interactive, Admiral: s.Me()}, Effort: a.Effort}, a.Name, a.Profile, a.Dir, a.Prompt)
+		prof, err := s.spawnProfile(a.Profile, "fleet_profiles")
+		if err != nil {
+			return "", err
+		}
+		ag, err := s.F.SpawnWith(fleet.SpawnOpts{Worktree: a.Worktree, Card: a.card(), Role: fleet.Role{Leader: a.Leader, Interactive: a.Interactive, Admiral: s.Me()}, Effort: a.Effort}, a.Name, prof, a.Dir, a.Prompt)
 		if err != nil {
 			return "", err
 		}
 		if ag.Status == string(status.Queued) {
-			return fmt.Sprintf("queued %s (%s) in %s: %d agents busy, max_working %d%s; it starts when a slot frees",
-				ag.Name, ag.Profile, ag.Dir, s.F.Busy(), s.F.MaxWorking(), queueNote(ag)) + cardNote(ag), nil
+			return s.queuedReply(ag) + cardNote(ag), nil
 		}
 		if w := ag.Worktree; w != nil {
-			return fmt.Sprintf("spawned %s (%s) in its own worktree %s on branch %s (of %s)", ag.Name, ag.Profile, w.Path, w.Branch, w.Repo) + cardNote(ag) + leaderNote(ag), nil
+			return fmt.Sprintf("spawned %s (%s) in its own worktree %s on branch %s (of %s)", ag.Name, s.spawnLabel(ag), w.Path, w.Branch, w.Repo) + cardNote(ag) + leaderNote(ag), nil
 		}
-		return fmt.Sprintf("spawned %s (%s) in %s%s", ag.Name, ag.Profile, ag.Dir, s.dirNote(ag.Dir)) + cardNote(ag) + leaderNote(ag), nil
+		return fmt.Sprintf("spawned %s (%s) in %s%s", ag.Name, s.spawnLabel(ag), ag.Dir, s.dirNote(ag.Dir)) + cardNote(ag) + leaderNote(ag), nil
 	case "fleet_sessions":
 		return s.sessions(a.Query, a.Limit)
 	case "fleet_adopt":

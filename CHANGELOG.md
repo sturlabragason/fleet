@@ -5,6 +5,7 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-09
+- Every `fleet_spawn`, `fleet_squad_spawn` and `fleet spawn` reply names the profile and model the agent got, and a queued one says how many are ahead of it. Set `[defaults] profile` in `config.toml` and spawn calls may leave out the profile (#31).
 - See how often each Copilot agent compacted its context (`⟲2` after its spend in `fleet_status`, `fleet spend` and `fleet info`), and the admiral or squad leader is told once to hand an agent over to a fresh one after 2 compactions or 1,000 AIC; set `recycle_compactions` / `recycle_aic` in config.toml, 0 turns them off (ADR-71, #27).
 - Wait for reports without polling: the admiral and squad leaders call `fleet_wait` (agents: a peer's reply), and a shell runs `fleet wait [--agents a,b] [--timeout 300s]`; it returns the moment a new report or message arrives, or says nothing came (exit 2) (ADR-72).
 - Admirals no longer burn turns on autopilot "not complete yet" nudges: a Copilot admiral always starts in interactive mode, and agents are told to load the fleet tools once at the start and end with one report (ADR-70, #28, #29, #34).

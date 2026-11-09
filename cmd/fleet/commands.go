@@ -439,13 +439,13 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 		return err
 	}
 	if ag.Status == string(status.Queued) {
-		fmt.Printf("queued %s (%d busy, max_working %d)\n", ag.Name, f.Busy(), f.MaxWorking())
+		fmt.Printf("queued %s (%s): %d ahead of it, %d busy, max_working %d\n", ag.Name, f.SpawnLabel(ag), f.QueueAhead(ag.Name), f.Busy(), f.MaxWorking())
 		if ag.LastLine != "" {
 			fmt.Println(ag.LastLine)
 		}
 		return nil
 	}
-	fmt.Printf("spawned %s (%s) in %s pane %s%s\n", ag.Name, ag.Profile, ag.Dir, ag.PaneID, dirNote(f, ag.Dir))
+	fmt.Printf("spawned %s (%s) in %s pane %s%s\n", ag.Name, f.SpawnLabel(ag), ag.Dir, ag.PaneID, dirNote(f, ag.Dir))
 	fmt.Print(squadNote)
 	if w := ag.Worktree; w != nil {
 		fmt.Printf("worktree %s on branch %s (of %s)\n", w.Path, w.Branch, w.Repo)

@@ -90,6 +90,7 @@ type Prefs struct {
 	profiles   map[string]map[string]conf.Value
 	maxWorking int
 	theme      string
+	profile    string
 	admiral    string
 	admiralMax int
 	agentMail  string
@@ -141,6 +142,16 @@ func (p *Prefs) Theme() string {
 	return p.theme
 }
 
+// DefaultProfile is [defaults] profile: the tool profile a fleet_spawn or
+// fleet_squad_spawn uses when the call names none. "" = unset, the call
+// must name one.
+func (p *Prefs) DefaultProfile() string {
+	if p == nil {
+		return ""
+	}
+	return p.profile
+}
+
 // Load reads the config file. A missing file is not an error.
 func Load() (*Prefs, error) {
 	path := Path()
@@ -159,6 +170,7 @@ func Load() (*Prefs, error) {
 			p.maxWorking = n
 		}
 		p.theme = strings.TrimSpace(conf.Str(sec, "theme"))
+		p.profile = strings.TrimSpace(conf.Str(sec, "profile"))
 		if p.agentMail, err = parseAgentMail(sec); err != nil {
 			return nil, fmt.Errorf("%s: %w", path, err)
 		}

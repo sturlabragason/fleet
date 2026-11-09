@@ -524,3 +524,20 @@ func TestContextArgs(t *testing.T) {
 		t.Errorf("override drops the other levels: %v", got)
 	}
 }
+
+func TestModelArg(t *testing.T) {
+	for _, c := range []struct {
+		lists [][]string
+		want  string
+	}{
+		{nil, ""},
+		{[][]string{{"--allow-all"}}, ""},
+		{[][]string{{"--model", "a", "--allow-all"}}, "a"},
+		{[][]string{{"--model", "a"}, {"--model=b"}}, "b"}, // extra_args win
+		{[][]string{{"--model"}}, ""},
+	} {
+		if got := ModelArg(c.lists...); got != c.want {
+			t.Errorf("%v: %q, want %q", c.lists, got, c.want)
+		}
+	}
+}

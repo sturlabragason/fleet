@@ -14,6 +14,10 @@
 # `fleet up` again — the tmux chrome is re-set and the overview pane restarts,
 # agents keep running.
 # theme = "catppuccin"
+# Tool profile for fleet_spawn and fleet_squad_spawn calls that name none
+# (see `fleet profiles`). Unset: every spawn call must name a profile.
+# Re-read on every spawn. The spawn reply always names the profile and model.
+# profile = "claude-copilot"
 # Starting mode, looked up in the profile's mode_args / mode_keys.
 # "" (or omitted) leaves the tool alone. An unknown mode is logged and ignored.
 # "auto" is defined by every built-in profile and means "run every tool call
