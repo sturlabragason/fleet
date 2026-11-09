@@ -75,7 +75,9 @@ func TestSpawnStoresCardAndQueueKeepsIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := f.Store.Load().Agents["a1"].Card
-	if got == nil || got.Goal != "ship it" || got.Check != "true" || got.Result != DefaultResult {
+	// A temp dir is no git repo, so a1 has no worktree of its own and gets
+	// a result file of its own in the shared dir (#17).
+	if got == nil || got.Goal != "ship it" || got.Check != "true" || got.Result != SharedResult("a1") {
 		t.Fatalf("card on the board: %+v", got)
 	}
 	// The agent is told its card: the block reaches the pane as part of the
@@ -84,7 +86,7 @@ func TestSpawnStoresCardAndQueueKeepsIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"## Task card", "ship it", "`true`", DefaultResult} {
+	for _, want := range []string{"## Task card", "ship it", "`true`", "`result-a1.md`"} {
 		if !strings.Contains(first, want) {
 			t.Fatalf("first prompt missing %q:\n%s", want, first)
 		}
@@ -339,5 +341,34 @@ func TestCheckStateAndResultPath(t *testing.T) {
 	p, written, ok := ResultPath(a)
 	if !ok || written || !strings.HasSuffix(p, DefaultResult) {
 		t.Fatalf("result path %q written=%v ok=%v", p, written, ok)
+	}
+	// A file older than the spawn is a stale result from an earlier task.
+	if err := os.WriteFile(p, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a.Created = time.Now().Add(time.Hour)
+	if _, written, _ := ResultPath(a); written {
+		t.Fatal("a result file older than the spawn counts as written")
+	}
+	a.Created = time.Now().Add(-time.Hour)
+	if _, written, _ := ResultPath(a); !written {
+		t.Fatal("a result file newer than the spawn does not count as written")
+	}
+}
+
+func TestResultForSharedDir(t *testing.T) {
+	def := NormalizeCard(&board.Card{Goal: "g"})
+	if c := ResultFor(def, "a1", true); c.Result != DefaultResult {
+		t.Fatalf("own worktree: %q", c.Result)
+	}
+	if c := ResultFor(def, "a1", false); c.Result != "result-a1.md" || def.Result != DefaultResult {
+		t.Fatalf("shared dir: %q (input now %q)", c.Result, def.Result)
+	}
+	own := NormalizeCard(&board.Card{Goal: "g", Result: "out/notes.md"})
+	if c := ResultFor(own, "a1", false); c.Result != "out/notes.md" {
+		t.Fatalf("explicit result changed: %q", c.Result)
+	}
+	if ResultFor(nil, "a1", false) != nil {
+		t.Fatal("no card became a card")
 	}
 }
