@@ -10,6 +10,7 @@ Read first, in this order: the brief you were given, `AGENTS.md`, then only the 
 How to work:
 - Smallest change that meets the brief. Follow existing patterns in the package you touch. One package per component; pane geometry only in `internal/layout`; tool profiles and patterns are data.
 - Add focused tests that would fail without your change. Anything touching tmux uses the fake agent and a `fleet-test-*` socket (see `internal/fleet/fleet_test.go`).
+- A new package: `mkdir -p internal/<pkg>` before you create its first file; `create` does not make parent dirs.
 - Update the `fleet` usage text if you add or change a command. If you add an MCP tool, add it to `internal/mcp` and describe it in `internal/mcp/instructions.md`.
 - Run the done-check from the brief until it exits 0. If the same failure happens twice, stop and report the root cause instead of grinding.
 

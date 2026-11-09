@@ -7,7 +7,7 @@ Time matters here: do not spend time that can be avoided, and the earlier a corr
 Start
 - Read-only task (review, research, plan, measure): say so in your first reply and edit nothing.
 - Otherwise work in your own worktree, never in the main checkout. Fleet usually starts you in one (`<repo>.wt/<name>`, branch `fleet/<name>`): stay there, don't make another. If you are not on a `fleet/` branch, create one: `git worktree add ../<repo>.wt/<your-name> -b <type>/<slug>`.
-- Plan in a few lines: the files you will touch and how you will check the result. Keep it one small, reviewable change.
+- Plan in a few lines: the files you will touch and how you will check the result. Keep it one small, reviewable change. If your tool defers MCP tools (Copilot), load the fleet tools in this first response with one `tool_search_tool` call, pattern `^fleet-peer-fleet_`, never later.
 - Before editing, run `fleet touching <files>` (exit 1: another worktree changes them). Merge order comes from branch state, not from a reply: fewer touched files goes first. Message the other agent or the coordinator your task names, then keep working; don't wait more than a few minutes, and don't edit the same files in parallel.
 - You own your task's area; the neighbours your task names own theirs. If you depend on another agent's work, say so in your plan and message it.
 
@@ -17,7 +17,7 @@ Work
 - Control scope: work found outside the task goes into your report as a follow-up, not into this change. If the task itself must grow, report `question` first.
 - Your ADR number comes from your task prompt. Don't read DESIGN.md §14 to pick one: several agents pick the same number and renumber each other.
 - Write the failing test first when that is cheap. Parsers of screens or tool output get real captured fixtures. An HTML page you hand the user must be one self-contained file (`scripts/inline-html.py` inlines images, CSS and sibling pages) and you prove it rendered with `scripts/check-renders.sh page.html`: the browser is sandboxed and gets only that file, and `xdg-open` exits 0 even when nothing rendered.
-- Scrub fixtures, logs and commits of secrets and private data: tokens, emails, names, hostnames, customer data, home paths.
+- Scrub fixtures, logs and commits of secrets and private data: tokens, emails, names, hostnames, customer data, home paths. Shell: `mkdir -p` a new dir before creating files in it; `kill` a numeric PID (`kill $P` is refused); never `sleep` to wait for a peer, end your turn and its message wakes you.
 - If your tools include `fleet_squad_*` you lead a squad: split the task, spawn one agent per piece, collect their reports and send **one** summary upward. A prompt, merge, push or infra apply escalates; you never answer it for them.
 
 Pre-merge checklist (all of it, every time)
@@ -37,4 +37,4 @@ Never
 Finish
 - Report with `fleet_report` (state `done`; first line: what changed and the commit, then optional detail lines). Without the tool, run `fleet report done "<summary>"` in a shell. Don't print marker lines. If the user talks to you directly, report `progress`, not `done`, until they end the session.
 - Detail lines, only those that apply: `next:` (follow-ups), `risks:`, `decisions:` (needed from the user), `retro:` (one line: what slowed you down).
-- Blocked or need a decision: the same tool with `blocked` or `question`.
+- Blocked or need a decision: the same tool with `blocked` or `question`, then end your turn. In autopilot, end every done, blocked or question report with `fleet_report` and `task_complete` in the same response (it only ends the turn; a reply resumes you), never one after the other.

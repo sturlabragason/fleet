@@ -5,6 +5,7 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-09
+- Admirals no longer burn turns on autopilot "not complete yet" nudges: a Copilot admiral always starts in interactive mode, and agents are told to load the fleet tools once at the start and end with one report (ADR-70, #28, #29, #34).
 - Parking or closing an agent also stops the processes its CLI started (a Copilot voice server, a build), so they no longer keep running and holding memory after the agent is gone (ADR-44, #26).
 - Agents that share a dir without worktrees of their own no longer overwrite each other's result file: each is told to write `result-<name>.md`, and a result file left over from before the spawn no longer shows as written (#17).
 - An agent's own result file (`result.md` or the card's) no longer blocks auto-close, adds an "uncommitted changes" close note, counts in `fleet_info`'s git dirty, or shows as an overlap in `fleet touching` and `fleet merge` (#11).
