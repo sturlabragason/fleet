@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/wall"
 )
@@ -63,5 +64,44 @@ func TestReportRoundTrip(t *testing.T) {
 	}
 	if msg, _ := sup.tool("fleet_handoff", map[string]any{}); strings.Contains(msg, "unread reports") {
 		t.Fatalf("handoff got the suffix: %q", msg)
+	}
+}
+
+func TestReportsByNameHeadlinesAndCards(t *testing.T) {
+	f := mailHome(t)
+	f.Store.Update(func(b *board.Board) error {
+		b.Agents["a"].Card = &board.Card{Goal: "goal-a"}
+		b.Agents["b"].Card = &board.Card{Goal: "goal-b"}
+		return nil
+	})
+	sup := startRPC(t, New(f, wall.New(f.T, fleet.Session)))
+	sup.call("initialize", map[string]any{"protocolVersion": ProtocolVersion})
+	long := "a first\nsecond line " + strings.Repeat("x", 200)
+	f.Mail().Report("a", "done", long)
+	f.Mail().Report("b", "blocked", "b needs a key")
+	f.Mail().Report("a", "progress", strings.Repeat("y", 300))
+
+	msg, _ := sup.tool("fleet_reports", map[string]any{"name": "a"})
+	if !strings.Contains(msg, "a: done: a first\n    second line") || strings.Contains(msg, "b: blocked") ||
+		!strings.Contains(msg, "| goal-a |") || strings.Contains(msg, "goal-b") {
+		t.Fatalf("name=a: %q", msg)
+	}
+	if msg, _ := sup.tool("fleet_reports", map[string]any{"name": "a"}); !strings.HasPrefix(msg, "no new reports from a") || strings.Contains(msg, "Task cards") {
+		t.Fatalf("name=a again: %q", msg)
+	}
+	msg, _ = sup.tool("fleet_reports", map[string]any{"all": true})
+	if strings.Contains(msg, "second line") || !strings.Contains(msg, "a: done: a first\n") || !strings.Contains(msg, strings.Repeat("y", 100)+"…\n") ||
+		strings.Contains(msg, strings.Repeat("y", 120)) || !strings.Contains(msg, "name=<agent>") || !strings.Contains(msg, "goal-b") {
+		t.Fatalf("all headlines: %q", msg)
+	}
+	if msg, _ := sup.tool("fleet_reports", map[string]any{"all": true, "name": "a"}); !strings.Contains(msg, "second line") || strings.Contains(msg, "b: blocked") || strings.Contains(msg, "goal-b") {
+		t.Fatalf("all name=a: %q", msg)
+	}
+	msg, _ = sup.tool("fleet_reports", nil)
+	if !strings.Contains(msg, "b: blocked: b needs a key") || strings.Contains(msg, "a first") || strings.Contains(msg, "goal-a") {
+		t.Fatalf("b must still be unread, alone: %q", msg)
+	}
+	if msg, _ := sup.tool("fleet_reports", nil); msg != "no new reports" {
+		t.Fatalf("no new reports must carry no cards: %q", msg)
 	}
 }

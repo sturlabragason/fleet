@@ -142,6 +142,74 @@ func (s *Store) viewOf(box string, reports bool) view {
 	return view{func(m Msg) bool { return m.Kind != KindReport }, s.msgsReadPath(box)}
 }
 
+// idsPath holds the ids read one by one above the read mark (InboxFrom),
+// one per line, so reading one sender's reports leaves the rest unread.
+func (v view) idsPath() string { return v.mark + ".ids" }
+
+func readIDs(path string) map[string]bool {
+	ids := map[string]bool{}
+	for _, id := range strings.Fields(readTrim(path)) {
+		ids[id] = true
+	}
+	return ids
+}
+
+// unread is the part of ms (this view's messages) not yet read: newer than
+// the mark and not read one by one.
+func (v view) unread(ms []Msg) []Msg {
+	out := unreadOf(ms, readTrim(v.mark))
+	ids := readIDs(v.idsPath())
+	if len(ids) == 0 {
+		return out
+	}
+	var keep []Msg
+	for _, m := range out {
+		if !ids[m.ID] {
+			keep = append(keep, m)
+		}
+	}
+	return keep
+}
+
+// markRead marks read in this view and moves the mark over every message
+// of ms that is now read, keeping above it only the ids it cannot cover.
+func (v view) markRead(ms, read []Msg) error {
+	if len(read) == 0 {
+		return nil
+	}
+	mark := readTrim(v.mark)
+	ids := readIDs(v.idsPath())
+	for _, m := range read {
+		ids[m.ID] = true
+	}
+	newMark := mark
+	for _, m := range unreadOf(ms, mark) {
+		if !ids[m.ID] {
+			break
+		}
+		newMark = m.ID
+	}
+	var rest []string
+	for id := range ids {
+		if id > newMark {
+			rest = append(rest, id)
+		}
+	}
+	sort.Strings(rest)
+	if newMark != mark {
+		if err := writeAtomic(v.mark, []byte(newMark)); err != nil {
+			return err
+		}
+	}
+	if len(rest) == 0 {
+		if err := os.Remove(v.idsPath()); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	return writeAtomic(v.idsPath(), []byte(strings.Join(rest, "\n")+"\n"))
+}
+
 func (s *Store) readView(box string, reports bool) ([]Msg, view) {
 	v := s.viewOf(box, reports)
 	var out []Msg
@@ -158,7 +226,16 @@ func (s *Store) readView(box string, reports bool) ([]Msg, view) {
 // outside that window are never skipped. For an admiral's box these are the
 // reports; its other messages are InboxMsgs.
 func (s *Store) Inbox(agent string, all bool, n int) ([]Msg, error) {
-	return s.inbox(agent, true, all, n)
+	return s.inbox(agent, true, all, n, "")
+}
+
+// InboxFrom is Inbox for the messages from one sender only. Without all it
+// marks just those read: the others stay unread however they interleave.
+func (s *Store) InboxFrom(agent, from string, all bool, n int) ([]Msg, error) {
+	if err := checkName(from); err != nil {
+		return nil, err
+	}
+	return s.inbox(agent, true, all, n, from)
 }
 
 // InboxMsgs is Inbox for what an admiral's box holds besides reports:
@@ -167,10 +244,10 @@ func (s *Store) InboxMsgs(agent string, all bool, n int) ([]Msg, error) {
 	if !IsAdmiralBox(agent) {
 		return nil, fmt.Errorf("%q is not an admiral", agent)
 	}
-	return s.inbox(agent, false, all, n)
+	return s.inbox(agent, false, all, n, "")
 }
 
-func (s *Store) inbox(agent string, reports, all bool, n int) ([]Msg, error) {
+func (s *Store) inbox(agent string, reports, all bool, n int, from string) ([]Msg, error) {
 	if err := checkBox(agent); err != nil {
 		return nil, err
 	}
@@ -181,16 +258,27 @@ func (s *Store) inbox(agent string, reports, all bool, n int) ([]Msg, error) {
 			if n <= 0 {
 				n = 20
 			}
-			out = ms[max(0, len(ms)-n):]
+			pick := onlyFrom(ms, from)
+			out = pick[max(0, len(pick)-n):]
 			return nil
 		}
-		out = unreadOf(ms, readTrim(v.mark))
-		if len(out) == 0 || out[len(out)-1].ID <= readTrim(v.mark) {
-			return nil
-		}
-		return writeAtomic(v.mark, []byte(out[len(out)-1].ID))
+		out = onlyFrom(v.unread(ms), from)
+		return v.markRead(ms, out)
 	})
 	return out, err
+}
+
+func onlyFrom(ms []Msg, from string) []Msg {
+	if from == "" {
+		return ms
+	}
+	var out []Msg
+	for _, m := range ms {
+		if m.From == from {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // Unread counts agent's unread messages (an admiral's: unread reports).
@@ -209,7 +297,7 @@ func (s *Store) ClaimNudge(agent string) (unread int, ok bool, err error) {
 	}
 	err = s.update(func(st *state) error {
 		read := readTrim(s.readPath(agent))
-		un := unreadOf(s.read(agent), read)
+		un := view{nil, s.readPath(agent)}.unread(s.read(agent))
 		unread = len(un)
 		if unread == 0 || readTrim(s.nudgePath(agent)) > read {
 			return nil

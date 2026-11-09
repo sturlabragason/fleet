@@ -42,8 +42,8 @@ var squadToolDefs = []tool{
 		"raw": map[string]any{"type": "boolean", "description": "screen as captured, with borders"}})},
 	{"fleet_squad_send", "Send a prompt or follow-up to one of your agents, or \"*\" for all of them. An agent sitting on a permission prompt is refused: you may not answer prompts, report it to the admiral instead.", obj([]string{"name", "text"}, map[string]any{
 		"name": str("squad agent name, or * for all of them"), "text": str("text to send")})},
-	{"fleet_squad_reports", "Read your agents' reports (done, blocked, question, progress) without marking them read; fleet_inbox is where you mark them read.", obj(nil, map[string]any{
-		"limit": map[string]any{"type": "integer", "description": "how many to show (default 20)"}})},
+	{"fleet_squad_reports", "Read your agents' reports (done, blocked, question, progress) without marking them read; fleet_inbox is where you mark them read. name=<agent> shows only that agent's.", obj(nil, map[string]any{
+		"name": str("only this squad agent's reports"), "limit": map[string]any{"type": "integer", "description": "how many to show (default 20)"}})},
 	{"fleet_squad_close", "Stop one of your agents and take it off the board, or with name=\"*\" all of them. The first call is refused and names any uncommitted or unmerged work: read it, and call again with confirmed=true only when that work is merged or you no longer need it.", obj([]string{"name", "confirmed"}, map[string]any{
 		"name": str("squad agent name, or * for all of them"), "confirmed": confirmedProp})},
 }
@@ -96,7 +96,7 @@ func (s *Server) squadCall(me, name string, raw json.RawMessage) (string, error)
 	case "fleet_squad_status":
 		return s.squadStatus(me), nil
 	case "fleet_squad_reports":
-		return s.squadReports(me, a.Limit), nil
+		return s.squadReports(me, a.Name, a.Limit), nil
 	case "fleet_squad_send":
 		return s.squadSend(me, a)
 	case "fleet_squad_close":
@@ -155,13 +155,13 @@ func (s *Server) squadStatus(me string) string {
 // squadReports shows the reports in the leader's own inbox without marking
 // them read: fleet_inbox is the one place that does that, so a leader sees
 // each report exactly once there however often it looks here.
-func (s *Server) squadReports(me string, limit int) string {
+func (s *Server) squadReports(me, name string, limit int) string {
 	if limit <= 0 {
 		limit = 20
 	}
 	var ms []mail.Msg
 	for _, m := range s.F.Mail().Peek(me) {
-		if m.Kind == mail.KindReport {
+		if m.Kind == mail.KindReport && (name == "" || m.From == name) {
 			ms = append(ms, m)
 		}
 	}
@@ -169,9 +169,12 @@ func (s *Server) squadReports(me string, limit int) string {
 		ms = ms[len(ms)-limit:]
 	}
 	if len(ms) == 0 {
-		return "no unread reports from your squad" + taskCards(s.F.Squad(me))
+		if name != "" {
+			return "no unread reports from " + name
+		}
+		return "no unread reports from your squad"
 	}
-	return RenderReports(ms, true) + taskCards(s.F.Squad(me))
+	return RenderReports(ms, true) + taskCards(inReports(s.F.Squad(me), ms))
 }
 
 // squadSend is fleet_squad_send: plain text only, and never into a prompt.

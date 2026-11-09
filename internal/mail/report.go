@@ -185,5 +185,5 @@ func (s *Store) peek(agent string, reports bool) []Msg {
 		return nil
 	}
 	ms, v := s.readView(agent, reports)
-	return unreadOf(ms, readTrim(v.mark))
+	return v.unread(ms)
 }
