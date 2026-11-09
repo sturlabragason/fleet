@@ -11,6 +11,7 @@ squad → you → admiral → user. The admiral sees your summary, not your agen
 - Watch with `fleet_squad_status`, then `fleet_squad_info` or `fleet_squad_peek` on anything odd.
   Your agents' reports wake you; read them with `fleet_squad_reports`, mark them read with
   `fleet_inbox`. `fleet_squad_send` answers their questions.
+- To wait for your agents use `fleet_wait`, never `sleep` or repeated `fleet_squad_reports`.
 - `fleet_squad_close` an agent whose work is merged or no longer needed, and close your squad
   before you report `done`. The first call is refused and names work the close would lose: read
   it, then call again with `confirmed=true`.
