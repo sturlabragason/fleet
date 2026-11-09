@@ -19,7 +19,7 @@ func TestCopilotFixture(t *testing.T) {
 		t.Fatal("copilot fixture not read")
 	}
 	want := Spend{Calls: 3, Input: 200, Output: 1000, CacheRead: 55004, CacheWrite: 5000,
-		AIC: 12.80125, HasAIC: true, Model: "claude-opus-5"}
+		AIC: 12.80125, HasAIC: true, Model: "claude-opus-5", Context: 15}
 	if got != want {
 		t.Fatalf("got %+v want %+v", got, want)
 	}
@@ -31,6 +31,41 @@ func TestCopilotFixture(t *testing.T) {
 	}
 	if l := got.Long(); l != "12.8 AIC (3 calls, 61k tokens, 55k cached)" {
 		t.Fatalf("long %q", l)
+	}
+}
+
+// The fixture has two applied compactions and one failed one, and a subagent
+// call whose small context must not count as the agent's.
+func TestCopilotCompactions(t *testing.T) {
+	src, err := os.ReadFile("testdata/copilot-compaction.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "events.jsonl")
+	lines := bytes.SplitAfter(src, []byte("\n"))
+	os.WriteFile(path, bytes.Join(lines[:6], nil), 0o600)
+	c := NewCache()
+	got, _ := c.File(path, Copilot)
+	if got.Compactions != 1 || got.Context != 20 || got.Calls != 3 {
+		t.Fatalf("after first compaction: %+v", got)
+	}
+	os.WriteFile(path, src, 0o600)
+	os.Chtimes(path, timeZero, timeZero)
+	got, _ = c.File(path, Copilot)
+	if got.Compactions != 2 || got.Context != 9 || got.Calls != 3 || got.Model != "claude-opus-5" {
+		t.Fatalf("got %+v", got)
+	}
+	if s := got.Short(); s != "3.0 AIC ⟲2" {
+		t.Fatalf("short %q", s)
+	}
+	if l := got.Long(); l != "3.0 AIC ⟲2 (3 calls, 205k tokens, 202k cached, compacted 2×)" {
+		t.Fatalf("long %q", l)
+	}
+	var total Spend
+	total.Add(got)
+	total.Add(got)
+	if total.Compactions != 4 || total.Context != 0 {
+		t.Fatalf("total %+v", total)
 	}
 }
 

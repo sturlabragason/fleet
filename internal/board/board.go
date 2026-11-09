@@ -93,6 +93,9 @@ type Agent struct {
 	// NoReportTold is when the owner was told this agent stopped without a
 	// report; once per task, so a newer PromptAt re-arms it (ADR-68).
 	NoReportTold time.Time `json:"no_report_told,omitempty"`
+	// RecycleTold is when the owner was told to hand this agent's work to a
+	// fresh agent; once per agent (ADR-71).
+	RecycleTold time.Time `json:"recycle_told,omitempty"`
 	// TurnAt is when the agent's latest turn began: the refresher's last
 	// switch to working after an idle of at least NoReportAfter (a shorter
 	// idle is a boundary inside one turn). It is what the user's agents are

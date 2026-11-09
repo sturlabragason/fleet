@@ -81,7 +81,7 @@ func (c *Cache) File(path string, k Kind) (Spend, bool) {
 		return e.total(), e.size > 0
 	}
 	r := scan(p, buf, e.last)
-	model := r.add.Model
+	model, ctx := r.add.Model, r.add.Context
 	if r.hasSnap {
 		at := e.acc
 		at.Add(r.atSnap)
@@ -90,6 +90,9 @@ func (c *Cache) File(path string, k Kind) (Spend, bool) {
 	e.acc.Add(r.add)
 	if model != "" {
 		e.acc.Model = model
+	}
+	if ctx > 0 {
+		e.acc.Context = ctx
 	}
 	e.last = r.lastID
 	e.off = off + r.consumed

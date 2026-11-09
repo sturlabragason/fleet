@@ -81,6 +81,12 @@ ready_timeout = "15s"
 # Every message is logged (`fleet access log`), and `fleet access revoke A B`
 # still stops any pair. Fleet-wide, [defaults] only; takes effect at once.
 # agent_mail = "team"
+# Tell an agent's owner (admiral or squad leader), once per agent, to hand its
+# work to a fresh agent after this many context compactions or this many AI
+# credits (Copilot agents; DESIGN §7b, ADR-71). Agents that compacted cost
+# about ten times as much. 0 turns a threshold off. [defaults] only.
+# recycle_compactions = 2
+# recycle_aic = 1000
 
 # The cheap model behind `fleet peek --summary` and MCP fleet_peek summary=true
 # (DESIGN §6.2, ADR-40). It shells out to a CLI you already have signed in, so
