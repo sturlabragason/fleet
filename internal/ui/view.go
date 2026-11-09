@@ -277,9 +277,9 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 	if a.WithUser(m.now()) {
 		tgt, tw2 = tgt+leadStyle.Render(" "+userMark), tw2+2
 	}
-	noReport := a.NoReport(m.now())
-	if noReport {
-		tgt, tw2 = tgt+noReportStyle.Render(" "+noReportMark), tw2+2
+	noReport := a.NoReportTag(m.now())
+	if noReport != "" {
+		tgt, tw2 = tgt+noReportStyleOf(noReport).Render(" "+noReportMark), tw2+2
 	}
 	chip := m.ownerChip(a)
 	tw2 += ansi.StringWidth(chip)
@@ -290,7 +290,7 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 	}
 	l1 := st1.Render(glyph(a.Status, m.frame)+" "+ansi.Truncate(a.Name, inner-4-tw2, "…")) + tgt + st1.Render(wall)
 	st := a.Status
-	if noReport {
+	if noReport != "" {
 		st += " · no report"
 	}
 	state := strings.TrimSpace(st + m.queueMark(a.Name) + " " + since(a.StatusSince, m.now()))
@@ -419,6 +419,15 @@ const userMark = "✎"
 // noReportMark follows the name of an agent that went idle mid-task without
 // a report (ADR-68), in the waiting colour: it needs a nudge, not a fold.
 const noReportMark = "…"
+
+// noReportStyleOf is the … colour for a NoReportTag: waiting for an agent
+// that needs a nudge, muted for the user's own agent (ADR-68).
+func noReportStyleOf(tag string) lipgloss.Style {
+	if tag == "user" {
+		return leadStyle
+	}
+	return noReportStyle
+}
 
 func since(t, now time.Time) string {
 	if t.IsZero() {

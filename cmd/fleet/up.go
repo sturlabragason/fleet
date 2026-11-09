@@ -439,7 +439,8 @@ var (
 	// DESIGN.md §5e): ⚑ in Overlay1, then the name colour again.
 	pinMark string
 	// noReportMark follows the pin on the border of an agent that went idle
-	// mid-task without a report (@fleet_noreport, ADR-68): … in Waiting.
+	// mid-task without a report (@fleet_noreport, ADR-68): … in Waiting, or
+	// muted when it is the user's agent ("user").
 	noReportMark string
 	// nextOutMark ends the title of the pane a card would evict (no target,
 	// full wall).
@@ -452,7 +453,8 @@ var (
 func init() {
 	theme.OnChange(func() {
 		targetMark = "#{?#{==:#{pane_id},#{@fleet_target}},#[fg=" + theme.Select + "]#[bold]▶#[nobold] ,}"
-		noReportMark = "#{?@fleet_noreport, #[fg=" + theme.Waiting + "]…#[fg=#{?@fleet_color,#{@fleet_color},default}],}"
+		noReportMark = "#{?#{==:#{@fleet_noreport},1}, #[fg=" + theme.Waiting + "]…#[fg=#{?@fleet_color,#{@fleet_color},default}],}" +
+			"#{?#{==:#{@fleet_noreport},user}, #[fg=" + theme.Muted + "]…#[fg=#{?@fleet_color,#{@fleet_color},default}],}"
 		pinMark = "#{?@fleet_pin, #[fg=" + theme.Overlay1 + "]⚑#[fg=#{?@fleet_color,#{@fleet_color},default}],}"
 		ownerMark = "#{?" + fleet.MultiOption + ",#{?@fleet_owner,#[fg=" + theme.Crust + "#,bg=#{@fleet_owner_color}#,bold] #{@fleet_owner} #[default] ,},}"
 		nextOutMark = "#{?#{==:#{pane_id},#{@fleet_next_out}}, #[fg=" + theme.Gone + "]· next out#[default],}"

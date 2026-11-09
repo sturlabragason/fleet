@@ -310,3 +310,19 @@ func TestNoReportAgentDoesNotFold(t *testing.T) {
 		t.Fatalf("i0 should be a row with %s, the other 5 folded:\n%s", noReportMark, v)
 	}
 }
+
+// The user's agent that ended a turn with no report is a row with … too,
+// not folded with the idle ones (ADR-68 amendment, fleet#8).
+func TestUserNoReportAgentDoesNotFold(t *testing.T) {
+	m, _ := crowd(80)
+	for _, a := range m.agents {
+		if a.Name == "i0" {
+			a.Interactive, a.TurnAt = true, a.StatusSince.Add(-time.Minute)
+		}
+	}
+	m.setAgents(m.agents)
+	v := ansi.Strip(m.View())
+	if !strings.Contains(v, "+5 idle") || !strings.Contains(v, noReportMark) {
+		t.Fatalf("i0 should be a row with %s, the other 5 folded:\n%s", noReportMark, v)
+	}
+}

@@ -27,7 +27,7 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 	ids := map[string]string{}
 	var agentPanes []tmux.PaneInfo
 	tagged := map[string]string{}
-	taggedNR := map[string]bool{}
+	taggedNR := map[string]string{}
 	deadPanes := map[string]tmux.PaneInfo{}
 	for _, p := range panes {
 		if p.Agent != "" {
@@ -81,6 +81,9 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 				f.subagents(a, byAgent[a.Name] && !dead[a.Name], now)
 			}
 			if next != prev {
+				if newTurn(a, prev, next, now) {
+					a.TurnAt = now
+				}
 				a.Status, a.StatusSince = next, now
 				logx.For("status").Info("transition", "agent", a.Name, "from", prev, "to", next, "line", a.LastLine)
 				f.Store.AppendEvent(board.Event{Time: now, Agent: a.Name, From: prev, To: next})
@@ -90,11 +93,13 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 				// set by an older fleet): re-sync without resetting the age.
 				f.tagPane(id, next, a.StatusSince)
 			}
-			nr := a.NoReport(now)
+			nr := a.NoReportTag(now)
 			if id := ids[a.Name]; id != "" && nr != taggedNR[a.Name] {
 				f.tagNoReport(id, nr)
 			}
-			if tell && nr && a.NoReportTold.Before(a.PromptAt) {
+			// Only the hard flag wakes the owner: the user's agents get the
+			// soft mark and nobody types into a pane the user is in.
+			if tell && nr == "1" && a.NoReportTold.Before(a.PromptAt) {
 				a.NoReportTold = now
 				silent = append(silent, stuckNote{name: a.Name, profile: a.Profile, pane: ids[a.Name], line: a.LastLine})
 			}
@@ -257,11 +262,24 @@ func (f *Fleet) classify(a *board.Agent, alive, dead bool, pane string, now time
 	return string(st)
 }
 
+// newTurn reports whether a switch from prev to next starts a new turn: the
+// first work, work after starting, or work after an idle of at least
+// NoReportAfter. A shorter idle, a menu or a stuck spell is inside the turn
+// (ADR-68).
+func newTurn(a *board.Agent, prev, next string, now time.Time) bool {
+	if next != string(status.Working) {
+		return false
+	}
+	return a.TurnAt.IsZero() || prev == string(status.Starting) ||
+		prev == string(status.Idle) && now.Sub(a.StatusSince) >= board.NoReportAfter
+}
+
 // tagNoReport sets or clears @fleet_noreport, the border's "…" mark for an
-// agent that went idle mid-task without a report (ADR-68).
-func (f *Fleet) tagNoReport(pane string, on bool) {
-	if on {
-		f.T.SetPaneOption(pane, "@fleet_noreport", "1")
+// agent that went idle mid-task without a report: "1", or "user" for the
+// user's agent, drawn muted (ADR-68).
+func (f *Fleet) tagNoReport(pane, tag string) {
+	if tag != "" {
+		f.T.SetPaneOption(pane, "@fleet_noreport", tag)
 		return
 	}
 	f.T.UnsetPaneOption(pane, "@fleet_noreport")

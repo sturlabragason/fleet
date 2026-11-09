@@ -152,3 +152,47 @@ func TestNoReport(t *testing.T) {
 		}
 	}
 }
+
+// The user's agents get the soft flag: a turn that ended with no report of
+// any kind since it began, while the user is not typing (ADR-68 amendment).
+func TestUserNoReport(t *testing.T) {
+	now := time.Now()
+	turn := now.Add(-10 * time.Minute)
+	idle := func(mod func(*Agent)) *Agent {
+		// An agent the user typed in on 2026-11-09: a progress report from
+		// an earlier turn, then "Logging everything now." and idle.
+		a := &Agent{Status: "idle", StatusSince: now.Add(-time.Minute), TurnAt: turn,
+			UserAt: now.Add(-2 * time.Minute), Report: &Report{State: "progress", At: turn.Add(-time.Hour)}}
+		if mod != nil {
+			mod(a)
+		}
+		return a
+	}
+	for _, c := range []struct {
+		name      string
+		a         *Agent
+		user, tag string
+	}{
+		{"typed lately, turn ended without a report", idle(nil), "user", "user"},
+		{"interactive, turn ended without a report", idle(func(a *Agent) { a.Interactive, a.UserAt = true, time.Time{} }), "user", "user"},
+		{"progress in this turn ends it", idle(func(a *Agent) { a.Report = &Report{State: "progress", At: turn.Add(time.Minute)} }), "", ""},
+		{"no report ever", idle(func(a *Agent) { a.Report = nil }), "user", "user"},
+		{"the user is typing", idle(func(a *Agent) { a.UserAt = now.Add(-5 * time.Second) }), "", ""},
+		{"between turns", idle(func(a *Agent) { a.StatusSince = now.Add(-time.Second) }), "", ""},
+		{"working", idle(func(a *Agent) { a.Status = "working" }), "", ""},
+		{"no turn seen", idle(func(a *Agent) { a.TurnAt = time.Time{} }), "", ""},
+		{"not the user's any more: the hard flag", idle(func(a *Agent) { a.UserAt, a.PromptAt = now.Add(-time.Hour), turn }), "", "1"},
+		{"not the user's, never handed work", idle(func(a *Agent) { a.UserAt = now.Add(-time.Hour) }), "", ""},
+	} {
+		got := ""
+		if c.a.UserNoReport(now) {
+			got = "user"
+		}
+		if got != c.user {
+			t.Errorf("%s: UserNoReport = %q, want %q", c.name, got, c.user)
+		}
+		if tag := c.a.NoReportTag(now); tag != c.tag {
+			t.Errorf("%s: NoReportTag = %q, want %q", c.name, tag, c.tag)
+		}
+	}
+}

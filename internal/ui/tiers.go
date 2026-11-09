@@ -48,7 +48,7 @@ func tierOf(a *board.Agent, onWall bool, now time.Time) int {
 	switch {
 	case onWall:
 		return tierWall
-	case a.NoReport(now):
+	case a.NoReportTag(now) != "":
 		return tierRest // stopped mid-task: it needs a nudge, so it never folds (ADR-68)
 	case a.Status == "idle" || a.Status == "gone":
 		return tierIdle
@@ -434,8 +434,8 @@ func (m *Model) rowCell(tv tierView, name string, w int) string {
 	if a.WithUser(m.now()) {
 		mark(leadStyle, userMark)
 	}
-	if a.NoReport(m.now()) {
-		mark(noReportStyle, noReportMark)
+	if tag := a.NoReportTag(m.now()); tag != "" {
+		mark(noReportStyleOf(tag), noReportMark)
 	}
 	if ti, ok := m.teams[a.Name]; ok && ti.Team != "" {
 		mark(lipgloss.NewStyle().Foreground(lipgloss.Color(ti.Color)), teamMark)
@@ -459,7 +459,7 @@ func (m *Model) markCount(a *board.Agent) int {
 	if a.WithUser(m.now()) {
 		n++
 	}
-	if a.NoReport(m.now()) {
+	if a.NoReportTag(m.now()) != "" {
 		n++
 	}
 	if ti, ok := m.teams[a.Name]; ok && ti.Team != "" {
