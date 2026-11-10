@@ -3,6 +3,7 @@ package fleet
 import (
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/acphost"
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/status"
 )
@@ -15,6 +16,13 @@ func (f *Fleet) subagents(a *board.Agent, alive bool, now time.Time) {
 		return
 	}
 	path := f.Profiles[a.Profile].SubagentLogPath(a.SessionID)
+	if path == "" && a.ACP() {
+		// agy keeps no event log fleet reads; its host's transcript names
+		// the subagents it starts (DESIGN §7d).
+		st, off := status.ReadACPSubagents(acphost.TranscriptPath(f.Home, a.Name), a.SubLogOffset, status.Subs{List: a.Subagents}, now)
+		a.Subagents, a.SubLogOffset = st.List, off
+		return
+	}
 	if path == "" {
 		a.Subagents = status.PruneSubagents(a.Subagents, now)
 		return

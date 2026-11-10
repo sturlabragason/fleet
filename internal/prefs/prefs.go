@@ -58,7 +58,8 @@ type Spawn struct {
 	AutoTrust bool
 	// Driver is how fleet runs the agent: DriverTmux (the tool's TUI in a
 	// pane, read from the screen) or DriverACP (the tool's ACP server under
-	// `fleet acp-host`, DESIGN §7d, ADR-74).
+	// `fleet acp-host`, DESIGN §7d, ADR-74). Empty = not set in config.toml:
+	// the tool profile's own default decides.
 	Driver string
 }
 
@@ -99,7 +100,7 @@ const DefaultDeadPaneGrace = 5 * time.Minute
 // worker playbook on, DefaultDeadPaneGrace, a worktree per agent, auto-trust,
 // the stuck rule's default timeout and no action on stuck.
 func Neutral() Spawn {
-	return Spawn{AutoSubmit: true, ReadyTimeout: DefaultReadyTimeout, Playbook: true, DeadPaneGrace: DefaultDeadPaneGrace, Worktree: true, AutoTrust: true, StuckAfter: status.DefaultStuckAfter, StuckAction: StuckNone, Driver: DriverTmux}
+	return Spawn{AutoSubmit: true, ReadyTimeout: DefaultReadyTimeout, Playbook: true, DeadPaneGrace: DefaultDeadPaneGrace, Worktree: true, AutoTrust: true, StuckAfter: status.DefaultStuckAfter, StuckAction: StuckNone}
 }
 
 // DefaultMaxWorking caps how many agents may be working at once before new

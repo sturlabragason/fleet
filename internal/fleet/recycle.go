@@ -62,7 +62,7 @@ func (f *Fleet) recycleScan(agents []board.Agent, now time.Time) {
 	}
 	due := map[string]spend.Spend{}
 	for _, a := range agents {
-		sp, ok := spend.Default.Agent(f.Profiles[a.Profile], a.SessionID)
+		sp, ok := f.SpendOf(&a)
 		if ok && r.Due(sp.Compactions, sp.AIC) {
 			due[a.Name] = sp
 		}

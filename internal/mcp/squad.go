@@ -33,7 +33,7 @@ var squadToolDefs = []tool{
 		"check_exit": map[string]any{"type": "integer", "description": "exit code the done-check must return to pass (default 0)"},
 		"result":     str("task card: result file the agent must write, relative to its dir (default result.md)"),
 		"may":        mayProp,
-		"driver":     map[string]any{"type": "string", "enum": []string{"tmux", "acp"}, "description": "how fleet runs the agent: tmux (the tool's own screen) or acp (the tool's ACP server under fleet acp-host: status, questions and sends over the protocol, no screen reading). Default: the user's config, normally tmux. Profiles without an ACP server (claude, vibe) refuse acp."},
+		"driver":     map[string]any{"type": "string", "enum": []string{"tmux", "acp"}, "description": "how fleet runs the agent: tmux (the tool's own screen) or acp (the tool's ACP server under fleet acp-host: status, questions and sends over the protocol, no screen reading). Default: the user's config, else acp for copilot and agy and tmux for every other profile. Profiles without an ACP server (claude, vibe) refuse acp."},
 		"effort":     map[string]any{"type": "string", "enum": []string{"light", "standard", "pro"}, "description": "how much process the agent is given: light (an errand or a quick read-only question), standard (a contained change: plan, build, test, commit), pro (the full playbook, including the pre-merge checklist). Default: pro with a worktree, light without one."}})},
 	{"fleet_squad_profiles", "List the tool profiles fleet_squad_spawn accepts.", obj(nil, map[string]any{})},
 	{"fleet_squad_status", "List your squad: name, profile, status, age, what each agent waits for and its last report. Start here.", obj(nil, map[string]any{})},

@@ -130,7 +130,8 @@ func (e *e2e) prompt(text string) (acp.StopReason, error, acp.State) {
 	defer cancel()
 	e.tr.PromptSent()
 	e.h.pending.Store(true)
-	r, err := e.cl.Prompt(ctx, e.sid, text)
+	res, err := e.cl.Prompt(ctx, e.sid, text)
+	r := res.StopReason
 	e.h.pending.Store(false)
 	return r, err, e.tr.PromptDone(r, err)
 }

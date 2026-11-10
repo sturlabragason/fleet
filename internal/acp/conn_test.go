@@ -324,7 +324,7 @@ func TestConcurrentPromptAndPermission(t *testing.T) {
 		err error
 	}
 	res := make(chan out, 1)
-	go func() { r, err := cl.Prompt(context.Background(), "s1", "go"); res <- out{r, err} }()
+	go func() { r, err := cl.Prompt(context.Background(), "s1", "go"); res <- out{r.StopReason, err} }()
 	pm := p.recv()
 	var pp PromptParams
 	json.Unmarshal(pm.Params, &pp)

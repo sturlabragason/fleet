@@ -577,3 +577,79 @@ patterns = "fake"
 	}
 	waitFor(t, f, "c2", "ctx=resumed-"+b.SessionID)
 }
+
+// flipToACP makes the res profile what copilot and agy are in v1.0.0: an
+// ACP server and acp as its default driver (ADR-74).
+func flipToACP(f *Fleet) {
+	p := f.Profiles["res"]
+	p.ACP, p.Driver = []string{"--acp"}, "acp"
+	f.Profiles["res"] = p
+}
+
+// An agent that was on tmux before the upgrade to v1.0.0 stays on tmux: the
+// board's empty driver means tmux, and park and wake keep it, however often.
+func TestTmuxAgentKeepsItsDriverAcrossTheUpgrade(t *testing.T) {
+	f, _ := parkFleet(t, "")
+	a, err := f.Spawn("u1", "res", f.Home, "")
+	if err != nil || a.Driver != "" {
+		t.Fatalf("spawn: %v %+v", err, a)
+	}
+	id := a.SessionID
+	waitFor(t, f, "u1", "started-"+id)
+	setState(t, f, "u1", "idle", time.Now())
+	if err := f.Park("u1", ""); err != nil {
+		t.Fatal(err)
+	}
+	flipToACP(f) // the upgrade lands while it is parked
+	for i := 0; i < 2; i++ {
+		woke, err := f.Wake("u1", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if woke.ACP() {
+			t.Fatalf("wake %d moved a tmux agent to acp: %+v", i, woke)
+		}
+		waitFor(t, f, "u1", "resumed-"+id)
+		setState(t, f, "u1", "idle", time.Now())
+		if err := f.Park("u1", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// --driver tmux on a profile whose default is acp gives a tmux agent, and
+// park and wake keep it there.
+func TestDriverTmuxOverrideSurvivesParkAndWake(t *testing.T) {
+	f, _ := parkFleet(t, "")
+	flipToACP(f)
+	a, err := f.SpawnWith(SpawnOpts{Driver: "tmux"}, "o1", "res", f.Home, "")
+	if err != nil || a.ACP() {
+		t.Fatalf("spawn --driver tmux: %v %+v", err, a)
+	}
+	waitFor(t, f, "o1", "started-"+a.SessionID)
+	setState(t, f, "o1", "idle", time.Now())
+	if err := f.Park("o1", ""); err != nil {
+		t.Fatal(err)
+	}
+	woke, err := f.Wake("o1", false)
+	if err != nil || woke.ACP() {
+		t.Fatalf("wake: %v %+v", err, woke)
+	}
+	waitFor(t, f, "o1", "resumed-"+a.SessionID)
+}
+
+// A spawn queued before the upgrade (board driver empty) starts on tmux
+// after it, even though its profile now defaults to acp.
+func TestQueuedBeforeUpgradeStartsOnTmux(t *testing.T) {
+	f, _ := parkFleet(t, "")
+	flipToACP(f)
+	f.Store.Update(func(b *board.Board) error {
+		b.Agents["q1"] = &board.Agent{Name: "q1", Profile: "res", Dir: f.Home, Status: "starting", StatusSince: time.Now(), NoWorktree: true}
+		return nil
+	})
+	f.startQueued(f.Store.Load().Agents["q1"])
+	waitFor(t, f, "q1", "started-")
+	if a := f.Store.Load().Agents["q1"]; a.ACP() {
+		t.Fatalf("queued tmux spawn started on acp: %+v", a)
+	}
+}

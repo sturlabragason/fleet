@@ -16,6 +16,8 @@ import (
 	"net"
 	"path/filepath"
 	"time"
+
+	"github.com/sturlabragason/fleet/internal/acp"
 )
 
 // Dir is where ACP hosts keep their sockets and transcripts.
@@ -26,6 +28,11 @@ func SocketPath(home, name string) string { return filepath.Join(Dir(home), name
 
 // TranscriptPath is the agent's transcript, one Entry per line.
 func TranscriptPath(home, name string) string { return filepath.Join(Dir(home), name+".jsonl") }
+
+// PromptPath holds the prompts an agent's host has not sent yet: spawn's
+// first prompt, and whatever a host that died before its session was ready
+// had queued. The next host sends them first (--prompt-file).
+func PromptPath(home, name string) string { return filepath.Join(Dir(home), name+".prompt") }
 
 // Control operations.
 const (
@@ -77,6 +84,7 @@ const (
 	KindStatus     = "status"     // a status change: Status
 	KindError      = "error"      // the child exited, a protocol error
 	KindSession    = "session"    // session started/loaded/resumed: SessionID
+	KindUsage      = "usage"      // a turn's token use, when the agent reports it: Usage
 )
 
 // Entry is one transcript line.
@@ -89,6 +97,9 @@ type Entry struct {
 	ToolID    string    `json:"tool_id,omitempty"`
 	SessionID string    `json:"session_id,omitempty"`
 	Options   []Option  `json:"options,omitempty"`
+	// Sub names the subagent a tool call starts (agy's invoke_subagent).
+	Sub   string     `json:"sub,omitempty"`
+	Usage *acp.Usage `json:"usage,omitempty"`
 }
 
 // ErrNoHost means nothing listens on the agent's socket.

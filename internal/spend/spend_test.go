@@ -338,3 +338,19 @@ func TestSourcePicksNewestMatch(t *testing.T) {
 		t.Fatalf("source %q %q, want %q", got, k, paths[1])
 	}
 }
+
+// An ACP agent's transcript carries each turn's usage as agy reports it:
+// cached tokens apart from input, thoughts inside output (DESIGN §7b, §7d).
+func TestACPTranscript(t *testing.T) {
+	got, ok := NewCache().File("testdata/acp-transcript.jsonl", ACP)
+	if !ok {
+		t.Fatal("acp transcript not read")
+	}
+	want := Spend{Calls: 2, Input: 26729, Output: 121, CacheRead: 41080, Uncredited: 67930}
+	if got != want {
+		t.Fatalf("got %+v want %+v", got, want)
+	}
+	if s := got.Short(); s != "67k tok" {
+		t.Fatalf("short %q", s)
+	}
+}

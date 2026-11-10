@@ -22,11 +22,11 @@ Session switchers make moving between agents faster, but you still do all the su
 ## What it does today
 
 - **Spawn** agents from tool profiles into a dedicated tmux server (`tmux -L fleet`), one hidden window per agent.
-- **Status** for every agent (working, waiting, error, stuck, idle), read from the bottom of each pane with per-tool regex patterns. Polled every second.
+- **Status** for every agent (working, waiting, error, stuck, idle). Copilot and agy agents run over the Agent Client Protocol (ACP), so their status, questions and answers come from the tool itself and their pane shows fleet's transcript of the session. Claude and vibe run in their own TUI, read from the bottom of the pane with per-tool regex patterns. Refreshed every second.
 - **Overview TUI**: coloured tiles sorted by attention (waiting agents first, longest wait first), arrow keys, mouse click, `Tab` through waiting agents.
 - **Live wall**: real, interactive tmux panes for the agents you are working with. Layouts 1, 2, 4, 6, 9 and main+stack, as caps rather than fixed shapes: the grid is sized to the window so panes stay readable, and a readability floor shows fewer panes rather than unreadable ones. The pane that needs attention gets the big slot. Click a pane to make it the `▶` target and the next card you pick from the overview goes there; from the overview, `p` pins a pane so it is never evicted and `u` undoes the last replace. Waiting and failing panes stay. Processes never restart.
 - **Copy out of any pane**: drag-select, double-click or triple-click copies to the system clipboard, even over an agent that asked for the mouse.
-- **Adopt**: `fleet sessions` lists Copilot and Claude sessions started outside fleet, and `fleet adopt` resumes one as an agent.
+- **Adopt**: `fleet sessions` lists Copilot and Claude sessions started outside fleet, and `fleet adopt` resumes one as an agent (agy too, by session id).
 - **A queue**: with `max_working` set, a spawn past the limit waits and starts when a slot frees.
 - **A worktree per agent**: spawning into a git repo gives the agent `<repo>.wt/<name>` on branch `fleet/<name>`, so parallel agents never share an index. `--no-worktree` opts out.
 - **Admiral**: an agent (Copilot CLI by default) in the left pane with nineteen `fleet_*` MCP tools from `fleet mcp`. It keeps a context meter, can hand off to a fresh session (`Alt+R`) and can swap its own tool profile (`Alt+P`). Unread agent reports show as a `✉` badge in the overview header and the tmux status line.
@@ -35,7 +35,7 @@ Session switchers make moving between agents faster, but you still do all the su
 - **Agent mail**: agents message each other with `fleet mail` or peer MCP tools. Free inside a team or a repo, otherwise one agent asks and you decide.
 - **Squads**: `fleet spawn --leader <name> <profile>` makes an agent a leader, with its own tools to spawn, watch, message and close up to four agents of its own. Their reports wake the leader, which sends the admiral one summary; leaders are marked `▲` and never answer prompts, merge or push for you.
 - **CLI** for scripting: `spawn`, `adopt`, `sessions`, `ls`, `send`, `peek`, `close`, `team`, `mail`, `access`, `report`, `spend`, `admiral`, `note`, `playbook`, `touching`, `merge`, `profiles`, `keys`, `changes`, `snap`, `wall`.
-- **Spend**: `fleet spend` shows what each agent has cost so far and the fleet total — AI credits for Copilot agents, tokens for Claude — read from the agents' own session files, never from a model.
+- **Spend**: `fleet spend` shows what each agent has cost so far and the fleet total — AI credits for Copilot agents, tokens for Claude and agy — read from the agents' own session files or the usage agy reports over ACP, never from a model.
 - **Fake agents** that cycle through states and print scripted work (reads, edits, test runs), so you can try everything without spending tokens. `fleet send <name> "!wait"` (or `!work`, `!error`, `!done`) holds one in a chosen state, which is how the screenshot above is composed.
 
 Planned, not built yet: park/wake to save RAM, tool hooks instead of screen scraping, a spawn wizard, approve/reject keys in the TUI, notifications. See [Roadmap](#roadmap).
@@ -147,6 +147,17 @@ Anywhere in the fleet window (tmux bindings, no prefix; only on the `fleet` serv
 | `Alt+?` | Show all keys in a popup |
 
 Mouse is on: click a pane to type in it, drag borders to resize, scroll for history. Details and planned keys: [docs/keys.md](docs/keys.md).
+
+## Upgrading to v1.0.0 (breaking)
+
+From v1.0.0, new `copilot` and `agy` agents run over ACP: the agent's pane shows fleet's transcript of the session (you can still type a prompt there, and a digit answers an open question), not the tool's own TUI. `fleet snap` and the screen patterns no longer apply to them. Agents that exist when you upgrade keep running, parking and waking on tmux. To keep the old behaviour for new agents, add to `~/.config/fleet/config.toml`:
+
+```toml
+[defaults]
+driver = "tmux"        # every profile; or put it under [profile.copilot] / [profile.agy]
+```
+
+or spawn with `--driver tmux`. Details: [DESIGN.md §7d](DESIGN.md#7d-acp-agents-fleet-drives-the-tool-over-the-agent-client-protocol-adr-74-the-default-for-copilot-and-agy-since-v100).
 
 ## Tool profiles
 

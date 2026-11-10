@@ -66,11 +66,13 @@ func TestLive(t *testing.T) {
 			if os.Getenv("FLEET_ACP_LIVE") == "1" {
 				tr := NewTracker()
 				tr.PromptSent()
-				r, err := cl.Prompt(ctx, id, "Reply with the single word OK and do nothing else.")
+				pr, err := cl.Prompt(ctx, id, "Reply with the single word OK and do nothing else.")
+				r := pr.StopReason
 				st := tr.PromptDone(r, err)
 				if err != nil || r != StopEndTurn || st.Status != StatusIdle {
 					t.Errorf("prompt: %v %v %+v", r, err, st)
 				}
+				t.Logf("%s usage: %+v", tool.name, pr.Usage)
 				if h.chunks() == 0 {
 					t.Error("no agent_message_chunk received")
 				}

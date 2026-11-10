@@ -182,9 +182,22 @@ type PromptParams struct {
 	Prompt    []ContentBlock `json:"prompt"`
 }
 
-// PromptResult ends a turn.
+// PromptResult ends a turn. Usage is the turn's token use, when the agent
+// reports it (agy does; ACP's unstable usage field).
 type PromptResult struct {
 	StopReason StopReason `json:"stopReason"`
+	Usage      *Usage     `json:"usage,omitempty"`
+}
+
+// Usage is the tokens one turn used. agy counts cached tokens apart from
+// InputTokens, and thought tokens inside OutputTokens.
+type Usage struct {
+	InputTokens       int64 `json:"inputTokens"`
+	OutputTokens      int64 `json:"outputTokens"`
+	CachedReadTokens  int64 `json:"cachedReadTokens,omitempty"`
+	CachedWriteTokens int64 `json:"cachedWriteTokens,omitempty"`
+	ThoughtTokens     int64 `json:"thoughtTokens,omitempty"`
+	TotalTokens       int64 `json:"totalTokens,omitempty"`
 }
 
 // StopReason says why a turn ended.
@@ -227,6 +240,30 @@ type SessionUpdate struct {
 	Status     string          `json:"status,omitempty"` // pending, in_progress, completed, failed
 	Entries    json.RawMessage `json:"entries,omitempty"`
 	ModeID     string          `json:"currentModeId,omitempty"`
+	// Name and RawInput are a tool call's tool name (an agy extension) and
+	// its arguments.
+	Name     string          `json:"name,omitempty"`
+	RawInput json.RawMessage `json:"rawInput,omitempty"`
+}
+
+// SubagentTool is the tool agy starts a subagent with.
+const SubagentTool = "invoke_subagent"
+
+// Subagent returns the name of the subagent a tool call starts (its role,
+// else its type), and false when the call starts none.
+func (u SessionUpdate) Subagent() (string, bool) {
+	if u.Name != SubagentTool {
+		return "", false
+	}
+	var in struct{ Role, TypeName string }
+	_ = json.Unmarshal(u.RawInput, &in)
+	switch {
+	case in.Role != "":
+		return in.Role, true
+	case in.TypeName != "":
+		return in.TypeName, true
+	}
+	return "subagent", true
 }
 
 // Text returns the text of the update's content: one text block, or every

@@ -141,7 +141,7 @@ func tool(n int) string {
 }
 
 func stop(id int, reason string) string {
-	return fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"result":{"stopReason":%q}}`, id, reason)
+	return fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"result":{"stopReason":%q,"usage":{"inputTokens":100,"outputTokens":10,"totalTokens":110}}}`, id, reason)
 }
 
 func event(typ, agent, data string) string {
@@ -344,4 +344,18 @@ func TestMainWithoutACPIsTheTUIFake(t *testing.T) {
 	if !ok || after != want {
 		t.Fatalf("composed screen changed:\n got %q\nwant %q", after, want)
 	}
+}
+
+func TestACPInvoke(t *testing.T) {
+	h := startACP(t, ACPOptions{})
+	newSession(h, plainInit)
+	h.send(prompt(3, "x [invoke]"))
+	in := `"name":"invoke_subagent","rawInput":{"Prompt":"help","Role":"helper","TypeName":"research"}`
+	up := func(u string) string {
+		return `{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s1","update":` + u + `}}`
+	}
+	h.expect(msg("fake: x [invoke]"),
+		up(`{"sessionUpdate":"tool_call","toolCallId":"call_1","title":"Run invoke_subagent","kind":"other","status":"in_progress",`+in+`}`),
+		up(`{"sessionUpdate":"tool_call_update","toolCallId":"call_1","status":"completed",`+in+`}`),
+		stop(3, "end_turn"))
 }

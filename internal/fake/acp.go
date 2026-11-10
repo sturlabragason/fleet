@@ -13,6 +13,11 @@ package fake
 //	[crash]    exits 3 mid-turn
 //	[error]    a JSON-RPC error on the prompt
 //	[subagent] a turn_start/idle Copilot event pair with agentId "sub1"
+//	[invoke]   an agy invoke_subagent tool call (Role "helper"): in_progress,
+//	           then completed after the [slow] gap
+//
+// Every prompt's response carries usage, as agy's does: 100 input and 10
+// output tokens.
 //
 // Copilot session events are sent only to a client that opted in through
 // initialize's _meta, as copilot does. A prompt arriving while a turn runs
@@ -449,7 +454,7 @@ func (s *server) run(ss *session, t *turn) {
 	s.copilot(id, "assistant.idle", "", map[string]bool{"aborted": stop == acp.StopCancelled})
 	s.copilot(id, "session.idle", "", struct{}{})
 	for _, rid := range ids {
-		s.reply(rid, acp.PromptResult{StopReason: stop})
+		s.reply(rid, acp.PromptResult{StopReason: stop, Usage: &acp.Usage{InputTokens: 100, OutputTokens: 10, TotalTokens: 110}})
 	}
 }
 
@@ -522,6 +527,17 @@ func (s *server) work(ss *session, t *turn, text string) acp.StopReason {
 		if !pause() {
 			return acp.StopCancelled
 		}
+	}
+	if strings.Contains(text, "[invoke]") {
+		in := json.RawMessage(`{"Prompt":"help","Role":"helper","TypeName":"research"}`)
+		s.update(id, acp.SessionUpdate{Kind: acp.UpdateToolCall, ToolCallID: call, Name: acp.SubagentTool,
+			RawInput: in, Title: "Run invoke_subagent", ToolKind: "other", Status: "in_progress"})
+		if !pause() {
+			return acp.StopCancelled
+		}
+		s.update(id, acp.SessionUpdate{Kind: acp.UpdateToolCallUpdate, ToolCallID: call, Name: acp.SubagentTool,
+			RawInput: in, Status: "completed"})
+		return ""
 	}
 	s.update(id, acp.SessionUpdate{Kind: acp.UpdateToolCall, ToolCallID: call,
 		Title: "fake tool", ToolKind: "execute", Status: "completed"})
