@@ -673,3 +673,22 @@ func TestNextMessages(t *testing.T) {
 		t.Errorf("refused: msg %q sel %q target %q", m.msg, m.sel, m.target)
 	}
 }
+
+func TestTileACPMarker(t *testing.T) {
+	zone.NewGlobal()
+	now := time.Now()
+	m := New(&fakeBE{}, "")
+	m.now = func() time.Time { return now }
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 9})
+	a := &board.Agent{Name: "a1", Profile: "copilot", Status: "idle", StatusSince: now.Add(-3 * time.Minute)}
+	if tile := ansi.Strip(m.tile(a, m.cfg.TileW)); !strings.Contains(tile, "copilot · idle 3m") || strings.Contains(tile, "acp") {
+		t.Errorf("tmux tile:\n%s", tile)
+	}
+	a.Driver = board.DriverACP
+	if tile := ansi.Strip(m.tile(a, m.cfg.TileW)); !strings.Contains(tile, "copil…·acp · idle 3m") {
+		t.Errorf("acp tile: the mark stays whole, the profile is cut:\n%s", tile)
+	}
+	if got := metaLineMark("copilot", "·acp", "idle 3m", 30); got != "copilot·acp · idle 3m" {
+		t.Errorf("wide: %q", got)
+	}
+}

@@ -421,14 +421,20 @@ patterns = "fake"
 	if err != nil {
 		t.Fatal(err)
 	}
+	old := Version
+	Version = "v9.9.9"
+	t.Cleanup(func() { Version = old })
 	dir := t.TempDir()
 	wt := false
 	a, err := f.SpawnWith(SpawnOpts{Driver: "acp", Worktree: &wt}, "a1", "stub", dir, "do it")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.Driver != "acp" {
-		t.Errorf("board driver %q", a.Driver)
+	if a.Driver != "acp" || a.ACPServer != "stubtool --acp" || a.FleetVersion != "v9.9.9" {
+		t.Errorf("board driver %q server %q version %q", a.Driver, a.ACPServer, a.FleetVersion)
+	}
+	if info, _ := f.Info("a1"); !strings.Contains(info, "\ndriver: acp via stubtool --acp\n") || !strings.Contains(info, "\nfleet version: v9.9.9 (started the agent)\n") {
+		t.Errorf("acp info:\n%s", info)
 	}
 	pf := ACPPromptPath(home, "a1")
 	want := tools.ShellCommand([]string{host, "acp-host", "a1", "--dir", dir, "--prompt-file", pf, "--", "stubtool", "--x", "--acp"})
@@ -453,8 +459,11 @@ patterns = "fake"
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b.Driver != "" {
-		t.Errorf("tmux agent driver %q", b.Driver)
+	if b.Driver != "" || b.ACPServer != "" {
+		t.Errorf("tmux agent driver %q server %q", b.Driver, b.ACPServer)
+	}
+	if info, _ := f.Info("t1"); !strings.Contains(info, "\ndriver: tmux\n") {
+		t.Errorf("tmux info:\n%s", info)
 	}
 	if got, want := startCommand(t, tc, b.PaneID), tools.ShellCommand([]string{"sh", "-c", "printf 'Approve? [y/n] '; cat"}); got != want {
 		t.Errorf("tmux window command:\n%s\nwant\n%s", got, want)
@@ -671,5 +680,24 @@ func TestACPSpawnRefusesLongSocketPath(t *testing.T) {
 	}
 	if _, ok := f.Store.Load().Agents["a1"]; ok {
 		t.Error("refused spawn left a board entry")
+	}
+}
+
+func TestDriverLine(t *testing.T) {
+	copilot := tools.Profile{Command: "copilot", ACP: []string{"--acp"}}
+	for _, c := range []struct {
+		a    board.Agent
+		want string
+	}{
+		{board.Agent{}, "tmux"}, // no driver field: spawned before v1.0.0
+		{board.Agent{Driver: board.DriverACP, ACPServer: "claude-agent-acp@0.1.0"}, "acp via claude-agent-acp@0.1.0"},
+		{board.Agent{Driver: board.DriverACP}, "acp via copilot --acp"}, // started before v1.2.0: the profile's server
+	} {
+		if got := DriverLine(&c.a, copilot); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.a, got, c.want)
+		}
+	}
+	if got := DriverLine(&board.Agent{Driver: board.DriverACP}, tools.Profile{}); got != "acp" {
+		t.Errorf("unknown profile: %q", got)
 	}
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"runtime/debug"
+	"strings"
 
 	"github.com/sturlabragason/fleet/internal/whatsnew"
 )
@@ -43,4 +44,20 @@ func moduleVersion() string {
 		return bi.Main.Version
 	}
 	return ""
+}
+
+// shortVersion is the release tag, else the build's revision: what the board
+// records as the fleet that started an agent (ADR-77).
+func shortVersion(linked, module string) string {
+	if linked != "" {
+		return linked
+	}
+	if module != "" && module != "(devel)" {
+		return module
+	}
+	rev, _, _ := strings.Cut(strings.TrimPrefix(whatsnew.Version(), "fleet "), " · ")
+	if strings.HasPrefix(rev, "(") {
+		return "" // unknown build
+	}
+	return rev
 }

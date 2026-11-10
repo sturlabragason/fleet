@@ -40,7 +40,7 @@ func strList(desc string) map[string]any {
 var confirmedProp = map[string]any{"type": "boolean", "description": "true only after the user explicitly said yes in chat"}
 
 var toolDefs = []tool{
-	{"fleet_status", "List all agents: name, team, profile, status, running subagents, on_wall, age, spend so far, what it waits for. Ends with the fleet-wide spend. Start here.", obj(nil, map[string]any{})},
+	{"fleet_status", "List all agents: name, team, profile, driver (acp or tmux), status, running subagents, on_wall, age, spend so far, what it waits for. Ends with the fleet-wide spend. Start here.", obj(nil, map[string]any{})},
 	{"fleet_peek", "Show the last N lines (default 20, max 80) of one agent's screen, without box borders and blank runs (raw=true: as captured). last_message=true returns the agent's last reply from its session log instead. summary=true returns about 5 lines from a cheap model (what it is doing, what it waits for, any error) and costs a model call, so prefer it over long screens and don't poll it.", obj([]string{"name"}, map[string]any{
 		"name": str("agent name"), "lines": map[string]any{"type": "integer", "description": "lines to return (default 20, max 80)"},
 		"raw":          map[string]any{"type": "boolean", "description": "screen as captured, with borders"},
@@ -56,7 +56,7 @@ var toolDefs = []tool{
 		"option": map[string]any{"type": "integer", "minimum": 1, "maximum": 9, "description": "menu option number; pass exactly one of answer, option or label"},
 		"label":  str("text of the option to pick (part of it is enough, case-insensitive); for ❯ menus with no numbers on screen, e.g. \"Yes, I trust\""),
 		"expect": str("the question the user confirmed (or part of it, or of the option label); refused if the prompt on screen no longer matches"), "confirmed": confirmedProp})},
-	{"fleet_info", "Facts about one agent: profile, team, status and age, last activity, dir, its task card (goal, done-check and its verdict, result file), git (worktree, branch, dirty files, merged into main, commits ahead), session id, context %, spend so far, mode.", obj([]string{"name"}, map[string]any{
+	{"fleet_info", "Facts about one agent: profile, team, driver (acp with its ACP server, or tmux), the fleet version that started it, status and age, last activity, dir, its task card (goal, done-check and its verdict, result file), git (worktree, branch, dirty files, merged into main, commits ahead), session id, context %, spend so far, mode.", obj([]string{"name"}, map[string]any{
 		"name": str("agent name")})},
 	{"fleet_spawn", "Start a new agent with a tool profile in a directory, optionally with a first prompt. Never spawn in the home directory: pass the repo or project dir, not $HOME (fleet moves a home-directory spawn to a scratch dir of its own and says so). In a git repo the agent gets its own worktree, <repo>.wt/<name> on branch fleet/<name>, and works there; pass worktree=false to put it straight in dir (e.g. a read-only task, or work that must land in the user's checkout). goal, check and result make a task card: fleet runs check in the agent's dir when it reports done and tells you whether it passed, and the agent is told to write the result file. effort sizes the worker process the agent is given: pick it per task. interactive=true for an agent the user will talk to directly: it is never auto-closed and reports progress, not done, until the user ends the session.", obj([]string{"name", "dir"}, map[string]any{
 		"name": str("short unique agent name"), "profile": str("tool profile, see fleet_profiles; default [defaults] profile in config.toml"), "dir": str("working directory (absolute)"), "prompt": str("optional first prompt"),
@@ -379,7 +379,7 @@ func (s *Server) status() (string, error) {
 	var b strings.Builder
 	teams := s.F.Teams.ByAgent()
 	many := len(s.F.AdmiralNames()) > 1 // several admirals: say whose each agent is (§6.12)
-	b.WriteString("name | team | squad | profile | status | subagents | wall | age | spend | waiting_for | report")
+	b.WriteString("name | team | squad | profile | driver | status | subagents | wall | age | spend | waiting_for | report")
 	if many {
 		b.WriteString(" | admiral")
 	}
@@ -413,7 +413,7 @@ func (s *Server) status() (string, error) {
 		case "user":
 			st += " (no report, the user's: don't send)"
 		}
-		fmt.Fprintf(&b, "%s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s", a.Name, teams[a.Name].Team, squadCell(s.F, a), a.Profile, st, sub, w, time.Since(a.StatusSince).Round(time.Second), sp, wf, reportCell(a))
+		fmt.Fprintf(&b, "%s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s", a.Name, teams[a.Name].Team, squadCell(s.F, a), a.Profile, a.DriverName(), st, sub, w, time.Since(a.StatusSince).Round(time.Second), sp, wf, reportCell(a))
 		if many {
 			fmt.Fprintf(&b, " | %s", s.F.OwnerOf(a.Name))
 		}

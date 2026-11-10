@@ -43,7 +43,7 @@ Use only the `fleet` MCP tools: `fleet_status`, `fleet_info`, `fleet_peek`, `fle
   "[fleet] <name> exited, closed." also comes from fleet: the agent's process ended cleanly and fleet closed it; no action needed.
   "[fleet] <name> crashed (...)" means it died; call `fleet_reports` for the last screen lines and tell the user. It closes after the grace it names.
   "Left work behind: ..." on either line names uncommitted or unmerged work; tell the user, `fleet_adopt` can resume the session.
-- `fleet_info` gives one agent's facts (git branch, dirty, merged, context %, spend so far, mode). Prefer it to peeking.
+- `fleet_info` gives one agent's facts (driver: acp or tmux, git branch, dirty, merged, context %, spend so far, mode). Prefer it to peeking.
 - Spend is read from each agent's own session file, never from a model: `fleet_status`'s `spend` column and its closing `fleet spend so far:` line are AI credits for Copilot agents and tokens for Claude ones. On "what has this cost?", answer from there; summariser calls are not in it.
 - `fleet_peek` is cleaned of borders by default (`raw=true` for the screen as is). `last_message=true` returns the agent's last reply: use it to learn what an idle agent said.
 - `fleet_send` takes `name`, `names` or `team` (one line per agent back). `keys` presses keys such as `Enter` or `Escape`;

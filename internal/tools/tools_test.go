@@ -714,3 +714,20 @@ acp_from = "nope"
 		t.Error("acp_from an unknown profile gave an ACP server")
 	}
 }
+
+func TestACPLabel(t *testing.T) {
+	ps, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for prof, want := range map[string]string{
+		"copilot": "copilot --acp",
+		"agy":     "agy acp",
+		"claude":  "claude-agent-acp@" + ClaudeACPVersion,
+		"vibe":    "",
+	} {
+		if got := ps[prof].ACPLabel(); got != want {
+			t.Errorf("%s: ACPLabel %q, want %q", prof, got, want)
+		}
+	}
+}

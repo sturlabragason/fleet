@@ -294,7 +294,7 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 		st += " · no report"
 	}
 	state := strings.TrimSpace(st + m.queueMark(a.Name) + " " + since(a.StatusSince, m.now()))
-	l2 := lipgloss.NewStyle().Foreground(colIdle).Render(metaLine(a.Profile, state, inner))
+	l2 := lipgloss.NewStyle().Foreground(colIdle).Render(metaLineMark(a.Profile, driverMark(a), state, inner))
 	if ti, ok := m.teams[a.Name]; ok && ti.Team != "" {
 		ts := lipgloss.NewStyle().Foreground(lipgloss.Color(ti.Color))
 		l1 = st1.Render(glyph(a.Status, m.frame)+" "+ansi.Truncate(a.Name, inner-4-2-tw2, "…")) + tgt + " " + ts.Render(teamMark)
@@ -302,7 +302,7 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 			l1 += st1.Render(wall)
 		}
 		tn := ansi.Truncate(ti.Team, 10, "…")
-		rest := lipgloss.NewStyle().Foreground(colIdle).Render(" · " + metaLine(a.Profile, state, inner-ansi.StringWidth(tn)-3))
+		rest := lipgloss.NewStyle().Foreground(colIdle).Render(" · " + metaLineMark(a.Profile, driverMark(a), state, inner-ansi.StringWidth(tn)-3))
 		l2 = ansi.Truncate(ts.Render(tn)+rest, inner, "…")
 	}
 	l1 = chip + l1
@@ -372,6 +372,31 @@ func (m *Model) queueMark(name string) string {
 		return fmt.Sprintf(" #%d", n)
 	}
 	return ""
+}
+
+// driverMark follows the profile on the tile's second line: "·acp" for an
+// agent on the acp driver (ADR-77), "" for tmux.
+func driverMark(a *board.Agent) string {
+	if a.ACP() {
+		return "·" + board.DriverACP
+	}
+	return ""
+}
+
+// metaLineMark is metaLine with mark kept right after the profile; the
+// profile is cut before the mark.
+func metaLineMark(profile, mark, state string, w int) string {
+	if mark == "" {
+		return metaLine(profile, state, w)
+	}
+	full := profile + mark + " · " + state
+	if ansi.StringWidth(full) <= w {
+		return full
+	}
+	if room := w - ansi.StringWidth(mark+" · "+state); room >= 4 {
+		return ansi.Truncate(profile, room, "…") + mark + " · " + state
+	}
+	return metaLine(profile+mark, state, w)
 }
 
 // metaLine is "profile · state" in w cells. The state (status and age) is

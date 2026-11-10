@@ -82,12 +82,12 @@ func TestRoundTrip(t *testing.T) {
 	var isErr bool
 	for i := 0; i < 50; i++ {
 		st, isErr = text(call(100+i, "tools/call", map[string]any{"name": "fleet_status", "arguments": map[string]any{}}))
-		if strings.Contains(st, "a1 |  |  | yn | waiting") {
+		if strings.Contains(st, "a1 |  |  | yn | tmux | waiting") {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	if isErr || !strings.Contains(st, "a1 |  |  | yn | waiting") {
+	if isErr || !strings.Contains(st, "a1 |  |  | yn | tmux | waiting") {
 		t.Errorf("status: %q", st)
 	}
 	if _, isErr := text(call(4, "tools/call", map[string]any{"name": "fleet_answer", "arguments": map[string]any{"name": "a1", "answer": "y"}})); !isErr {
