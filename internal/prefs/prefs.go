@@ -61,6 +61,9 @@ type Spawn struct {
 	// (permissions.blockWritesOutsideWorkingDirectories, ADR-79). Shell,
 	// MCP and hooks are not fenced. false leaves Claude's own settings.
 	FenceWrites bool
+	// KeepMCP names user-global MCP servers a worker keeps; the rest are
+	// switched off at spawn (ADR-91). [profile.<name>] replaces [defaults].
+	KeepMCP []string
 	// Driver is how fleet runs the agent: DriverTmux (the tool's TUI in a
 	// pane, read from the screen) or DriverACP (the tool's ACP server under
 	// `fleet acp-host`, DESIGN §7d, ADR-74). Empty = not set in config.toml:
@@ -328,6 +331,9 @@ func applySpawn(s Spawn, sec map[string]conf.Value) Spawn {
 	}
 	if v, ok := sec["extra_args"]; ok {
 		s.ExtraArgs, _ = v.([]string)
+	}
+	if v, ok := sec["keep_mcp"]; ok {
+		s.KeepMCP, _ = v.([]string)
 	}
 	if m := conf.Map(sec, "env"); len(m) > 0 {
 		env := make(map[string]string, len(s.Env)+len(m))

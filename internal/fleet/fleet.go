@@ -376,7 +376,7 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 		ex.Base = Baseline(dir)
 		return f.launchACP(name, profile, p, dir, prompt, full, claimed, lvl, ex)
 	}
-	argv, embedded := launchArgv(name, p, tools.AgentVars(f.Exe, name, id).Fenced(fenceDir(ex.Worktree, pr.FenceWrites)),
+	argv, embedded := launchArgv(name, p, agentVars(f.Exe, name, id, p, pr).Fenced(fenceDir(ex.Worktree, pr.FenceWrites)),
 		tools.Launch{Mode: pr.Mode, Context: contextKey(p, lvl, role.Leader), Extra: pr.ExtraArgs,
 			Prompt: full, NoPromptArgs: !pr.AutoSubmit})
 	ex.Base = Baseline(dir) // before the agent can touch anything
@@ -423,6 +423,13 @@ func fenceDir(w *board.Worktree, on bool) string {
 		return ""
 	}
 	return filepath.Dir(w.Path)
+}
+
+// agentVars are the Vars for launching worker name with profile p: the
+// peer MCP server and hooks, with the user's global MCP servers switched off
+// except those pr keeps (ADR-91).
+func agentVars(exe, name, id string, p tools.Profile, pr prefs.Spawn) tools.Vars {
+	return tools.AgentVars(exe, name, id).UserMCP(p, pr.KeepMCP)
 }
 
 func launchArgv(name string, p tools.Profile, v tools.Vars, l tools.Launch) ([]string, bool) {

@@ -11,6 +11,9 @@
 #   prompt_args, mode_args, session_path, subagent_log, peer_args, hook_args: see internal/tools/tools.go
 #   A profile whose command is claude or copilot takes that built-in's peer_args
 #   and hook_args unless it sets them ([] = none) (ADR-80).
+#   user_mcp_config, user_mcp_off: the tool's file of global MCP servers and the
+#   args that switch them off for workers; inherited the same way, [] = keep
+#   them all (ADR-91).
 #   patterns   status pattern set: copilot, claude, agy, vibe or fake
 # Give every profile you define a mode_args "auto" key with that tool's
 # allow-all flag, or `mode = "auto"` in config.toml cannot reach it and the
