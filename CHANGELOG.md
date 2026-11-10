@@ -5,6 +5,7 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-10
+- The admiral pane and the status bar no longer flicker: the overview repaints its spinners 3 times a second instead of 10, and tmux now draws each update in one piece on terminals that support it (re-attach once to pick that up).
 - Claude agents in a fleet worktree can only write files inside `<repo>.wt/` (Claude's `blockWritesOutsideWorkingDirectories`); `fence_writes = false` turns it off (ADR-79).
 - `fleet worktrees` lists the leftover agent worktrees with size, merged and dirty state; `--prune` removes the merged, clean ones and never touches uncommitted work (ADR-79).
 - Spend now includes what Copilot's context compactions cost, and Claude agents count their compactions (idle ones excepted) for the recycle hint (ADR-79).

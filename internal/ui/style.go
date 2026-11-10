@@ -54,7 +54,7 @@ func statusColor(st string, frame int) lipgloss.Color {
 	case "working":
 		return colWorking
 	case "waiting":
-		if (frame/6)%2 == 0 {
+		if (frame/2)%2 == 0 { // 600 ms per colour
 			return colWaitA
 		}
 		return colWaitB

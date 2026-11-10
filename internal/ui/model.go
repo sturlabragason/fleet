@@ -117,8 +117,15 @@ func (m *Model) poll() tea.Cmd {
 // Init starts polling.
 func (m *Model) Init() tea.Cmd { return tea.Batch(m.poll(), anim()) }
 
+// animEvery is one animation frame. Each frame that changes the view makes
+// bubbletea rewrite whole tile rows (1-2 KB through tmux), and tmux moves the
+// cursor out of the active pane and back for each one: at 100 ms that
+// flickered the admiral's bottom lines on VTE. Three frames a second keeps the
+// spinner alive at a third of the writes.
+const animEvery = 300 * time.Millisecond
+
 func anim() tea.Cmd {
-	return tea.Tick(100*time.Millisecond, func(time.Time) tea.Msg { return animMsg{} })
+	return tea.Tick(animEvery, func(time.Time) tea.Msg { return animMsg{} })
 }
 
 func pollLater() tea.Cmd {
