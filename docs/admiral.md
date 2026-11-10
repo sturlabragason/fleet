@@ -49,6 +49,7 @@ To use a tool fleet doesn't start itself, register `fleet mcp --admiral main` (o
 | `fleet_worktrees` | `dir`, `prune`, `confirmed` | Leftover agent worktrees; `prune` removes merged, clean ones |
 | `fleet_branches` | `dir`, `prune`, `confirmed` | `fleet/` branches on origin; `prune` deletes merged ones (ADR-87) |
 | `fleet_changes` | `limit` | Running version and latest changelog lines |
+| `fleet_instructions` | none | Current instructions text and its hash (ADR-102) |
 | `fleet_admirals` | none | The admirals on this fleet |
 | `fleet_admiral_add` | `name`, `profile` | Start another admiral beside main |
 | `fleet_handover` | `name`, `to` | Give one of your agents to another admiral |
