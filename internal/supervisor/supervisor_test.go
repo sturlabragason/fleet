@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/theme"
+	"github.com/sturlabragason/fleet/internal/tools"
 )
 
 func writeEvents(t *testing.T, home, id, body string) {
@@ -363,5 +364,42 @@ func TestHandoffDue(t *testing.T) {
 	t.Setenv("FLEET_ADMIRAL_HANDOFF_TOKENS", "0")
 	if HandoffDue(500_000, 1_000_000) {
 		t.Error("0 turns the token limit off")
+	}
+}
+
+func TestFollowAfterClear(t *testing.T) {
+	store, dir := t.TempDir(), "/adm/dir"
+	proj := filepath.Join(store, "-adm-dir")
+	os.MkdirAll(proj, 0o755)
+	write := func(id string, at time.Time) {
+		p := filepath.Join(proj, id+".jsonl")
+		os.WriteFile(p, []byte(`{"type":"user","cwd":"`+dir+`","message":{"content":"hi"}}`+"\n"), 0o644)
+		os.Chtimes(p, at, at)
+	}
+	p := tools.Profile{Name: "claude", SessionPath: store + "/*/{id}.jsonl"}
+	start := time.Now().Add(-time.Hour)
+	s := Session{SessionID: "11111111-old", Profile: "claude", Dir: dir, Started: start}
+	write("00000000-before", start.Add(-time.Minute)) // an earlier generation: never followed
+	write(s.SessionID, start.Add(time.Minute))
+	if _, moved := Follow(p, s); moved {
+		t.Fatal("moved with no newer session")
+	}
+	write("22222222-new", start.Add(2*time.Minute))
+	other := filepath.Join(store, "-elsewhere")
+	os.MkdirAll(other, 0o755)
+	for i := 0; i < 30; i++ { // a busy store: newer sessions of other dirs
+		w := filepath.Join(other, fmt.Sprintf("%08d-w.jsonl", i))
+		os.WriteFile(w, []byte(`{"type":"user","cwd":"/elsewhere","message":{"content":"x"}}`+"\n"), 0o644)
+	}
+	ns, moved := Follow(p, s)
+	if !moved || ns.SessionID != "22222222-new" || ns.Previous != s.SessionID {
+		t.Fatalf("follow %+v %v", ns, moved)
+	}
+	if _, moved := Follow(p, ns); moved {
+		t.Fatal("followed back to the previous session")
+	}
+	s.Dir = "/other"
+	if _, moved := Follow(p, s); moved {
+		t.Fatal("followed a session in another dir")
 	}
 }

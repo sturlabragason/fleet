@@ -115,6 +115,7 @@ type Fleet struct {
 	globMu      sync.Mutex
 	sweep       doneSweep
 	dead        deadReaper
+	admWatch    admiralWatch
 }
 
 // Open builds a Fleet on the default socket and ~/.fleet.

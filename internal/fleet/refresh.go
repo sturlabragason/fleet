@@ -152,6 +152,7 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 		f.sweepDone(out, now)
 		f.sweepChecks(out)
 		f.reapDead(out, deadPanes, now)
+		f.watchAdmirals(panes, now)
 		f.checkRecycle(out, now)
 	}
 	return out, err
