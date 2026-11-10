@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -126,6 +127,16 @@ func TestAdmiralLaunchBootPrompt(t *testing.T) {
 	sl, _ = admiralLaunch(f, "copilot", "sess-9", "")
 	if !strings.Contains(sl.Cmd, "--resume sess-9") || strings.Contains(sl.Cmd, "--session-id") || sl.ID != "sess-9" {
 		t.Errorf("resume: %s", sl.Cmd)
+	}
+}
+
+// fleet up refuses an admiral profile whose command is not on PATH rather
+// than start a pane that dies with exit 127 (fleet#23).
+func TestAdmiralLaunchNeedsCommand(t *testing.T) {
+	f := testFleet(t)
+	f.LookCmd = func(string) error { return errors.New("missing") }
+	if _, err := supervisorCmd(f, "copilot", ""); err == nil || err.Error() != "profile copilot: copilot not found on PATH" {
+		t.Errorf("copilot missing: %v", err)
 	}
 }
 

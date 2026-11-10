@@ -96,16 +96,19 @@ type Fleet struct {
 	// SummaryModel replaces the model behind PeekSummary; nil builds the
 	// CLI backend from the [summary] section of config.toml. Tests set it.
 	SummaryModel summary.Model
-	summarizer   *summary.Summarizer
-	summaryMu    sync.Mutex
-	wakeMu       sync.Mutex
-	wakeWarn     time.Time
-	lastCap      map[string]time.Time
-	lastRecycle  time.Time         // last recycle check (ADR-71)
-	globs        map[string]string // agent -> resolved session log (WatchPaths)
-	globMu       sync.Mutex
-	sweep        doneSweep
-	dead         deadReaper
+	// LookCmd reports whether a profile's command can be run; nil = look
+	// in ~/.local/bin, PATH and a login shell (tests replace it).
+	LookCmd     func(cmd string) error
+	summarizer  *summary.Summarizer
+	summaryMu   sync.Mutex
+	wakeMu      sync.Mutex
+	wakeWarn    time.Time
+	lastCap     map[string]time.Time
+	lastRecycle time.Time         // last recycle check (ADR-71)
+	globs       map[string]string // agent -> resolved session log (WatchPaths)
+	globMu      sync.Mutex
+	sweep       doneSweep
+	dead        deadReaper
 }
 
 // Open builds a Fleet on the default socket and ~/.fleet.
@@ -202,6 +205,9 @@ func (f *Fleet) SpawnWith(o SpawnOpts, name, profile, dir, prompt string) (*boar
 	if abs, err := filepath.Abs(dir); err == nil {
 		dir = abs
 	}
+	if err := checkDir(dir); err != nil {
+		return nil, err
+	}
 	// Never start an agent in the home directory (ADR-47); do it before the
 	// queue so a queued agent remembers where it will really start.
 	dir, _ = f.safeDir(name, dir)
@@ -218,6 +224,9 @@ func (f *Fleet) SpawnWith(o SpawnOpts, name, profile, dir, prompt string) (*boar
 	}
 	driver, err := f.driverFor(o.Driver, profile)
 	if err != nil {
+		return nil, err
+	}
+	if err := f.CheckCommand(profile, f.Profiles[profile], driver); err != nil {
 		return nil, err
 	}
 	if driver == prefs.DriverACP {

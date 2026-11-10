@@ -62,6 +62,9 @@ func admiralLaunchOf(f *fleet.Fleet, adm, prof, resumeID, boot string) (supLaunc
 	if !ok {
 		return supLaunch{}, fmt.Errorf("admiral profile %q not found", prof)
 	}
+	if err := f.CheckCommand(prof, p, ""); err != nil {
+		return supLaunch{}, err
+	}
 	dir := admiralEnv("DIR")
 	if p.Patterns == "copilot" && adm != supervisor.Main {
 		// Its own .mcp.json is its only fleet server; without it the

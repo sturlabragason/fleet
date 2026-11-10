@@ -114,7 +114,7 @@ Where the ID can't be set at launch, `fleet` has to find it after the start. It 
 
 | Command | What it does |
 |---|---|
-| `fleet spawn [--worktree\|--no-worktree] [--driver tmux\|acp] <name> <tool> <dir> ["prompt"]` | New tmux window, starts the tool, records the session ID, creates the card; in a git repo the agent gets its own worktree (see below). every profile that runs copilot or agy (claude-copilot included) runs over ACP under `fleet acp-host` by default, the rest in their TUI; `--driver` picks (§7d, ADR-74) |
+| `fleet spawn [--worktree\|--no-worktree] [--driver tmux\|acp] <name> <tool> <dir> ["prompt"]` | New tmux window, starts the tool, records the session ID, creates the card; in a git repo the agent gets its own worktree (see below). every profile that runs copilot or agy (claude-copilot included) runs over ACP under `fleet acp-host` by default, the rest in their TUI; `--driver` picks (§7d, ADR-74). It fails before any worktree, board entry or pane when the dir does not exist or the command the window would run (the profile's, or its `acp_command`) is not on PATH (fleet#38, #23); `fleet up` checks the admiral's command the same way |
 | `fleet ls [--json]` | All agents with status, live/parked and RAM; a `DRIVER` column (`acp` or `tmux`, ADR-77) |
 | `fleet info <name>` | One agent's facts, the same lines as `fleet_info` (ADR-77) |
 | `fleet spend [--json]` | ✅ built (2026-11-05) What each agent has cost so far and the fleet total, read from its own session file: AI credits for Copilot, tokens for Claude (§7b, ADR-46) |
