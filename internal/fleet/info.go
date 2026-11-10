@@ -9,7 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/acphost"
 	"github.com/sturlabragason/fleet/internal/board"
+	"github.com/sturlabragason/fleet/internal/spend"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/tools"
@@ -260,26 +262,65 @@ func DriverLine(a *board.Agent, p tools.Profile) string {
 // LastMessageMax caps LastMessage output (runes; the end is kept).
 const LastMessageMax = 4000
 
-// LastMessage is the agent's last main-agent reply from its tool's session
-// event log (profile subagent_log).
+// LastMessageScreenLines is how much of the screen LastMessage returns when
+// the agent's tool keeps no log fleet can read.
+const LastMessageScreenLines = 40
+
+// LastMessageScreenNote heads a LastMessage taken from the screen.
+const LastMessageScreenNote = "(from the screen)"
+
+// LastMessage is the agent's last main-agent reply: from fleet's transcript
+// for an ACP agent, else from the tool's session log (the profile's
+// subagent_log, a Copilot events.jsonl, or for Claude patterns the session
+// .jsonl under session_path). When there is none it falls back to the end of
+// the cleaned screen, headed LastMessageScreenNote.
 func (f *Fleet) LastMessage(name string) (string, error) {
-	a, ok := f.Store.Load().Agents[name]
+	msg, ok := f.loggedMessage(name)
 	if !ok {
-		return "", fmt.Errorf("no agent %q", name)
-	}
-	path := f.Profiles[a.Profile].SubagentLogPath(a.SessionID)
-	if path == "" {
-		return "", fmt.Errorf("last_message not available for profile %s", a.Profile)
-	}
-	msg, ok, err := status.LastMessage(path)
-	if err != nil {
-		return "", fmt.Errorf("last_message: %v", err)
-	}
-	if !ok {
-		return "", fmt.Errorf("no assistant message yet")
-	}
-	if r := []rune(msg); len(r) > LastMessageMax {
-		msg = "…" + string(r[len(r)-LastMessageMax+1:])
+		if _, known := f.Store.Load().Agents[name]; !known {
+			return "", fmt.Errorf("no agent %q", name)
+		}
+		screen, err := f.Peek(name, 4*LastMessageScreenLines)
+		if err != nil {
+			return "", err
+		}
+		ls := strings.Split(strings.TrimRight(status.CleanScreen(screen), "\n "), "\n")
+		if len(ls) > LastMessageScreenLines {
+			ls = ls[len(ls)-LastMessageScreenLines:]
+		}
+		return LastMessageScreenNote + "\n" + strings.Join(ls, "\n"), nil
 	}
 	return msg, nil
+}
+
+// loggedMessage is the agent's last reply from a log, never the screen,
+// capped at LastMessageMax.
+func (f *Fleet) loggedMessage(name string) (string, bool) {
+	a, ok := f.Store.Load().Agents[name]
+	if !ok {
+		return "", false
+	}
+	if a.ACP() {
+		if t := acphost.LastAgentText(acphost.TranscriptPath(f.Home, name)); t != "" {
+			return capMessage(t), true
+		}
+	}
+	p := f.Profiles[a.Profile]
+	var msg string
+	if path := p.SubagentLogPath(a.SessionID); path != "" {
+		msg, ok, _ = status.LastMessage(path)
+	} else if path, kind := spend.Source(p, a.SessionID); kind == spend.Claude {
+		msg, ok, _ = status.LastClaudeMessage(path)
+	} else {
+		return "", false
+	}
+	return capMessage(msg), ok
+}
+
+// capMessage keeps the last LastMessageMax runes of msg.
+func capMessage(msg string) string {
+	if r := []rune(msg); len(r) > LastMessageMax {
+		return "…" + string(r[len(r)-LastMessageMax+1:])
+	}
+	return msg
 }

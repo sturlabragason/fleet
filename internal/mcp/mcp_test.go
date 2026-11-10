@@ -246,8 +246,8 @@ patterns = "copilot"
 	if out, _ := call("fleet_peek", map[string]any{"name": "m", "raw": true}); !strings.Contains(out, "╰──") {
 		t.Errorf("raw peek: %q", out)
 	}
-	if out, isErr := call("fleet_peek", map[string]any{"name": "m", "last_message": true}); !isErr || !strings.Contains(out, "last_message not available for profile menu") {
-		t.Errorf("last_message menu: %q", out)
+	if out, isErr := call("fleet_peek", map[string]any{"name": "m", "last_message": true}); isErr || !strings.HasPrefix(out, "(from the screen)\n") || !strings.Contains(out, "❯ 1. Yes") {
+		t.Errorf("last_message menu, from the screen: %q", out)
 	}
 	f.Store.Update(func(b *board.Board) error { b.Agents["a2"].SessionID = "s1"; return nil })
 	os.WriteFile(filepath.Join(home, "s1.jsonl"), []byte(`{"type":"assistant.message","data":{"content":"all done"}}`+"\n"+`{"type":"assistant.message","data":{"content":"sub","agentId":"x"}}`+"\n"), 0o644)

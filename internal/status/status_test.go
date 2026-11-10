@@ -173,6 +173,30 @@ func TestLastMessage(t *testing.T) {
 	}
 }
 
+// The fixture is a scrubbed real Claude Code session: thinking and tool_use
+// lines, an api-request-blob carrying text, then a sidechain reply after the
+// main one.
+func TestLastClaudeMessage(t *testing.T) {
+	p := filepath.Join("testdata", "claude-session.jsonl")
+	if got, ok, err := LastClaudeMessage(p); err != nil || !ok || got != "1\n2\n3" {
+		t.Errorf("got %q %v %v", got, ok, err)
+	}
+	// Text blocks of one message come on separate lines and are joined.
+	q := filepath.Join(t.TempDir(), "s.jsonl")
+	os.WriteFile(q, []byte(`{"type":"assistant","message":{"id":"m1","role":"assistant","content":[{"type":"text","text":"old"}]}}
+{"type":"assistant","message":{"id":"m2","role":"assistant","content":[{"type":"text","text":"part one"}]}}
+{"type":"assistant","message":{"id":"m2","role":"assistant","content":[{"type":"tool_use","name":"Bash"}]}}
+{"type":"assistant","message":{"id":"m2","role":"assistant","content":[{"type":"text","text":"part two"}]}}
+`), 0o644)
+	if got, ok, _ := LastClaudeMessage(q); !ok || got != "part one\n\npart two" {
+		t.Errorf("joined: got %q %v", got, ok)
+	}
+	os.WriteFile(q, []byte(`{"type":"user","message":{"role":"user","content":"hi"}}`+"\n"), 0o644)
+	if got, ok, err := LastClaudeMessage(q); ok || err != nil {
+		t.Errorf("no reply: got %q %v %v", got, ok, err)
+	}
+}
+
 func TestInputBox(t *testing.T) {
 	sets := Load(t.TempDir())
 	cp := sets["copilot"]
