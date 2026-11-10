@@ -99,3 +99,61 @@ func captureOut(t *testing.T, fn func() error) string {
 	}
 	return b.String()
 }
+
+// fleet#40: fleet merge stops before the rebase when the branch's new ADR
+// number is on main or another agent's live claim, and names the fix.
+func TestMergeStopsOnATakenADRNumber(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FLEET_HOME", home)
+	t.Setenv("FLEET_CONFIG", filepath.Join(home, "none.toml"))
+	t.Setenv("TMUX_PANE", "")
+	repo := adrRepo(t)
+	wt := filepath.Join(t.TempDir(), "wt")
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd.Env = append(cmd.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	addADR := func(dir string, n string) {
+		t.Helper()
+		f := filepath.Join(dir, "DESIGN.md")
+		b, _ := os.ReadFile(f)
+		if err := os.WriteFile(f, append(b, []byte("\n**ADR-"+n+": x**\n")...), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		git(dir, "commit", "-qam", "ADR-"+n+" in "+filepath.Base(dir))
+	}
+	git(repo, "worktree", "add", "-q", "-b", "fleet/x", wt)
+	addADR(wt, "51")
+
+	// Another agent holds ADR-51 in the lock.
+	if err := cmdADR([]string{"claim", "--for", "other", "-C", repo}); err != nil {
+		t.Fatal(err)
+	}
+	out := captureOut(t, func() error { return cmdMerge([]string{"--dry-run", "-C", wt}) })
+	if !strings.HasPrefix(out, "1. ADR-51 is taken (claimed by other): run `fleet adr claim`") {
+		t.Fatalf("dry-run output:\n%s", out)
+	}
+
+	// Now it is on main too.
+	addADR(repo, "51")
+	head, branch := git(repo, "rev-parse", "main"), git(wt, "rev-parse", "HEAD")
+	out = captureOut(t, func() error { return cmdMerge([]string{"--dry-run", "--json", "-C", wt}) })
+	if !strings.Contains(out, `"adr_taken"`) || !strings.Contains(out, "already on main") {
+		t.Fatalf("dry-run JSON:\n%s", out)
+	}
+	if err := cmdMerge([]string{"--check", "", "-C", wt}); err == nil {
+		t.Fatal("merge with a taken ADR number should fail")
+	}
+	if now := git(repo, "rev-parse", "main"); now != head {
+		t.Fatal("main moved although the ADR number was taken")
+	}
+	if now := git(wt, "rev-parse", "HEAD"); now != branch {
+		t.Fatal("branch was rebased although the merge stopped")
+	}
+}

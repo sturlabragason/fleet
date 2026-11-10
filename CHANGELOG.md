@@ -5,6 +5,7 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-10
+- `fleet merge` and `fleet merge --dry-run` stop when your branch's new ADR number is already on main or claimed by another agent, and tell you to take a new one with `fleet adr claim`, so a renumber no longer lands on someone else's number (ADR-50, fleet#40).
 - Alt-Shift-X brings the wall back at once: the overview and agent panes are redrawn in well under a second instead of staying blank or torn for about 3 s, and Alt-x and preset changes are quicker too (#41, ADR-88).
 - The admiral can now take over an ACP agent, check merge order (`fleet_touching`), list and prune worktrees and merged branches (after your yes), start another admiral and tell you what's new; its rules list every tool, and a Claude admiral such as `personal` now gets all of them instead of a cut-off copy (ADR-86).
 - Agent branches no longer pile up on GitHub: closing an agent deletes its pushed `fleet/<name>` once it is merged into main, and `fleet branches --prune` deletes the other merged ones no agent is on (ADR-87).

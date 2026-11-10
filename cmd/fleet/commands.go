@@ -164,6 +164,8 @@ const usage = `usage:
                                             Conflicts in CHANGELOG.md or DESIGN.md keep both sides,
                                             newest first; any other conflict aborts the rebase and
                                             exits 1, naming the files and the other worktree.
+                                            Stops first if the branch's new ADR number is on main or
+                                            another agent's claim: renumber via fleet adr claim.
                                             --dry-run prints the order it would take. Never pushes,
                                             never removes the worktree
   fleet profiles                            list tool profiles (~/.fleet/tools.toml)
