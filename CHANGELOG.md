@@ -5,6 +5,7 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-10
+- v1.1.0 is retracted: `go install` skips it and `go list -m -u` flags it. Use v1.1.1 or later, which has the same changes.
 - See which driver each agent runs on: `fleet_info` and the new `fleet info <name>` show `driver: acp via copilot --acp` (or `tmux`) and the fleet version that started it, `fleet_status` and `fleet ls` have a driver column, and ACP tiles read `copilot·acp` (ADR-77).
 - Contributors: `scripts/check-public.sh` now checks every added line and commit message in a push, not just the final tree, runs in CI on every push and PR, and `--gh` scans issue, comment and release text.
 - Run a Claude agent over ACP, opt-in: `fleet spawn --driver acp <name> claude ...` or `driver = "acp"` under `[profile.claude-personal]` in config.toml. It runs the installed claude through the pinned claude-agent-acp adapter (node 22+ and npx), takes status, questions, mode and the peer tools over the protocol, parks and wakes by resume, and shows spend as before. Per-account profiles add `acp_from = "claude"`; you log in once per config dir by hand, fleet never touches tokens (ADR-76).

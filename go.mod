@@ -31,3 +31,6 @@ require (
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 )
+
+// Withdrawn: use v1.1.1 or later.
+retract v1.1.0
