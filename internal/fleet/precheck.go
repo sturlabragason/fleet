@@ -62,6 +62,16 @@ func (f *Fleet) CheckCommand(profile string, p tools.Profile, driver string) err
 	return nil
 }
 
+// DefaultDriver is the driver a spawn of profile gets with no --driver
+// (driverFor), tmux when that would be refused; fleet doctor checks with it.
+func (f *Fleet) DefaultDriver(profile string) string {
+	d, err := f.driverFor("", profile)
+	if err != nil {
+		return prefs.DriverTmux
+	}
+	return d
+}
+
 // lookCmd finds cmd as the window would. The fast path is ~/.local/bin and
 // PATH (commandPath); a miss asks a login shell, the window's own shell
 // (tools.ShellCommand), whose profile may add dirs this process lacks. A

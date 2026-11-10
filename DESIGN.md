@@ -1179,7 +1179,7 @@ The biggest maintenance risk is not the language. It's the four agent tools chan
 2. **Tool-specific details in one place.** Screen patterns per tool live in `~/.fleet/patterns.toml`, not in code. When a tool changes its UI, it takes one line in that file and one new capture in `testdata/`.
 3. **Hooks over scraping where the tool supports them** (Claude Code, Copilot). Hooks don't break when a tool changes how it looks.
 4. **Fail soft.** An unknown screen shows a grey "unknown" tile. It never crashes the TUI or blocks other agents.
-5. **`fleet doctor`** checks tmux version, each tool's version and resume flag, and runs the status detector against a fresh capture of each tool. It says exactly what broke.
+5. **`fleet doctor`** checks tmux version, each tool's version and resume flag, and runs the status detector against a fresh capture of each tool. It says exactly what broke. *Built (#23) as a static pre-flight: tmux 3.3+, a UTF-8 locale, `~/.local/bin` on PATH, config.toml and tools.toml parse, and the admiral's and each user-defined profile's command is found. Tool versions, resume flags and a live status capture are not checked: those need an agent running.*
 6. **Few dependencies, pinned.** Only the Charm libraries (Bubble Tea, Lip Gloss, bubblezone) and the standard library.
 7. **No server, no database, no daemon.** tmux, files in `~/.fleet/` and one binary. Removing it is `rm`. *Exception (ADR-66): `fleet web` is an opt-in, stateless HTTP server you start by hand.*
 
