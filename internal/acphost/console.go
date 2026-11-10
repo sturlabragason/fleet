@@ -8,7 +8,7 @@ import (
 	"unicode/utf8"
 )
 
-// The pane as a small console (ADR-82, ADR-84): the conversation above one
+// The pane as a small console (ADR-82, ADR-85): the conversation above one
 // input line that the user types into (drawn by view.go). The terminal is
 // in raw mode, so the host reads key presses, not lines: Enter sends, Esc
 // cancels the turn, Ctrl-T hands the session to the tool's own screen,

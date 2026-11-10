@@ -16,7 +16,7 @@ package fake
 //	[invoke]   an agy invoke_subagent tool call (Role "helper"): in_progress,
 //	           then completed after the [slow] gap
 //	[rich]     a thought, a tool call pending then completed after the [slow]
-//	           gap, and a markdown reply, for looking at the pane (ADR-84)
+//	           gap, and a markdown reply, for looking at the pane (ADR-85)
 //
 // Every prompt's response carries usage, as agy's does: 100 input and 10
 // output tokens.

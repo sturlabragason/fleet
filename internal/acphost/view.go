@@ -12,7 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The pane when it is a terminal (ADR-82, ADR-84): a header with the
+// The pane when it is a terminal (ADR-82, ADR-85): a header with the
 // agent's name, profile and status, the conversation, a rule, the input
 // line and a line of key hints. The whole screen is drawn again on every
 // change, from the conversation kept as blocks, so a tool call is one line
