@@ -87,6 +87,15 @@ func cmdWatch(f *fleet.Fleet, args []string) error {
 // fails the probe and the old code keeps watching. The flock on watch.lock is
 // close-on-exec, so the new image claims it again at start.
 func reexecWatcher(exe string) error {
+	if err := probeBinary(exe); err != nil {
+		return err
+	}
+	return syscall.Exec(exe, os.Args, os.Environ())
+}
+
+// probeBinary checks that the binary at exe runs (`exe watch --probe` says
+// ok) and was not replaced again meanwhile. A half-written build fails it.
+func probeBinary(exe string) error {
 	before, err := os.Stat(exe)
 	if err != nil {
 		return err
@@ -103,7 +112,7 @@ func reexecWatcher(exe string) error {
 	if now, err := os.Stat(exe); err != nil || !os.SameFile(now, before) || !now.ModTime().Equal(before.ModTime()) {
 		return fmt.Errorf("binary changed after the probe")
 	}
-	return syscall.Exec(exe, os.Args, os.Environ())
+	return nil
 }
 
 // stopWatcher signals a running watcher to exit (it drops its heartbeat on
