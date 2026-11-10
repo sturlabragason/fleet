@@ -125,7 +125,7 @@ func (f *Fleet) adopt(o AdoptOpts, rec *board.Agent, claimed bool, prompt string
 		}
 		ex.Driver = board.DriverACP
 	} else {
-		argv, _ = p.Argv(agentVars(f.Exe, name, id, p, apr).Fenced(fence),
+		argv, _ = p.Argv(f.launchVars(name, id, p, apr, fence, false),
 			tools.Launch{Resume: true, Mode: f.modeFor(name, o.Profile, p, apr.Mode), Extra: apr.ExtraArgs, Context: ctx})
 	}
 	// Adopt resumes a session that already has a dir, so it never makes a

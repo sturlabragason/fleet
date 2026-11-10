@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -204,35 +203,49 @@ const hookStdinMax = 64 << 10
 
 // cmdHook records what an agent's own tool just did:
 //
-//	fleet hook <event> [--agent NAME] [--waiting-for TEXT]
+//	fleet hook <event> [--agent NAME] [--waiting-for TEXT] [--no-status]
 //
 // It writes ~/.fleet/status/<name>.json, which the watcher notices within a
-// tick (DESIGN §18 #3, ADR-49). It is wired into Claude through the per-agent
-// --settings fleet passes at spawn, so the user's own settings file is never
-// touched. It never fails loudly: a broken hook must not break the agent.
+// tick (DESIGN §18 #3, ADR-49), and keeps the agent's subagents from
+// SubagentStart/SubagentStop (ADR-96). It is wired in through the per-agent
+// plugin dir fleet writes at spawn (ADR-96), so the user's own settings are
+// never touched. --no-status keeps the subagents only: an ACP agent's host
+// owns its status file. A hook fired inside a subagent (its payload names
+// one) changes no status. It never fails loudly: a broken hook must not
+// break the agent.
 func cmdHook(f *fleet.Fleet, args []string) error {
 	fs := flag.NewFlagSet("hook", flag.ContinueOnError)
 	agent := fs.String("agent", os.Getenv("FLEET_AGENT"), "agent name (default $FLEET_AGENT)")
 	waiting := fs.String("waiting-for", "", "what the agent waits for, for a prompt event")
+	noStatus := fs.Bool("no-status", false, "record subagents only; the agent's ACP host owns its status")
 	rest, err := parseInterleaved(fs, args)
 	if err != nil {
 		return err
 	}
 	if len(rest) != 1 {
-		return fmt.Errorf("usage: fleet hook <event> [--agent NAME] [--waiting-for TEXT]\nevents: %s",
+		return fmt.Errorf("usage: fleet hook <event> [--agent NAME] [--waiting-for TEXT] [--no-status]\nevents: %s",
 			strings.Join(status.HookEvents(), ", "))
 	}
-	msg := hookPayload(os.Stdin)
-	if *waiting == "" {
-		*waiting = msg
-	}
-	s, ok := status.EventState(rest[0], *waiting, time.Now())
-	if !ok {
-		logx.For("status").Debug("unknown hook event", "event", rest[0], "agent", *agent)
+	ev := rest[0]
+	p := hookPayload(os.Stdin)
+	now := time.Now()
+	sub := status.SubagentEvent(ev)
+	s, ok := status.EventState(ev, *waiting, now)
+	if !ok && !sub {
+		logx.For("status").Debug("unknown hook event", "event", ev, "agent", *agent)
 		return nil
 	}
 	if *agent == "" {
 		return fmt.Errorf("no agent name: pass --agent or set FLEET_AGENT")
+	}
+	if err := status.RecordSubs(f.Home, *agent, ev, p, now); err != nil {
+		logx.For("status").Warn("hook subagents", "agent", *agent, "err", err)
+	}
+	if sub || *noStatus || p.AgentID != "" {
+		return nil
+	}
+	if s.WaitingFor == "" {
+		s.WaitingFor = p.WaitingFor(ev)
 	}
 	if err := status.WriteState(status.StateDir(f.Home), *agent, s); err != nil {
 		logx.For("status").Warn("hook state", "agent", *agent, "err", err)
@@ -241,23 +254,16 @@ func cmdHook(f *fleet.Fleet, args []string) error {
 	return nil
 }
 
-// hookPayload reads a tool's hook JSON from r and returns its message, if
-// any. A terminal stdin is left alone so the command does not hang when it
-// is run by hand.
-func hookPayload(r *os.File) string {
+// hookPayload reads a tool's hook JSON from r. A terminal stdin is left
+// alone so the command does not hang when it is run by hand.
+func hookPayload(r *os.File) status.Payload {
 	fi, err := r.Stat()
 	if err != nil || fi.Mode()&os.ModeCharDevice != 0 {
-		return ""
+		return status.Payload{}
 	}
 	b, err := io.ReadAll(io.LimitReader(r, hookStdinMax))
 	if err != nil || len(b) == 0 {
-		return ""
+		return status.Payload{}
 	}
-	var p struct {
-		Message string `json:"message"`
-	}
-	if json.Unmarshal(b, &p) != nil {
-		return ""
-	}
-	return strings.TrimSpace(p.Message)
+	return status.ParsePayload(b)
 }

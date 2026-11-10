@@ -16,6 +16,7 @@ import (
 //
 //   - ~/.fleet/status, the directory the tools' own hooks write into. One
 //     stat covers every hook-driven agent, whatever its name.
+//   - ~/.fleet/status/subs, where the hooks keep subagents (ADR-96).
 //   - each agent's session event log (copilot's events.jsonl, Claude's
 //     session jsonl): the tool appends to it as it works, so its size moves
 //     on every turn, tool call and subagent.
@@ -23,7 +24,7 @@ import (
 // Resolved session globs are cached: the directory a tool files a session
 // under does not change while the agent runs.
 func (f *Fleet) WatchPaths() []string {
-	out := []string{status.StateDir(f.Home)}
+	out := []string{status.StateDir(f.Home), status.SubsDir(f.Home)}
 	seen := map[string]bool{}
 	for _, a := range f.Store.Load().Agents {
 		for _, p := range f.sessionLogs(a) {
@@ -33,7 +34,7 @@ func (f *Fleet) WatchPaths() []string {
 			}
 		}
 	}
-	sort.Strings(out[1:])
+	sort.Strings(out[2:])
 	return out
 }
 
@@ -114,4 +115,7 @@ func applyHook(a *board.Agent, s status.State) status.Status {
 
 // forgetHook drops an agent's hook state, so a new agent of the same name
 // never inherits it.
-func (f *Fleet) forgetHook(name string) { status.DropState(status.StateDir(f.Home), name) }
+func (f *Fleet) forgetHook(name string) {
+	status.DropState(status.StateDir(f.Home), name)
+	status.DropHookSubs(f.Home, name)
+}

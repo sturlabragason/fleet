@@ -860,8 +860,13 @@ command = "foo"
 	if !reflect.DeepEqual(ps["copilot-work"].PeerArgs, ps["copilot"].PeerArgs) || ps["copilot-work"].HookArgs != nil {
 		t.Errorf("copilot-work: peer %v hook %v", ps["copilot-work"].PeerArgs, ps["copilot-work"].HookArgs)
 	}
-	if len(ps["claude-bare"].PeerArgs) != 0 || len(ps["claude-bare"].HookArgs) != 0 {
+	if len(ps["claude-bare"].PeerArgs) != 0 || len(ps["claude-bare"].HookArgs) != 0 || ps["claude-bare"].UsesPlugin(false) {
 		t.Errorf("explicit [] not kept: %+v", ps["claude-bare"])
+	}
+	// The plugin (ADR-96) comes along only with both: it carries the hooks
+	// and, for copilot, fleet-peer.
+	if !reflect.DeepEqual(ps["copilot-work"].PluginArgs, ps["copilot"].PluginArgs) || !ps["copilot-work"].PluginMCP || !ps["claude-personal"].UsesPlugin(false) {
+		t.Errorf("plugin not inherited: %+v", ps["copilot-work"])
 	}
 	if ps["other"].PeerArgs != nil || ps["other"].HookArgs != nil {
 		t.Errorf("other: %+v", ps["other"])

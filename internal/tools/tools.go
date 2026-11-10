@@ -55,6 +55,14 @@ type Profile struct {
 	// line, so the user's own settings file is never written to. Left out
 	// when the vars carry no hook config.
 	HookArgs []string
+	// PluginArgs load the agent's fleet plugin dir (ADR-96), with
+	// {plugin}: its hooks call `fleet hook`. Left out when the vars carry
+	// no plugin. Under the acp driver a tool's own server takes them; an
+	// adapter takes the plugin through ACPMeta instead.
+	PluginArgs []string
+	// PluginMCP puts the peer MCP server in the plugin's .mcp.json, and
+	// drops PeerArgs while the plugin is loaded (ADR-96).
+	PluginMCP bool
 	// UserMCPConfig is the file where the tool keeps the user's global MCP
 	// servers ({"mcpServers":{name:...}}), ~ expanded. Empty = none.
 	UserMCPConfig string
@@ -94,6 +102,9 @@ type Profile struct {
 	// ACPFrom names a profile whose acp keys this one takes where it sets
 	// none itself.
 	ACPFrom string
+	// ACPMeta is "claude" when the adapter takes the plugin dir and the
+	// settings in session/new _meta.claudeCode.options (ADR-96).
+	ACPMeta string
 }
 
 // HasACP reports whether the profile can run under the acp driver.
@@ -238,8 +249,8 @@ const copilotContext = `context_args = { light = "` + copilotLean + copilotNoAge
 	`leader = "` + copilotLean + ` --disable-builtin-mcps" }`
 
 // Defaults are the built-in profiles. {fleet} is the fleet executable, {name}
-// the agent name, {peer_mcp}/{peer_mcp_claude} the agent's peer MCP config and
-// {hooks} its status-hook settings.
+// the agent name, {peer_mcp}/{peer_mcp_claude} the agent's peer MCP config,
+// {hooks} its status-hook settings and {plugin} its fleet plugin dir.
 //
 // Every profile defines the AutoMode ("auto") mode; see its documentation.
 const Defaults = `
@@ -253,6 +264,8 @@ session_path = "~/.copilot/session-state/{id}"
 subagent_log = "~/.copilot/session-state/{id}/events.jsonl"
 patterns = "copilot"
 peer_args = ["--additional-mcp-config", "{peer_mcp}"]
+plugin_args = ["--plugin-dir", "{plugin}"]
+plugin_mcp = true
 user_mcp_config = "~/.copilot/mcp-config.json"
 user_mcp_off = ["--disable-mcp-server", "{server}"]
 acp = ["--acp"]
@@ -271,6 +284,8 @@ session_path = "~/.copilot/session-state/{id}"
 subagent_log = "~/.copilot/session-state/{id}/events.jsonl"
 patterns = "copilot"
 peer_args = ["--additional-mcp-config", "{peer_mcp}"]
+plugin_args = ["--plugin-dir", "{plugin}"]
+plugin_mcp = true
 user_mcp_config = "~/.copilot/mcp-config.json"
 user_mcp_off = ["--disable-mcp-server", "{server}"]
 acp = ["--acp"]
@@ -290,11 +305,13 @@ peer_args = ["--mcp-config", "{peer_mcp_claude}"]
 user_mcp_config = "~/.claude.json"
 user_mcp_off = ["--disallowedTools=mcp__{server}"]
 hook_args = ["--settings", "{hooks}"]
+plugin_args = ["--plugin-dir", "{plugin}"]
 patterns = "claude"
 acp_command = ["npx", "-y", "@agentclientprotocol/claude-agent-acp@` + ClaudeACPVersion + `"]
 acp_modes = { default = "default", auto = "bypassPermissions", bypass = "bypassPermissions", accept-edits = "acceptEdits", plan = "plan" }
 acp_env = { CLAUDE_CODE_EXECUTABLE = "{command_path}", ANTHROPIC_MODEL = "` + ClaudeModel + `" }
 acp_mcp = "session"
+acp_meta = "claude"
 acp_unset_env = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"]
 
 [agy]
@@ -387,7 +404,7 @@ func LoadWith(home string, local conf.Doc) (map[string]Profile, error) {
 		}
 	}
 	// A profile that runs a built-in tool (claude, copilot) and sets no
-	// peer_args or hook_args takes that tool's: a user's [claude-work]
+	// peer_args, hook_args or plugin_args takes that tool's: a user's [claude-work]
 	// would otherwise start agents with no fleet_report tool and no status
 	// hooks. An explicit [] keeps them off.
 	for name, p := range out {
@@ -395,6 +412,12 @@ func LoadWith(home string, local conf.Doc) (map[string]Profile, error) {
 		b, ok := out[t]
 		if t == name || !ok {
 			continue
+		}
+		// The plugin carries the hooks and (plugin_mcp) fleet-peer, so it
+		// is inherited only by a profile that set neither peer_args nor
+		// hook_args: an opt-out ([]) or its own peer server stays as set.
+		if p.PluginArgs == nil && p.PeerArgs == nil && p.HookArgs == nil {
+			p.PluginArgs, p.PluginMCP = b.PluginArgs, b.PluginMCP
 		}
 		if p.PeerArgs == nil {
 			p.PeerArgs = b.PeerArgs
@@ -435,6 +458,9 @@ func inheritACP(p, b Profile) Profile {
 	}
 	if p.ACPUnsetEnv == nil {
 		p.ACPUnsetEnv = b.ACPUnsetEnv
+	}
+	if p.ACPMeta == "" {
+		p.ACPMeta = b.ACPMeta
 	}
 	return p
 }
@@ -486,6 +512,15 @@ func apply(p *Profile, sec map[string]conf.Value) {
 	if v, ok := sec["hook_args"]; ok {
 		p.HookArgs, _ = v.([]string)
 	}
+	if v, ok := sec["plugin_args"]; ok {
+		p.PluginArgs, _ = v.([]string)
+		if p.PluginArgs == nil {
+			p.PluginArgs = []string{}
+		}
+	}
+	if v, ok := conf.Bool(sec, "plugin_mcp"); ok {
+		p.PluginMCP = v
+	}
 	if v, ok := sec["user_mcp_config"]; ok {
 		p.UserMCPConfig, _ = v.(string)
 	}
@@ -522,6 +557,9 @@ func apply(p *Profile, sec map[string]conf.Value) {
 	if v, ok := sec["acp_from"]; ok {
 		p.ACPFrom, _ = v.(string)
 	}
+	if v, ok := sec["acp_meta"]; ok {
+		p.ACPMeta, _ = v.(string)
+	}
 }
 
 // splitModes turns an inline table of mode -> "a b c" into mode -> ["a","b","c"].
@@ -553,15 +591,29 @@ func Names(ps map[string]Profile) []string {
 // HookArgs are left out.
 //
 // MCPOff are the user's global MCP servers to switch off with UserMCPOff
-// (see UserMCP).
+// (see UserMCP). Plugin is the agent's fleet plugin dir (see WithPlugin);
+// when empty PluginArgs are left out.
 type Vars struct {
 	Fleet, Name, ID, PeerMCP, PeerMCPClaude, Hooks string
 	MCPOff                                         []string
+	Plugin                                         string
 }
 
 func (v Vars) expand(s string) string {
 	return strings.NewReplacer("{fleet}", v.Fleet, "{name}", v.Name, "{id}", v.ID,
-		"{peer_mcp_claude}", v.PeerMCPClaude, "{peer_mcp}", v.PeerMCP, "{hooks}", v.Hooks).Replace(s)
+		"{peer_mcp_claude}", v.PeerMCPClaude, "{peer_mcp}", v.PeerMCP, "{hooks}", v.Hooks,
+		"{plugin}", v.Plugin).Replace(s)
+}
+
+// WithPlugin returns v loading the plugin dir for profile p: its hooks
+// replace the hook settings, and with plugin_mcp its .mcp.json replaces the
+// peer args (ADR-96). Call Fenced after it.
+func (v Vars) WithPlugin(dir string, p Profile) Vars {
+	v.Plugin, v.Hooks = dir, ""
+	if p.PluginMCP {
+		v.PeerMCP, v.PeerMCPClaude = "", ""
+	}
+	return v
 }
 
 // hookEvents are the Claude Code events worth a status update: the turn
@@ -596,10 +648,25 @@ func ClaudeSettings(exe, name, fence string) string {
 	return string(b)
 }
 
+// ClaudeFence is the Claude settings document with the write fence for
+// fence and no hooks, for an agent whose hooks are in its plugin (ADR-96);
+// "" when fence is "".
+func ClaudeFence(fence string) string {
+	if fence == "" {
+		return ""
+	}
+	b, _ := json.Marshal(map[string]any{"permissions": map[string]any{
+		"blockWritesOutsideWorkingDirectories": true, "additionalDirectories": []string{fence}}})
+	return string(b)
+}
+
 // Fenced returns v with the Claude settings carrying the write fence for
-// dir (see ClaudeSettings).
+// dir (see ClaudeSettings); with a plugin, the fence alone (ClaudeFence).
 func (v Vars) Fenced(dir string) Vars {
-	if dir != "" {
+	switch {
+	case v.Plugin != "":
+		v.Hooks = ClaudeFence(dir)
+	case dir != "":
 		v.Hooks = ClaudeSettings(v.Fleet, v.Name, dir)
 	}
 	return v
@@ -655,6 +722,11 @@ func (p Profile) Argv(v Vars, l Launch) (argv []string, embedded bool) {
 			argv = append(argv, v.expand(a))
 		}
 	}
+	if v.Plugin != "" {
+		for _, a := range p.PluginArgs {
+			argv = append(argv, v.expand(a))
+		}
+	}
 	for _, a := range p.Args {
 		argv = append(argv, v.expand(a))
 	}
@@ -688,10 +760,11 @@ func (p Profile) Argv(v Vars, l Launch) (argv []string, embedded bool) {
 // driver (ADR-74): command, peer MCP args, the profile's args, its ACP args,
 // the ACP mode args, the context args and the extra args. No launch id,
 // resume or prompt args: the host carries the session and the prompt over
-// ACP, and no hook args: the host writes the status itself. With an
-// acp_command (ADR-76) it is that command, the ACP args and the ACP mode
-// args only: the rest are the tool's own flags, which an adapter doesn't
-// take.
+// ACP, and no hook args: the host writes the status itself. The plugin args
+// follow the peer args (ADR-96). With an acp_command (ADR-76) it is that
+// command, the ACP args and the ACP mode args only: the rest are the tool's
+// own flags, which an adapter doesn't take (it gets the plugin through
+// SessionMeta).
 func (p Profile) ACPArgv(v Vars, l Launch) []string {
 	var argv []string
 	add := func(as []string) {
@@ -708,6 +781,9 @@ func (p Profile) ACPArgv(v Vars, l Launch) []string {
 	argv = []string{v.expand(p.Command)}
 	if (v.PeerMCP != "" || v.PeerMCPClaude != "") && !p.ACPSessionMCP() {
 		add(p.PeerArgs)
+	}
+	if v.Plugin != "" {
+		add(p.PluginArgs)
 	}
 	argv = append(argv, p.userMCPOffArgs(v.MCPOff)...)
 	add(p.Args)

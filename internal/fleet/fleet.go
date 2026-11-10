@@ -382,7 +382,7 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 		ex.Base = Baseline(dir)
 		return f.launchACP(name, profile, p, dir, prompt, full, claimed, lvl, ex)
 	}
-	argv, embedded := launchArgv(name, p, agentVars(f.Exe, name, id, p, pr).Fenced(fenceDir(ex.Worktree, pr.FenceWrites)),
+	argv, embedded := launchArgv(name, p, f.launchVars(name, id, p, pr, fenceDir(ex.Worktree, pr.FenceWrites), false),
 		tools.Launch{Mode: pr.Mode, Context: contextKey(p, lvl, role.Leader), Extra: pr.ExtraArgs,
 			Prompt: full, NoPromptArgs: !pr.AutoSubmit})
 	ex.Base = Baseline(dir) // before the agent can touch anything
@@ -431,11 +431,32 @@ func fenceDir(w *board.Worktree, on bool) string {
 	return filepath.Dir(w.Path)
 }
 
-// agentVars are the Vars for launching worker name with profile p: the
-// peer MCP server and hooks, with the user's global MCP servers switched off
-// except those pr keeps (ADR-91).
-func agentVars(exe, name, id string, p tools.Profile, pr prefs.Spawn) tools.Vars {
-	return tools.AgentVars(exe, name, id).UserMCP(p, pr.KeepMCP)
+// launchVars prepares launching worker name with profile p and returns its
+// Vars: the peer MCP server and hooks, with the user's global MCP servers
+// switched off except those pr keeps (ADR-91), and the write fence for
+// fence (ADR-79). When p loads the fleet plugin it writes the agent's
+// plugin dir and points the Vars at it (ADR-96); if that fails the agent
+// starts without it, on the hook settings and peer args as before. The
+// subagents an earlier process of this name left are dropped: they died
+// with it.
+func (f *Fleet) launchVars(name, id string, p tools.Profile, pr prefs.Spawn, fence string, acp bool) tools.Vars {
+	v := tools.AgentVars(f.Exe, name, id).UserMCP(p, pr.KeepMCP)
+	status.DropHookSubs(f.Home, name)
+	if p.UsesPlugin(acp) {
+		dir := tools.PluginDir(f.Home, name)
+		pl := tools.Plugin{Exe: f.Exe, Name: name, MCP: p.PluginMCP, NoStatus: acp}
+		if err := tools.WritePlugin(dir, pl); err != nil {
+			logx.For("fleet").Warn("plugin dir; starting without it", "agent", name, "dir", dir, "err", err)
+		} else {
+			v = v.WithPlugin(dir, p)
+		}
+	}
+	if acp {
+		// The host writes the status; the settings only fence (ADR-96).
+		v.Hooks = tools.ClaudeFence(fence)
+		return v
+	}
+	return v.Fenced(fence)
 }
 
 func launchArgv(name string, p tools.Profile, v tools.Vars, l tools.Launch) ([]string, bool) {
@@ -719,6 +740,9 @@ func (f *Fleet) Close(name string) error {
 	logx.For("fleet").Info("closed", "agent", name)
 	f.forgetMail(name)
 	f.forgetHook(name)
+	if err := os.RemoveAll(tools.PluginDir(f.Home, name)); err != nil {
+		logx.For("fleet").Warn("remove plugin dir", "agent", name, "err", err)
+	}
 	// Prompts a failed acp host kept are listed in its transcript and the
 	// dead-pane report; a closed agent has no next host to send them.
 	if err := os.Remove(ACPPromptPath(f.Home, name)); err != nil && !errors.Is(err, os.ErrNotExist) {

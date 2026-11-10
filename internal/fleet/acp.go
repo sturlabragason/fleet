@@ -81,6 +81,7 @@ type ACPHostOpts struct {
 	CopilotEvents bool
 	Mode          string   // ACP session mode (ADR-76)
 	MCP           string   // peer MCP config for the session (ADR-76)
+	Meta          string   // _meta for the session calls (ADR-96)
 	UnsetEnv      []string // variables the tool must not inherit (ADR-76)
 	Profile       string   // shown in the pane's header (ADR-85)
 }
@@ -104,6 +105,9 @@ func ACPHostArgv(exe, name, dir string, o ACPHostOpts, tool []string) []string {
 	if o.MCP != "" {
 		argv = append(argv, "--mcp", o.MCP)
 	}
+	if o.Meta != "" {
+		argv = append(argv, "--meta", o.Meta)
+	}
 	if len(o.UnsetEnv) > 0 {
 		argv = append(argv, "--unset-env", strings.Join(o.UnsetEnv, ","))
 	}
@@ -118,8 +122,8 @@ func ACPHostArgv(exe, name, dir string, o ACPHostOpts, tool []string) []string {
 // window), and the host options. For claude (ADR-76) that is the installed
 // claude in CLAUDE_CODE_EXECUTABLE, the session mode, peer MCP over the
 // session and the inherited secrets to drop.
-func (f *Fleet) acpSetup(name, profile string, p tools.Profile, mode string) (tools.Profile, ACPHostOpts, error) {
-	o := ACPHostOpts{CopilotEvents: copilotEvents(p), UnsetEnv: p.ACPUnsetEnv, Profile: profile}
+func (f *Fleet) acpSetup(name, profile string, p tools.Profile, mode string, v tools.Vars) (tools.Profile, ACPHostOpts, error) {
+	o := ACPHostOpts{CopilotEvents: copilotEvents(p), UnsetEnv: p.ACPUnsetEnv, Profile: profile, Meta: p.SessionMeta(v)}
 	if len(p.ACPEnvVars) > 0 {
 		path := ""
 		if p.ACPNeedsCommandPath() {
@@ -178,9 +182,10 @@ func acpMode(name, profile string, p tools.Profile, mode string) string {
 func (f *Fleet) launchACP(name, profile string, p tools.Profile, dir, goal, full string, claimed bool, lvl playbook.Level, ex startExtra) (*board.Agent, error) {
 	pr := f.Prefs.For(profile)
 	mode := acpMode(name, profile, p, pr.Mode)
-	tool := p.ACPArgv(agentVars(f.Exe, name, "", p, pr), tools.Launch{
+	v := f.launchVars(name, "", p, pr, fenceDir(ex.Worktree, pr.FenceWrites), true)
+	tool := p.ACPArgv(v, tools.Launch{
 		Mode: mode, Context: contextKey(p, lvl, ex.Role.Leader), Extra: pr.ExtraArgs})
-	p, o, err := f.acpSetup(name, profile, p, mode)
+	p, o, err := f.acpSetup(name, profile, p, mode, v)
 	if err != nil {
 		return nil, err
 	}
@@ -210,9 +215,10 @@ func (f *Fleet) wakeACPArgv(old *board.Agent, p tools.Profile, ctx string) ([]st
 	}
 	pr := f.Prefs.For(old.Profile)
 	mode := acpMode(old.Name, old.Profile, p, pr.Mode)
-	tool := p.ACPArgv(agentVars(f.Exe, old.Name, "", p, pr), tools.Launch{
+	v := f.launchVars(old.Name, "", p, pr, fenceDir(old.Worktree, pr.FenceWrites), true)
+	tool := p.ACPArgv(v, tools.Launch{
 		Mode: mode, Context: ctx, Extra: pr.ExtraArgs})
-	p, o, err := f.acpSetup(old.Name, old.Profile, p, mode)
+	p, o, err := f.acpSetup(old.Name, old.Profile, p, mode, v)
 	if err != nil {
 		return nil, p, err
 	}

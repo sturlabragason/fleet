@@ -19,7 +19,11 @@ func TestEventState(t *testing.T) {
 		{"Notification", Waiting, true},
 		{"pre-tool-use", Working, true},
 		{"UserPromptSubmit", Working, true},
-		{"SubagentStop", Working, true},
+		{"SubagentStop", "", false},
+		{"agentStop", Idle, true},
+		{"userPromptSubmitted", Working, true},
+		{"postToolUseFailure", Working, true},
+		{"permissionRequest", "", false},
 		{"CompletelyMadeUp", "", false},
 		{"", "", false},
 	} {

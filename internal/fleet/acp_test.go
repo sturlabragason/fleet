@@ -313,7 +313,7 @@ func TestClaudeACPSpawnAndWake(t *testing.T) {
 	if tm.ACP() {
 		t.Fatal("claude went to acp without opting in")
 	}
-	if got := startCommand(t, tc, tm.PaneID); !strings.Contains(got, "claude --mcp-config") || !strings.Contains(got, "--permission-mode bypassPermissions") || strings.Contains(got, "acp-host") {
+	if got := startCommand(t, tc, tm.PaneID); !strings.Contains(got, "claude --mcp-config") || !strings.Contains(got, "--plugin-dir "+tools.PluginDir(home, "t1")) || !strings.Contains(got, "--permission-mode bypassPermissions") || strings.Contains(got, "acp-host") {
 		t.Errorf("claude tmux command %q", got)
 	}
 
@@ -326,7 +326,9 @@ func TestClaudeACPSpawnAndWake(t *testing.T) {
 	}
 	_, peer := tools.PeerMCP(host, "a1")
 	wantArgv := []string{"acp-host", "a1", "--dir", dir, "--prompt-file", ACPPromptPath(home, "a1"),
-		"--mode", "bypassPermissions", "--mcp", peer, "--unset-env", "ANTHROPIC_API_KEY,ANTHROPIC_AUTH_TOKEN,CLAUDE_CODE_OAUTH_TOKEN",
+		"--mode", "bypassPermissions", "--mcp", peer,
+		"--meta", `{"claudeCode":{"options":{"plugins":[{"path":"` + tools.PluginDir(home, "a1") + `","type":"local"}]}}}`,
+		"--unset-env", "ANTHROPIC_API_KEY,ANTHROPIC_AUTH_TOKEN,CLAUDE_CODE_OAUTH_TOKEN",
 		"--profile", "claude", "--", "npx", "-y", "@agentclientprotocol/claude-agent-acp@" + tools.ClaudeACPVersion}
 	got := hostArgs(t, home)
 	if len(got) != 1 || !reflect.DeepEqual(got[0], wantArgv) {

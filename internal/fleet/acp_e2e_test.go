@@ -369,11 +369,22 @@ func TestClaudeCopilotACPEndToEnd(t *testing.T) {
 	}
 	b, _ := os.ReadFile(argsFile)
 	argv := strings.Split(strings.TrimSuffix(string(b), "---\n"), "\n")
-	cp, _ := tools.PeerMCP(exe, "cc1")
-	for _, want := range [][]string{{"--additional-mcp-config", cp}, {"--model", tools.CopilotClaudeModel}, {"--acp", "--allow-all"}} {
+	plugin := tools.PluginDir(home, "cc1")
+	for _, want := range [][]string{{"--plugin-dir", plugin}, {"--model", tools.CopilotClaudeModel}, {"--acp", "--allow-all"}} {
 		if !containsRun(argv, want) {
 			t.Errorf("copilot argv lacks %q:\n%q", want, argv)
 		}
+	}
+	if slices.Contains(argv, "--additional-mcp-config") {
+		t.Errorf("fleet-peer passed twice, flag and plugin: %q", argv)
+	}
+	// fleet-peer rides in the plugin's .mcp.json; the hooks skip the state
+	// file, which the ACP host owns.
+	if b, err := os.ReadFile(filepath.Join(plugin, ".mcp.json")); err != nil || !strings.Contains(string(b), `"fleet-peer"`) || !strings.Contains(string(b), `"cc1"`) {
+		t.Errorf("plugin .mcp.json %s %v", b, err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(plugin, "hooks", "hooks.json")); !strings.Contains(string(b), "--no-status") {
+		t.Errorf("ACP plugin hooks write the host's state file: %s", b)
 	}
 	if slices.Contains(argv, "kept") {
 		t.Errorf("kept MCP server switched off: %q", argv)

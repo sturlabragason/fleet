@@ -67,20 +67,69 @@ func TestCmdHook(t *testing.T) {
 	}
 }
 
+// withStdin runs fn with os.Stdin reading payload, as a tool's hook does.
+func withStdin(t *testing.T, payload string, fn func()) {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "stdin.json")
+	os.WriteFile(p, []byte(payload), 0o644)
+	r, err := os.Open(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	old := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = old }()
+	fn()
+}
+
+func TestCmdHookPlugin(t *testing.T) {
+	f := hookTestFleet(t)
+	dir := status.StateDir(f.Home)
+	// A subagent's start records it and leaves the status alone; so does a
+	// tool call inside the subagent (Copilot's agentId).
+	withStdin(t, `{"agentName":"explore"}`, func() {
+		if err := cmdHook(f, []string{"subagentstart", "--agent", "a1"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if subs, ok := status.ReadHookSubs(f.Home, "a1", time.Now()); !ok || len(subs) != 1 || subs[0].Name != "explore" || subs[0].State != status.SubRunning {
+		t.Fatalf("subs %+v %v", subs, ok)
+	}
+	withStdin(t, `{"agentId":"s1","toolName":"bash"}`, func() { cmdHook(f, []string{"preToolUse", "--agent", "a1"}) })
+	if _, ok := status.ReadState(dir, "a1"); ok {
+		t.Error("subagent events wrote the agent's status")
+	}
+	// The host owns an ACP agent's status: --no-status keeps subagents only.
+	withStdin(t, `{"agentType":"explore"}`, func() { cmdHook(f, []string{"subagentStop", "--agent", "a1", "--no-status"}) })
+	cmdHook(f, []string{"agentStop", "--agent", "a1", "--no-status"})
+	if _, ok := status.ReadState(dir, "a1"); ok {
+		t.Error("--no-status wrote a status")
+	}
+	if subs, _ := status.ReadHookSubs(f.Home, "a1", time.Now()); len(subs) != 1 || subs[0].State != status.SubDone {
+		t.Errorf("subs after stop %+v", subs)
+	}
+	// A notification's kind is what it waits for.
+	withStdin(t, `{"notification_type":"idle_prompt"}`, func() { cmdHook(f, []string{"Notification", "--agent", "a1"}) })
+	if s, ok := status.ReadState(dir, "a1"); !ok || s.Status != status.Waiting || s.WaitingFor != "idle prompt" {
+		t.Errorf("notification: %+v %v", s, ok)
+	}
+}
+
 func TestHookPayload(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "in.json")
 	os.WriteFile(p, []byte(`{"message":"  Claude needs your permission  ","other":1}`), 0o644)
 	r, _ := os.Open(p)
 	defer r.Close()
-	if got := hookPayload(r); got != "Claude needs your permission" {
+	if got := hookPayload(r).Message; got != "Claude needs your permission" {
 		t.Errorf("payload %q", got)
 	}
 	os.WriteFile(p, []byte("not json"), 0o644)
 	r2, _ := os.Open(p)
 	defer r2.Close()
-	if got := hookPayload(r2); got != "" {
-		t.Errorf("broken payload %q", got)
+	if got := hookPayload(r2); got != (status.Payload{}) {
+		t.Errorf("broken payload %+v", got)
 	}
 }
 

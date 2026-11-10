@@ -216,7 +216,7 @@ func (f *Fleet) Wake(name string, force bool) (*board.Agent, error) {
 		// host before it is up; the transcript and session id stay.
 		f.forgetHook(name)
 	} else {
-		argv, _ = p.Argv(agentVars(f.Exe, name, old.SessionID, p, wpr).Fenced(fenceDir(old.Worktree, wpr.FenceWrites)),
+		argv, _ = p.Argv(f.launchVars(name, old.SessionID, p, wpr, fenceDir(old.Worktree, wpr.FenceWrites), false),
 			tools.Launch{Resume: true, Mode: f.modeFor(name, old.Profile, p, wpr.Mode), Extra: wpr.ExtraArgs, Context: ctx})
 	}
 	a, err := f.start(name, old.Profile, p, old.Dir, old.Goal, "", old.SessionID, argv, true,

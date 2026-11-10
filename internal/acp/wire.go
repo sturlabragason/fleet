@@ -148,6 +148,9 @@ type EnvVariable struct {
 type NewSessionParams struct {
 	Cwd        string      `json:"cwd"`
 	MCPServers []MCPServer `json:"mcpServers"`
+	// Meta is the agent-specific _meta object, e.g. claude-agent-acp's
+	// {"claudeCode":{"options":{...}}} (ADR-96).
+	Meta json.RawMessage `json:"_meta,omitempty"`
 }
 
 // NewSessionResult carries the new session's id.
@@ -157,9 +160,10 @@ type NewSessionResult struct {
 
 // SessionRefParams is the params of session/load and session/resume.
 type SessionRefParams struct {
-	SessionID  string      `json:"sessionId"`
-	Cwd        string      `json:"cwd"`
-	MCPServers []MCPServer `json:"mcpServers"`
+	SessionID  string          `json:"sessionId"`
+	Cwd        string          `json:"cwd"`
+	MCPServers []MCPServer     `json:"mcpServers"`
+	Meta       json.RawMessage `json:"_meta,omitempty"`
 }
 
 // SetModeParams switches a session's mode (session/set_mode).
