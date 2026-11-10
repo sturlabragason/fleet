@@ -126,6 +126,16 @@ func git(dir string, args ...string) (string, error) {
 // gitCtx runs git in dir without inherited GIT_DIR-style variables (a git
 // hook or wrapper may set them), which would point every dir at one repo.
 func gitCtx(ctx context.Context, dir string, args ...string) (string, error) {
+	out, err := gitKeep(ctx, dir, args...)
+	if err != nil {
+		return "", err
+	}
+	return out, nil
+}
+
+// gitKeep is gitCtx that also returns stdout when git fails, for commands
+// that report per item and exit non-zero when one fails (git push).
+func gitKeep(ctx context.Context, dir string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
 	for _, e := range os.Environ() {
 		switch k, _, _ := strings.Cut(e, "="); k {
@@ -140,7 +150,7 @@ func gitCtx(ctx context.Context, dir string, args ...string) (string, error) {
 		if errors.As(err, &ee) && len(ee.Stderr) > 0 {
 			err = fmt.Errorf("%w: %s", err, strings.TrimSpace(string(ee.Stderr)))
 		}
-		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
+		return string(out), fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
 	return string(out), nil
 }
