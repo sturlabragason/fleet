@@ -1,8 +1,12 @@
 package wall
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func pids(t *testing.T, w *Wall, panes []string) []string {
@@ -103,4 +107,65 @@ func TestRestoreSkipsGonePanes(t *testing.T) {
 	if on := w.OnWall(); !on["a0"] || on["a1"] || !on["a2"] {
 		t.Errorf("on wall %v", on)
 	}
+}
+
+// winchLogger is a pane command that appends its size to file on every
+// SIGWINCH.
+func winchLogger(t *testing.T, file string) string {
+	sh := file + ".sh"
+	script := "trap 'stty size >> " + file + "' WINCH; while :; do sleep 0.02; done\n"
+	if err := os.WriteFile(sh, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return "sh " + sh
+}
+
+// Restore and HideAll move every pane in one tmux call, so each pane is
+// told its size once, the final one: no redraw at a throwaway size, and no
+// wait on tmux's 250 ms hold-back of a second resize (#41).
+func TestRestoreAndHideAllResizeEachPaneOnce(t *testing.T) {
+	dir := t.TempDir()
+	c, w, _ := setupWall(t, 0)
+	s, _ := w.Read()
+	logs := map[string]string{s.Ov: filepath.Join(dir, "ov")}
+	c.Run("respawn-pane", "-k", "-t", s.Ov, winchLogger(t, logs[s.Ov]))
+	var agents []string
+	for i := 0; i < 3; i++ {
+		name := fmt.Sprintf("a%d", i)
+		f := filepath.Join(dir, name)
+		p, _ := c.Spawn("f", "ag-"+name, "", nil, winchLogger(t, f))
+		c.SetPaneOption(p, "@fleet_agent", name)
+		c.SetPaneOption(p, "@fleet_status", "idle")
+		agents = append(agents, p)
+		logs[p] = f
+	}
+	fillWall(t, w, agents)
+	settle := func() {
+		time.Sleep(600 * time.Millisecond) // past tmux's resize hold-back
+		for _, f := range logs {
+			os.Remove(f)
+		}
+	}
+	check := func(what string, panes []string) {
+		t.Helper()
+		time.Sleep(600 * time.Millisecond)
+		for _, p := range panes {
+			b, _ := os.ReadFile(logs[p])
+			got := strings.Fields(strings.ReplaceAll(string(b), "\n", " "))
+			size, _ := c.Run("display-message", "-p", "-t", p, "#{pane_height} #{pane_width}")
+			if len(got) != 2 || got[0]+" "+got[1] != strings.TrimSpace(size) {
+				t.Errorf("%s: pane %s resized to %v, want once to %s", what, p, got, size)
+			}
+		}
+	}
+	settle()
+	if n, err := w.HideAll(); err != nil || n != 3 {
+		t.Fatalf("HideAll = %d, %v", n, err)
+	}
+	check("hide all", append([]string{s.Ov}, agents...))
+	settle()
+	if n, err := w.Restore(); err != nil || n != 3 {
+		t.Fatalf("Restore = %d, %v", n, err)
+	}
+	check("restore", append([]string{s.Ov}, agents...))
 }

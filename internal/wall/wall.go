@@ -133,31 +133,13 @@ func (w *Wall) apply(force bool) error {
 			}
 		}
 	}
-	var ids []string
-	for _, p := range s.Wall {
-		ids = append(ids, p.ID)
+	p := w.plan(s)
+	session := strings.SplitN(w.Target, ":", 2)[0]
+	for _, id := range p.hide {
+		w.T.Run("break-pane", "-d", "-s", id, "-t", session+":", "-n", "sup-hidden")
 	}
-	// Admirals that do not fit the column move out of the window (Alt-s
-	// brings them back) so the layout covers every pane (DESIGN §6.12).
-	if fit := s.fitSups(); len(fit) < len(s.Sups) {
-		session := strings.SplitN(w.Target, ":", 2)[0]
-		for _, id := range s.Sups[len(fit):] {
-			w.T.Run("break-pane", "-d", "-s", id, "-t", session+":", "-n", "sup-hidden")
-		}
-		s.Sups, s.SupNames, s.SupRows = fit, s.SupNames[:len(fit)], s.SupRows[:len(fit)]
-		s.Panes = nil // the pane set changed: no drag to adopt
-	}
-	w.syncNextOut(s)
-	want, adopted := w.supRows(s)
-	rows := s.Cfg.SupRowsFor(want, len(s.Sups), s.H)
-	lay, leaves := s.Cfg.Render(layout.Input{W: s.W, H: s.H, Sups: s.Sups, SupRows: rows, Ov: s.Ov, Wall: ids, Preset: s.Preset, Focus: w.emphasis(s)})
-	remember := func() {
-		w.setOpt("@fleet_layout", lay)
-		if rows != nil {
-			w.storeSupRows(s.Sups, rows)
-		}
-		w.setOpt(supSeenOption, seenKey(s.H, leaves))
-	}
+	lay, leaves, adopted := p.lay, p.leaves, p.adopted
+	remember := func() { w.remember(s, p) }
 	// An unchanged layout is never re-applied: agent TUIs reflow on every resize.
 	if !force && lay == w.opt("@fleet_layout") {
 		return nil
@@ -235,6 +217,16 @@ func (w *Wall) reorder(want []string) {
 	for i, p := range panes {
 		cur[i] = p.ID
 	}
+	for _, sw := range swaps(cur, want) {
+		w.T.Run("swap-pane", "-d", "-s", sw[0], "-t", sw[1])
+		swapped[sw[0]], swapped[sw[1]] = true, true
+	}
+}
+
+// swaps lists the `swap-pane -s A -t B` pairs that put the panes in cur into
+// want's order. cur is reordered in place.
+func swaps(cur, want []string) [][2]string {
+	var out [][2]string
 	for i, id := range want {
 		if i >= len(cur) || cur[i] == id {
 			continue
@@ -243,10 +235,10 @@ func (w *Wall) reorder(want []string) {
 		if j < 0 {
 			continue
 		}
-		w.T.Run("swap-pane", "-d", "-s", cur[i], "-t", id)
-		swapped[cur[i]], swapped[id] = true, true
+		out = append(out, [2]string{cur[i], id})
 		cur[i], cur[j] = cur[j], cur[i]
 	}
+	return out
 }
 
 func index(l []string, s string) int {
@@ -445,22 +437,28 @@ func (w *Wall) SetPreset(p string) error {
 	if s.Capped() {
 		w.T.Run("display-message", "-t", w.Target, steppedMsg(p, slots))
 	}
+	b := w.newBatch(s)
+	target := w.opt("@fleet_target")
 	for len(s.Wall) > slots {
 		id, ok := EvictCandidate(s.Wall)
 		if !ok {
 			break
 		}
-		w.breakOut(id)
+		b.breakOut(id)
+		if id == target {
+			w.setOpt("@fleet_target", "") // a target off the wall is no target
+		}
 		s.Wall = remove(s.Wall, id)
 	}
-	added := w.fill(s, slots)
+	added := w.fill(s, slots, b)
 	logx.For("wall").Info("preset", "preset", p, "slots", slots, "on_wall", len(s.Wall), "added", added)
-	return w.Apply()
+	_, err = b.commit(s)
+	return err
 }
 
 // fill joins hidden agent panes onto the wall until it has slots panes,
 // most recently used first. Returns how many were added.
-func (w *Wall) fill(s *State, slots int) int {
+func (w *Wall) fill(s *State, slots int, b *batch) int {
 	if len(s.Wall) >= slots {
 		return 0
 	}
@@ -485,10 +483,8 @@ func (w *Wall) fill(s *State, slots int) int {
 		if len(s.Wall) > 0 {
 			target = s.Wall[len(s.Wall)-1].ID
 		}
-		if _, err := w.T.Run("join-pane", "-d", "-s", p.ID, "-t", target); err != nil {
-			continue
-		}
-		w.T.SetPaneOption(p.ID, "@role", "wall")
+		b.join(p.ID, target)
+		p.Role = "wall"
 		s.Wall = append(s.Wall, p)
 		added++
 	}

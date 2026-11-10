@@ -2,6 +2,7 @@ package wall
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/sturlabragason/fleet/internal/logx"
@@ -33,13 +34,19 @@ func (w *Wall) HideAll() (int, error) {
 		return 0, nil
 	}
 	ids := make([]string, 0, len(s.Wall))
+	b := w.newBatch(s)
 	for _, p := range s.Wall {
-		w.breakOut(p.ID)
+		b.breakOut(p.ID)
 		ids = append(ids, p.ID)
 	}
+	if t := w.opt("@fleet_target"); t != "" && slices.Contains(ids, t) {
+		w.setOpt("@fleet_target", "") // a target off the wall is no target
+	}
 	w.setOpt(minimizedOption, strings.Join(ids, " "))
+	s.Wall = nil
+	_, err = b.commit(s)
 	logx.For("wall").Info("hide all", "panes", len(ids))
-	return len(ids), w.Apply()
+	return len(ids), err
 }
 
 // Restore puts the panes the last HideAll took off back on the wall, in their
@@ -61,7 +68,8 @@ func (w *Wall) Restore() (int, error) {
 	}
 	session := strings.SplitN(w.Target, ":", 2)[0]
 	slots := s.Slots()
-	added := 0
+	b := w.newBatch(s)
+	var added []string
 	for _, id := range rec {
 		if len(s.Wall) >= slots {
 			break
@@ -74,18 +82,29 @@ func (w *Wall) Restore() (int, error) {
 		if len(s.Wall) > 0 {
 			target = s.Wall[len(s.Wall)-1].ID
 		}
-		if _, err := w.T.Run("join-pane", "-d", "-s", id, "-t", target); err != nil {
-			continue
-		}
-		w.T.SetPaneOption(id, "@role", "wall")
+		b.join(id, target)
+		p.Role = "wall"
 		s.Wall = append(s.Wall, p)
-		added++
+		added = append(added, id)
 	}
-	logx.For("wall").Info("restore", "panes", added, "recorded", len(rec))
-	if added == 0 {
+	if len(added) == 0 {
+		logx.For("wall").Info("restore", "panes", 0, "recorded", len(rec))
 		return 0, nil
 	}
-	return added, w.Apply()
+	ok, err := b.commit(s)
+	n := len(added)
+	if !ok { // some joins may not have run: count what is on the wall
+		n = 0
+		if s, rerr := w.Read(); rerr == nil {
+			for _, id := range added {
+				if onWall(s, id) {
+					n++
+				}
+			}
+		}
+	}
+	logx.For("wall").Info("restore", "panes", n, "recorded", len(rec), "batched", ok)
+	return n, err
 }
 
 // ToggleAll is the Alt-X key: Restore when the wall is empty and there is
