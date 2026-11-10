@@ -8,7 +8,8 @@ import (
 // markClaude pre-answers Claude Code's two startup modals for dir in its
 // config file: the folder-trust dialog, and the one about the external
 // imports in the user's own CLAUDE.md, which stops a fresh dir just as hard.
-// Every other key of the file, and of that project's own entry, is kept.
+// Claude reads them from the entry of the repo's main checkout, not the cwd,
+// so both are marked (claudeProjects). Every other key of the file, and of that project's own entry, is kept.
 func markClaude(home string, env Env, dir string) (Result, error) {
 	path := claudeConfig(home, env)
 	r := Result{Tool: "claude", File: path}
@@ -21,25 +22,32 @@ func markClaude(home string, env Env, dir string) (Result, error) {
 		if err != nil {
 			return nil, false, errParse(path, err)
 		}
-		entry, err := projects.sub(dir)
-		if err != nil {
-			return nil, false, errParse(path, err)
-		}
 		done := true
-		for _, k := range claudeKeys {
-			if entry.isTrue(k) {
+		for _, key := range claudeProjects(home, dir) {
+			entry, err := projects.sub(key)
+			if err != nil {
+				return nil, false, errParse(path, err)
+			}
+			complete := true
+			for _, k := range claudeKeys {
+				if entry.isTrue(k) {
+					continue
+				}
+				complete = false
+				if err := entry.set(k, true); err != nil {
+					return nil, false, err
+				}
+			}
+			if complete {
 				continue
 			}
 			done = false
-			if err := entry.set(k, true); err != nil {
+			if err := projects.set(key, entry); err != nil {
 				return nil, false, err
 			}
 		}
 		if done {
 			return nil, false, nil
-		}
-		if err := projects.set(dir, entry); err != nil {
-			return nil, false, err
 		}
 		if err := root.set("projects", projects); err != nil {
 			return nil, false, err

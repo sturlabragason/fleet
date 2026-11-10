@@ -5,7 +5,7 @@
 // Each tool keeps the answer somewhere different:
 //
 //	claude   <CLAUDE_CONFIG_DIR>/.claude.json (default ~/.claude.json),
-//	         projects["<dir>"].hasTrustDialogAccepted = true
+//	         projects["<dir>"] and projects["<repo main checkout>"]: trust + imports
 //	copilot  ~/.copilot/config.json, "trustedFolders": ["<dir>", …]
 //	vibe     <VIBE_HOME>/trusted_folders.toml (default ~/.vibe), trusted = […]
 //	agy      no trust store fleet can find; its dialog is answered on screen

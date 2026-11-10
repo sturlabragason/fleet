@@ -108,6 +108,68 @@ func TestMarkClaudeKeepsEveryOtherKey(t *testing.T) {
 	}
 }
 
+// Claude keys its project config by the repo's main checkout, not the cwd:
+// an agent started in a repo subdir stopped on "Allow external CLAUDE.md
+// file imports?" although fleet had marked the subdir. Both must be marked.
+func TestMarkClaudeMarksTheRepoRootClaudeReads(t *testing.T) {
+	home := t.TempDir()
+	tmpHome(t, home)
+	path := filepath.Join(home, ".claude.json")
+	claudeFile(t, path)
+
+	main := filepath.Join(home, "repo")
+	sub := filepath.Join(main, "supervisor")
+	gitdir := filepath.Join(main, ".git", "worktrees", "wt")
+	wt := filepath.Join(home, "repo.wt", "wt")
+	for _, d := range []string{sub, gitdir, wt} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The layout git writes for `git worktree add`.
+	if err := os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: "+gitdir+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(gitdir, "commondir"), []byte("../..\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Mark("claude", nil, sub); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []string{sub, main} {
+		if !claudeTrusted(t, path, d) {
+			t.Errorf("subdir spawn: %s not marked", d)
+		}
+	}
+
+	// A linked worktree reads the main checkout's entry too: reset it first.
+	claudeFile(t, path)
+	r, err := Mark("claude", nil, filepath.Join(wt, "pkg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.Changed || !claudeTrusted(t, path, main) || !claudeTrusted(t, path, filepath.Join(wt, "pkg")) {
+		t.Errorf("worktree spawn: main checkout not marked: %v", readJSON(t, path)["projects"])
+	}
+
+	// A dotfiles repo in home is never what an agent's dir gets trusted as.
+	if err := os.MkdirAll(filepath.Join(home, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Mark("claude", nil, filepath.Join(home, "notes")); err != nil {
+		t.Fatal(err)
+	}
+	if claudeTrusted(t, path, home) {
+		t.Error("marked home as a repo root")
+	}
+
+	// Both entries already set: nothing to write.
+	if r, err := Mark("claude", nil, filepath.Join(wt, "pkg")); err != nil || r.Changed {
+		t.Errorf("second Mark: %+v %v", r, err)
+	}
+}
+
 func TestMarkClaudeUsesTheProfileConfigDir(t *testing.T) {
 	home := t.TempDir()
 	tmpHome(t, home)
