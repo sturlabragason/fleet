@@ -7,6 +7,7 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
 ## 2026-11-10
+- After a fleet update changes the agent or admiral instructions, the next tool result says so once, and the new `fleet_instructions` tool returns the current text (ADR-102).
 - A Claude or Copilot agent with a task that tries to stop without a done, blocked or question report is sent back once to call `fleet_report`, so it reports in the same turn instead of being flagged "no report" 20 s later; agents the user talks to are never sent back (ADR-105).
 - `fleet exec -- go test ./...` runs a build or test for the current worktree on another machine (`[exec] host` in config.toml): it copies the worktree with rsync, runs over ssh and passes the output and exit code back; with no host it runs locally (ADR-107).
 - `[memory] park_idle = "10m"` parks an agent that has been idle that long, freeing its process even when memory is fine; `fleet wake` resumes it (ADR-106).

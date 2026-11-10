@@ -52,6 +52,7 @@ var agentToolDefs = []tool{
 	{"fleet_inbox", "Read your unread messages (marks them read), or with all=true the last N.", obj(nil, map[string]any{
 		"all": map[string]any{"type": "boolean", "description": "show the last N messages, read or not"}, "limit": map[string]any{"type": "integer", "description": "N for all=true (default 20)"}})},
 	reportToolDef,
+	instructionsToolDef,
 }
 
 // unreadSuffix is appended to every agent-mode result.

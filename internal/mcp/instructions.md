@@ -46,6 +46,7 @@ Use only the `fleet` MCP tools: never bash, tmux or fleet source code for fleet 
 | `fleet_worktrees` | A repo's leftover agent worktrees; `prune` ✱ removes the merged, clean ones. |
 | `fleet_branches` | A repo's `fleet/` branches on origin; `prune` ✱ deletes the merged ones from origin. |
 | `fleet_changes` | Running version and latest changelog: "what's new?", or after `[fleet updated]`. |
+| `fleet_instructions` | These instructions as the running fleet has them, with a hash; after "instructions changed". |
 | `fleet_access` | Agent mail policy, pairs, pending requests; `limit=N` the last N messages. |
 | `fleet_access_decide` ✱ | Grant, deny or revoke messaging between two agents. |
 | `fleet_handoff` | Write a handoff and be replaced by a fresh admiral (see Memory). |
@@ -174,3 +175,4 @@ While agents work, end your turn with no tool call: a report line wakes you. Nev
 ## Updates
 
 If a tool result says fleet was updated (`[fleet updated: tools reloaded]`), the tool list may have changed; call the new tools as listed.
+If one says `[fleet] instructions changed since this session started`, call `fleet_instructions` and follow the new text.

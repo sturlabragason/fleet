@@ -73,7 +73,10 @@ type Server struct {
 	selfExe  string        // running executable (default /proc/self/exe; tests set it)
 	pending  *resumedInput // input left over from the previous reload
 	noted    bool          // reload note already appended
-	mu       sync.Mutex
+	// served is the hash of the instructions the client last got, inherited
+	// across a reload (ADR-102).
+	served string
+	mu     sync.Mutex
 
 	// out writes protocol messages; progress, while a tools/call that
 	// carries a progressToken runs, sends it a notifications/progress
@@ -156,6 +159,7 @@ func (s *Server) Serve(r io.Reader, w io.Writer) error {
 	if ri, ok := r.(*resumedInput); ok {
 		s.pending = ri
 	}
+	s.takeServedHash()
 	if s.Reloaded {
 		if _, err := io.WriteString(w, listChanged); err != nil {
 			return err
@@ -213,6 +217,7 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 	}()
 	switch req.Method {
 	case "initialize":
+		s.served = instructionsHash(s.rulesText())
 		return map[string]any{
 			"protocolVersion": ProtocolVersion,
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": true}},
@@ -243,9 +248,12 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		s.progress = s.progressFor(p.Meta.ProgressToken)
 		var text string
 		var err error
-		if s.Agent != "" {
+		switch {
+		case p.Name == "fleet_instructions":
+			text = s.currentInstructions()
+		case s.Agent != "":
 			text, err = s.agentCall(p.Name, p.Arguments)
-		} else {
+		default:
 			text, err = s.call(p.Name, p.Arguments)
 		}
 		s.progress = nil
@@ -265,6 +273,7 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 			s.noted = true
 			text += reloadedNote
 		}
+		text += s.instructionsNote(p.Name)
 		return toolResult(text, isErr), nil
 	}
 	return nil, &rpcError{-32601, "method not found: " + req.Method}
