@@ -43,6 +43,7 @@ var CLIParity = map[string]string{
 	"note":            "fleet_note",
 	"playbook":        "agent: prints the playbook fleet already prepends to every spawn prompt",
 	"touching":        "fleet_touching",
+	"exec":            "agent: runs a build or test from its own worktree",
 	"worktrees":       "fleet_worktrees",
 	"branches":        "fleet_branches",
 	"adr":             "fleet_adr",

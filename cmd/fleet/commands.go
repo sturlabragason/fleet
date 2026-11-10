@@ -92,6 +92,10 @@ const usage = `usage:
   fleet close <name> [--squad]              stop an agent and remove it from the board
                                             (--squad: a leader's agents go with it; without it they
                                             keep running and report to the admiral)
+  fleet exec [--host H] -- <command...>     run a build or test for this worktree on the [exec] host:
+                                            rsync the worktree (minus .git and ignored files), run it over
+                                            ssh in the same subdir, pass output and exit code back; no host
+                                            set: runs here
   fleet park <name>                         stop an idle agent's process to free RAM, keep it on the board
                                             as "parked" with its session id (refused while it works,
                                             waits, or sits on a prompt)
@@ -247,6 +251,8 @@ func run(args []string) error {
 		return cmdPlaybook(rest)
 	case "touching":
 		return cmdTouching(rest)
+	case "exec":
+		return cmdExec(rest)
 	case "adr":
 		return cmdADR(rest)
 	case "merge":

@@ -21,7 +21,7 @@ Work
 - If your tools include `fleet_squad_*` you lead a squad: split the task, spawn one agent per piece, collect their reports and send **one** summary upward. A prompt, merge, push or infra apply escalates; you never answer it for them. A Claude agent of yours stuck on one hard step gets one message with `ultrathink` in it (that turn only, at higher effort), not a respawn at a higher effort.
 
 Pre-merge checklist (all of it, every time)
-1. Locally, build and run only the tests for the packages you changed (`go test ./<pkg>/...`), never the full suite: several agents share the machine. Quote the command.
+1. Locally, build and run only the tests for the packages you changed (`go test ./<pkg>/...`), never the full suite: several agents share the machine. Prefix heavy builds and tests with `fleet exec --` (it runs them on the build host when one is set). Quote the command.
 2. A fresh-context subagent reviewed the diff for bugs that break behaviour, not style or what CI already checks; a large or risky diff gets two or three in parallel, one angle each (correctness, state and concurrency, security). Each finding cites file:line and why it is real; check it before you fix it, and fix or answer every one.
 3. Docs describe the new behaviour; a decision others will ask "why?" about gets a short ADR. Optional, for a new abstraction: before settling it, do a throwaway build of a later feature on top of it in a worktree beside yours (`git worktree add --detach ../<name>.spike`), don't polish it, note in the ADR where the design got in the way, then `git worktree remove --force ../<name>.spike`. If the repo keeps a changelog, a user-facing change adds its line there in the same commit.
 4. The diff has no secrets, private data, stray files or debug output.

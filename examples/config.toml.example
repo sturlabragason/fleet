@@ -173,6 +173,12 @@ mode_args = { autopilot = "--allow-all --autopilot", plan = "--plan" }
 # check_every = "30s"    # at most one park per interval, across all processes
 # park_idle = "10m"      # also park an agent idle this long, memory or not (default: off)
 
+# Where `fleet exec -- <cmd>` runs builds and tests (DESIGN §4, ADR-107): an ssh
+# destination with the toolchain and rsync. Unset: fleet exec runs locally.
+# [exec]
+# host = "buildbox"      # user@host or a ~/.ssh/config alias
+# root = "fleet-exec"    # remote dir, under the remote home, for worktree copies
+
 # The admiral's tool profile when nothing else picks one (DESIGN §6.10).
 # Order: fleet --admiral-profile > $FLEET_ADMIRAL_PROFILE > last choice
 # (Alt-P / fleet admiral profile NAME) > this > copilot.
