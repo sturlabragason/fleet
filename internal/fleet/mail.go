@@ -242,8 +242,21 @@ func (f *Fleet) MailRequest(me, to, reason string) (string, error) {
 	return st, err
 }
 
-// MailSend messages one agent or "*" (every peer I may message) and nudges idle recipients.
+// MailSend messages one agent or "*" (every peer I may message), with the
+// default for needs-action: an ask to one agent wakes it, a broadcast is FYI.
 func (f *Fleet) MailSend(me, to, text string) ([]string, error) {
+	return f.MailSendAs(me, to, text, NeedsAction(to))
+}
+
+// NeedsAction is the default of fleet_msg_send's needs_action (ADR-92): true
+// for a message to one agent, false for a "*" broadcast.
+func NeedsAction(to string) bool { return to != "*" }
+
+// MailSendAs messages one agent or "*". Mail that needs action nudges idle
+// recipients; FYI mail is only queued: idle, done and parked agents see it on
+// their next turn as the "(N unread)" note on any fleet tool result, so it
+// never pays for a cold wake (ADR-92). Admiral boxes are woken either way.
+func (f *Fleet) MailSendAs(me, to, text string, act bool) ([]string, error) {
 	if to == "*" {
 		if err := f.onBoard(me); err != nil {
 			return nil, err
@@ -251,11 +264,15 @@ func (f *Fleet) MailSend(me, to, text string) ([]string, error) {
 	} else if err := f.onBoard(me, to); err != nil {
 		return nil, err
 	}
-	rcpt, err := f.Mail().Send(me, to, text)
+	rcpt, err := f.Mail().SendAs(me, to, text, !act)
 	if err != nil {
 		return nil, err
 	}
-	f.nudge(me, rcpt...)
+	if act {
+		f.nudge(me, rcpt...)
+	} else {
+		logx.For("mail").Info("queued FYI, no wake", "from", me, "recipients", len(rcpt))
+	}
 	f.announceAdmiral(me, rcpt...)
 	return rcpt, nil
 }

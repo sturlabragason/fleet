@@ -149,6 +149,9 @@ type args struct {
 	ACP   bool `json:"acp"`
 	Files []string
 	Prune bool
+	// NeedsAction is agent fleet_msg_send's wake switch; nil is the default,
+	// fleet.NeedsAction (ADR-92).
+	NeedsAction *bool `json:"needs_action"`
 }
 
 // identityBound are the admiral tools that change something or read the
@@ -414,6 +417,11 @@ func (s *Server) status() (string, error) {
 		st := statusWord(a)
 		if a.WithUser(time.Now()) {
 			st += " (interactive)"
+		}
+		if a.Status != "working" {
+			if q := s.F.Mail().UnreadFYI(a.Name); q > 0 {
+				st += fmt.Sprintf(" (%d FYI queued)", q)
+			}
 		}
 		switch a.NoReportTag(time.Now()) {
 		case "1":

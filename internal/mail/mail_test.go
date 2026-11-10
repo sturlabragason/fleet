@@ -398,3 +398,23 @@ func TestGrantsKeepUnknownKeys(t *testing.T) {
 		t.Fatalf("unknown key dropped: %s", b)
 	}
 }
+
+func TestSendFYIKeepsTheFlag(t *testing.T) {
+	s := newStore(t)
+	s.Decide("a", "b", "grant")
+	s.Inbox("b", false, 0)
+	if _, err := s.SendAs("a", "b", "fyi", true); err != nil {
+		t.Fatal(err)
+	}
+	mustSend(t, s, "a", "b", "ask")
+	if n := s.UnreadFYI("b"); n != 1 {
+		t.Fatalf("UnreadFYI = %d, want 1", n)
+	}
+	ms, _ := s.Inbox("b", false, 0)
+	if len(ms) != 2 || !ms[0].FYI || ms[1].FYI {
+		t.Fatalf("flags lost: %+v", ms)
+	}
+	if n := s.UnreadFYI("b"); n != 0 {
+		t.Fatalf("UnreadFYI after read = %d", n)
+	}
+}

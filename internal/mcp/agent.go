@@ -46,8 +46,9 @@ var agentToolDefs = []tool{
 		"from": str("agent that asked"), "decision": map[string]any{"type": "string", "enum": []string{"grant", "deny"}}})},
 	{"fleet_access_revoke", "End access between you and another agent (either side may revoke).", obj([]string{"name"}, map[string]any{
 		"name": str("agent name")})},
-	{"fleet_msg_send", "Message an agent you may message (free or granted in fleet_agents), or \"*\" for all of them. Max 8 KB. The admiral can read every message.", obj([]string{"to", "text"}, map[string]any{
-		"to": str("agent name or *"), "text": str("message text")})},
+	{"fleet_msg_send", "Message an agent you may message (free or granted in fleet_agents), or \"*\" for all of them. Max 8 KB. The admiral can read every message. needs_action=false (the default for \"*\") is FYI: an idle or done agent is not woken and reads it on its next turn; an ask, question or handoff to one agent keeps the default true and wakes it.", obj([]string{"to", "text"}, map[string]any{
+		"to": str("agent name or *"), "text": str("message text"),
+		"needs_action": map[string]any{"type": "boolean", "description": "wake an idle recipient for it (default: true for one agent, false for *)"}})},
 	{"fleet_inbox", "Read your unread messages (marks them read), or with all=true the last N.", obj(nil, map[string]any{
 		"all": map[string]any{"type": "boolean", "description": "show the last N messages, read or not"}, "limit": map[string]any{"type": "integer", "description": "N for all=true (default 20)"}})},
 	reportToolDef,
@@ -106,9 +107,16 @@ func (s *Server) agentCall(name string, raw json.RawMessage) (string, error) {
 		}
 		return "revoked access with " + a.Name, nil
 	case "fleet_msg_send":
-		rcpt, err := s.F.MailSend(me, a.To, a.Text)
+		act := fleet.NeedsAction(a.To)
+		if a.NeedsAction != nil {
+			act = *a.NeedsAction
+		}
+		rcpt, err := s.F.MailSendAs(me, a.To, a.Text, act)
 		if err != nil {
 			return "", err
+		}
+		if !act {
+			return "sent to " + strings.Join(rcpt, ", ") + " (FYI: an idle or done agent reads it on its next turn, not woken)", nil
 		}
 		return "sent to " + strings.Join(rcpt, ", "), nil
 	case "fleet_report":
@@ -150,7 +158,11 @@ func RenderInbox(ms []mail.Msg, all bool) string {
 	var b strings.Builder
 	b.WriteString(InboxHeader + "\n")
 	for _, m := range ms {
-		fmt.Fprintf(&b, "\n[%s %s %s→%s %s] %s\n", m.ID, m.T.Format("2006-01-02 15:04:05"), m.From, m.To, m.Kind, m.Text)
+		kind := m.Kind
+		if m.FYI {
+			kind += " fyi"
+		}
+		fmt.Fprintf(&b, "\n[%s %s %s→%s %s] %s\n", m.ID, m.T.Format("2006-01-02 15:04:05"), m.From, m.To, kind, m.Text)
 	}
 	return b.String()
 }
