@@ -119,6 +119,22 @@ func CleanReport(s string) string {
 	return s
 }
 
+// CheckReport says why text cannot be filed as a report: it is empty or
+// only whitespace once cleaned (issue #5). The CLI also refuses text that
+// begins with "-" (FlagLike) before it gets here.
+func CheckReport(text string) error {
+	if FoldSummary(CleanReport(text)) == "" {
+		return fmt.Errorf("empty report: say what changed, what you need or what you ask")
+	}
+	return nil
+}
+
+// FlagLike is text that begins with "-", such as a lone "--help": a flag
+// that `fleet report` would otherwise file as the report (issue #5).
+func FlagLike(text string) bool {
+	return strings.HasPrefix(strings.TrimSpace(text), "-")
+}
+
 // Report writes a report from an agent to the admiral's inbox. It needs
 // no grant. The message text is "<state>: <full report>" (CleanReport); the
 // one-line headline is FoldSummary of it.
@@ -143,10 +159,10 @@ func (s *Store) ReportTo(from, to, st, summary string) (Msg, error) {
 	if !ValidState(st) {
 		return Msg{}, fmt.Errorf("bad state %q: want one of %s", st, strings.Join(ReportStates, ", "))
 	}
-	summary = CleanReport(summary)
-	if FoldSummary(summary) == "" {
-		return Msg{}, fmt.Errorf("empty summary")
+	if err := CheckReport(summary); err != nil {
+		return Msg{}, err
 	}
+	summary = CleanReport(summary)
 	var m Msg
 	err := s.update(func(x *state) error {
 		id := x.nextID()

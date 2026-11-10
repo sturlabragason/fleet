@@ -24,6 +24,9 @@ func TestReportRoundTrip(t *testing.T) {
 	if msg, isErr := ra.tool("fleet_report", map[string]any{"state": "finished", "summary": "x"}); !isErr || !strings.Contains(msg, "bad state") {
 		t.Fatalf("bad state: %q", msg)
 	}
+	if msg, isErr := ra.tool("fleet_report", map[string]any{"state": "question", "summary": " \n\t "}); !isErr || !strings.Contains(msg, "empty report") {
+		t.Fatalf("whitespace summary: %q", msg)
+	}
 	if msg, isErr := ra.tool("fleet_report", map[string]any{"state": "done", "summary": "nav fixed on feat/nav"}); isErr || msg != "reported done to the admiral" {
 		t.Fatalf("report: %q", msg)
 	}

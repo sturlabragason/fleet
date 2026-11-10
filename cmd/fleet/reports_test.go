@@ -103,3 +103,35 @@ func TestCmdReports(t *testing.T) {
 		t.Fatal("--as with an unknown agent must fail")
 	}
 }
+
+// A flag or empty text is usage, not a report (issue #5).
+func TestCmdReportRefusesFlagOrEmptyText(t *testing.T) {
+	f := reportsHome(t)
+	for _, args := range [][]string{
+		{"--as", "a", "question", "--help"},
+		{"--as", "a", "question", "-h"},
+		{"--as", "a", "blocked", "-x", "y"},
+		{"--as", "a", "done", " ", "\t"},
+		{"--as", "a", "done"},
+	} {
+		err := cmdReport(f, args)
+		if args[len(args)-1] == "--help" || args[len(args)-1] == "-h" {
+			if err != nil {
+				t.Fatalf("%q: help should print usage, got %v", args, err)
+			}
+			continue
+		}
+		if err == nil || !strings.Contains(err.Error(), "usage: fleet report") {
+			t.Fatalf("%q: want usage error, got %v", args, err)
+		}
+	}
+	if err := cmdReport(f, []string{"--help"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := f.UnreadReports(); n != 0 {
+		t.Fatalf("filed %d reports", n)
+	}
+	if err := cmdReport(f, []string{"--as", "a", "question", "which", "db?"}); err != nil || f.UnreadReports() != 1 {
+		t.Fatalf("real report: %v", err)
+	}
+}

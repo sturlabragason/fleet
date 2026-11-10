@@ -98,22 +98,37 @@ func cmdMail(f *fleet.Fleet, args []string) error {
 	return fmt.Errorf("unknown mail command %q\n%s", sub, mailUsage)
 }
 
+const reportUsage = `usage: fleet report [--as NAME] <done|blocked|question|progress> "summary"`
+
 // cmdReport is fleet_report for agents without MCP (DESIGN §6.7).
 func cmdReport(f *fleet.Fleet, args []string) error {
+	for _, a := range args {
+		if a == "-h" || a == "--help" || a == "-help" {
+			fmt.Println(reportUsage)
+			return nil
+		}
+	}
 	fs := flag.NewFlagSet("report", flag.ContinueOnError)
 	as := fs.String("as", "", "act as this agent (default: the fleet pane you run in)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() < 2 {
-		return fmt.Errorf("usage: fleet report [--as NAME] <done|blocked|question|progress> \"summary\"")
+		return fmt.Errorf("%s", reportUsage)
+	}
+	text := strings.Join(fs.Args()[1:], " ")
+	if mail.FlagLike(text) {
+		return fmt.Errorf("refusing to file %q as a report: it looks like a flag\n%s", text, reportUsage)
+	}
+	if err := mail.CheckReport(text); err != nil {
+		return fmt.Errorf("%v\n%s", err, reportUsage)
 	}
 	me, err := f.Me(*as)
 	if err != nil {
 		return err
 	}
 	state := fs.Arg(0)
-	note, err := f.Report(me, state, strings.Join(fs.Args()[1:], " "))
+	note, err := f.Report(me, state, text)
 	if err != nil {
 		return err
 	}
