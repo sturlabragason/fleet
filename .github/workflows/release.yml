@@ -27,6 +27,8 @@ on:
 permissions:
   contents: write # push the tag, create the release
   actions: read # check CI on the release commit
+  id-token: write # sign the build provenance (ADR-103)
+  attestations: write # store the attestations
 
 concurrency:
   group: release
@@ -138,6 +140,13 @@ jobs:
           got=$(out/fleet-linux-amd64 version)
           echo "$got"
           [[ $got == "fleet $V"* ]]
+
+      # Provenance for each release asset, checked by install.sh and
+      # `gh attestation verify` (ADR-103). Dry runs publish nothing to attest.
+      - if: env.DRY_RUN != 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: out/*
 
       - if: env.DRY_RUN == 'true'
         uses: actions/upload-artifact@v4

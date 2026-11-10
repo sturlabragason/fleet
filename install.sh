@@ -7,9 +7,11 @@
 # Environment:
 #   FLEET_VERSION      release tag to install (vX.Y.Z); default: the latest release
 #   FLEET_INSTALL_DIR  where the binary goes; default: ~/.local/bin
+#   FLEET_SKIP_ATTEST  set to 1 to skip the provenance check
 #
-# Downloads fleet-<os>-<arch> and SHA256SUMS, refuses on a checksum mismatch,
-# installs without sudo and never edits shell rc files. Running it again
+# Downloads fleet-<os>-<arch> and SHA256SUMS, refuses on a checksum mismatch
+# and, when gh is installed and logged in, on a failed provenance check
+# (gh attestation verify, ADR-103). Installs without sudo and never edits shell rc files. Running it again
 # replaces the binary in place.
 set -eu
 
@@ -30,6 +32,7 @@ Usage: install.sh [--dry-run] [--help]
 Environment:
   FLEET_VERSION      release tag (vX.Y.Z); default: the latest release
   FLEET_INSTALL_DIR  install directory; default: \$HOME/.local/bin
+  FLEET_SKIP_ATTEST  1 = skip the provenance check (gh attestation verify)
 EOF
 }
 
@@ -95,6 +98,22 @@ resolve_version() {
 	echo "$v"
 }
 
+# Checks that the release workflow of $REPO built the binary (ADR-103).
+# Without gh, or with gh logged out, the SHA-256 check is all there is.
+verify_provenance() {
+	if [ "${FLEET_SKIP_ATTEST:-}" = 1 ]; then
+		say "provenance not checked (FLEET_SKIP_ATTEST=1)"
+	elif ! command -v gh >/dev/null 2>&1; then
+		say "provenance not checked (needs gh: https://cli.github.com)"
+	elif ! gh auth token >/dev/null 2>&1; then
+		say "provenance not checked (gh is not logged in: gh auth login)"
+	elif gh attestation verify "$1" -R "$REPO" --signer-workflow "$REPO/.github/workflows/release.yml" >/dev/null; then
+		say "provenance ok (built by $REPO release.yml)"
+	else
+		die "gh attestation verify failed for ${1##*/}; not installing (releases made before ADR-103 have no attestation; FLEET_SKIP_ATTEST=1 relies on the SHA-256 check alone)"
+	fi
+}
+
 # Everything runs from main, called on the last line, so a download cut
 # short by the network runs nothing.
 main() {
@@ -134,6 +153,7 @@ main() {
 	got=$(sha256 "$tmp/$asset")
 	[ "$got" = "$want" ] || die "checksum mismatch for $asset: SHA256SUMS says $want, the download is $got; not installing"
 	say "sha256  ok ($got)"
+	verify_provenance "$tmp/$asset"
 
 	mkdir -p "$dir" || die "cannot create $dir (set FLEET_INSTALL_DIR to a directory you can write)"
 	chmod 755 "$tmp/$asset"
