@@ -56,6 +56,15 @@ func (s *Store) Request(from, to, reason string) (string, error) {
 	return out, err
 }
 
+// Notice delivers a control message of kind from -> to without an access
+// check, like an access request.
+func (s *Store) Notice(from, to, kind, text string) error {
+	if err := checkPair(from, to); err != nil {
+		return err
+	}
+	return s.update(func(st *state) error { return st.notify(to, from, kind, text) })
+}
+
 func orNone(s string) string {
 	if strings.TrimSpace(s) == "" {
 		return "(none given)"

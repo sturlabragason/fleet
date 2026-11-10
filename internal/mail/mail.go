@@ -40,6 +40,8 @@ const (
 	KindGrant   = "grant"
 	KindDeny    = "deny"
 	KindRevoke  = "revoke"
+	// KindHandover is an admiral asking another for one of its agents.
+	KindHandover = "handover"
 )
 
 // Pair is the access state of one unordered pair of agents (A < B).

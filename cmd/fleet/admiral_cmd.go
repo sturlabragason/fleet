@@ -158,9 +158,27 @@ func cmdAdmiralLs(f *fleet.Fleet) error {
 		if s := supervisor.CurrentOf(f.Home, f.T, mainTarget(), n); s.Profile != "" {
 			prof = s.Profile
 		}
-		fmt.Printf("%-16s %-18s %d agents · %d unread\n", n, prof, owned[n], by[n])
+		pane, err := admiralPane(f, n)
+		if err != nil {
+			pane = "-"
+		}
+		fmt.Printf("%-16s %-18s %-5s %d agents · %d unread\n", n, prof, pane, owned[n], by[n])
 	}
 	return nil
+}
+
+// admiralPane is an admiral's pane, in the main window or, hidden, another.
+func admiralPane(f *fleet.Fleet, name string) (string, error) {
+	pane, err := supervisor.FindPaneOf(f.T, mainTarget(), name)
+	if err != nil {
+		panes, _ := f.T.ListPanes("")
+		for _, p := range panes {
+			if p.Role == "sup" && p.Admiral == name {
+				return p.ID, nil
+			}
+		}
+	}
+	return pane, err
 }
 
 func cmdAdmiralClose(f *fleet.Fleet, args []string) error {
@@ -168,15 +186,7 @@ func cmdAdmiralClose(f *fleet.Fleet, args []string) error {
 		return fmt.Errorf("usage: fleet admiral close NAME")
 	}
 	name := args[0]
-	pane, perr := supervisor.FindPaneOf(f.T, mainTarget(), name)
-	if perr != nil { // a hidden pane lives in another window
-		panes, _ := f.T.ListPanes("")
-		for _, p := range panes {
-			if p.Role == "sup" && p.Admiral == name {
-				pane, perr = p.ID, nil
-			}
-		}
-	}
+	pane, perr := admiralPane(f, name)
 	agents, reports, err := f.CloseAdmiral(name)
 	if err != nil {
 		return err

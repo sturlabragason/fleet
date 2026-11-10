@@ -33,7 +33,7 @@ var CLIParity = map[string]string{
 	"admiral":         "fleet_admirals",
 	"admiral add":     "fleet_admiral_add",
 	"admiral ls":      "fleet_admirals",
-	"admiral close":   "user: closing another admiral moves its agents, the user's call like taking one (DESIGN §6.12)",
+	"admiral close":   "fleet_admiral_close",
 	"admiral min":     "user: pane layout",
 	"admiral act":     "user: the admiral pane key bindings",
 	"admiral give":    "fleet_handover",
