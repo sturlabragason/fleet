@@ -416,6 +416,11 @@ func (f *Fleet) classifyACP(a *board.Agent, dead bool, pane string, now time.Tim
 	if tr.SessionID != "" {
 		a.SessionID = tr.SessionID
 	}
+	// A prompt, answer or cancel typed in the pane is the user's key press,
+	// whichever tmux client sent it (ADR-82).
+	if tr.UserAt.After(a.UserAt) && tr.UserAt.After(a.Created) {
+		a.UserAt = tr.UserAt
+	}
 	if dead {
 		a.Stuck = nil
 		a.LastLine = "process exited"
@@ -466,10 +471,11 @@ const transcriptTail = 64 << 10
 // transcript is what Refresh takes from an acp agent's transcript.
 type transcript struct {
 	Size      int64
-	SessionID string   // the latest session entry
-	Line      string   // the last line worth a tile
-	Error     string   // the last error entry
-	Lines     []string // the tail, rendered as plain lines
+	SessionID string    // the latest session entry
+	Line      string    // the last line worth a tile
+	Error     string    // the last error entry
+	Lines     []string  // the tail, rendered as plain lines
+	UserAt    time.Time // the newest entry the user typed in the pane (ADR-82)
 }
 
 // readTranscript reads the transcript's tail. full reads the whole file,
@@ -513,6 +519,9 @@ func readTranscript(path string, full bool) transcript {
 			}
 		case acphost.KindError:
 			t.Error = e.Text
+		}
+		if e.By == acphost.ByPane && e.At.After(t.UserAt) {
+			t.UserAt = e.At
 		}
 		t.Lines = append(t.Lines, renderEntry(e)...)
 	}

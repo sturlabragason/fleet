@@ -94,6 +94,9 @@ const usage = `usage:
                                             waits, or sits on a prompt)
   fleet wake <name> [--force]               resume a parked agent: the same session, dir and name
                                             (--force: wake even while memory is still low)
+  fleet takeover <name> [--acp]             move an idle acp agent's session into the tool's own screen
+                                            (park, wake on tmux, same wall slot; Ctrl-T in its pane does
+                                            it); --acp hands a tmux agent back to fleet's acp host
   fleet team ls [--json]                    teams with colour and members (running members marked)
   fleet team create <team> [colour]         new empty team; colour: blue, pink, teal, mauve, sky, sapphire or #rrggbb
   fleet team delete <team>                  remove the team; its agents keep running
@@ -336,6 +339,8 @@ func run(args []string) error {
 		}
 		fmt.Printf("woke %s (%s) session %s in %s pane %s\n", ag.Name, ag.Profile, ag.SessionID, ag.Dir, ag.PaneID)
 		return nil
+	case "takeover":
+		return cmdTakeover(f, rest)
 	case "team":
 		return cmdTeam(f, rest)
 	case "mcp":
@@ -500,7 +505,7 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 // in a plain agent's, nothing changes.
 func leaderScope(f *fleet.Fleet, cmd string, rest []string) error {
 	switch cmd {
-	case "close", "kill", "send", "park", "wake":
+	case "close", "kill", "send", "park", "wake", "takeover":
 	default:
 		return nil
 	}

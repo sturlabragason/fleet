@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -34,6 +33,15 @@ type Config struct {
 	Mode          string    // session mode set after new, resume or load; "" sets none
 	Out           io.Writer // the pane; nil draws nothing
 	In            io.Reader // typed lines; nil reads nothing
+	// Keys reads In as raw key presses (a terminal in raw mode) and keeps
+	// an input line at the bottom of Out (ADR-82); off, In is read as lines.
+	Keys bool
+	// Width is the pane's width in columns for the input line; nil is 80.
+	Width func() int
+	// Takeover, when set, is what Ctrl-T runs: hand the session to the
+	// tool's own screen (fleet takeover). It must not block.
+	// say prints a line in the pane, for an outcome that comes later.
+	Takeover func(say func(string)) error
 }
 
 // agentConn is the part of *acp.Client the host uses.
@@ -106,6 +114,7 @@ type host struct {
 	tr    stateTracker
 	tx    *transcript
 	out   io.Writer
+	con   *console // the input line, when Keys
 	bg    context.Context
 	stopC chan struct{}
 	once  sync.Once
@@ -164,6 +173,11 @@ func run(ctx context.Context, cfg Config, start starter, tr stateTracker) error 
 	if h.out == nil {
 		h.out = io.Discard
 	}
+	if cfg.Keys && cfg.In != nil {
+		h.con = newConsole(h.out, cfg.Width)
+		h.out = h.con
+		h.con.hint()
+	}
 	h.mu.Lock()
 	h.apply(tr.State())
 	h.mu.Unlock()
@@ -193,7 +207,9 @@ func run(ctx context.Context, cfg Config, start starter, tr stateTracker) error 
 	}()
 	setupC := make(chan error, 1)
 	go func() { setupC <- h.setup() }()
-	if cfg.In != nil {
+	if cfg.In != nil && cfg.Keys {
+		go h.keys(cfg.In)
+	} else if cfg.In != nil {
 		go h.input(cfg.In)
 	}
 
@@ -436,14 +452,19 @@ func options(p acp.RequestPermissionParams) []Option {
 // resolve answers q once: it leaves the open questions, the tracker and
 // transcript hear of it and RequestPermission returns r. Caller holds mu.
 func (h *host) resolve(q *question, r acp.RequestPermissionResult, label string) {
-	if h.dropQuestion(q, r, label) {
+	h.resolveBy(q, r, label, "")
+}
+
+// resolveBy is resolve recording who answered (Entry.By).
+func (h *host) resolveBy(q *question, r acp.RequestPermissionResult, label, by string) {
+	if h.dropQuestion(q, r, label, by) {
 		h.apply(h.tr.PermissionAnswered(q.p.ToolCall.ToolCallID))
 	}
 }
 
 // dropQuestion is resolve without writing the resulting state, for a
 // caller that writes the state it ends in. It reports whether q was open.
-func (h *host) dropQuestion(q *question, r acp.RequestPermissionResult, label string) bool {
+func (h *host) dropQuestion(q *question, r acp.RequestPermissionResult, label, by string) bool {
 	i := -1
 	for j, o := range h.questions {
 		if o == q {
@@ -455,14 +476,14 @@ func (h *host) dropQuestion(q *question, r acp.RequestPermissionResult, label st
 	}
 	h.questions = append(h.questions[:i], h.questions[i+1:]...)
 	q.answer <- r
-	h.emit(Entry{Kind: KindAnswer, Text: label, ToolID: q.p.ToolCall.ToolCallID}, true)
+	h.emit(Entry{Kind: KindAnswer, Text: label, ToolID: q.p.ToolCall.ToolCallID, By: by}, true)
 	h.tr.PermissionAnswered(q.p.ToolCall.ToolCallID)
 	return true
 }
 
 // answer answers the oldest open question by 1-based option number or by
 // option id.
-func (h *host) answer(n int, id string) error {
+func (h *host) answer(n int, id, by string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if len(h.questions) == 0 {
@@ -486,23 +507,26 @@ func (h *host) answer(n int, id string) error {
 	default:
 		return fmt.Errorf("option %d out of range 1-%d", n, len(opts))
 	}
-	h.resolve(q, acp.Selected(pick.OptionID), pick.Name)
+	h.resolveBy(q, acp.Selected(pick.OptionID), pick.Name, by)
 	return nil
 }
 
 // prompt sends text as a prompt; one sent during a turn steers it. Before
 // the session is ready it is queued and sent once it is.
-func (h *host) prompt(text string) error {
+func (h *host) prompt(text, by string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.stopping || h.exited {
 		return errors.New("agent is stopping")
 	}
 	if !h.ready {
+		if by != "" { // drawn only: setup records it when it is sent
+			h.emit(Entry{Kind: KindUser, Text: text + "  (queued until the session is ready)"}, false)
+		}
 		h.pending = append(h.pending, text)
 		return nil
 	}
-	h.send(text)
+	h.sendBy(text, by)
 	return nil
 }
 
@@ -510,9 +534,12 @@ func (h *host) prompt(text string) error {
 // last prompt in flight returns: then a question the agent left open is
 // moot and is answered "cancelled". A prompt that fails while others run
 // (a rejected steer) only leaves an error entry. Caller holds mu.
-func (h *host) send(text string) {
+func (h *host) send(text string) { h.sendBy(text, "") }
+
+// sendBy is send recording who typed the prompt (Entry.By).
+func (h *host) sendBy(text, by string) {
 	h.flush()
-	h.emit(Entry{Kind: KindUser, Text: text}, true)
+	h.emit(Entry{Kind: KindUser, Text: text, By: by}, true)
 	h.inflight++
 	h.apply(h.tr.PromptSent())
 	c, sid := h.conn, h.sid
@@ -537,7 +564,7 @@ func (h *host) send(text string) {
 		}
 		if h.inflight == 0 {
 			for len(h.questions) > 0 {
-				h.dropQuestion(h.questions[0], acp.CancelledOutcome(), "cancelled")
+				h.dropQuestion(h.questions[0], acp.CancelledOutcome(), "cancelled", "")
 			}
 		}
 		h.apply(h.tr.PromptDone(r.StopReason, err))
@@ -546,7 +573,7 @@ func (h *host) send(text string) {
 
 // cancel sends session/cancel and answers open questions "cancelled", as
 // ACP asks of a client that cancels.
-func (h *host) cancel() error {
+func (h *host) cancel(by string) error {
 	h.mu.Lock()
 	c, sid := h.conn, h.sid
 	h.mu.Unlock()
@@ -555,8 +582,12 @@ func (h *host) cancel() error {
 	}
 	err := c.Cancel(sid)
 	h.mu.Lock()
+	if by != "" {
+		h.flush()
+		h.emit(Entry{Kind: KindCancel, By: by}, true)
+	}
 	for len(h.questions) > 0 {
-		h.resolve(h.questions[0], acp.CancelledOutcome(), "cancelled")
+		h.resolveBy(h.questions[0], acp.CancelledOutcome(), "cancelled", by)
 	}
 	h.mu.Unlock()
 	return err
@@ -657,30 +688,13 @@ func (h *host) keepUnsent() {
 	h.emit(Entry{Kind: KindError, Text: text}, true)
 }
 
-// input reads typed lines: a digit answers the open question, anything
-// else is a prompt.
+// input reads typed lines (In is not a terminal): a digit answers the
+// open question, anything else is a prompt.
 func (h *host) input(r io.Reader) {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64<<10), 1<<20)
 	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" {
-			continue
-		}
-		h.mu.Lock()
-		open := len(h.questions) > 0
-		h.mu.Unlock()
-		var err error
-		if n, nerr := strconv.Atoi(line); open && nerr == nil {
-			err = h.answer(n, "")
-		} else {
-			err = h.prompt(line)
-		}
-		if err != nil {
-			h.mu.Lock()
-			fmt.Fprintln(h.out, "! "+err.Error())
-			h.mu.Unlock()
-		}
+		h.submit(sc.Text())
 	}
 }
 

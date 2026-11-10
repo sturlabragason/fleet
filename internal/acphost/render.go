@@ -30,10 +30,12 @@ func render(e Entry) string {
 		for i, o := range e.Options {
 			fmt.Fprintf(&b, "\n  %d) %s", i+1, o.Name)
 		}
-		b.WriteString("\n  type a number to answer")
+		b.WriteString("\n  type a number and Enter to answer, Esc to cancel the turn")
 		return b.String()
 	case KindAnswer:
 		return "  -> " + e.Text
+	case KindCancel:
+		return "^ cancel sent"
 	case KindError:
 		return "! " + clip(e.Text)
 	case KindSession:

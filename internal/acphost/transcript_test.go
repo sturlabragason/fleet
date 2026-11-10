@@ -66,7 +66,7 @@ func TestRenderIsShort(t *testing.T) {
 	cases := map[string]Entry{
 		"> hi":               {Kind: KindUser, Text: "hi"},
 		"* Read (completed)": {Kind: KindTool, Title: "Read", Status: "completed"},
-		"? Run\n  1) Allow\n  2) No\n  type a number to answer": {Kind: KindPermission, Title: "Run", Options: []Option{{Name: "Allow"}, {Name: "No"}}},
+		"? Run\n  1) Allow\n  2) No\n  type a number and Enter to answer, Esc to cancel the turn": {Kind: KindPermission, Title: "Run", Options: []Option{{Name: "Allow"}, {Name: "No"}}},
 		"":               {Kind: KindStatus, Status: "idle"},
 		"! status error": {Kind: KindStatus, Status: "error"},
 	}

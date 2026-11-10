@@ -5,6 +5,7 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-10
+- You can work with an ACP agent directly in its pane: type a prompt at the `›` line, answer a question with its number, press Esc to cancel the turn, and Ctrl-T or `fleet takeover <name>` to continue the same session in the tool's own screen (`--acp` hands it back); the admiral won't send over you while you do (ADR-82).
 - Nothing in fleet blinks or animates any more: tiles show one static dot per state (○ working, ● waiting), and the unread-report badge is a quiet `● main 8` that no longer flashes on and off; a leaked test process can no longer reach your fleet server (ADR-81).
 - A report wake now reaches the admiral even while a read-only tmux client is attached, and a wake that cannot be submitted no longer sits in the input box blocking every retry; your own claude or copilot profiles get the fleet report tool and status hooks without editing `tools.toml` (ADR-80).
 - The admiral pane and the status bar no longer flicker: the overview repaints its spinners 3 times a second instead of 10, and tmux now draws each update in one piece on terminals that support it (re-attach once to pick that up).
