@@ -82,6 +82,7 @@ type ACPHostOpts struct {
 	Mode          string   // ACP session mode (ADR-76)
 	MCP           string   // peer MCP config for the session (ADR-76)
 	UnsetEnv      []string // variables the tool must not inherit (ADR-76)
+	Profile       string   // shown in the pane's header (ADR-84)
 }
 
 // ACPHostArgv is the command an acp agent's window runs: the host, its
@@ -106,6 +107,9 @@ func ACPHostArgv(exe, name, dir string, o ACPHostOpts, tool []string) []string {
 	if len(o.UnsetEnv) > 0 {
 		argv = append(argv, "--unset-env", strings.Join(o.UnsetEnv, ","))
 	}
+	if o.Profile != "" {
+		argv = append(argv, "--profile", o.Profile)
+	}
 	return append(append(argv, "--"), tool...)
 }
 
@@ -115,7 +119,7 @@ func ACPHostArgv(exe, name, dir string, o ACPHostOpts, tool []string) []string {
 // claude in CLAUDE_CODE_EXECUTABLE, the session mode, peer MCP over the
 // session and the inherited secrets to drop.
 func (f *Fleet) acpSetup(name, profile string, p tools.Profile, mode string) (tools.Profile, ACPHostOpts, error) {
-	o := ACPHostOpts{CopilotEvents: copilotEvents(p), UnsetEnv: p.ACPUnsetEnv}
+	o := ACPHostOpts{CopilotEvents: copilotEvents(p), UnsetEnv: p.ACPUnsetEnv, Profile: profile}
 	if len(p.ACPEnvVars) > 0 {
 		path := ""
 		if p.ACPNeedsCommandPath() {

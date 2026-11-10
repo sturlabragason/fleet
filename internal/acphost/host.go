@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/charmbracelet/colorprofile"
 	"io"
 	"os"
 	"os/exec"
@@ -36,8 +37,16 @@ type Config struct {
 	// Keys reads In as raw key presses (a terminal in raw mode) and keeps
 	// an input line at the bottom of Out (ADR-82); off, In is read as lines.
 	Keys bool
-	// Width is the pane's width in columns for the input line; nil is 80.
-	Width func() int
+	// Size is the pane's width and height; nil (or zeros) is 80x24.
+	Size func() (int, int)
+	// Resized redraws the pane, after SIGWINCH.
+	Resized <-chan os.Signal
+	// Profile is the fleet profile named in the pane's header; "" shows
+	// the command's name.
+	Profile string
+	// Color is what the pane can show; the zero value (NoTTY) draws plain
+	// text without escape sequences.
+	Color colorprofile.Profile
 	// Takeover, when set, is what Ctrl-T runs: hand the session to the
 	// tool's own screen (fleet takeover). It must not block.
 	// say prints a line in the pane, for an outcome that comes later.
@@ -114,7 +123,7 @@ type host struct {
 	tr    stateTracker
 	tx    *transcript
 	out   io.Writer
-	con   *console // the input line, when Keys
+	con   *view // the screen with the input line, when Keys
 	bg    context.Context
 	stopC chan struct{}
 	once  sync.Once
@@ -174,9 +183,19 @@ func run(ctx context.Context, cfg Config, start starter, tr stateTracker) error 
 		h.out = io.Discard
 	}
 	if cfg.Keys && cfg.In != nil {
-		h.con = newConsole(h.out, cfg.Width)
+		prof := cfg.Profile
+		if prof == "" {
+			prof = filepath.Base(cfg.Argv[0])
+		}
+		h.con = newView(h.out, cfg.Size, cfg.Color, cfg.Name, prof)
 		h.out = h.con
-		h.con.hint()
+		if cfg.Resized != nil {
+			go func() {
+				for range cfg.Resized {
+					h.con.redraw()
+				}
+			}()
+		}
 	}
 	h.mu.Lock()
 	h.apply(tr.State())
@@ -330,6 +349,10 @@ func (h *host) emit(e Entry, record bool) {
 		if err := h.tx.add(e); err != nil {
 			logx.For("acphost").Warn("transcript", "agent", h.cfg.Name, "err", err)
 		}
+	}
+	if h.con != nil {
+		h.con.add(e)
+		return
 	}
 	if s := render(e); s != "" {
 		fmt.Fprintln(h.out, s)

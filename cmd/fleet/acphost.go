@@ -17,7 +17,7 @@ import (
 	"golang.org/x/term"
 )
 
-const acpHostUsage = "usage: fleet acp-host <name> [--dir D] [--session ID] [--prompt-file F] [--copilot-events] [--mode M] [--mcp JSON] [--unset-env A,B] -- <argv...>"
+const acpHostUsage = "usage: fleet acp-host <name> [--dir D] [--session ID] [--prompt-file F] [--copilot-events] [--mode M] [--mcp JSON] [--unset-env A,B] [--profile P] -- <argv...>"
 
 // cmdACPHost runs one ACP agent in this terminal (its tmux window) until it
 // is stopped or its child exits (DESIGN §7d, ADR-74).
@@ -34,6 +34,7 @@ func cmdACPHost(args []string) error {
 	mode := fs.String("mode", "", "session mode to set (session/set_mode) after the session starts")
 	mcpJSON := fs.String("mcp", "", `MCP servers for the session, as {"mcpServers":{...}} with stdio servers`)
 	unset := fs.String("unset-env", "", "comma-separated variables the agent must not inherit")
+	profile := fs.String("profile", "", "the fleet profile, shown in the pane's header")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -76,7 +77,7 @@ func cmdACPHost(args []string) error {
 	cfg := acphost.Config{
 		Home: logx.Home(), Name: name, Dir: *dir, Argv: argv, Env: acphost.FilterEnv(os.Environ(), drop),
 		SessionID: *session, Prompt: prompt, OnPromptSent: sent, CopilotEvents: *copilotEvents,
-		Mode: *mode, MCP: mcp,
+		Mode: *mode, MCP: mcp, Profile: *profile,
 		Out: os.Stdout, In: os.Stdin,
 	}
 	// A terminal gets the input line: raw key presses, so Esc cancels and
@@ -84,16 +85,21 @@ func cmdACPHost(args []string) error {
 	if fd := int(os.Stdin.Fd()); term.IsTerminal(fd) {
 		if old, err := term.MakeRaw(fd); err == nil {
 			defer term.Restore(fd, old)
-			os.Stdout.WriteString(acphost.PasteOn)
-			defer os.Stdout.WriteString(acphost.PasteOff)
+			os.Stdout.WriteString(acphost.ScreenOn + acphost.PasteOn)
+			defer os.Stdout.WriteString(acphost.PasteOff + acphost.ScreenOff)
 			cfg.Keys = true
-			cfg.Width = func() int {
-				w, _, err := term.GetSize(int(os.Stdout.Fd()))
+			cfg.Color = acphost.ColorProfile(os.Environ())
+			cfg.Size = func() (int, int) {
+				w, h, err := term.GetSize(int(os.Stdout.Fd()))
 				if err != nil {
-					return 0
+					return 0, 0
 				}
-				return w
+				return w, h
 			}
+			winch := make(chan os.Signal, 1)
+			signal.Notify(winch, syscall.SIGWINCH)
+			defer signal.Stop(winch)
+			cfg.Resized = winch
 			if exe, err := os.Executable(); err == nil {
 				cfg.Takeover = func(say func(string)) error { return paneTakeover(exe, logx.Home(), name, say) }
 			}
