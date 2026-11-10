@@ -77,3 +77,24 @@ jobs:
       - name: Install tmux
         run: sudo apt-get update && sudo apt-get install -y tmux
       - run: go test -race ./...
+
+  # install.sh (ADR-78): lint it, then install the latest release with it, as
+  # a user would: curl on ubuntu, busybox sh and wget in alpine.
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck -s sh install.sh
+      - name: install with curl into a temp HOME
+        run: |
+          home=$(mktemp -d)
+          HOME=$home sh install.sh --dry-run
+          HOME=$home sh install.sh
+          HOME=$home sh install.sh # again: an upgrade overwrites cleanly
+          "$home/.local/bin/fleet" version
+          dir=$(mktemp -d)
+          FLEET_INSTALL_DIR=$dir FLEET_VERSION=v1.3.0 sh install.sh
+          "$dir/fleet" version | grep -q '^fleet v1.3.0 '
+      - name: install with busybox wget in alpine
+        run: docker run --rm -v "$PWD/install.sh:/install.sh:ro" alpine:3 sh -c 'sh /install.sh && /root/.local/bin/fleet version'
