@@ -348,7 +348,7 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		{"set-option", "-g", "display-panes-colour", theme.Overlay0},
 		{"set-option", "-g", "display-panes-active-colour", theme.Text},
 		{"set-option", "-g", "clock-mode-colour", theme.Supervisor},
-		// The unread-report badge (ADR-36) is set by the overview poll.
+		// The unread-report badge (ADR-36) is set by the resident poll: the watcher when live (ADR-75), else the overview.
 		{"set-option", "-g", "status-left", "#[fg=" + theme.Crust + ",bg=" + theme.Supervisor + ",bold] fleet #[default] #{?" + fleet.BadgeOption + ",#[fg=" + theme.Crust + "#,bg=" + theme.Waiting + "#,bold]#{?#{&&:#{" + fleet.MultiOption + "},#{" + fleet.BadgeByOption + "}},#{" + fleet.BadgeByOption + "}, ✉ #{" + fleet.BadgeOption + "} }#[default] ,}"},
 		{"set-option", "-g", "status-left-length", "100"},
 		{"set-option", "-g", "window-status-separator", ""},

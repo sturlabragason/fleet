@@ -233,6 +233,8 @@ func TestCmdWatchOnceDoesNoHousekeeping(t *testing.T) {
 
 // The overview delivers wakes even on the polls where a live watcher means
 // it reads board.json instead of capturing panes itself (ADR-51).
+// It leaves the status-line badge to the watcher, so two writers on
+// different builds cannot set it in turn and make it blink (ADR-75).
 func TestOverviewDeliversWakeWithWatcherLive(t *testing.T) {
 	a := newFakeAdmiralFleet(t)
 	if _, err := a.f.Report("a", "blocked", "need creds"); err != nil {
@@ -245,9 +247,17 @@ func TestOverviewDeliversWakeWithWatcherLive(t *testing.T) {
 		t.Fatal("heartbeat not live")
 	}
 	a.goIdle()
+	// The watcher's badge; the overview must not overwrite it (ADR-75).
+	const watcherBadge = "2 reports: a, b"
+	a.f.T.Run("set-option", "-g", fleet.BadgeOption, watcherBadge)
 	be := &backend{f: a.f}
-	if _, err := be.Refresh(); err != nil {
-		t.Fatal(err)
+	for i := 0; i < 3; i++ {
+		if _, err := be.Refresh(); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := a.f.T.Run("show-options", "-gqv", fleet.BadgeOption); strings.TrimSpace(got) != watcherBadge {
+			t.Fatalf("poll %d: overview rewrote the watcher's badge: %q", i, got)
+		}
 	}
 	want := fleet.ReportLine("a", "blocked", "need creds")
 	if got := a.lines(); len(got) != 1 || got[0] != want {

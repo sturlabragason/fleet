@@ -264,21 +264,31 @@ const WakeMaxTries = 3
 // admiral has read its reports; anything else puts it back, so a wake that
 // could not be typed is retried on the next poll (the watcher polls,
 // DESIGN §7c) instead of being lost (ADR-51).
-func (f *Fleet) DeliverWake() {
+func (f *Fleet) DeliverWake() { f.deliverWake(true) }
+
+// RetryWake is DeliverWake without the badge: for the overview while a
+// watcher is live. The badge has one writer, the watcher, which re-execs
+// on a rebuild; two writers whose code disagrees on what is unread set it
+// in turn every poll and the badge blinks (ADR-75).
+func (f *Fleet) RetryWake() { f.deliverWake(false) }
+
+func (f *Fleet) deliverWake(badge bool) {
 	for _, box := range f.AdmiralBoxes() {
-		f.DeliverWakeTo(box)
+		f.deliverWakeTo(box, badge)
 	}
 	for _, l := range f.Leaders() {
-		f.DeliverWakeTo(l)
+		f.deliverWakeTo(l, badge)
 	}
 }
 
 // DeliverWakeTo delivers one box's queue: the admiral's, or a leader's
 // (ADR-53). Everything below is the same for both; only the badge is the
 // admiral's alone.
-func (f *Fleet) DeliverWakeTo(box string) {
+func (f *Fleet) DeliverWakeTo(box string) { f.deliverWakeTo(box, true) }
+
+func (f *Fleet) deliverWakeTo(box string, badge bool) {
 	unread := f.unreadFor(box)
-	if box == mail.Supervisor {
+	if badge && box == mail.Supervisor {
 		f.syncBadge()
 	}
 	b, err := os.ReadFile(f.wakePath(box))
