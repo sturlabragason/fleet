@@ -51,6 +51,10 @@ type Agent struct {
 	// Exit is the first sighting of the agent's dead pane (DESIGN §6.7,
 	// ADR-33); set once, so each death is reported once.
 	Exit *Exit `json:"exit,omitempty"`
+	// Closing is when a close of an acp agent began: its host exits cleanly
+	// on the stop request before fleet kills the window, and the dead-pane
+	// reaper must not report that as a death (ADR-74).
+	Closing time.Time `json:"closing,omitzero"`
 	// Worktree is the git worktree the agent works in: the one spawn made
 	// for it, or the linked worktree an adopted session was already in
 	// (DESIGN §4, ADR-39). nil: it works in a plain checkout. Dir is the
@@ -101,11 +105,20 @@ type Agent struct {
 	// idle is a boundary inside one turn). It is what the user's agents are
 	// judged by, since what the user types sets no PromptAt (ADR-68).
 	TurnAt time.Time `json:"turn_at,omitempty"`
+	// Driver is "acp" for an agent run under `fleet acp-host` (DESIGN §7d,
+	// ADR-74); "" is the tmux driver, which every agent had before it.
+	Driver string `json:"driver,omitempty"`
 
 	// extra holds board keys this build does not know, so they survive a
 	// round trip (ADR-58).
 	extra jsonx.Extra
 }
+
+// DriverACP is Agent.Driver for an agent run over ACP.
+const DriverACP = "acp"
+
+// ACP reports whether the agent runs under the acp driver.
+func (a *Agent) ACP() bool { return a != nil && a.Driver == DriverACP }
 
 // Card is a spawn's task card: what the task is, how fleet checks it is
 // done, and where the agent writes its result (DESIGN §18 #5/#6, ADR-43).

@@ -55,7 +55,17 @@ type Profile struct {
 	// line, so the user's own settings file is never written to. Left out
 	// when the vars carry no hook config.
 	HookArgs []string
+	// ACP are the args after the profile's own args that start the tool's
+	// ACP server on stdio (DESIGN §7d, ADR-74). Empty = the profile can't
+	// run under the acp driver.
+	ACP []string
+	// ACPModeArgs maps a starting-mode name to its args under the acp
+	// driver, where keystroke modes don't exist.
+	ACPModeArgs map[string][]string
 }
+
+// HasACP reports whether the profile can run under the acp driver.
+func (p Profile) HasACP() bool { return len(p.ACP) > 0 }
 
 // AutoMode is the canonical starting mode that means "run every tool call
 // without asking". Each tool spells it differently (`--allow-all --autopilot`,
@@ -122,6 +132,8 @@ session_path = "~/.copilot/session-state/{id}"
 subagent_log = "~/.copilot/session-state/{id}/events.jsonl"
 patterns = "copilot"
 peer_args = ["--additional-mcp-config", "{peer_mcp}"]
+acp = ["--acp"]
+acp_mode_args = { auto = "--allow-all" }
 ` + copilotContext + `
 
 [claude-copilot]
@@ -135,6 +147,8 @@ session_path = "~/.copilot/session-state/{id}"
 subagent_log = "~/.copilot/session-state/{id}/events.jsonl"
 patterns = "copilot"
 peer_args = ["--additional-mcp-config", "{peer_mcp}"]
+acp = ["--acp"]
+acp_mode_args = { auto = "--allow-all" }
 ` + copilotContext + `
 
 [claude]
@@ -155,6 +169,8 @@ command = "agy"
 mode_args = { auto = "--dangerously-skip-permissions", accept-edits = "--mode accept-edits", plan = "--mode plan" }
 resume = ["--conversation", "{id}"]
 patterns = "agy"
+acp = ["acp"]
+acp_mode_args = { auto = "--dangerously-skip-permissions" }
 
 [vibe]
 command = "vibe"
@@ -168,6 +184,8 @@ args = ["fakeagent", "{name}"]
 mode_args = { auto = "" }
 patterns = "fake"
 ready = "fakeagent .+ ready"
+acp = ["--acp"]
+acp_mode_args = { auto = "" }
 `
 
 // Path is the user override file.
@@ -261,6 +279,12 @@ func apply(p *Profile, sec map[string]conf.Value) {
 	}
 	if v, ok := sec["hook_args"]; ok {
 		p.HookArgs, _ = v.([]string)
+	}
+	if v, ok := sec["acp"]; ok {
+		p.ACP, _ = v.([]string)
+	}
+	if v := conf.Map(sec, "acp_mode_args"); v != nil {
+		p.ACPModeArgs = splitModes(v)
 	}
 }
 
@@ -394,6 +418,38 @@ func (p Profile) Argv(v Vars, l Launch) (argv []string, embedded bool) {
 		embedded = true
 	}
 	return argv, embedded
+}
+
+// ACPArgv builds the argv that starts the profile's ACP server for the acp
+// driver (ADR-74): command, peer MCP args, the profile's args, its ACP args,
+// the ACP mode args, the context args and the extra args. No launch id,
+// resume or prompt args: the host carries the session and the prompt over
+// ACP, and no hook args: the host writes the status itself.
+func (p Profile) ACPArgv(v Vars, l Launch) []string {
+	argv := []string{v.expand(p.Command)}
+	add := func(as []string) {
+		for _, a := range as {
+			argv = append(argv, v.expand(a))
+		}
+	}
+	if v.PeerMCP != "" || v.PeerMCPClaude != "" {
+		add(p.PeerArgs)
+	}
+	add(p.Args)
+	add(p.ACP)
+	add(p.ACPModeArgs[l.Mode])
+	add(p.ContextArgs[l.Context])
+	return append(argv, l.Extra...)
+}
+
+// HasACPMode reports whether the profile knows the named mode under the acp
+// driver.
+func (p Profile) HasACPMode(mode string) bool {
+	if mode == "" {
+		return true
+	}
+	_, ok := p.ACPModeArgs[mode]
+	return ok
 }
 
 // SessionGlob returns SessionPath with {id} substituted and a leading ~ expanded.

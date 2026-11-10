@@ -168,6 +168,9 @@ type SpawnOpts struct {
 	// (ADR-57). "" picks the default for the spawn: pro with a worktree,
 	// light without one.
 	Effort string
+	// Driver is "tmux" or "acp" (DESIGN §7d, ADR-74); "" takes the
+	// profile's driver from config.toml, else tmux.
+	Driver string
 }
 
 // Spawn starts an agent in its own hidden window, with the config file's
@@ -213,6 +216,15 @@ func (f *Fleet) SpawnWith(o SpawnOpts, name, profile, dir, prompt string) (*boar
 		}
 		o.Effort = string(l) // the board keeps the canonical name, not "PRO"
 	}
+	driver, err := f.driverFor(o.Driver, profile)
+	if err != nil {
+		return nil, err
+	}
+	if driver == prefs.DriverACP {
+		if err := acpSocketFits(f.Home, name); err != nil {
+			return nil, err
+		}
+	}
 	card := NormalizeCard(o.Card)
 	if err := f.checkRole(name, o.Role); err != nil {
 		return nil, err
@@ -220,13 +232,13 @@ func (f *Fleet) SpawnWith(o SpawnOpts, name, profile, dir, prompt string) (*boar
 	if o.Role.Leader {
 		f.MakeLeader(name)
 	}
-	if a, err := f.enqueue(name, profile, dir, prompt, wt, card, o.Role, o.Effort); a != nil || err != nil {
+	if a, err := f.enqueue(name, profile, dir, prompt, wt, card, o.Role, o.Effort, driver); a != nil || err != nil {
 		return a, err
 	}
 	// The busy count and the launch are not one critical section, so two
 	// concurrent spawns can both see the last free slot: the cap is
 	// best-effort and may be exceeded by one per racing spawn.
-	return f.launch(name, profile, dir, prompt, false, wt, card, o.Role, o.Effort)
+	return f.launch(name, profile, dir, prompt, false, wt, card, o.Role, o.Effort, driver)
 }
 
 // agentWorktree gives the agent its own worktree and branch for a spawn into
@@ -280,7 +292,7 @@ func contextKey(p tools.Profile, lvl playbook.Level, leader bool) string {
 // for the agent's own git worktree; the playbook and the baseline are then
 // read from that worktree, not from the spawn dir. card is the task card
 // (ADR-43): it goes on the board and its block is appended to the prompt.
-func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, card *board.Card, role Role, effort string) (*board.Agent, error) {
+func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, card *board.Card, role Role, effort, driver string) (*board.Agent, error) {
 	p, ok := f.Profiles[profile]
 	if !ok {
 		return nil, fmt.Errorf("unknown profile %q (have %v)", profile, tools.Names(f.Profiles))
@@ -307,9 +319,11 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	// resumed process the same context args (ADR-60).
 	lvl := effortLevel(effort, code)
 	ex.Effort = string(lvl)
+	acp := driver == prefs.DriverACP
 	// The dir is final here (worktree or not), so this is the last moment
-	// before the tool reads it: pre-answer its trust dialog (ADR-47).
-	marked := f.TrustDir(profile, p, dir)
+	// before the tool reads it: pre-answer its trust dialog (ADR-47). An
+	// ACP server shows no dialog.
+	marked := acp || f.TrustDir(profile, p, dir)
 	id := ""
 	if len(p.LaunchID) > 0 {
 		id = tools.NewUUID()
@@ -348,6 +362,10 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 			full += "\n\n"
 		}
 		full += cp
+	}
+	if acp {
+		ex.Base = Baseline(dir)
+		return f.launchACP(name, profile, p, dir, prompt, full, claimed, lvl, ex)
 	}
 	argv, embedded := launchArgv(name, p, tools.AgentVars(f.Exe, name, id),
 		tools.Launch{Mode: pr.Mode, Context: contextKey(p, lvl, role.Leader), Extra: pr.ExtraArgs,
@@ -451,7 +469,7 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 	a := &board.Agent{Name: name, Profile: profile, Patterns: p.Patterns, Dir: dir, Goal: goal, SessionID: id,
 		PaneID: pane, Status: string(status.Unknown), Created: now, StatusSince: now, LastChange: now,
 		Baseline: ex.Base, Worktree: ex.Worktree, NoWorktree: ex.NoWorktree, Card: ex.Card, Effort: ex.Effort,
-		Leader: ex.Role.Leader, LeadBy: ex.Role.LeadBy, Interactive: ex.Role.Interactive}
+		Leader: ex.Role.Leader, LeadBy: ex.Role.LeadBy, Interactive: ex.Role.Interactive, Driver: ex.Driver}
 	if goal != "" && secret != "" {
 		a.PromptAt = now // a spawn with a task: the turn it starts should end in a report (ADR-68)
 	}
@@ -486,6 +504,7 @@ type startExtra struct {
 	Card       *board.Card
 	Role       Role
 	Effort     string
+	Driver     string // board.Agent.Driver
 }
 
 // afterTag, when set by a test, runs between tagging a new pane and the
@@ -530,6 +549,9 @@ var (
 // patterns have `pending` and the paste still sits unsubmitted after
 // SubmitWait, it presses Enter once more, then gives up with an error.
 func (f *Fleet) Send(name, text string) error {
+	if f.isACP(name) {
+		return f.acpSend(name, text)
+	}
 	p, err := f.Pane(name)
 	if err != nil {
 		return err
@@ -610,6 +632,9 @@ func (f *Fleet) Peek(name string, n int) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if f.isACP(name) {
+		return f.acpScreen(name, n), nil
+	}
 	return f.T.Capture(p, n)
 }
 
@@ -620,6 +645,9 @@ func (f *Fleet) PeekColor(name string, n int) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if f.isACP(name) {
+		return f.acpScreen(name, n), nil
+	}
 	return f.T.Run("capture-pane", "-e", "-p", "-t", p, "-S", fmt.Sprint(-n))
 }
 
@@ -627,7 +655,16 @@ func (f *Fleet) PeekColor(name string, n int) (string, error) {
 // leaves its members running and hands them back to the admiral (ADR-53).
 func (f *Fleet) Close(name string) error {
 	if p := f.paneOf(name); p != "" {
+		acp := f.isACP(name)
+		if acp {
+			// Its host exits cleanly on the stop: not a death to report.
+			f.markClosing(name, time.Now())
+			f.acpStop(name)
+		}
 		if err := f.KillPane(p); err != nil {
+			if acp {
+				f.markClosing(name, time.Time{})
+			}
 			return err
 		}
 	}

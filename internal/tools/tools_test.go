@@ -541,3 +541,55 @@ func TestModelArg(t *testing.T) {
 		}
 	}
 }
+
+func TestACPArgv(t *testing.T) {
+	ps, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := Vars{Fleet: "/bin/fleet", Name: "a1", ID: "U"}
+	cases := []struct {
+		profile, mode string
+		want          []string
+	}{
+		{"copilot", "", []string{"copilot", "--acp"}},
+		{"copilot", AutoMode, []string{"copilot", "--acp", "--allow-all"}},
+		{"claude-copilot", AutoMode, []string{"copilot", "--model", CopilotClaudeModel, "--allow-all", "--acp", "--allow-all"}},
+		{"agy", "", []string{"agy", "acp"}},
+		{"agy", AutoMode, []string{"agy", "acp", "--dangerously-skip-permissions"}},
+		{"fake", AutoMode, []string{"/bin/fleet", "fakeagent", "a1", "--acp"}},
+	}
+	for _, c := range cases {
+		p := ps[c.profile]
+		if !p.HasACP() || !p.HasACPMode(c.mode) {
+			t.Errorf("%s: HasACP %v HasACPMode(%q) %v", c.profile, p.HasACP(), c.mode, p.HasACPMode(c.mode))
+		}
+		if got := p.ACPArgv(v, Launch{Mode: c.mode, Prompt: "hi", Resume: true}); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s mode %q: %q want %q", c.profile, c.mode, got, c.want)
+		}
+	}
+	for _, n := range []string{"claude", "vibe"} {
+		if ps[n].HasACP() {
+			t.Errorf("%s: has no ACP server, got %v", n, ps[n].ACP)
+		}
+	}
+	// Peer MCP args go in, the context args come last before extra args.
+	cp, _ := PeerMCP("/bin/fleet", "a1")
+	got := ps["copilot"].ACPArgv(Vars{Fleet: "/bin/fleet", Name: "a1", PeerMCP: cp}, Launch{Context: "pro", Extra: []string{"--x"}})
+	if got[1] != "--additional-mcp-config" || got[3] != "--acp" || got[len(got)-2] != "--disable-builtin-mcps" || got[len(got)-1] != "--x" {
+		t.Errorf("copilot acp argv with peer/context/extra: %q", got)
+	}
+}
+
+func TestACPUserOverride(t *testing.T) {
+	home := t.TempDir()
+	os.WriteFile(filepath.Join(home, "tools.toml"), []byte("[vibe]\nacp = [\"--acp\"]\nacp_mode_args = { auto = \"--yolo --x\" }\n"), 0o644)
+	ps, err := Load(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := ps["vibe"].ACPArgv(Vars{}, Launch{Mode: AutoMode})
+	if want := []string{"vibe", "--acp", "--yolo", "--x"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("%q want %q", got, want)
+	}
+}

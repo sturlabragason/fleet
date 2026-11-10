@@ -56,6 +56,29 @@ type Spawn struct {
 	// tool's own config, so its "do you trust this folder?" dialog never
 	// appears (DESIGN §4, ADR-47). false leaves the tool to ask.
 	AutoTrust bool
+	// Driver is how fleet runs the agent: DriverTmux (the tool's TUI in a
+	// pane, read from the screen) or DriverACP (the tool's ACP server under
+	// `fleet acp-host`, DESIGN §7d, ADR-74).
+	Driver string
+}
+
+// Drivers for driver = "...". Any other value leaves the driver unchanged,
+// so a typo never switches an agent to a driver nobody asked for.
+const (
+	DriverTmux = "tmux"
+	DriverACP  = "acp"
+)
+
+// ParseDriver returns the canonical driver name for s, or "" when s names
+// none.
+func ParseDriver(s string) string {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case DriverTmux:
+		return DriverTmux
+	case DriverACP:
+		return DriverACP
+	}
+	return ""
 }
 
 // Stuck actions for stuck_action: tell the admiral only (the default), or
@@ -76,7 +99,7 @@ const DefaultDeadPaneGrace = 5 * time.Minute
 // worker playbook on, DefaultDeadPaneGrace, a worktree per agent, auto-trust,
 // the stuck rule's default timeout and no action on stuck.
 func Neutral() Spawn {
-	return Spawn{AutoSubmit: true, ReadyTimeout: DefaultReadyTimeout, Playbook: true, DeadPaneGrace: DefaultDeadPaneGrace, Worktree: true, AutoTrust: true, StuckAfter: status.DefaultStuckAfter, StuckAction: StuckNone}
+	return Spawn{AutoSubmit: true, ReadyTimeout: DefaultReadyTimeout, Playbook: true, DeadPaneGrace: DefaultDeadPaneGrace, Worktree: true, AutoTrust: true, StuckAfter: status.DefaultStuckAfter, StuckAction: StuckNone, Driver: DriverTmux}
 }
 
 // DefaultMaxWorking caps how many agents may be working at once before new
@@ -271,6 +294,11 @@ func applySpawn(s Spawn, sec map[string]conf.Value) Spawn {
 			s.StuckAction = StuckInterrupt
 		} else {
 			s.StuckAction = StuckNone
+		}
+	}
+	if v, ok := sec["driver"].(string); ok {
+		if d := ParseDriver(v); d != "" {
+			s.Driver = d
 		}
 	}
 	if v, ok := conf.Bool(sec, "auto_trust"); ok {

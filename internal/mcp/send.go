@@ -25,11 +25,18 @@ func (s *Server) waitingFor(a *board.Agent) string {
 	if a.Status != "waiting" || a.PaneID == "" {
 		return wf
 	}
-	text, err := s.F.T.Capture(a.PaneID, 0)
-	if err != nil {
-		return wf
+	var m status.Menu
+	ok := false
+	if a.ACP() {
+		// An acp agent's question comes from its host, not the screen.
+		m, ok, _ = s.F.Menu(a.Name)
+	} else {
+		text, err := s.F.T.Capture(a.PaneID, 0)
+		if err != nil {
+			return wf
+		}
+		m, ok = s.F.Patterns[a.Patterns].Menu(text)
 	}
-	m, ok := s.F.Patterns[a.Patterns].Menu(text)
 	if !ok {
 		return wf
 	}

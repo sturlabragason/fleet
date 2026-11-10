@@ -173,6 +173,10 @@ func cmdPeekLive(f *fleet.Fleet, name string) error {
 		w := wall.New(f.T, fleet.Session)
 		w.KeepFocus = true
 		m.capture = func() (string, error) { return f.T.Run("capture-pane", "-e", "-p", "-t", pane) }
+		if f.Store.Load().Agents[name].ACP() {
+			// An acp agent's pane is its host; show the transcript instead.
+			m.capture = func() (string, error) { return f.PeekColor(name, 200) }
+		}
 		m.show = func() error { _, err := w.Show(pane); return err }
 	}
 	_, err = tea.NewProgram(m, tea.WithAltScreen()).Run()

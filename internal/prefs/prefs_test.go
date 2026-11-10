@@ -243,3 +243,19 @@ func TestThemePref(t *testing.T) {
 		t.Errorf("unset Theme() = %q, want the default", got)
 	}
 }
+
+func TestDriver(t *testing.T) {
+	write(t, "[defaults]\ndriver = \"ACP\"\n[profile.claude]\ndriver = \"tmux\"\n[profile.agy]\ndriver = \"tmuxx\"\n")
+	p, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for prof, want := range map[string]string{"copilot": DriverACP, "claude": DriverTmux, "agy": DriverACP} {
+		if got := p.For(prof).Driver; got != want {
+			t.Errorf("%s: driver %q want %q", prof, got, want)
+		}
+	}
+	if Neutral().Driver != DriverTmux || (*Prefs)(nil).For("x").Driver != DriverTmux {
+		t.Error("default driver is not tmux")
+	}
+}

@@ -97,6 +97,8 @@ Use only the `fleet` MCP tools: `fleet_status`, `fleet_info`, `fleet_peek`, `fle
   your dir, no secrets, report), `standard` for a contained change (plan, build, test, commit on its branch),
   `pro` for professional code work (worktree, review, pre-merge checklist, merge into local main; it pushes only its own `fleet/` branch, for CI).
   Default: `pro` with a worktree, `light` without one. Pick it deliberately: `pro` over-steers a small job.
+- `driver=acp` runs a copilot, claude-copilot, agy or fake agent over ACP instead of its screen: the same tools
+  (send, answer, park, wake, close) work, peek shows its transcript. Default tmux; claude and vibe have no ACP.
 - A spawn prompt is ready when it says: the task, what is done when, which agent owns neighbouring areas (don't touch),
   what it depends on, and exceptions to the playbook (for example "read-only", "you are the publisher", "use best judgment").
 - Always spawn with the task as the prompt: an agent spawned without one gets no playbook.

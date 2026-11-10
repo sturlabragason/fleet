@@ -71,7 +71,7 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 			noteUser(a, cs, ids[a.Name])
 			prev := a.Status
 			var next string
-			if f.skipCapture(a, byAgent[a.Name] && !dead[a.Name], onWall[a.Name], now) {
+			if !a.ACP() && f.skipCapture(a, byAgent[a.Name] && !dead[a.Name], onWall[a.Name], now) {
 				next = a.Status
 			} else {
 				next = f.classify(a, byAgent[a.Name], dead[a.Name], ids[a.Name], now)
@@ -194,6 +194,9 @@ func (f *Fleet) classify(a *board.Agent, alive, dead bool, pane string, now time
 			return a.Status
 		}
 		return string(status.Gone)
+	}
+	if a.ACP() {
+		return f.classifyACP(a, dead, pane, now)
 	}
 	a.PaneID = pane
 	text, err := f.T.Capture(pane, 0)

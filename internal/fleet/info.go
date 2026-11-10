@@ -227,7 +227,7 @@ func (f *Fleet) Info(name string) (string, error) {
 		kv("spend", s.Long())
 	}
 	mode := ""
-	if p := f.paneOf(name); p != "" {
+	if p := f.paneOf(name); p != "" && !a.ACP() {
 		if text, err := f.T.Capture(p, 0); err == nil {
 			mode = Mode(text)
 		}

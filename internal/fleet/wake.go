@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/sturlabragason/fleet/internal/acphost"
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/mail"
@@ -336,6 +337,14 @@ func (f *Fleet) deliverWakeTo(box string, badge bool) {
 		return
 	}
 	line := wakeLineTo(box, es)
+	if f.isACP(box) {
+		if _, err := f.acpCall(box, acphost.Request{Op: acphost.OpPrompt, Text: line}); err != nil {
+			f.undelivered(box, es, prev, "acp prompt failed: "+err.Error())
+			return
+		}
+		f.writeTries(box, nil)
+		return
+	}
 	if err := f.typeText(v.Pane, line); err != nil {
 		f.undelivered(box, es, prev, "paste failed: "+err.Error())
 		return
@@ -588,6 +597,10 @@ func (f *Fleet) boxView(box string) AdmiralView {
 	pane := f.paneOf(box)
 	if pane == "" {
 		return AdmiralView{}
+	}
+	if a.ACP() {
+		// No input box to read: the host takes whole prompts (ADR-74).
+		return AdmiralView{Pane: pane, Idle: a.Status == string(status.Idle), Box: true}
 	}
 	text, err := f.T.Capture(pane, 0)
 	if err != nil {
