@@ -16,12 +16,15 @@ type Node struct {
 
 // Input describes the window to lay out.
 type Input struct {
-	W, H   int
-	Sups   []string // admiral pane ids, main first (none if hidden/absent), stacked in one column (DESIGN §6.12)
-	Ov     string   // overview pane id
-	Wall   []string // wall pane ids in slot order
-	Preset string
-	Focus  string // emphasis pane id (must be on the wall), "" for an even grid
+	W, H int
+	Sups []string // admiral pane ids, main first (none if hidden/absent), stacked in one column (DESIGN §6.12)
+	// SupRows are the admiral heights, parallel to Sups, as the user set
+	// them; nil means equal rows. Config.SupRowsFor fits them to the column.
+	SupRows []int
+	Ov      string   // overview pane id
+	Wall    []string // wall pane ids in slot order
+	Preset  string
+	Focus   string // emphasis pane id (must be on the wall), "" for an even grid
 }
 
 // Build returns the full layout tree.
@@ -45,6 +48,11 @@ func (c Config) Build(in Input) *Node {
 			root.Kids = []*Node{sup, right}
 		}
 		sizes(root, []int{sw, in.W - sw - 1}, c.SupSide == "right")
+		if len(in.Sups) > 1 {
+			if rows := c.SupRowsFor(in.SupRows, len(in.Sups), sup.H); rows != nil {
+				sizes(sup, rows, false)
+			}
+		}
 	}
 	ov := &Node{Pane: in.Ov}
 	if len(in.Wall) == 0 {

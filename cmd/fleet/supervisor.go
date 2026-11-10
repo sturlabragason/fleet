@@ -79,6 +79,8 @@ func cmdSupervisor(f *fleet.Fleet, args []string) error {
 			return cmdAdmiralClose(f, args[1:])
 		case "give":
 			return cmdAdmiralGive(f, args[1:])
+		case "min":
+			return cmdAdmiralMin(f, args[1:])
 		case "act":
 			return cmdAdmiralAct(f, args[1:])
 		}
