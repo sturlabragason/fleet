@@ -148,8 +148,13 @@ func waitingPanes(all []tmux.PaneInfo, session string) []tmux.PaneInfo {
 // when there is no valid target and the wall is full. It costs one tmux read
 // and writes only when the value changes.
 func (w *Wall) syncNextOut(s *State) {
-	out, _ := w.T.Run("display-message", "-p", "-t", w.Target, "#{@fleet_target}\t#{@fleet_next_out}")
-	target, cur, _ := strings.Cut(strings.TrimSpace(out), "\t")
+	var target, cur string
+	if win, ok := w.snapWindow(); ok {
+		target, cur = win["@fleet_target"], win["@fleet_next_out"]
+	} else {
+		out, _ := w.T.Run("display-message", "-p", "-t", w.Target, "#{@fleet_target}\t#{@fleet_next_out}")
+		target, cur, _ = strings.Cut(strings.TrimSpace(out), "\t")
+	}
 	want := ""
 	if _, ok := targetPane(s, target); !ok && len(s.Wall) >= s.Slots() {
 		want, _ = EvictCandidate(s.Wall)

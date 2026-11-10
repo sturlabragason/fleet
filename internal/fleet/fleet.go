@@ -75,6 +75,12 @@ type Fleet struct {
 	// OffWallEvery is how often Refresh captures an agent pane that is not
 	// on the wall; 0 = every Refresh. The overview TUI sets it (DESIGN §7a).
 	OffWallEvery time.Duration
+	// ShareSnapshot, when set, makes Refresh read tmux with one snapshot
+	// (every pane plus the window options the wall reads) instead of a plain
+	// list-panes, and hands it over with this refresh's own pane tags
+	// applied. The watcher sets it and writes the snapshot to a file the
+	// overview reads instead of running tmux (ADR-94).
+	ShareSnapshot func(*tmux.Snapshot)
 	// DrainQueue lets Refresh start the oldest queued agent when a working
 	// slot is free, and lets the memory guard park an idle agent when RAM
 	// runs low (DESIGN §7, §7a). The overview TUI, the admiral's MCP

@@ -10,6 +10,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/prefs"
 	"github.com/sturlabragason/fleet/internal/status"
+	"github.com/sturlabragason/fleet/internal/team"
 	"github.com/sturlabragason/fleet/internal/theme"
 	"github.com/sturlabragason/fleet/internal/tmux"
 )
@@ -17,7 +18,16 @@ import (
 // Refresh captures every agent pane, updates statuses on the board, logs
 // transitions and returns the agents sorted by name.
 func (f *Fleet) Refresh() ([]*board.Agent, error) {
-	panes, perr := f.T.ListPanes("")
+	var snap *tmux.Snapshot
+	var panes []tmux.PaneInfo
+	var perr error
+	if f.ShareSnapshot != nil {
+		if snap, perr = f.T.Snapshot(); perr == nil {
+			panes = snap.Panes
+		}
+	} else {
+		panes, perr = f.T.ListPanes("")
+	}
 	if perr != nil {
 		logx.For("status").Debug("list panes", "err", perr)
 	}
@@ -131,6 +141,9 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 		go f.reportNoReport(n)
 	}
 	f.syncTeams(agentPanes)
+	if snap != nil {
+		f.shareSnapshot(snap, out, now)
+	}
 	if f.DrainQueue && perr == nil {
 		f.guardMemory(out, now, low, free, mem)
 	}
@@ -142,6 +155,36 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 		f.checkRecycle(out, now)
 	}
 	return out, err
+}
+
+// shareSnapshot brings the pane tags this refresh just wrote (status,
+// no-report mark, team) into snap, so readers see what tmux now holds, and
+// hands it to ShareSnapshot.
+func (f *Fleet) shareSnapshot(snap *tmux.Snapshot, agents []*board.Agent, now time.Time) {
+	by := make(map[string]*board.Agent, len(agents))
+	for _, a := range agents {
+		by[a.Name] = a
+	}
+	var teams map[string]team.Info
+	if f.Teams != nil {
+		teams = f.Teams.ByAgent()
+	}
+	for i := range snap.Panes {
+		p := &snap.Panes[i]
+		a, ok := by[p.Agent]
+		if !ok {
+			continue
+		}
+		if st := a.Shown(); p.Status != st {
+			p.Status, p.StatusSince = st, a.StatusSince.UnixNano()
+		}
+		p.NoReport = a.NoReportTag(now)
+		if teams != nil {
+			t := teams[p.Agent]
+			p.Team, p.TeamColor = t.Team, t.Color
+		}
+	}
+	f.ShareSnapshot(snap)
 }
 
 // skipCapture reports whether this Refresh may reuse an agent's last status

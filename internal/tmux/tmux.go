@@ -15,6 +15,9 @@ import (
 type Client struct {
 	Socket string // name passed to -L
 	Config string // optional -f file (tests use /dev/null)
+	// OnRun, when set, is told about every command before it runs (tests
+	// count tmux execs with it).
+	OnRun func(args []string)
 }
 
 // New returns a client for the given socket name.
@@ -55,6 +58,9 @@ func tmpdirGone() bool {
 func (c *Client) RunInput(stdin string, args ...string) (string, error) {
 	if tmpdirGone() {
 		return "", ErrTmpdirGone
+	}
+	if c.OnRun != nil {
+		c.OnRun(args)
 	}
 	cmd := exec.Command("tmux", append(c.base(), args...)...)
 	if stdin != "" {

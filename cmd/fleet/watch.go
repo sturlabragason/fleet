@@ -16,6 +16,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/status"
+	"github.com/sturlabragason/fleet/internal/tmux"
 	"github.com/sturlabragason/fleet/internal/watch"
 )
 
@@ -66,6 +67,13 @@ func cmdWatch(f *fleet.Fleet, args []string) error {
 	f.Housekeeping = true
 	// Those done-checks may take minutes; off the loop they cannot stall it.
 	f.Async()
+	// Each refresh's one tmux read is shared, so the overview makes no
+	// tmux calls of its own while this watcher is live (ADR-94).
+	f.ShareSnapshot = func(s *tmux.Snapshot) {
+		if err := watch.WriteSnapshot(f.Home, s); err != nil {
+			logx.For("watch").Warn("snapshot", "err", err)
+		}
+	}
 	w := &watch.Watcher{
 		Home:     f.Home,
 		Refresh:  func() error { _, err := f.Refresh(); return err },
@@ -79,7 +87,11 @@ func cmdWatch(f *fleet.Fleet, args []string) error {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
-	return w.Run(ctx)
+	err := w.Run(ctx)
+	if err == nil {
+		watch.DropSnapshot(f.Home)
+	}
+	return err
 }
 
 // reexecWatcher replaces the watcher with the binary at exe, same pid and

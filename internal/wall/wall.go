@@ -26,6 +26,42 @@ type Wall struct {
 	// (the overview sets it, so a second key press still reaches the overview,
 	// not the agent it just put on the wall). @fleet_target is set explicitly.
 	KeepFocus bool
+	// Snap, when set, answers the read-only hot path (Read, OnWall,
+	// Pinned, TargetAgent, ApplyCached) from the watcher's shared snapshot
+	// instead of tmux (ADR-94). Only copies made by WithSnapshot set it.
+	Snap  *tmux.Snapshot
+	wrote *bool // set when a snapshot-backed plan wanted to write
+}
+
+// WithSnapshot returns a copy of w that reads s instead of tmux. A cached
+// apply on it goes to tmux only when the snapshot shows something to do.
+func (w *Wall) WithSnapshot(s *tmux.Snapshot) *Wall {
+	c := *w
+	c.Snap, c.wrote = s, nil
+	return &c
+}
+
+// live is w reading tmux.
+func (w *Wall) live() *Wall {
+	c := *w
+	c.Snap, c.wrote = nil, nil
+	return &c
+}
+
+// snapWindow is the main window's fields in the snapshot.
+func (w *Wall) snapWindow() (map[string]string, bool) {
+	if w.Snap == nil {
+		return nil, false
+	}
+	return w.Snap.Window(w.Target)
+}
+
+// listPanes is ListPanes, answered by the snapshot when there is one.
+func (w *Wall) listPanes(target string) ([]tmux.PaneInfo, error) {
+	if w.Snap != nil {
+		return w.Snap.PanesOf(target), nil
+	}
+	return w.T.ListPanes(target)
 }
 
 // New returns a wall for session:main.
@@ -48,19 +84,37 @@ type State struct {
 }
 
 func (w *Wall) opt(name string) string {
+	if win, ok := w.snapWindow(); ok {
+		if v, ok := win[name]; ok {
+			return v
+		}
+	}
 	s, _ := w.T.Run("show-options", "-wqv", "-t", w.Target, name)
 	return strings.TrimSpace(s)
 }
 
 func (w *Wall) setOpt(name, val string) {
+	if w.wrote != nil {
+		*w.wrote = true // a snapshot-backed plan: the live apply writes it
+		return
+	}
 	w.T.Run("set-option", "-w", "-t", w.Target, name, val)
 }
 
 // Read loads the current state.
 func (w *Wall) Read() (*State, error) {
-	dims, err := w.T.Run("display-message", "-p", "-t", w.Target, "#{window_width} #{window_height}")
-	if err != nil {
-		return nil, err
+	var dims string
+	if w.Snap != nil {
+		win, ok := w.snapWindow()
+		if !ok {
+			return nil, fmt.Errorf("no window %s in the snapshot", w.Target)
+		}
+		dims = win["window_width"] + " " + win["window_height"]
+	} else {
+		var err error
+		if dims, err = w.T.Run("display-message", "-p", "-t", w.Target, "#{window_width} #{window_height}"); err != nil {
+			return nil, err
+		}
 	}
 	s := &State{Cfg: w.Cfg, Preset: w.opt("@fleet_wall")}
 	fmt.Sscan(dims, &s.W, &s.H)
@@ -71,7 +125,7 @@ func (w *Wall) Read() (*State, error) {
 		s.Cfg.SupSide = v
 	}
 	s.Cfg.ChipsOnly = w.opt("@fleet_chips") == "1"
-	panes, err := w.T.ListPanes(w.Target)
+	panes, err := w.listPanes(w.Target)
 	if err != nil {
 		return nil, err
 	}
@@ -109,6 +163,12 @@ func (w *Wall) Apply() error { return w.apply(true) }
 func (w *Wall) ApplyCached() error { return w.apply(false) }
 
 func (w *Wall) apply(force bool) error {
+	if w.Snap != nil {
+		if !force && w.snapUnchanged() {
+			return nil
+		}
+		return w.live().apply(force)
+	}
 	s, err := w.Read()
 	if err != nil {
 		return err
@@ -169,6 +229,22 @@ func (w *Wall) apply(force bool) error {
 	return nil
 }
 
+// snapUnchanged reports whether the snapshot proves a cached apply has
+// nothing to do: no pane to shed or hide, no option to write, and the plan's
+// layout is the one last applied. Anything else is left to a live apply,
+// which reads tmux again before it changes a thing (ADR-94).
+func (w *Wall) snapUnchanged() bool {
+	s, err := w.Read()
+	if err != nil || len(s.Wall) > s.MaxPanes() {
+		return false
+	}
+	c := *w
+	wrote := false
+	c.wrote = &wrote
+	p := c.plan(s)
+	return !wrote && len(p.hide) == 0 && p.lay == c.opt("@fleet_layout")
+}
+
 // lock takes the apply lock, a window option holding the owner's deadline. It
 // returns false when another process holds it. A stale lock (an apply that
 // crashed) expires after applyLockTTL.
@@ -187,6 +263,9 @@ func (w *Wall) unlock() { w.setOpt("@fleet_applying", "") }
 
 // windowLayout is the window's current tmux layout string.
 func (w *Wall) windowLayout() string {
+	if win, ok := w.snapWindow(); ok {
+		return win["window_layout"]
+	}
 	s, _ := w.T.Run("display-message", "-p", "-t", w.Target, "#{window_layout}")
 	return strings.TrimSpace(s)
 }
@@ -568,7 +647,7 @@ func (w *Wall) ToggleChips() error {
 // OnWall returns agent names currently on the wall.
 func (w *Wall) OnWall() map[string]bool {
 	out := map[string]bool{}
-	panes, err := w.T.ListPanes(w.Target)
+	panes, err := w.listPanes(w.Target)
 	if err != nil {
 		return out
 	}

@@ -108,7 +108,7 @@ func (w *Wall) TogglePin(pane string) (bool, error) {
 // Pinned returns the names of the session's pinned agents, on the wall or not.
 func (w *Wall) Pinned() map[string]bool {
 	out := map[string]bool{}
-	panes, err := w.T.ListPanes("")
+	panes, err := w.listPanes("")
 	if err != nil {
 		return out
 	}
