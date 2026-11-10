@@ -209,3 +209,12 @@ func TestUserNoReport(t *testing.T) {
 		}
 	}
 }
+
+func TestDriverName(t *testing.T) {
+	if got := (&Agent{}).DriverName(); got != "tmux" {
+		t.Errorf("no driver field (pre-v1.0.0 agent): %q, want tmux", got)
+	}
+	if got := (&Agent{Driver: DriverACP}).DriverName(); got != "acp" {
+		t.Errorf("acp agent: %q", got)
+	}
+}

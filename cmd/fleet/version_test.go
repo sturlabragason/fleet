@@ -16,3 +16,16 @@ func TestVersionLine(t *testing.T) {
 		}
 	}
 }
+
+func TestShortVersion(t *testing.T) {
+	if got := shortVersion("v1.2.0", "v1.1.0"); got != "v1.2.0" {
+		t.Errorf("linked tag: %q", got)
+	}
+	if got := shortVersion("", "v1.1.0"); got != "v1.1.0" {
+		t.Errorf("module version: %q", got)
+	}
+	// go test binaries carry no vcs info: no version rather than "(unknown build)".
+	if got := shortVersion("", "(devel)"); got != "" {
+		t.Errorf("unknown build: %q", got)
+	}
+}

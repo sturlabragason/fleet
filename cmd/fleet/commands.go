@@ -71,7 +71,9 @@ const usage = `usage:
                                             --driver as for spawn
   fleet sessions [--all] [--json] [-n 20] [words...]
                                             list copilot/claude sessions to adopt, newest first
-  fleet ls [--json]
+  fleet ls [--json]                         the agents; DRIVER is acp or tmux
+  fleet info <name>                         one agent's facts, as fleet_info: driver (and ACP server),
+                                            the fleet version that started it, status, git, session, spend
   fleet spend [--json]                      what each agent has cost so far and the fleet total, read from
                                             the agents' own session files (AI credits for copilot, tokens
                                             for claude); no model is called
@@ -250,6 +252,16 @@ func run(args []string) error {
 		return cmdLs(f, rest)
 	case "spend":
 		return cmdSpend(f, rest)
+	case "info":
+		if len(rest) != 1 {
+			return fmt.Errorf("usage: fleet info <name>")
+		}
+		out, err := f.Info(rest[0])
+		if err != nil {
+			return err
+		}
+		fmt.Println(out)
+		return nil
 	case "send":
 		force := len(rest) > 0 && rest[0] == "--force"
 		if force {
@@ -657,9 +669,9 @@ func writeLs(out io.Writer, as []*board.Agent, teams map[string]team.Info, asJSO
 	var buf bytes.Buffer
 	w := tabwriter.NewWriter(&buf, 0, 2, 2, ' ', 0)
 	if withTeam {
-		fmt.Fprintln(w, "NAME\tTEAM\tPROFILE\tSTATUS\tFOR\tPANE\tLAST LINE")
+		fmt.Fprintln(w, "NAME\tTEAM\tPROFILE\tDRIVER\tSTATUS\tFOR\tPANE\tLAST LINE")
 	} else {
-		fmt.Fprintln(w, "NAME\tPROFILE\tSTATUS\tFOR\tPANE\tLAST LINE")
+		fmt.Fprintln(w, "NAME\tPROFILE\tDRIVER\tSTATUS\tFOR\tPANE\tLAST LINE")
 	}
 	colors := []string{""}
 	for _, a := range as {
@@ -677,7 +689,7 @@ func writeLs(out io.Writer, as []*board.Agent, teams map[string]team.Info, asJSO
 			name += "\t" + cell
 			colors = append(colors, ti.Color)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", name, a.Profile, a.Status, time.Since(a.StatusSince).Round(time.Second), a.PaneID, ll)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", name, a.Profile, a.DriverName(), a.Status, time.Since(a.StatusSince).Round(time.Second), a.PaneID, ll)
 	}
 	w.Flush()
 	table := buf.String()

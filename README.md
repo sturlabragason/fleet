@@ -81,9 +81,9 @@ Drop `--admiral-profile fake` to get a real Copilot CLI admiral. To stop everyth
 
 ```text
 $ fleet ls
-NAME         PROFILE  STATUS   FOR  PANE  LAST LINE
-api-auth     fake     working  3s   %2    ⠇ Thinking… step 8 of refactor auth middleware (esc to i
-web-nav      fake     waiting  11s  %3    Approve? [y/n]
+NAME         PROFILE  DRIVER  STATUS   FOR  PANE  LAST LINE
+api-auth     fake     tmux    working  3s   %2    ⠇ Thinking… step 8 of refactor auth middleware (esc to i
+web-nav      fake     tmux    waiting  11s  %3    Approve? [y/n]
 ```
 
 ## Screen layout
@@ -206,7 +206,7 @@ Agents start through `bash -lc`, so shell aliases don't apply; make a profile in
 | `fleet_access` | Who may message whom |
 | `fleet_access_decide` | Grant, deny or revoke that. Needs `confirmed=true` |
 | `fleet_admiral_profile` | Show or swap the admiral's own tool profile |
-| `fleet_info` | One agent's facts: status, git state, session, context fill, spend so far |
+| `fleet_info` | One agent's facts: driver (acp or tmux), status, git state, session, context fill, spend so far |
 
 A leader agent (`fleet_spawn` with `leader=true`, or `fleet spawn --leader`) gets a squad-scoped set of its own: `fleet_squad_spawn`, `fleet_squad_profiles`, `fleet_squad_status`, `fleet_squad_info`, `fleet_squad_peek`, `fleet_squad_send`, `fleet_squad_reports` and `fleet_squad_close`. Each refuses any agent the leader did not spawn, and none of them can answer a prompt: that escalates to the admiral and to you. `[squad] max_members` (4) and `max_depth` (1) cap it.
 

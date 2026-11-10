@@ -12,6 +12,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/supervisor"
+	"github.com/sturlabragason/fleet/internal/tools"
 	"github.com/sturlabragason/fleet/internal/worktree"
 )
 
@@ -175,6 +176,10 @@ func (f *Fleet) Info(name string) (string, error) {
 	case a.WithUser(now):
 		kv("interactive", "the user typed in its pane "+now.Sub(a.UserAt).Round(time.Second).String()+" ago; not auto-closed for now")
 	}
+	kv("driver", DriverLine(a, f.Profiles[a.Profile]))
+	if a.FleetVersion != "" {
+		kv("fleet version", a.FleetVersion+" (started the agent)")
+	}
 	kv("last activity", now.Sub(a.LastChange).Round(time.Second).String()+" ago")
 	kv("dir", a.Dir)
 	if c := a.Card; c != nil {
@@ -233,6 +238,23 @@ func (f *Fleet) Info(name string) (string, error) {
 	}
 	kv("mode", mode)
 	return strings.TrimRight(b.String(), "\n"), nil
+}
+
+// DriverLine is fleet_info's driver value: "tmux", or "acp via <server>"
+// with the ACP server recorded at start, else the profile's (an acp agent
+// started before v1.2.0).
+func DriverLine(a *board.Agent, p tools.Profile) string {
+	if !a.ACP() {
+		return a.DriverName()
+	}
+	srv := a.ACPServer
+	if srv == "" {
+		srv = p.ACPLabel()
+	}
+	if srv == "" {
+		return board.DriverACP
+	}
+	return board.DriverACP + " via " + srv
 }
 
 // LastMessageMax caps LastMessage output (runes; the end is kept).

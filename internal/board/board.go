@@ -108,6 +108,14 @@ type Agent struct {
 	// Driver is "acp" for an agent run under `fleet acp-host` (DESIGN §7d,
 	// ADR-74); "" is the tmux driver, which every agent had before it.
 	Driver string `json:"driver,omitempty"`
+	// ACPServer names the ACP server an acp agent's host was started with
+	// (tools.Profile.ACPLabel, ADR-77): "copilot --acp", "agy acp",
+	// "claude-agent-acp@0.103.0". "" on a tmux agent or one started before
+	// v1.2.0.
+	ACPServer string `json:"acp_server,omitempty"`
+	// FleetVersion is the fleet build that last started the agent's window
+	// (spawn, wake or adopt; ADR-77). "" before v1.2.0.
+	FleetVersion string `json:"fleet_version,omitempty"`
 
 	// extra holds board keys this build does not know, so they survive a
 	// round trip (ADR-58).
@@ -119,6 +127,15 @@ const DriverACP = "acp"
 
 // ACP reports whether the agent runs under the acp driver.
 func (a *Agent) ACP() bool { return a != nil && a.Driver == DriverACP }
+
+// DriverName is "acp" or "tmux"; an agent with no driver recorded (every
+// one before v1.0.0) runs on tmux.
+func (a *Agent) DriverName() string {
+	if a.ACP() {
+		return DriverACP
+	}
+	return "tmux"
+}
 
 // Card is a spawn's task card: what the task is, how fleet checks it is
 // done, and where the agent writes its result (DESIGN §18 #5/#6, ADR-43).

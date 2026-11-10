@@ -91,6 +91,20 @@ type Profile struct {
 // HasACP reports whether the profile can run under the acp driver.
 func (p Profile) HasACP() bool { return len(p.ACP) > 0 || len(p.ACPCommand) > 0 }
 
+// ACPLabel names the profile's ACP server for people: the adapter package
+// ("claude-agent-acp@0.103.0") or the tool and its acp args ("copilot
+// --acp"). "" when the profile has no ACP server.
+func (p Profile) ACPLabel() string {
+	if n := len(p.ACPCommand); n > 0 {
+		s := p.ACPCommand[n-1]
+		return s[strings.LastIndex(s, "/")+1:]
+	}
+	if len(p.ACP) == 0 {
+		return ""
+	}
+	return strings.Join(append([]string{filepath.Base(p.Command)}, p.ACP...), " ")
+}
+
 // ACPOptIn reports whether the acp driver must be chosen for this profile
 // by name (--driver, its own config section or its tool profile): an
 // adapter profile is never moved to acp by [defaults] (ADR-76).

@@ -14,7 +14,7 @@ func TestLsTeamColumn(t *testing.T) {
 	now := time.Now()
 	as := []*board.Agent{
 		{Name: "a1", Profile: "fake", Status: "idle", StatusSince: now, PaneID: "%1", LastLine: "hi"},
-		{Name: "bravo2", Profile: "fake", Status: "working", StatusSince: now, PaneID: "%2"},
+		{Name: "bravo2", Profile: "fake", Status: "working", StatusSince: now, PaneID: "%2", Driver: board.DriverACP},
 	}
 	var plain, empty bytes.Buffer
 	writeLs(&plain, as, nil, false)
@@ -22,16 +22,16 @@ func TestLsTeamColumn(t *testing.T) {
 	if plain.String() != empty.String() || strings.Contains(plain.String(), "TEAM") {
 		t.Errorf("no listed agent in a team must keep today's table:\n%s\n%s", plain.String(), empty.String())
 	}
-	if !strings.HasPrefix(plain.String(), "NAME    PROFILE  STATUS") {
+	if !strings.HasPrefix(plain.String(), "NAME    PROFILE  DRIVER  STATUS") {
 		t.Errorf("header changed: %q", plain.String())
 	}
 	var withTeam bytes.Buffer
 	writeLs(&withTeam, as, map[string]team.Info{"bravo2": {Team: "alpha", Color: "#89b4fa"}}, false)
 	lines := strings.Split(withTeam.String(), "\n")
 	// Not a TTY: lipgloss drops the colour, so the columns line up as plain text.
-	if lines[0] != "NAME    TEAM     PROFILE  STATUS   FOR  PANE  LAST LINE" ||
-		!strings.HasPrefix(lines[1], "a1               fake     idle") ||
-		!strings.HasPrefix(lines[2], "bravo2  ◆ alpha  fake     working") {
+	if lines[0] != "NAME    TEAM     PROFILE  DRIVER  STATUS   FOR  PANE  LAST LINE" ||
+		!strings.HasPrefix(lines[1], "a1               fake     tmux    idle") ||
+		!strings.HasPrefix(lines[2], "bravo2  ◆ alpha  fake     acp     working") {
 		t.Errorf("team table:\n%s", withTeam.String())
 	}
 	var js bytes.Buffer

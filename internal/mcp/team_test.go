@@ -68,7 +68,7 @@ func TestFleetTeam(t *testing.T) {
 		t.Error("unknown action accepted")
 	}
 	st, _ := callText(t, s, "fleet_status", nil)
-	if !strings.HasPrefix(st, "admiral: ?\nname | team | squad | profile | status") || !strings.Contains(st, "a1 | alpha |  | yn | ") || !strings.Contains(st, "a2 |  |  | yn | ") {
+	if !strings.HasPrefix(st, "admiral: ?\nname | team | squad | profile | driver | status") || !strings.Contains(st, "a1 | alpha |  | yn | tmux | ") || !strings.Contains(st, "a2 |  |  | yn | tmux | ") {
 		t.Errorf("status: %q", st)
 	}
 	if out, isErr := callText(t, s, "fleet_team", map[string]any{"action": "close", "team": "alpha", "confirmed": true}); isErr || !strings.Contains(out, "closed: a1") {

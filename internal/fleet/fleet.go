@@ -469,7 +469,11 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 	a := &board.Agent{Name: name, Profile: profile, Patterns: p.Patterns, Dir: dir, Goal: goal, SessionID: id,
 		PaneID: pane, Status: string(status.Unknown), Created: now, StatusSince: now, LastChange: now,
 		Baseline: ex.Base, Worktree: ex.Worktree, NoWorktree: ex.NoWorktree, Card: ex.Card, Effort: ex.Effort,
-		Leader: ex.Role.Leader, LeadBy: ex.Role.LeadBy, Interactive: ex.Role.Interactive, Driver: ex.Driver}
+		Leader: ex.Role.Leader, LeadBy: ex.Role.LeadBy, Interactive: ex.Role.Interactive, Driver: ex.Driver,
+		FleetVersion: Version}
+	if a.ACP() {
+		a.ACPServer = p.ACPLabel()
+	}
 	if goal != "" && secret != "" {
 		a.PromptAt = now // a spawn with a task: the turn it starts should end in a report (ADR-68)
 	}
@@ -506,6 +510,10 @@ type startExtra struct {
 	Effort     string
 	Driver     string // board.Agent.Driver
 }
+
+// Version is the running fleet build ("v1.2.0", else a revision), set by
+// main; start records it on the board (ADR-77). "" in tests.
+var Version string
 
 // afterTag, when set by a test, runs between tagging a new pane and the
 // board write in start.
