@@ -110,7 +110,34 @@ func (f *Fleet) BadgeBy() string {
 
 // ErrOtherAdmiral is the refusal for a write on another admiral's agent.
 func ErrOtherAdmiral(agent, owner string) error {
-	return fmt.Errorf("%s belongs to admiral %s; ask the user to hand it over", agent, owner)
+	return fmt.Errorf("%s belongs to admiral %s; ask for it with fleet_handover_request name=%s, or ask the user", agent, owner, agent)
+}
+
+// RequestHandover mails agent's owning admiral that admiral me asks for it
+// (#18, ADR-109). It needs no access grant and moves nothing: the owner
+// approves with fleet_handover, or the user does. It returns the owner.
+func (f *Fleet) RequestHandover(me, agent string) (string, error) {
+	if me == "" {
+		me = board.Main
+	}
+	a, ok := f.Store.Load().Agents[agent]
+	if !ok {
+		return "", fmt.Errorf("no agent %q", agent)
+	}
+	if a.LeadBy != "" {
+		return "", fmt.Errorf("%s is in %s's squad: ask for the leader", agent, a.LeadBy)
+	}
+	owner := f.OwnerOf(agent)
+	if owner == me {
+		return "", fmt.Errorf("%s is already yours", agent)
+	}
+	text := fmt.Sprintf("admiral %s asks for %s; approve with fleet_handover %s to=%s", me, agent, agent, me)
+	if err := f.Mail().Notice(mail.BoxOf(me), mail.BoxOf(owner), mail.KindHandover, text); err != nil {
+		return "", err
+	}
+	f.announceAdmiral(mail.BoxOf(me), mail.BoxOf(owner))
+	logx.For("fleet").Info("handover requested", "agent", agent, "owner", owner, "by", me)
+	return owner, nil
 }
 
 // CheckScope refuses admiral me acting on an agent another admiral owns.

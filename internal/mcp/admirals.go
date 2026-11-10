@@ -44,6 +44,8 @@ func (s *Server) teamScope(team string) error {
 var admiralToolDefs = []tool{
 	{"fleet_handover", "Give one of your agents (and, for a leader, its squad) to another admiral, with its unread reports. You can give away only your own agents; taking one is the user's call.", obj([]string{"name", "to"}, map[string]any{
 		"name": str("agent name"), "to": str("admiral name, see fleet_admirals")})},
+	{"fleet_handover_request", "Ask the admiral that owns an agent to hand it to you: mails its inbox; it approves with fleet_handover (or the user does). Moves nothing by itself.", obj([]string{"name"}, map[string]any{
+		"name": str("agent name")})},
 	{"fleet_admirals", "List the admirals on this fleet: name, profile, how many agents each owns, and your access with each. Admirals other than you may be reached with fleet_msg_send.", obj(nil, map[string]any{})},
 	{"fleet_msg_send", "Message another admiral (not an agent), or \"*\" for every admiral you may message. Under agent_mail = team or ask you need access first (fleet_access_request). Max 8 KB.", obj([]string{"to", "text"}, map[string]any{
 		"to": str("admiral name or *"), "text": str("message text")})},
@@ -79,6 +81,15 @@ func (s *Server) admiralCall(name string, a args) (string, error) {
 			return "", err
 		}
 		return fmt.Sprintf("handed %s to %s (%d unread reports moved)", a.Name, a.To, n), nil
+	case "fleet_handover_request":
+		if strings.TrimSpace(a.Name) == "" {
+			return "", fmt.Errorf("name is required")
+		}
+		owner, err := f.RequestHandover(s.Me(), a.Name)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("asked admiral %s for %s; it approves with fleet_handover, or the user does", owner, a.Name), nil
 	case "fleet_admirals":
 		return s.admirals(), nil
 	case "fleet_msg_send":

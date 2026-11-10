@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/sturlabragason/fleet/internal/board"
 )
 
 // CLI-backed admiral tools (ADR-86): fleet commands whose work lives in the
@@ -26,6 +28,8 @@ var cliToolDefs = []tool{
 		"dir": str("the repo (absolute)"), "prune": map[string]any{"type": "boolean", "description": "delete the merged branches from origin"}, "confirmed": confirmedProp})},
 	{"fleet_admiral_add", "Start another admiral beside main (its own pane, agents and reports), only when the user asks. fleet_admirals lists them.", obj([]string{"name"}, map[string]any{
 		"name": str("new admiral name"), "profile": str("tool profile (default: main's), see fleet_profiles")})},
+	{"fleet_admiral_close", "Close another admiral (main only, only when the user asks): its pane closes and its agents and unread reports come to main.", obj([]string{"name"}, map[string]any{
+		"name": str("admiral name, see fleet_admirals")})},
 	{"fleet_changes", "What's new in fleet: the running version and its latest changelog lines, newest first. Use when the user asks what changed, or after [fleet updated].", obj(nil, map[string]any{
 		"limit": map[string]any{"type": "integer", "description": "lines to return (default 15)"}})},
 }
@@ -132,6 +136,14 @@ func (s *Server) cliCall(name string, a args) (string, error) {
 			argv = append(argv, "--profile", a.Profile)
 		}
 		return cliResult(s.runFleet("", argv...))
+	case "fleet_admiral_close":
+		if strings.TrimSpace(a.Name) == "" {
+			return "", fmt.Errorf("name is required")
+		}
+		if s.Me() != board.Main {
+			return "", fmt.Errorf("only main closes an admiral; ask main or the user")
+		}
+		return cliResult(s.runFleet("", "admiral", "close", a.Name))
 	}
 	// fleet_changes
 	out, err := cliResult(s.runFleet("", "changes"))

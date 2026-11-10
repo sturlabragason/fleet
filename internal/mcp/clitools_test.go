@@ -102,3 +102,22 @@ func TestCLIToolsAdmiralAddAndChanges(t *testing.T) {
 		t.Fatalf("changes: %q", msg)
 	}
 }
+
+// #18: only main closes an admiral, through `fleet admiral close`.
+func TestCLIToolsAdmiralClose(t *testing.T) {
+	s, runs := cliServer(t, "admiral print closed", 0)
+	if msg, isErr := callText(t, s, "fleet_admiral_close", map[string]any{"name": "print"}); isErr {
+		t.Fatalf("close refused: %q", msg)
+	}
+	if want := []string{"admiral", "close", "print"}; len(*runs) != 1 || !reflect.DeepEqual((*runs)[0].argv, want) {
+		t.Fatalf("runs %v", *runs)
+	}
+	print := NewAdmiral(s.F, wall.New(s.F.T, fleet.Session), "print")
+	print.RunCLI = s.RunCLI
+	if msg, isErr := callText(t, print, "fleet_admiral_close", map[string]any{"name": "print"}); !isErr || !strings.Contains(msg, "only main") {
+		t.Fatalf("print closed an admiral: %q", msg)
+	}
+	if len(*runs) != 1 {
+		t.Fatal("refused close still ran the CLI")
+	}
+}

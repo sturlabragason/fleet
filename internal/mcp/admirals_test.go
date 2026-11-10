@@ -176,3 +176,30 @@ func TestSendToClosedAgent(t *testing.T) {
 		t.Fatalf("status lists a closed agent: %q", msg)
 	}
 }
+
+// #18: a write on another admiral's agent names fleet_handover_request,
+// which mails the owner (no access grant needed) and moves nothing.
+func TestHandoverRequest(t *testing.T) {
+	f := admiralHome(t)
+	main := startRPC(t, NewAdmiral(f, wall.New(f.T, fleet.Session), ""))
+	if msg, _ := main.tool("fleet_send", map[string]any{"name": "p1", "text": "x"}); !strings.Contains(msg, "fleet_handover_request") {
+		t.Fatalf("refusal does not name the request tool: %q", msg)
+	}
+	if msg, isErr := main.tool("fleet_handover_request", map[string]any{"name": "p1"}); isErr {
+		t.Fatalf("request: %q", msg)
+	}
+	ms := f.Mail().PeekMsgs("admiral.print")
+	if len(ms) != 1 || !strings.Contains(ms[0].Text, "admiral main asks for p1; approve with fleet_handover p1 to=main") {
+		t.Fatalf("print's inbox: %+v", ms)
+	}
+	if got := f.OwnerOf("p1"); got != "print" {
+		t.Fatalf("request moved p1 to %q", got)
+	}
+	print := startRPC(t, NewAdmiral(f, wall.New(f.T, fleet.Session), "print"))
+	if msg, isErr := print.tool("fleet_handover_request", map[string]any{"name": "p1"}); !isErr || !strings.Contains(msg, "already yours") {
+		t.Fatalf("own agent: %q %v", msg, isErr)
+	}
+	if _, isErr := main.tool("fleet_handover_request", map[string]any{"name": "nope"}); !isErr {
+		t.Fatal("unknown agent accepted")
+	}
+}

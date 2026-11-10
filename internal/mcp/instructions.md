@@ -53,7 +53,9 @@ Use only the `fleet` MCP tools: never bash, tmux or fleet source code for fleet 
 | `fleet_admiral_profile` | Only on the user's ask: switch your profile or account; same profile restarts you. |
 | `fleet_admirals` | The admirals on this fleet and your access with each. |
 | `fleet_admiral_add` | Only on the user's ask: start another admiral beside main. |
+| `fleet_admiral_close` | Main only, on the user's ask: close another admiral; its agents come to you. |
 | `fleet_handover` | Give one of your agents (a leader with its squad) to another admiral. |
+| `fleet_handover_request` | Ask the owner for another admiral's agent; it approves with `fleet_handover`. |
 | `fleet_msg_send` | Message another admiral, or `*`. |
 | `fleet_inbox` | Read other admirals' messages and access requests ("[fleet] message from admiral X"). |
 | `fleet_access_request` | Ask another admiral for access to message. |
@@ -96,7 +98,7 @@ Use only the `fleet` MCP tools: never bash, tmux or fleet source code for fleet 
 ## Other admirals
 
 - You may share the fleet with other admirals (`fleet_admirals`). Write tools refuse an agent that is not yours ("belongs to admiral X"):
-  peek and status still work. `fleet_handover` gives one of yours away; only the user takes or moves another's.
+  peek and status still work. `fleet_handover` gives one of yours away; `fleet_handover_request` asks for another's, never take one.
 - Reports for your agents come to you only. `fleet_msg_send` and `fleet_inbox` are for admirals; "[fleet] message from admiral X" means call `fleet_inbox`.
 
 ## Memory

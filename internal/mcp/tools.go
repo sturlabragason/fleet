@@ -167,10 +167,11 @@ var identityBound = map[string]bool{
 	"fleet_send": true, "fleet_answer": true, "fleet_spawn": true, "fleet_adopt": true,
 	"fleet_close": true, "fleet_park": true, "fleet_team": true, "fleet_wall": true,
 	"fleet_adr": true, "fleet_note": true, "fleet_reports": true, "fleet_handoff": true,
-	"fleet_admiral_profile": true, "fleet_access_decide": true, "fleet_handover": true,
+	"fleet_admiral_profile": true, "fleet_access_decide": true, "fleet_handover": true, "fleet_handover_request": true,
 	"fleet_admirals": true, "fleet_msg_send": true, "fleet_inbox": true,
 	"fleet_access_request": true, "fleet_access_respond": true, "fleet_access_revoke": true,
 	"fleet_takeover": true, "fleet_worktrees": true, "fleet_branches": true, "fleet_admiral_add": true,
+	"fleet_admiral_close": true,
 }
 
 func (s *Server) call(name string, raw json.RawMessage) (string, error) {
@@ -280,9 +281,9 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 			return fmt.Sprintf("parked %s; fleet_park name=%s action=wake resumes it", a.Name, a.Name), nil
 		}
 		return "", fmt.Errorf("action must be park or wake")
-	case "fleet_handover", "fleet_admirals", "fleet_msg_send", "fleet_inbox", "fleet_access_request", "fleet_access_respond", "fleet_access_revoke":
+	case "fleet_handover", "fleet_handover_request", "fleet_admirals", "fleet_msg_send", "fleet_inbox", "fleet_access_request", "fleet_access_respond", "fleet_access_revoke":
 		return s.admiralCall(name, a)
-	case "fleet_takeover", "fleet_touching", "fleet_worktrees", "fleet_branches", "fleet_admiral_add", "fleet_changes":
+	case "fleet_takeover", "fleet_touching", "fleet_worktrees", "fleet_branches", "fleet_admiral_add", "fleet_admiral_close", "fleet_changes":
 		return s.cliCall(name, a)
 	case "fleet_wall":
 		switch a.Action {
