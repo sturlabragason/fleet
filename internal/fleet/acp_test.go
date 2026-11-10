@@ -709,3 +709,27 @@ func TestDriverLine(t *testing.T) {
 		t.Errorf("unknown profile: %q", got)
 	}
 }
+
+// A park of an acp agent waits up to ACPStopWait for the host before it
+// kills the pane. A refresh in that window must not read the stopping
+// host's idle state over "parked", nor put the pane back on the entry: the
+// watcher did both live, and the agent then went gone and could not wake.
+// Past the window a live pane is a park that did not take and is read.
+func TestRefreshDuringACPParkKeepsParked(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FLEET_CONFIG", filepath.Join(home, "none.toml"))
+	f, err := New(&tmux.Client{Socket: "fleet-test-unused"}, home, "/bin/fleet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	status.WriteState(status.StateDir(home), "p1", status.State{Status: status.Idle, At: time.Now(), Event: "acp:end_turn"})
+	now := time.Now()
+	a := &board.Agent{Name: "p1", Driver: board.DriverACP, Status: string(status.Parked), StatusSince: now.Add(-time.Second), SessionID: "S1"}
+	if got := f.classify(a, true, false, "%9", now); got != string(status.Parked) || a.PaneID != "" {
+		t.Errorf("mid-park refresh: status %q pane %q, want parked and no pane", got, a.PaneID)
+	}
+	a.StatusSince = now.Add(-ACPStopWait - parkSettle - time.Second)
+	if got := f.classify(a, true, false, "%9", now); got == string(status.Parked) || a.PaneID != "%9" {
+		t.Errorf("stale parked with a live pane: status %q pane %q, want it read fresh", got, a.PaneID)
+	}
+}

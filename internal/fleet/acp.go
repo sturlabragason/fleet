@@ -400,7 +400,17 @@ func (f *Fleet) acpAnswer(name, yn, expect string) (Choice, error) {
 
 // classifyACP is classify for an acp agent: the host's state file and
 // transcript, never the screen.
+// parkSettle is how long after ACPStopWait a park is still taking: the
+// pane kill and its process-tree grace follow the wait.
+const parkSettle = 5 * time.Second
+
 func (f *Fleet) classifyACP(a *board.Agent, dead bool, pane string, now time.Time) string {
+	// Park flips the entry to parked with no pane, then waits for the host
+	// before it kills the pane. Reading the stopping host's state now would
+	// undo the park and put the pane back, and the agent would go gone.
+	if a.Status == string(status.Parked) && a.PaneID == "" && now.Sub(a.StatusSince) < ACPStopWait+parkSettle {
+		return a.Status
+	}
 	a.PaneID = pane
 	tr := readTranscript(acphost.TranscriptPath(f.Home, a.Name), a.SessionID == "")
 	if tr.SessionID != "" {
