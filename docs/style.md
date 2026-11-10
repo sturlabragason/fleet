@@ -300,6 +300,9 @@ Screenshots:
 - Every screenshot has a caption in `<sub>` saying what is in it and that it was made with fake
   agents. A reader must never mistake a demo for a measurement.
 - The terminal uses the Mocha palette and the same font at the same size in every shot.
+- The GitHub social preview, `docs/img/social.png` (1280×640), is the hero under the lockup and one
+  tagline, built by `scripts/social-card.sh`. GitHub has no API for it: upload it under Settings,
+  Social preview, after regenerating.
 
 Diagrams are Mermaid, checked with mermaid-cli before committing:
 
