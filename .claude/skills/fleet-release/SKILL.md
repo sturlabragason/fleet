@@ -39,8 +39,13 @@ Then, in order — stop at the first failure and report `blocked` with the outpu
 ```sh
 git status --short                         # must be empty
 make build && go vet ./... && go test ./...
-scripts/check-public.sh origin/main..$REL  # emails, home paths, deny list, stray emails, gitleaks
+scripts/check-public.sh origin/main..$REL  # emails, messages, every added line, deny list, gitleaks
+scripts/check-public.sh --gh               # issue, comment and release text already on GitHub
 ```
+
+CI runs the same check with the deny list and emails from the `PUBLIC_DENY` and `PUBLIC_EMAILS`
+repository secrets. When you add a line to `.git/info/public-deny`, update the secret too:
+`grep -v -e '^#' -e '^$' .git/info/public-deny | gh secret set PUBLIC_DENY`.
 
 `check-public.sh` failing is the common case. It has caught an employer name in a test fixture more
 than once. Fix the content on a branch, merge it, and re-pin `REL` — never push past it.

@@ -235,7 +235,7 @@ See [docs/troubleshooting.md](docs/troubleshooting.md).
 ```sh
 make test   # go test ./..., never fails the build; output also in ~/.fleet/logs/test.log
 make dev    # tmux -L fleet-dev: rebuild, test and restart the TUI on every save (needs watchfiles)
-make hooks  # pre-push check: commit emails, home paths, secrets (scripts/check-public.sh)
+make hooks  # pre-push check: commit emails, messages, added lines, deny list, secrets (scripts/check-public.sh)
 ```
 
 Tests that need tmux use throwaway `fleet-test-*` servers. Architecture: [docs/architecture.md](docs/architecture.md). Contributor notes: [AGENTS.md](AGENTS.md).
