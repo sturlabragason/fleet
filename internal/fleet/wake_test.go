@@ -2,6 +2,7 @@ package fleet
 
 import (
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -21,6 +22,7 @@ type fakeAdmiral struct {
 	idle      *bool
 	noBox     bool
 	box       string
+	dropEnter int // Enters ignored before one submits, as copilot drops one right after a paste
 	submitted []string
 	onSubmit  func(string)
 	beforeTyp func(a *fakeAdmiral) // runs inside TypeText, before the paste lands
@@ -57,6 +59,10 @@ func fakeAdm(f *Fleet, pasted *[]string, idle *bool) *fakeAdmiral {
 		for _, k := range keys {
 			switch k {
 			case "Enter":
+				if a.dropEnter > 0 {
+					a.dropEnter--
+					continue
+				}
 				a.submitted = append(a.submitted, a.box)
 				sub = append(sub, a.box)
 				a.box = ""
@@ -274,8 +280,10 @@ func TestWakeRealPane(t *testing.T) {
 		t.Fatalf("user input changed to %q", v.Input)
 	}
 	// A fresh admiral with an empty box gets the wake, submitted.
+	// Its prompt comes back after each line, as a real input box empties
+	// on submit: that is how fleet sees the Enter took.
 	f.T.KillPane(pane)
-	if pane, err = f.T.Spawn(Session, "main", f.Home, nil, "sh -c 'stty -icanon; printf \"> \"; cat >/dev/null'"); err != nil {
+	if pane, err = f.T.Spawn(Session, "main", f.Home, nil, "sh -c 'while printf \"> \"; read l; do echo sent; done'"); err != nil {
 		t.Fatal(err)
 	}
 	f.T.SetPaneOption(pane, "@role", "sup")
@@ -284,9 +292,8 @@ func TestWakeRealPane(t *testing.T) {
 	}
 	f.DeliverWake()
 	out, _ := f.T.Capture(pane, 0)
-	cx, _ := f.T.Run("display-message", "-p", "-t", pane, "#{cursor_x}")
-	if !strings.Contains(out, "> "+ReportLine("a", "blocked", "need creds")) || strings.TrimSpace(cx) != "0" {
-		t.Fatalf("wake not typed and submitted (cursor_x %s):\n%s", cx, out)
+	if !strings.Contains(out, "> "+ReportLine("a", "blocked", "need creds")) || f.supPane().Input != "" {
+		t.Fatalf("wake not typed and submitted:\n%s", out)
 	}
 }
 
@@ -465,5 +472,114 @@ func TestWakeMaxHold(t *testing.T) {
 	f.DeliverWake()
 	if want := ReportLine("a", "done", "x"); len(a.submitted) != 1 || a.submitted[0] != want {
 		t.Fatalf("submitted %q, want %q", a.submitted, want)
+	}
+}
+
+// Copilot can drop an Enter that comes right after the paste, leaving the
+// wake in the box; the waker then waits for ever for an empty box (live,
+// 2026-11-10). Fleet checks that Enter took and presses it again.
+func TestWakeEnterDroppedIsPressedAgain(t *testing.T) {
+	f, pasted := mailFleet(t)
+	GuardWait = 50 * time.Millisecond
+	t.Cleanup(func() { GuardWait = 1500 * time.Millisecond })
+	a := fakeAdm(f, pasted, ptr(true))
+	a.dropEnter = 1
+	f.Report("a", "done", "x")
+	if want := ReportLine("a", "done", "x"); a.box != "" || len(a.submitted) != 1 || a.submitted[0] != want {
+		t.Fatalf("box %q submitted %q, want %q", a.box, a.submitted, want)
+	}
+	// Enter never takes: the line is taken back so the box reads empty,
+	// and the report stays queued for the next poll.
+	f.Mail().Inbox(mail.Supervisor, false, 0)
+	a.dropEnter = 100
+	f.Report("b", "done", "y")
+	if a.box != "" || len(a.submitted) != 1 {
+		t.Fatalf("Enter never took: box %q submitted %q", a.box, a.submitted)
+	}
+	a.dropEnter = 0
+	f.DeliverWake()
+	if want := ReportLine("b", "done", "y"); len(a.submitted) != 2 || a.submitted[1] != want {
+		t.Fatalf("not retried: submitted %q", a.submitted)
+	}
+}
+
+// A wake left in the box by a process that died before pressing Enter is
+// fleet's own text: the next poll submits it instead of waiting for an
+// empty box that never comes.
+func TestWakeLeftInBoxIsResubmitted(t *testing.T) {
+	f, pasted := mailFleet(t)
+	a := fakeAdm(f, pasted, ptr(true))
+	stale := "[fleet] 3 new reports: a (question), b (done), c (done). Full text: call fleet_reports."
+	a.box = stale
+	os.MkdirAll(filepath.Dir(f.typedPath(mail.Supervisor)), 0o755)
+	f.recordTyped(mail.Supervisor, stale, "", nil)
+	f.DeliverWake()
+	if len(a.submitted) != 1 || a.submitted[0] != stale || a.box != "" {
+		t.Fatalf("stale wake: box %q submitted %q", a.box, a.submitted)
+	}
+	// The user's own text that only resembles a wake is never submitted.
+	a.box = "[fleet] something the user wrote"
+	f.DeliverWake()
+	if len(a.submitted) != 1 || a.box != "[fleet] something the user wrote" {
+		t.Fatalf("user text: box %q submitted %q", a.box, a.submitted)
+	}
+}
+
+// A process that died after its paste leaves the line, and its reports off
+// the queue and claimed. When Enter will not take, the line goes and the
+// reports are queued again, so the next poll still wakes for them.
+func TestWakeLeftInBoxRequeuedWhenEnterFails(t *testing.T) {
+	f, pasted := mailFleet(t)
+	GuardWait = 20 * time.Millisecond
+	t.Cleanup(func() { GuardWait = 1500 * time.Millisecond })
+	busy := ptr(false)
+	a := fakeAdm(f, pasted, busy)
+	f.Report("a", "done", "x") // queued: the admiral is busy
+	es := f.takeWake(mail.Supervisor)
+	prev, ok, err := f.Mail().ClaimWakeUpTo(mail.Supervisor, newestID(es))
+	if err != nil || !ok || len(es) != 1 {
+		t.Fatalf("setup: es %d ok %v err %v", len(es), ok, err)
+	}
+	line := wakeLineTo(mail.Supervisor, es)
+	f.recordTyped(mail.Supervisor, line, prev, es)
+	// The dead process got only part way through taking it back.
+	a.box, a.dropEnter, *busy = string([]rune(line)[:20]), 100, true
+	f.DeliverWake()
+	if len(a.submitted) != 0 {
+		t.Fatalf("partial line submitted: %q", a.submitted)
+	}
+	a.dropEnter = 0
+	f.DeliverWake()
+	if len(a.submitted) != 1 || a.submitted[0] != line || a.box != "" {
+		t.Fatalf("report not woken again: box %q submitted %q", a.box, a.submitted)
+	}
+}
+
+// A capture that fails right after Enter is no proof the line was
+// submitted: fleet keeps looking and presses Enter again.
+func TestWakeUnreadableBoxIsNotASubmit(t *testing.T) {
+	f, pasted := mailFleet(t)
+	GuardWait = 50 * time.Millisecond
+	t.Cleanup(func() { GuardWait = 1500 * time.Millisecond })
+	a := fakeAdm(f, pasted, ptr(true))
+	a.dropEnter = 1
+	view, blank := f.SupPane, false
+	f.SupPane = func() AdmiralView {
+		if blank {
+			blank = false
+			return AdmiralView{Pane: "%sup"} // capture failed
+		}
+		return view()
+	}
+	press := f.PressKeys
+	f.PressKeys = func(pane string, keys ...string) error {
+		if len(keys) == 1 && keys[0] == "Enter" {
+			blank = true
+		}
+		return press(pane, keys...)
+	}
+	f.Report("a", "done", "x")
+	if want := ReportLine("a", "done", "x"); a.box != "" || len(a.submitted) != 1 || a.submitted[0] != want {
+		t.Fatalf("box %q submitted %q", a.box, a.submitted)
 	}
 }

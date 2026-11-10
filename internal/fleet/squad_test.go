@@ -22,8 +22,9 @@ func squadFleet(t *testing.T) *Fleet {
 	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
 	t.Cleanup(func() { tc.KillServer() })
 	os.WriteFile(filepath.Join(home, "tools.toml"), []byte("[cat]\ncommand = \"sh\"\nargs = [\"-c\", \"cat\"]\npatterns = \"fake\"\n"+
-		// box shows an input box on screen, so a wake may be typed into it.
-		"[box]\ncommand = \"sh\"\nargs = [\"-c\", \"printf '> '; cat\"]\npatterns = \"fake\"\n"), 0o644)
+		// box shows an input box on screen, so a wake may be typed into it;
+		// it comes back empty after each line, as on a submit.
+		"[box]\ncommand = \"sh\"\nargs = [\"-c\", \"while printf '> '; read l; do echo sent; done\"]\npatterns = \"fake\"\n"), 0o644)
 	t.Setenv("FLEET_CONFIG", filepath.Join(home, "no-config.toml"))
 	f, err := New(tc, home, "/nonexistent")
 	if err != nil {
@@ -101,8 +102,8 @@ func TestSquadReportWakesTheLeaderPane(t *testing.T) {
 	}
 	spawnMember(t, f, "lead", "m1")
 
-	// The wake is typed into the leader's own pane; Enter is faked, so the
-	// line is read back off the screen instead of being submitted.
+	// The wake is typed into the leader's own pane; each Enter records the
+	// line on screen, then submits it.
 	var typed []string
 	pane := f.Store.Load().Agents["lead"].PaneID
 	f.SupPane = func() AdmiralView { return AdmiralView{} } // the admiral has no pane here
@@ -112,7 +113,7 @@ func TestSquadReportWakesTheLeaderPane(t *testing.T) {
 				typed = append(typed, f.boxView("lead").Input)
 			}
 		}
-		return nil
+		return f.T.SendKeys(p, keys...)
 	}
 	if _, err := f.Report("m1", "blocked", "needs a decision"); err != nil {
 		t.Fatal(err)
@@ -330,7 +331,7 @@ func TestPeerNudgeDoesNotSuppressSquadWake(t *testing.T) {
 				typed = append(typed, f.boxView("lead").Input)
 			}
 		}
-		return nil
+		return f.T.SendKeys(p, keys...)
 	}
 	m, err := f.Mail().ReportTo("m1", "lead", "blocked", "needs a decision")
 	if err != nil {

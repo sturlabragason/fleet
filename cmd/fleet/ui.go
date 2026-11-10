@@ -95,14 +95,12 @@ func (p *pollBackend) SupCtx() (string, string) {
 // Refresh reads the board when the watcher is live, and captures the panes
 // itself when it is not. One refresher at a time is what keeps the border
 // titles, the board and these cards from disagreeing (ADR-49), and it halves
-// the tmux calls while the overview is open. The admiral wake is not a
-// refresh and runs either way: skipping it here is what let reports sit
-// unseen while a watcher ran. The status-line badge is the watcher's alone
-// then: an overview left on an older binary set it differently every poll
-// and it blinked (ADR-75).
+// the tmux calls while the overview is open. Admiral wakes and the
+// status-line badge are the watcher's alone then (its housekeeping, ADR-51):
+// two wakers reading the same box raced each other, and an overview on an
+// older binary set the badge differently every poll so it blinked (ADR-75).
 func (b *backend) Refresh() ([]*board.Agent, error) {
 	if watch.Live(b.f.Home, time.Now()) {
-		b.f.RetryWake()
 		return b.f.Store.Load().Sorted(), nil
 	}
 	return b.f.Refresh()

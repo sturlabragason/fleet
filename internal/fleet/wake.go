@@ -276,34 +276,26 @@ const WakeMaxTries = 3
 // other process is typing into it. The queue is dropped only once the
 // admiral has read its reports; anything else puts it back, so a wake that
 // could not be typed is retried on the next poll (the watcher polls,
-// DESIGN §7c) instead of being lost (ADR-51).
-func (f *Fleet) DeliverWake() { f.deliverWake(true) }
-
-// RetryWake is DeliverWake without the badge: for the overview while a
-// watcher is live. The badge has one writer, the watcher, which re-execs
-// on a rebuild; two writers whose code disagrees on what is unread set it
-// in turn every poll and the badge blinks (ADR-75).
-func (f *Fleet) RetryWake() { f.deliverWake(false) }
-
-func (f *Fleet) deliverWake(badge bool) {
+// DESIGN §7c) instead of being lost (ADR-51). The resident poll that
+// calls it is the watcher's while one is live, the overview's otherwise.
+func (f *Fleet) DeliverWake() {
 	for _, box := range f.AdmiralBoxes() {
-		f.deliverWakeTo(box, badge)
+		f.DeliverWakeTo(box)
 	}
 	for _, l := range f.Leaders() {
-		f.deliverWakeTo(l, badge)
+		f.DeliverWakeTo(l)
 	}
 }
 
 // DeliverWakeTo delivers one box's queue: the admiral's, or a leader's
 // (ADR-53). Everything below is the same for both; only the badge is the
 // admiral's alone.
-func (f *Fleet) DeliverWakeTo(box string) { f.deliverWakeTo(box, true) }
-
-func (f *Fleet) deliverWakeTo(box string, badge bool) {
+func (f *Fleet) DeliverWakeTo(box string) {
 	unread := f.unreadFor(box)
-	if badge && box == mail.Supervisor {
+	if box == mail.Supervisor {
 		f.syncBadge()
 	}
+	f.resubmitTyped(box)
 	b, err := os.ReadFile(f.wakePath(box))
 	if err != nil {
 		return
@@ -363,6 +355,8 @@ func (f *Fleet) deliverWakeTo(box string, badge bool) {
 		f.writeTries(box, nil)
 		return
 	}
+	f.recordTyped(box, line, prev, es)
+	defer os.Remove(f.typedPath(box))
 	if err := f.typeText(v.Pane, line); err != nil {
 		f.undelivered(box, es, prev, "paste failed: "+err.Error())
 		return
@@ -470,17 +464,18 @@ func (f *Fleet) guardEnter(box, pane, line string) bool {
 	log := logx.For("mail")
 	want := squash(line)
 	var raw, got string
+	time.Sleep(SubmitPause) // an Enter right after the paste can be dropped
 	end := time.Now().Add(GuardWait)
 	for {
 		v := f.boxView(box)
 		raw = v.Input
 		got = squash(raw)
 		if v.Pane == pane && v.Box && got == want {
-			if err := f.pressKeys(pane, "Enter"); err != nil {
+			if !f.submitWake(box, pane, want) {
 				// The line is in the box: take it back, or the box never
 				// reads empty again and every retry waits on it.
 				f.pressKeys(pane, backspaces(len([]rune(line)))...)
-				log.Warn("wake failed", "box", box, "err", err)
+				log.Warn("wake not submitted: Enter did not take; line removed", "box", box)
 				return false
 			}
 			log.Info("woke inbox owner", "box", box, "line", line)
@@ -661,4 +656,87 @@ func (f *Fleet) boxView(box string) AdmiralView {
 	st, ok := ps.Detect(text)
 	in, hasBox := ps.InputBox(text)
 	return AdmiralView{Pane: pane, Idle: ok && st == status.Idle, Box: hasBox, Input: in}
+}
+
+// typedPath holds the wake line while fleet types it, so a line left in the
+// box by a process that died before its Enter is known as fleet's own.
+// Line 1 is the typed line, line 2 the claim it replaced, then the queue
+// entries it took: what undelivered needs to put them back.
+func (f *Fleet) typedPath(box string) string { return f.wakePath(box) + "-typed" }
+
+func (f *Fleet) recordTyped(box, line, prev string, es []wakeEntry) {
+	var sb strings.Builder
+	sb.WriteString(strings.ReplaceAll(line, "\n", " ") + "\n" + prev + "\n")
+	for _, e := range es {
+		sb.WriteString(e.raw() + "\n")
+	}
+	os.WriteFile(f.typedPath(box), []byte(sb.String()), 0o644)
+}
+
+// resubmitTyped submits a wake fleet typed and never saw submitted: the box
+// holds exactly that line, so it would never read empty again and every
+// later wake would wait on it. Anything else in the box is the user's and
+// is left alone; the record is dropped once the box no longer shows it.
+func (f *Fleet) resubmitTyped(box string) {
+	b, err := os.ReadFile(f.typedPath(box))
+	if err != nil {
+		return
+	}
+	release, ok := f.lockWake(box)
+	if !ok {
+		return // a delivery is typing right now; its record is live
+	}
+	defer release()
+	v := f.boxView(box)
+	if v.Pane == "" || !v.Idle || !v.Box || !f.quiet() {
+		return // look again on the next poll
+	}
+	defer os.Remove(f.typedPath(box))
+	p := strings.SplitN(string(b), "\n", 3)
+	if len(p) < 3 {
+		return
+	}
+	line, prev := p[0], p[1]
+	got, want := squash(v.Input), squash(line)
+	if got == "" || !strings.HasPrefix(want, got) {
+		return // not fleet's line: the user's, or already gone
+	}
+	log := logx.For("mail")
+	if got == want && f.submitWake(box, v.Pane, want) {
+		log.Warn("wake left in the input box was submitted", "box", box, "line", line)
+		return
+	}
+	// Enter would not take, or only the start of the line is left (the
+	// process died while taking it back): remove it and requeue the reports.
+	f.pressKeys(v.Pane, backspaces(len([]rune(line)))...)
+	es := parseWake([]byte(p[2]), f.Mail().Peek(box))
+	tries := f.readTries(box)
+	for i := range es {
+		es[i].tries = tries[es[i].id]
+	}
+	f.undelivered(box, es, prev, "a wake left in the input box would not submit; removed")
+}
+
+// submitWake presses Enter and checks the box let go of the line, pressing
+// it once more if not: copilot can drop an Enter that comes right after a
+// paste (fleet.Send does the same). want is the squashed line.
+func (f *Fleet) submitWake(box, pane, want string) bool {
+	for range 2 {
+		if f.pressKeys(pane, "Enter") != nil {
+			return false
+		}
+		end := time.Now().Add(GuardWait)
+		for {
+			// Only a box seen without the line counts: a failed capture
+			// or a redraw with no box must not pass for a submit.
+			if v := f.boxView(box); v.Pane == pane && v.Box && squash(v.Input) != want {
+				return true
+			}
+			if time.Now().After(end) {
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	return false
 }
