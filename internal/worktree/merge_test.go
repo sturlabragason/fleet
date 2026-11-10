@@ -24,6 +24,16 @@ func TestKeepBoth(t *testing.T) {
 	if got, ok := KeepBoth(d3, true); !ok || got != "c\na\n" {
 		t.Fatalf("diff3: %q ok=%v", got, ok)
 	}
+	// A base line one side removed stays removed; one both kept appears once.
+	d3 = "<<<<<<< HEAD\nold\nkeep\nmain\n||||||| base\nold\nkeep\n=======\nnew\nkeep\n>>>>>>> x\n"
+	if got, _ := KeepBoth(d3, true); got != "new\nkeep\nmain\n" {
+		t.Fatalf("diff3 removal: %q", got)
+	}
+	// diff3 does not trim a heading both sides added; it is kept once.
+	d3 = "<<<<<<< HEAD\n## new\n- a\n\n||||||| base\n=======\n## new\n- b\n\n>>>>>>> x\n## old\n"
+	if got, _ := KeepBoth(d3, true); got != "## new\n- b\n- a\n\n## old\n" {
+		t.Fatalf("diff3 shared heading: %q", got)
+	}
 	if _, ok := KeepBoth("no markers\n", true); ok {
 		t.Fatal("found a conflict in clean content")
 	}
@@ -111,6 +121,32 @@ func TestMergeSharedDocConflict(t *testing.T) {
 	// Nothing was pushed: the repo has no remote and no stray refs.
 	if out, _ := git(repo, "remote"); strings.TrimSpace(out) != "" {
 		t.Fatalf("remote %q", out)
+	}
+}
+
+// #43: a branch adds a CHANGELOG line under ADR-1, main takes ADR-1 first, and
+// the branch renumbers to ADR-2 in a second commit. Replaying the renumber
+// conflicts too; the old ADR-1 line it removed must not survive beside it.
+func TestMergeRenumberLeavesNoOldLine(t *testing.T) {
+	repo, wts := mergeRepo(t, "a", "b")
+	write(t, wts["a"], "CHANGELOG.md", "# What's new\n\n## 2026-11-05\n- from a (ADR-1)\n- base line\n")
+	run(t, wts["a"], "commit", "-qam", "feat: a")
+	write(t, wts["b"], "CHANGELOG.md", "# What's new\n\n## 2026-11-05\n- from b (ADR-1)\n- base line\n")
+	run(t, wts["b"], "commit", "-qam", "feat: b")
+	write(t, wts["b"], "CHANGELOG.md", "# What's new\n\n## 2026-11-05\n- from b (ADR-2)\n- base line\n")
+	run(t, wts["b"], "commit", "-qam", "docs: renumber")
+	run(t, wts["b"], "config", "merge.conflictStyle", "merge")
+
+	if _, err := Merge(Options{Dir: wts["a"]}); err != nil {
+		t.Fatalf("first merge: %v", err)
+	}
+	if _, err := Merge(Options{Dir: wts["b"]}); err != nil {
+		t.Fatalf("second merge: %v", err)
+	}
+	got := read(t, repo, "CHANGELOG.md")
+	want := "# What's new\n\n## 2026-11-05\n- from b (ADR-2)\n- from a (ADR-1)\n- base line\n"
+	if got != want {
+		t.Fatalf("CHANGELOG after renumber merge:\n%q\nwant\n%q", got, want)
 	}
 }
 

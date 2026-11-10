@@ -254,7 +254,9 @@ func Merge(o Options) (*Plan, error) {
 // rebase replays the branch onto the base, resolving shared-doc conflicts as
 // they come and aborting on any other.
 func rebase(p *Plan, logf func(string)) error {
-	_, err := git(p.Dir, "rebase", p.Base)
+	// diff3 markers carry the replayed commit's base, which KeepBoth needs
+	// to tell a line the commit removed (an old ADR number) from a new one.
+	_, err := git(p.Dir, "-c", "merge.conflictStyle=diff3", "rebase", p.Base)
 	for i := 0; err != nil; i++ {
 		if i > 100 {
 			abortRebase(p.Dir)
@@ -289,7 +291,7 @@ func rebase(p *Plan, logf func(string)) error {
 			}
 		}
 		logf("kept both sides in " + strings.Join(unmerged, ", "))
-		_, err = gitEnv(p.Dir, []string{"GIT_EDITOR=true"}, "rebase", "--continue")
+		_, err = gitEnv(p.Dir, []string{"GIT_EDITOR=true"}, "-c", "merge.conflictStyle=diff3", "rebase", "--continue")
 	}
 	return nil
 }
@@ -310,11 +312,13 @@ func resolveFile(dir, file string, theirsFirst bool) error {
 
 // KeepBoth replaces every conflict region in content with both sides' lines,
 // the newer side first and no markers left. With theirsFirst the incoming
-// (replayed) side goes above. It reports whether any marker was found.
+// (replayed) side goes above. With diff3 markers a base line one side removed
+// stays removed, and one both kept or both added appears once (#43: a renumbered ADR or
+// CHANGELOG line replaces the old one). It reports whether any marker was found.
 func KeepBoth(content string, theirsFirst bool) (string, bool) {
 	lines := strings.Split(content, "\n")
 	var out []string
-	var ours, theirs []string
+	var ours, base, theirs []string
 	const (
 		plain = iota
 		inOurs
@@ -326,27 +330,22 @@ func KeepBoth(content string, theirsFirst bool) (string, bool) {
 		switch {
 		case strings.HasPrefix(l, "<<<<<<<") && state == plain:
 			state, found = inOurs, true
-			ours, theirs = nil, nil
+			ours, base, theirs = nil, nil, nil
 		case strings.HasPrefix(l, "|||||||") && state == inOurs:
 			state = inBase
 		case strings.HasPrefix(l, "=======") && (state == inOurs || state == inBase):
 			state = inTheirs
 		case strings.HasPrefix(l, ">>>>>>>") && state == inTheirs:
 			state = plain
-			if theirsFirst {
-				out = append(out, theirs...)
-				out = append(out, ours...)
-			} else {
-				out = append(out, ours...)
-				out = append(out, theirs...)
-			}
+			out = append(out, resolveRegion(ours, base, theirs, theirsFirst)...)
 		default:
 			switch state {
 			case inOurs:
 				ours = append(ours, l)
 			case inTheirs:
 				theirs = append(theirs, l)
-			case inBase: // the merge base, dropped
+			case inBase:
+				base = append(base, l)
 			default:
 				out = append(out, l)
 			}
@@ -478,4 +477,57 @@ func gitEnv(dir string, env []string, args ...string) (string, error) {
 		return string(out), fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 	}
 	return string(out), nil
+}
+
+// resolveRegion turns one conflict region into the lines kept: the lines
+// both sides start and end with once (diff3 does not trim them as the default
+// style does), then the rest of each side in order, without the base lines
+// the other side deleted and without theirs' copies of base lines. Lines are
+// counted, so a repeated line is removed only as often as it was in base.
+func resolveRegion(ours, base, theirs []string, theirsFirst bool) []string {
+	pre := 0
+	for pre < len(ours) && pre < len(theirs) && ours[pre] == theirs[pre] {
+		pre++
+	}
+	suf := 0
+	for suf < len(ours)-pre && suf < len(theirs)-pre && ours[len(ours)-1-suf] == theirs[len(theirs)-1-suf] {
+		suf++
+	}
+	inBase := map[string]int{}
+	for _, l := range base {
+		inBase[l]++
+	}
+	for _, l := range ours[:pre] {
+		inBase[l]--
+	}
+	for _, l := range ours[len(ours)-suf:] {
+		inBase[l]--
+	}
+	o, t := ours[pre:len(ours)-suf], theirs[pre:len(theirs)-suf]
+	deleted := map[string]int{}
+	for l, n := range inBase {
+		deleted[l] = n
+	}
+	for _, l := range t {
+		deleted[l]--
+	}
+	drop := func(lines []string, gone map[string]int) []string {
+		var out []string
+		for _, l := range lines {
+			if gone[l] > 0 {
+				gone[l]--
+				continue
+			}
+			out = append(out, l)
+		}
+		return out
+	}
+	o, t = drop(o, deleted), drop(t, inBase)
+	out := append([]string(nil), ours[:pre]...)
+	if theirsFirst {
+		out = append(append(out, t...), o...)
+	} else {
+		out = append(append(out, o...), t...)
+	}
+	return append(out, ours[len(ours)-suf:]...)
 }
