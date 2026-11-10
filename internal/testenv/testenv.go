@@ -30,8 +30,10 @@ type Proc struct {
 }
 
 // Main runs the tests with every child marked and returns the exit code: 1
-// if a marked process outlived them, which it then kills.
+// if a marked process outlived them, which it then kills. On Linux the
+// children run with no_new_privs, so test tmux panes write no wtmp records.
 func Main(m interface{ Run() int }) int {
+	noNewPrivs()
 	Reap(Orphans())
 	own := Owner(os.Getpid())
 	os.Setenv(Env, own)
