@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -149,4 +150,18 @@ func LastLine(path string) string {
 		return true
 	})
 	return line
+}
+
+// LastAgentText returns the text of the transcript's newest agent message,
+// or "" when there is none.
+func LastAgentText(path string) string {
+	text := ""
+	_ = eachFromEnd(path, func(e Entry) bool {
+		if e.Kind == KindAgent && strings.TrimSpace(e.Text) != "" {
+			text = e.Text
+			return false
+		}
+		return true
+	})
+	return text
 }

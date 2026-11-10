@@ -10,8 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/acphost"
+	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/summary"
 	"github.com/sturlabragason/fleet/internal/tmux"
+	"github.com/sturlabragason/fleet/internal/tools"
 )
 
 type fakeModel struct {
@@ -123,5 +126,51 @@ func TestSummarizerUsesTheConfiguredModel(t *testing.T) {
 	}
 	if s.MinInterval != 5*time.Second {
 		t.Fatalf("min interval = %s", s.MinInterval)
+	}
+}
+
+// last_message (#16): the screen when the tool keeps no log, the Claude
+// session .jsonl for claude patterns, fleet's own transcript for ACP.
+func TestLastMessageSources(t *testing.T) {
+	f, m := summaryFleet(t)
+	got, err := f.LastMessage("a1")
+	if err != nil || !strings.HasPrefix(got, LastMessageScreenNote+"\n") || !strings.Contains(got, "[y/n]") {
+		t.Fatalf("screen fallback: %q %v", got, err)
+	}
+	if _, err := f.PeekSummary(context.Background(), "a1"); err != nil || strings.Contains(m.prompt, LastMessageScreenNote) {
+		t.Fatalf("summary took the screen fallback as a last message (%v):\n%s", err, m.prompt)
+	}
+	if _, err := f.LastMessage("nobody"); err == nil {
+		t.Fatal("want an error for an unknown agent")
+	}
+
+	fixture, err := os.ReadFile(filepath.Join("..", "status", "testdata", "claude-session.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(f.Home, "projects", "-work")
+	must(t, os.MkdirAll(dir, 0o755))
+	must(t, os.WriteFile(filepath.Join(dir, "s16.jsonl"), fixture, 0o644))
+	f.Profiles["cl"] = tools.Profile{Patterns: "claude", SessionPath: filepath.Join(f.Home, "projects", "*", "{id}.jsonl")}
+	must(t, f.Store.Update(func(b *board.Board) error { b.Agents["a1"].Profile, b.Agents["a1"].SessionID = "cl", "s16"; return nil }))
+	if got, err := f.LastMessage("a1"); err != nil || got != "1\n2\n3" {
+		t.Fatalf("claude: %q %v", got, err)
+	}
+
+	tr := acphost.TranscriptPath(f.Home, "a1")
+	must(t, os.MkdirAll(filepath.Dir(tr), 0o700))
+	must(t, os.WriteFile(tr, []byte(`{"kind":"agent","text":"from acp"}`+"\n"+`{"kind":"tool","title":"Run ls"}`+"\n"), 0o600))
+	must(t, f.Store.Update(func(b *board.Board) error { b.Agents["a1"].Driver = board.DriverACP; return nil }))
+	got, err = f.LastMessage("a1")
+	must(t, f.Store.Update(func(b *board.Board) error { b.Agents["a1"].Driver = ""; return nil }))
+	if err != nil || got != "from acp" {
+		t.Fatalf("acp: %q %v", got, err)
+	}
+}
+
+func must(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
 	}
 }

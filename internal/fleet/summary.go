@@ -57,8 +57,8 @@ func (f *Fleet) PeekSummary(ctx context.Context, name string) (summary.Result, e
 		Task:   a.Goal,
 	}
 	// The last message is a bonus, not a requirement: profiles without a
-	// session log simply do not have one.
-	if msg, err := f.LastMessage(name); err == nil {
+	// session log simply do not have one (and the screen is already in).
+	if msg, ok := f.loggedMessage(name); ok {
 		in.LastMessage = msg
 	}
 	return s.Summarize(ctx, in)

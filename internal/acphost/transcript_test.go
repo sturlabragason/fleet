@@ -36,6 +36,12 @@ func TestTailAndLastSessionAcrossBlocks(t *testing.T) {
 	if got := LastLine(path); got != "last words" {
 		t.Fatalf("LastLine = %q", got)
 	}
+	tx, _ = openTranscript(path)
+	_ = tx.add(Entry{Kind: KindTool, Title: "Run ls"})
+	tx.close()
+	if got := LastAgentText(path); got != "line one\nlast words" {
+		t.Fatalf("LastAgentText = %q", got)
+	}
 
 	// Only the first session in a file whose blocks split lines.
 	p2 := filepath.Join(t.TempDir(), "b.jsonl")

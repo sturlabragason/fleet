@@ -5,6 +5,7 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-10
+- `fleet_peek last_message=true` now works for Claude agents (read from their session transcript) and ACP agents, and for agy, vibe and other tools gives the end of the screen marked "(from the screen)" instead of an error (#16).
 - `fleet spawn`, `fleet_spawn` and `fleet_squad_spawn` fail at once with a clear error when the dir does not exist or the profile's command is not on PATH, and `fleet up` does the same for the admiral's command, instead of reporting success and leaving a dead pane (#38, #23).
 - An agent idle on a question it reported shows as waiting on the board and in `fleet_status` until it works again; after that its question or blocked report reads "(answered)" and stops counting as waiting on you, and `fleet_status` shows every report's age (ADR-90).
 - `fleet merge` and `fleet merge --dry-run` stop when your branch's new ADR number is already on main or claimed by another agent, and tell you to take a new one with `fleet adr claim`, so a renumber no longer lands on someone else's number (ADR-50, fleet#40).
