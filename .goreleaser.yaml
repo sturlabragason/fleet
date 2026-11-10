@@ -27,8 +27,11 @@ checksum:
 snapshot:
   version_template: "{{ .Version }}-snapshot-{{ .ShortCommit }}"
 
+# The release body is CHANGELOG.md's new lines, passed as --release-notes
+# (scripts/release-notes.sh). Don't set changelog.disable: it skips the whole
+# changelog pipe, --release-notes included, and the body comes out empty.
 changelog:
-  disable: true # notes come from CHANGELOG.md (scripts/release-notes.sh)
+  use: git
 
 release:
   github:
