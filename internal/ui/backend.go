@@ -17,7 +17,7 @@ type AdmiralInfo struct {
 // admiral setups need nothing.
 type AdmiralBackend interface {
 	Admirals() []AdmiralInfo // main first; more than one turns the owner chips on
-	BadgeBy() string         // " ✉ main 1 · print 2 ", "" for none
+	BadgeBy() string         // " ● main 1 · print 2 ", "" for none
 	PickOwner(agent string) error
 }
 
@@ -38,7 +38,7 @@ type Backend interface {
 	Preset(p string) error                 // wall layout 1/2/4/6/9/m
 	Hide(name string) error                // send back to its hidden window
 	WallEnabled() bool
-	Reports() int     // unread admiral reports: the header's ✉ badge, 0 = none (ADR-36)
+	Reports() int     // unread admiral reports: the header's ● badge, 0 = none (ADR-36)
 	ApplyWall() error // re-tile after a refresh (cheap; cached layout)
 	// SupCtx is the admiral context meter: label ("34%") and colour,
 	// both "" when the fill is unknown.

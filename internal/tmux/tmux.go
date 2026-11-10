@@ -36,8 +36,26 @@ func (c *Client) Run(args ...string) (string, error) {
 	return c.RunInput("", args...)
 }
 
+// ErrTmpdirGone is returned instead of running tmux when TMUX_TMPDIR is set
+// but no longer exists. tmux then silently falls back to /tmp/tmux-UID, so a
+// leaked test process whose sandbox was cleaned up reached the user's real
+// `fleet` server and unset its badge every poll, which blinked it (ADR-81).
+var ErrTmpdirGone = fmt.Errorf("TMUX_TMPDIR is gone; refusing to fall back to the default tmux socket dir")
+
+func tmpdirGone() bool {
+	d := os.Getenv("TMUX_TMPDIR")
+	if d == "" {
+		return false
+	}
+	st, err := os.Stat(d)
+	return err != nil || !st.IsDir()
+}
+
 // RunInput is Run with stdin.
 func (c *Client) RunInput(stdin string, args ...string) (string, error) {
+	if tmpdirGone() {
+		return "", ErrTmpdirGone
+	}
 	cmd := exec.Command("tmux", append(c.base(), args...)...)
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)

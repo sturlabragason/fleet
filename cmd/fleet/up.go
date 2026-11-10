@@ -340,7 +340,7 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		// Not Select: Lavender means "target slot" and nothing else (ADR-37).
 		{"set-option", "-g", "pane-active-border-style", "fg=" + theme.Text},
 		{"set-option", "-g", "pane-border-format",
-			" #{?#{==:#{@role},sup},#[fg=#{?" + fleet.MultiOption + ",#{@fleet_admiral_color}," + theme.Supervisor + "}]#[bold]admiral#{?" + fleet.MultiOption + ", #{@fleet_admiral_name},}#[default]#{?@fleet_admiral_profile,#[fg=" + theme.Muted + "] · #{@fleet_admiral_profile}#[default],}#{?" + fleet.MultiOption + ",#{?@fleet_admiral_unread,#[fg=" + theme.Waiting + "] · ✉ #{@fleet_admiral_unread}#[default],},}#{?@fleet_ctx,#[fg=#{@fleet_ctx_color}] · ctx #{@fleet_ctx}#[default],},#{?#{==:#{@role},ov},#[fg=" + theme.Text + "]#[bold]overview#[default]," + targetMark + ownerMark + "#[fg=#{?@fleet_color,#{@fleet_color},default}]#{@fleet_glyph} #{@fleet_agent}" + pinMark + noReportMark + "#{?@fleet_team, #[fg=#{@fleet_team_color}]◆,} #[fg=" + theme.Muted + "]#{@fleet_status}#[default]" + nextOutMark + "}} "},
+			" #{?#{==:#{@role},sup},#[fg=#{?" + fleet.MultiOption + ",#{@fleet_admiral_color}," + theme.Supervisor + "}]#[bold]admiral#{?" + fleet.MultiOption + ", #{@fleet_admiral_name},}#[default]#{?@fleet_admiral_profile,#[fg=" + theme.Muted + "] · #{@fleet_admiral_profile}#[default],}#{?" + fleet.MultiOption + ",#{?@fleet_admiral_unread,#[fg=" + theme.Waiting + "] · ● #{@fleet_admiral_unread}#[default],},}#{?@fleet_ctx,#[fg=#{@fleet_ctx_color}] · ctx #{@fleet_ctx}#[default],},#{?#{==:#{@role},ov},#[fg=" + theme.Text + "]#[bold]overview#[default]," + targetMark + ownerMark + "#[fg=#{?@fleet_color,#{@fleet_color},default}]#{@fleet_glyph} #{@fleet_agent}" + pinMark + noReportMark + "#{?@fleet_team, #[fg=#{@fleet_team_color}]◆,} #[fg=" + theme.Muted + "]#{@fleet_status}#[default]" + nextOutMark + "}} "},
 		// Unfocused panes recede one step (Overlay2, 5.8:1 on Base: still
 		// readable, so an emphasised pane you are not in stays legible).
 		{"set-option", "-g", "window-style", "fg=" + theme.Overlay2 + ",bg=" + theme.Base},
@@ -354,8 +354,8 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		{"set-option", "-g", "display-panes-colour", theme.Overlay0},
 		{"set-option", "-g", "display-panes-active-colour", theme.Text},
 		{"set-option", "-g", "clock-mode-colour", theme.Supervisor},
-		// The unread-report badge (ADR-36) is set by the resident poll: the watcher when live (ADR-75), else the overview.
-		{"set-option", "-g", "status-left", "#[fg=" + theme.Crust + ",bg=" + theme.Supervisor + ",bold] fleet #[default] #{?" + fleet.BadgeOption + ",#[fg=" + theme.Crust + "#,bg=" + theme.Waiting + "#,bold]#{?#{&&:#{" + fleet.MultiOption + "},#{" + fleet.BadgeByOption + "}},#{" + fleet.BadgeByOption + "}, ✉ #{" + fleet.BadgeOption + "} }#[default] ,}"},
+		// The unread-report badge (ADR-36), a steady ● in the waiting colour (ADR-81), is set by the resident poll: the watcher when live (ADR-75), else the overview.
+		{"set-option", "-g", "status-left", "#[fg=" + theme.Crust + ",bg=" + theme.Supervisor + ",bold] fleet #[default] #{?" + fleet.BadgeOption + ",#[fg=" + theme.Waiting + "]#{?#{&&:#{" + fleet.MultiOption + "},#{" + fleet.BadgeByOption + "}},#{" + fleet.BadgeByOption + "}, ● #{" + fleet.BadgeOption + "} }#[default] ,}"},
 		{"set-option", "-g", "status-left-length", "100"},
 		{"set-option", "-g", "window-status-separator", ""},
 		{"set-option", "-g", "window-status-format", "#[fg=" + theme.Overlay1 + "] #I #W "},

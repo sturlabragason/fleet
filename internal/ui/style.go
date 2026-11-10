@@ -6,20 +6,19 @@ import (
 	"github.com/sturlabragason/fleet/internal/theme"
 )
 
-// Colours per status; pulse alternates for waiting tiles. They are rebuilt
+// Colours per status, all steady: nothing on the overview blinks or
+// animates (ADR-81). They are rebuilt
 // whenever the active palette changes, because a lipgloss colour is a value,
 // not a reference (ADR-55).
 var (
-	colWorking    lipgloss.Color
-	colWaitA      lipgloss.Color
-	colWaitB      lipgloss.Color
-	colError      lipgloss.Color
-	colStuck      lipgloss.Color
-	colIdle       lipgloss.Color
-	colGone       lipgloss.Color
-	colSelect     lipgloss.Color
-	colText       lipgloss.Color
-	colWorkingDim lipgloss.Color
+	colWorking lipgloss.Color
+	colWaitA   lipgloss.Color
+	colError   lipgloss.Color
+	colStuck   lipgloss.Color
+	colIdle    lipgloss.Color
+	colGone    lipgloss.Color
+	colSelect  lipgloss.Color
+	colText    lipgloss.Color
 
 	leadStyle     lipgloss.Style // leadMark: Overlay1, like ⚑, so no new colour role
 	pinStyle      lipgloss.Style // pinMark: Overlay1, never the select colour
@@ -32,14 +31,12 @@ func init() { theme.OnChange(applyTheme) }
 func applyTheme() {
 	colWorking = lipgloss.Color(theme.Working)
 	colWaitA = lipgloss.Color(theme.Waiting)
-	colWaitB = lipgloss.Color(theme.WaitingAlt)
 	colError = lipgloss.Color(theme.Error)
 	colStuck = lipgloss.Color(theme.Stuck)
 	colIdle = lipgloss.Color(theme.Idle)
 	colGone = lipgloss.Color(theme.Gone)
 	colSelect = lipgloss.Color(theme.Select)
 	colText = lipgloss.Color(theme.Text)
-	colWorkingDim = lipgloss.Color(theme.WorkingDim)
 
 	dim := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Overlay1))
 	leadStyle, pinStyle = dim, dim
@@ -47,17 +44,12 @@ func applyTheme() {
 	noReportStyle = lipgloss.NewStyle().Foreground(colWaitA)
 }
 
-var spinner = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
-
-func statusColor(st string, frame int) lipgloss.Color {
+func statusColor(st string) lipgloss.Color {
 	switch st {
 	case "working":
 		return colWorking
 	case "waiting":
-		if (frame/2)%2 == 0 { // 600 ms per colour
-			return colWaitA
-		}
-		return colWaitB
+		return colWaitA
 	case "error":
 		return colError
 	case "stuck":
@@ -70,10 +62,12 @@ func statusColor(st string, frame int) lipgloss.Color {
 	return colIdle
 }
 
-func glyph(st string, frame int) string {
+// glyph is one static mark per status, like Copilot CLI's own "○ Working":
+// the colour tells working (○) from idle (○), never motion (ADR-81).
+func glyph(st string) string {
 	switch st {
 	case "working":
-		return spinner[frame%len(spinner)]
+		return "○"
 	case "waiting":
 		return "●"
 	case "error":

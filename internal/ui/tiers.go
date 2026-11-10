@@ -405,7 +405,7 @@ func (m *Model) rowCell(tv tierView, name string, w int) string {
 		return zone.Mark("fold", st.Render(fit(label, w)))
 	}
 	a := m.agents[slices.IndexFunc(m.agents, func(a *board.Agent) bool { return a.Name == name })]
-	col := statusColor(a.Status, m.frame)
+	col := statusColor(a.Status)
 	cur := a.Name == m.sel
 	if cur {
 		col = cursorColor(col)
@@ -420,7 +420,7 @@ func (m *Model) rowCell(tv tierView, name string, w int) string {
 	}
 	age = fmt.Sprintf("%4s", age)
 	mw := 2 * m.markCount(a)
-	head := " " + glyph(a.Status, m.frame) + " " + ansi.Truncate(a.Name, max(w-3-mw-ansi.StringWidth(age)-1, 1), "…")
+	head := " " + glyph(a.Status) + " " + ansi.Truncate(a.Name, max(w-3-mw-ansi.StringWidth(age)-1, 1), "…")
 	row = cursorStyle(lipgloss.NewStyle().Foreground(col), cur).Render(head)
 	if m.pinned[a.Name] {
 		mark(pinStyle, pinMark)

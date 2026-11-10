@@ -174,13 +174,13 @@ func reportBadge(n int) string {
 	return fmt.Sprintf("  %s %d reports", reportMark, n)
 }
 
-// reportMark opens the unread-report badge, the same glyph the tmux status
-// line uses, so one unread batch reads the same in both places.
-const reportMark = "✉"
+// reportMark opens the unread-report badge: one static dot, the same glyph
+// the tmux status line and the admiral border use (ADR-81).
+const reportMark = "●"
 
 // badgeStyle draws the unread-report badge: the waiting colour, the role the
 // status-line badge already wears for the same state. No new role.
-var badgeStyle = lipgloss.NewStyle().Foreground(colWaitA).Bold(true)
+var badgeStyle = lipgloss.NewStyle().Foreground(colWaitA)
 
 // line3 is the tile's last line: the latest report while the agent is not
 // working (DESIGN §6.7), else the last screen line.
@@ -224,12 +224,12 @@ func cardLine(a *board.Agent, w int) string {
 // tileRow4 is the tile's fourth line, shared by the subagent dots and the
 // task-card line: dots first, at most half the width when a card wants the
 // rest. "" when the agent has neither.
-func tileRow4(a *board.Agent, w, frame int) string {
+func tileRow4(a *board.Agent, w int) string {
 	dotW := w
 	if a.Card != nil {
 		dotW = w / 2
 	}
-	dots := subagentRow(a.Subagents, dotW, frame)
+	dots := subagentRow(a.Subagents, dotW)
 	rest := w
 	if dots != "" {
 		rest -= ansi.StringWidth(dots) + 2
@@ -250,7 +250,7 @@ func (m *Model) grid() layout.TileGrid {
 }
 
 func (m *Model) tile(a *board.Agent, tw int) string {
-	col := statusColor(a.Status, m.frame)
+	col := statusColor(a.Status)
 	w := tw - 2
 	border := lipgloss.RoundedBorder()
 	if a.Name == m.sel {
@@ -288,7 +288,7 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 	if a.Name == m.sel {
 		st1 = st1.Foreground(cursorColor(col))
 	}
-	l1 := st1.Render(glyph(a.Status, m.frame)+" "+ansi.Truncate(a.Name, inner-4-tw2, "…")) + tgt + st1.Render(wall)
+	l1 := st1.Render(glyph(a.Status)+" "+ansi.Truncate(a.Name, inner-4-tw2, "…")) + tgt + st1.Render(wall)
 	st := a.Status
 	if noReport != "" {
 		st += " · no report"
@@ -297,7 +297,7 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 	l2 := lipgloss.NewStyle().Foreground(colIdle).Render(metaLineMark(a.Profile, driverMark(a), state, inner))
 	if ti, ok := m.teams[a.Name]; ok && ti.Team != "" {
 		ts := lipgloss.NewStyle().Foreground(lipgloss.Color(ti.Color))
-		l1 = st1.Render(glyph(a.Status, m.frame)+" "+ansi.Truncate(a.Name, inner-4-2-tw2, "…")) + tgt + " " + ts.Render(teamMark)
+		l1 = st1.Render(glyph(a.Status)+" "+ansi.Truncate(a.Name, inner-4-2-tw2, "…")) + tgt + " " + ts.Render(teamMark)
 		if wall != "" {
 			l1 += st1.Render(wall)
 		}
@@ -311,7 +311,7 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 		l3 = lipgloss.NewStyle().Foreground(colIdle).Render(shorten(a.Goal, inner))
 	}
 	text := l1 + "\n" + l2 + "\n" + l3
-	if l4 := tileRow4(a, inner, m.frame); l4 != "" {
+	if l4 := tileRow4(a, inner); l4 != "" {
 		text += "\n" + l4
 	}
 	body := lipgloss.NewStyle().Width(inner+2).Padding(0, 1).Render(text)
@@ -333,12 +333,12 @@ func (m *Model) chips(rest []*board.Agent, all bool) string {
 	}
 	for i, a := range rest {
 		cur := a.Name == m.sel
-		sc := statusColor(a.Status, m.frame)
+		sc := statusColor(a.Status)
 		if cur {
 			sc = cursorColor(sc)
 		}
 		st := cursorStyle(lipgloss.NewStyle().Foreground(sc), cur)
-		c := m.ownerChip(a) + st.Render(glyph(a.Status, m.frame)+" "+a.Name+m.queueMark(a.Name))
+		c := m.ownerChip(a) + st.Render(glyph(a.Status)+" "+a.Name+m.queueMark(a.Name))
 		if m.pinned[a.Name] {
 			c += pinStyle.Render(" " + pinMark)
 		}

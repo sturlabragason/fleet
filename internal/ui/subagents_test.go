@@ -26,63 +26,31 @@ func subs(states ...string) []status.Subagent {
 }
 
 func TestSubagentDotColours(t *testing.T) {
-	if colWorkingDim == colIdle || colWorkingDim == colWorking {
-		t.Fatal("the dim running colour must differ from grey (done) and green")
-	}
 	r, d, f := status.SubRunning, status.SubDone, status.SubFailed
-	l := subs(r, r, r, d, f)
-	lit := map[int]int{}
-	for frame := 0; frame < 9; frame++ {
-		cols, hidden := subagentDots(l, 20, frame)
-		if len(cols) != 5 || hidden != 0 {
-			t.Fatalf("frame %d: %d dots, %d hidden", frame, len(cols), hidden)
-		}
-		if cols[3] != colIdle || cols[4] != colError {
-			t.Errorf("frame %d: done %v failed %v", frame, cols[3], cols[4])
-		}
-		n := 0
-		for i, c := range cols[:3] {
-			if c != colWorking && c != colWorkingDim {
-				t.Errorf("frame %d dot %d: %v", frame, i, c)
-			}
-			if c == colWorking {
-				n++
-				lit[i]++
-			}
-		}
-		if n != 1 {
-			t.Errorf("frame %d: %d lit", frame, n)
-		}
+	cols, hidden := subagentDots(subs(r, r, r, d, f), 20)
+	if len(cols) != 5 || hidden != 0 {
+		t.Fatalf("%d dots, %d hidden", len(cols), hidden)
 	}
-	if len(lit) != 3 {
-		t.Errorf("the wave must reach every running dot: %v", lit)
-	}
-	// A single running dot still pulses.
-	seen := map[lipgloss.Color]bool{}
-	for frame := 0; frame < 9; frame++ {
-		cols, _ := subagentDots(subs(r), 20, frame)
-		seen[cols[0]] = true
-	}
-	if !seen[colWorking] || !seen[colWorkingDim] {
-		t.Errorf("one running dot never pulses: %v", seen)
+	want := []lipgloss.Color{colWorking, colWorking, colWorking, colIdle, colError}
+	for i, c := range cols {
+		if c != want[i] {
+			t.Errorf("dot %d: %v, want %v", i, c, want[i])
+		}
 	}
 }
 
 func TestSubagentRowOverflow(t *testing.T) {
 	l := subs(strings.Split(strings.Repeat("done ", 12), " ")[:12]...)
 	l[11].State = status.SubRunning
-	for frame := 0; frame < 9; frame++ {
-		row := ansi.Strip(subagentRow(l, 20, frame))
-		// 12 dots need 23 columns: the newest 9 fit, then "+3".
-		if row != "• • • • • • • • • +3" {
-			t.Errorf("frame %d: %q", frame, row)
-		}
+	// 12 dots need 23 columns: the newest 9 fit, then "+3".
+	if row := ansi.Strip(subagentRow(l, 20)); row != "• • • • • • • • • +3" {
+		t.Errorf("%q", row)
 	}
-	cols, hidden := subagentDots(l, 20, 0)
+	cols, hidden := subagentDots(l, 20)
 	if hidden != 3 || cols[len(cols)-1] == colIdle {
 		t.Errorf("the newest (running) dot must be shown: hidden %d", hidden)
 	}
-	if subagentRow(nil, 20, 0) != "" {
+	if subagentRow(nil, 20) != "" {
 		t.Error("row without subagents")
 	}
 }
@@ -100,22 +68,11 @@ func TestTileSubagentRow(t *testing.T) {
 		t.Errorf("dots without subagents:\n%s", plain)
 	}
 	a.Subagents = subs(r, r, r, d, f)
-	var row string
-	for frame := 0; frame < 9; frame++ {
-		m.frame = frame
-		tile := m.tile(a, m.cfg.TileW)
-		lines := strings.Split(ansi.Strip(tile), "\n")
-		if len(lines) != layout.Default.TileH {
-			t.Fatalf("tile has %d lines:\n%s", len(lines), strings.Join(lines, "\n"))
-		}
-		if !strings.Contains(lines[4], "• • • • •") {
-			t.Errorf("frame %d: line 4 %q", frame, lines[4])
-		}
-		if frame == 0 {
-			row = lines[4]
-			t.Logf("tile:\n%s", strings.Join(lines, "\n"))
-		} else if lines[4] != row || ansi.StringWidth(lines[4]) != ansi.StringWidth(lines[0]) {
-			t.Errorf("frame %d: row %q changed (was %q)", frame, lines[4], row)
-		}
+	lines := strings.Split(ansi.Strip(m.tile(a, m.cfg.TileW)), "\n")
+	if len(lines) != layout.Default.TileH {
+		t.Fatalf("tile has %d lines:\n%s", len(lines), strings.Join(lines, "\n"))
+	}
+	if !strings.Contains(lines[4], "• • • • •") || ansi.StringWidth(lines[4]) != ansi.StringWidth(lines[0]) {
+		t.Errorf("line 4 %q", lines[4])
 	}
 }

@@ -73,7 +73,7 @@ func (f *Fleet) UnreadBy() map[string]int {
 	return out
 }
 
-// BadgeBy is the split badge " ✉ main 1 · print 2 ": admirals with nothing
+// BadgeBy is the split badge " ● main 1 · print 2 ": admirals with nothing
 // unread are left out, and "" is returned for one admiral or no unread.
 func (f *Fleet) BadgeBy() string {
 	names := f.AdmiralNames()
@@ -90,7 +90,7 @@ func (f *Fleet) BadgeBy() string {
 	if len(parts) == 0 {
 		return ""
 	}
-	return " ✉ " + strings.Join(parts, " · ") + " "
+	return " ● " + strings.Join(parts, " · ") + " "
 }
 
 // ErrOtherAdmiral is the refusal for a write on another admiral's agent.
