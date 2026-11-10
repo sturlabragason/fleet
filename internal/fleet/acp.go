@@ -82,7 +82,7 @@ type ACPHostOpts struct {
 	Mode          string   // ACP session mode (ADR-76)
 	MCP           string   // peer MCP config for the session (ADR-76)
 	UnsetEnv      []string // variables the tool must not inherit (ADR-76)
-	Profile       string   // shown in the pane's header (ADR-84)
+	Profile       string   // shown in the pane's header (ADR-85)
 }
 
 // ACPHostArgv is the command an acp agent's window runs: the host, its

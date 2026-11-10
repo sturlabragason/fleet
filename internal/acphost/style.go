@@ -10,7 +10,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/theme"
 )
 
-// The pane's look (ADR-84): colours come from the active fleet theme
+// The pane's look (ADR-85): colours come from the active fleet theme
 // (internal/theme, [defaults] theme in config.toml), so the pane matches
 // the wall. Nothing blinks or moves: every mark is a static glyph in a
 // steady colour.
