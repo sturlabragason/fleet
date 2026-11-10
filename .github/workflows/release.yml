@@ -52,6 +52,9 @@ jobs:
           if [[ $DRY_RUN != true && $GITHUB_REF != refs/heads/main ]]; then
             echo "::error::releases are cut from main, not $GITHUB_REF"; exit 1
           fi
+          if [[ $DRY_RUN != true ]] && tag=$(git describe --tags --exact-match --match 'v*' HEAD 2>/dev/null); then
+            echo "::error::$sha is already released as $tag; another publisher got there first"; exit 1
+          fi
           ci=$(gh run list -R "$GITHUB_REPOSITORY" -w ci.yml -c "$sha" --json conclusion -q '[.[] | select(.conclusion == "success")] | length')
           if [[ $ci == 0 ]]; then
             if [[ $DRY_RUN == true ]]; then

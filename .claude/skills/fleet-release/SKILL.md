@@ -23,6 +23,19 @@ Read `PUBLISHING.md` once before your first release; the day-to-day flow is belo
 - **Never `--no-verify`.** If the hook blocks you, the commit is wrong, not the hook.
 - Push `main` only. No other branch has been checked.
 
+## Take the release lock first
+
+Two publishers once pushed and tagged over each other. Before anything else, from the main checkout:
+
+```sh
+scripts/release-lock.sh acquire <your-agent-name>   # exit 1: someone else is publishing; stop and ask them
+```
+
+The lock lives in the shared git dir (`.git/fleet-release.lock`, every worktree sees it) and holds
+your name, pid and the time; it goes stale after two hours. Drop it when the release is checked:
+`scripts/release-lock.sh release <your-agent-name>`. `status` shows who holds it. The release
+workflow also refuses a commit that already has a version tag.
+
 ## Before you push
 
 Push a known commit, not "whatever is on main now" — other agents are merging while you work. The
