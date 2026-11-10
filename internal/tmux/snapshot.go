@@ -10,7 +10,7 @@ import (
 
 // WindowKeys are the window fields a Snapshot carries: the main window's
 // size and layout and every window option the wall reads on its cached
-// apply, plus the target and pins the overview shows (ADR-94).
+// apply, plus the target and pins the overview shows (ADR-98).
 var WindowKeys = []string{
 	"window_width", "window_height", "window_layout",
 	"@fleet_wall", "@fleet_sup_side", "@fleet_chips", "@fleet_target", "@fleet_next_out",
@@ -35,7 +35,7 @@ func snapFmt() string {
 // Snapshot is every pane of the server with its @fleet_* options, and the
 // WindowKeys of every window that has a pane, read with one list-panes -a.
 // The watcher takes one per refresh and shares it in a file, so the
-// overview reads tmux state without running tmux itself (ADR-94).
+// overview reads tmux state without running tmux itself (ADR-98).
 type Snapshot struct {
 	At      time.Time                    `json:"at"`
 	Panes   []PaneInfo                   `json:"panes"`

@@ -8,7 +8,7 @@ import (
 )
 
 // One list-panes -a carries the panes and their window's options, an unset
-// last option included, and survives the file round trip (ADR-94).
+// last option included, and survives the file round trip (ADR-98).
 func TestSnapshotPanesAndWindowOptions(t *testing.T) {
 	c := &Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
 	t.Cleanup(func() { c.KillServer() })

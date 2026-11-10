@@ -82,7 +82,7 @@ Options 2, 3, 4, 5, 7 and part of 8 are in place. Option 1 is a manual decision 
 | 5 | At most `max_working` agents (default 4) working at once; extra spawns wait as `queued` and start, oldest first, when a slot frees while `fleet ui` runs | built in; `max_working` in `[defaults]`, `0` turns the cap off | `max_working = 0` |
 | 7 | Copilot statusline refreshes every 30 s instead of 5 s, and the script runs `jq` once instead of four times | `~/.copilot/settings.json`, `~/.copilot/statusline.sh` | restore the `*.pre-perf` backups next to them |
 | 8 | `fleet ui` captures panes that are not on the wall every 5 s instead of every second | built in | none needed; status of hidden agents lags by up to 5 s |
-| 9 | With `fleet watch` live, `fleet ui` makes no tmux calls per poll: it reads the watcher's `~/.fleet/tmux.json` snapshot and goes to tmux only to change the wall (ADR-94). Measured: 4.6 % → 0.75 % of a core with 3 agents | built in | none needed |
+| 9 | With `fleet watch` live, `fleet ui` makes no tmux calls per poll: it reads the watcher's `~/.fleet/tmux.json` snapshot and goes to tmux only to change the wall (ADR-98). Measured: 4.6 % → 0.75 % of a core with 3 agents | built in | none needed |
 
 `CPUQuota` applies straight away. `AllowedCPUs` needs the `cpuset` controller, which the user systemd instance does not get by default. Until a root drop-in delegates it, systemd stores the setting but the kernel ignores it. To enable it (needs sudo, then a re-login or reboot):
 

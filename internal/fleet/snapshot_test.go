@@ -12,7 +12,7 @@ import (
 
 // With ShareSnapshot set, Refresh lists the panes once, through the
 // snapshot, and the snapshot it hands over carries the status tags this
-// refresh wrote (ADR-94).
+// refresh wrote (ADR-98).
 func TestRefreshSharesItsSnapshot(t *testing.T) {
 	home := t.TempDir()
 	cfg := filepath.Join(home, "config.toml")
