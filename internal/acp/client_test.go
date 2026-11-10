@@ -9,7 +9,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -45,6 +48,7 @@ func helperAgent(mode string) {
 			gc := exec.Command("sleep", "5")
 			gc.Stdout, gc.Stderr = os.Stdout, os.Stderr
 			gc.Start()
+			os.WriteFile("gc.pid", []byte(strconv.Itoa(gc.Process.Pid)), 0o600)
 			os.Exit(0)
 		}
 	}
@@ -103,7 +107,14 @@ func TestStartOrphanHoldsPipes(t *testing.T) {
 	old := exitGrace
 	exitGrace = 200 * time.Millisecond
 	defer func() { exitGrace = old }()
-	cl, _, _ := startHelper(t, "orphan")
+	cl, _, dir := startHelper(t, "orphan")
+	t.Cleanup(func() {
+		if b, err := os.ReadFile(filepath.Join(dir, "gc.pid")); err == nil {
+			if pid, err := strconv.Atoi(string(b)); err == nil {
+				syscall.Kill(pid, syscall.SIGKILL)
+			}
+		}
+	})
 	if _, err := cl.Initialize(context.Background(), false); err != nil {
 		t.Fatal(err)
 	}
