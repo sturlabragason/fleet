@@ -55,7 +55,8 @@ const usage = `usage:
                                             --driver acp runs the tool's ACP server under fleet acp-host
                                             instead of its screen (copilot, claude-copilot, agy, fake),
                                             --driver tmux the tool's own screen; default: driver in
-                                            config.toml, else acp for copilot and agy, tmux otherwise;
+                                            config.toml, else acp for profiles running copilot or agy
+                                            (claude-copilot too), tmux otherwise;
                                             --leader makes it a leader: it gets squad tools, spawns a
                                             squad of its own and its agents report to it, not to the
                                             admiral ([squad] max_members, max_depth in config.toml);

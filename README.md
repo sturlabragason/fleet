@@ -22,7 +22,7 @@ Session switchers make moving between agents faster, but you still do all the su
 ## What it does today
 
 - **Spawn** agents from tool profiles into a dedicated tmux server (`tmux -L fleet`), one hidden window per agent.
-- **Status** for every agent (working, waiting, error, stuck, idle). Copilot and agy agents run over the Agent Client Protocol (ACP), so their status, questions and answers come from the tool itself and their pane shows fleet's transcript of the session. Claude and vibe run in their own TUI, read from the bottom of the pane with per-tool regex patterns. Refreshed every second.
+- **Status** for every agent (working, waiting, error, stuck, idle). Copilot and agy agents (every profile that runs them, claude-copilot included) run over the Agent Client Protocol (ACP), so their status, questions and answers come from the tool itself and their pane shows fleet's transcript of the session. Claude and vibe run in their own TUI, read from the bottom of the pane with per-tool regex patterns. Refreshed every second.
 - **Overview TUI**: coloured tiles sorted by attention (waiting agents first, longest wait first), arrow keys, mouse click, `Tab` through waiting agents.
 - **Live wall**: real, interactive tmux panes for the agents you are working with. Layouts 1, 2, 4, 6, 9 and main+stack, as caps rather than fixed shapes: the grid is sized to the window so panes stay readable, and a readability floor shows fewer panes rather than unreadable ones. The pane that needs attention gets the big slot. Click a pane to make it the `▶` target and the next card you pick from the overview goes there; from the overview, `p` pins a pane so it is never evicted and `u` undoes the last replace. Waiting and failing panes stay. Processes never restart.
 - **Copy out of any pane**: drag-select, double-click or triple-click copies to the system clipboard, even over an agent that asked for the mouse.
@@ -154,7 +154,7 @@ From v1.0.0, new `copilot` and `agy` agents run over ACP: the agent's pane shows
 
 ```toml
 [defaults]
-driver = "tmux"        # every profile; or put it under [profile.copilot] / [profile.agy]
+driver = "tmux"        # every profile; or put it under [profile.copilot] / [profile.claude-copilot] / [profile.agy]
 ```
 
 or spawn with `--driver tmux`. Details: [DESIGN.md §7d](DESIGN.md#7d-acp-agents-fleet-drives-the-tool-over-the-agent-client-protocol-adr-74-the-default-for-copilot-and-agy-since-v100).

@@ -58,8 +58,9 @@ func TestDriverResolution(t *testing.T) {
 	t.Setenv("FLEET_CONFIG", filepath.Join(home, "none.toml"))
 	f, _ = New(&tmux.Client{Socket: "fleet-test-unused"}, home, "/bin/fleet")
 	// v1.0.0 (ADR-74): with no config, copilot and agy default to acp and
-	// every other profile stays on tmux.
-	for profile, want := range map[string]string{"copilot": "acp", "agy": "acp", "claude-copilot": "tmux", "claude": "tmux", "vibe": "tmux", "fake": "tmux"} {
+	// every other profile stays on tmux; (i): so does every profile that
+	// runs copilot, claude-copilot first.
+	for profile, want := range map[string]string{"copilot": "acp", "agy": "acp", "claude-copilot": "acp", "claude": "tmux", "vibe": "tmux", "fake": "tmux"} {
 		if got, err := f.driverFor("", profile); err != nil || got != want {
 			t.Errorf("no config, %s: %q, %v want %q", profile, got, err, want)
 		}
@@ -85,6 +86,13 @@ func TestDriverDefaultOverrides(t *testing.T) {
 		{"[defaults]\ndriver = \"bogus\"\n", "", "copilot", "acp"},
 		{"", "tmux", "copilot", "tmux"},
 		{"", "tmux", "agy", "tmux"},
+		// claude-copilot (ADR-74 (i)): acp by default, and every way back wins.
+		{"", "", "claude-copilot", "acp"},
+		{"[defaults]\ndriver = \"tmux\"\n", "", "claude-copilot", "tmux"},
+		{"[profile.claude-copilot]\ndriver = \"tmux\"\n", "", "claude-copilot", "tmux"},
+		{"[profile.copilot]\ndriver = \"tmux\"\n", "", "claude-copilot", "acp"},
+		{"[profile.claude-copilot]\ndriver = \"tmux\"\n", "acp", "claude-copilot", "acp"},
+		{"", "tmux", "claude-copilot", "tmux"},
 	} {
 		cfg := filepath.Join(home, "config.toml")
 		os.WriteFile(cfg, []byte(c.conf), 0o644)

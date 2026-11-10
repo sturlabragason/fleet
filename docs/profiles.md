@@ -36,7 +36,7 @@ Each `[section]` is a profile. A section with a built-in name overrides only the
 | `acp_mcp` | `session`: pass the peer MCP server in the ACP session's `mcpServers` instead of `peer_args`. |
 | `acp_unset_env` | Env vars removed before the ACP server starts (the built-in `claude` drops API keys and OAuth tokens). |
 | `acp_from` | Take every unset `acp*` key from another profile, for example `acp_from = "claude"` on a per-account Claude profile. |
-| `driver` | `acp` or `tmux`: how agents of this profile run unless config.toml or `--driver` says otherwise. `acp` on the built-in `copilot` and `agy`; empty (tmux) on the rest. |
+| `driver` | `acp` or `tmux`: how agents of this profile run unless config.toml or `--driver` says otherwise. `acp` on the built-in `copilot` and `agy`. Unset, a profile whose `command` is `copilot` or `agy` (claude-copilot, your own copilot profiles) defaults to `acp` and takes the built-in's acp keys if it sets none; every other profile defaults to tmux (ADR-74 (i)). |
 
 Placeholders in `command` and `args`: `{fleet}` is the fleet binary, `{name}` the agent name, `{id}` the session ID.
 

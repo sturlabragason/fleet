@@ -17,6 +17,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/tmux"
+	"github.com/sturlabragason/fleet/internal/tools"
 )
 
 // buildFleet builds the real fleet binary (acp-host and fakeagent included).
@@ -313,4 +314,84 @@ acp_command = ["{fleet}", "fakeagent", "{name}", "--acp", "--resume"]
 	if err := f.Close("c1"); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestClaudeCopilotACPEndToEnd spawns the built-in claude-copilot profile
+// with no driver anywhere (ADR-74 (i)): it runs under the real acp-host, and
+// the copilot it starts gets its model, the peer MCP server and the
+// autopilot mode's --allow-all. A copilot shim on PATH records that argv and
+// runs the fake agent over ACP: question, answer, park, wake on the same
+// session, close.
+func TestClaudeCopilotACPEndToEnd(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds the fleet binary")
+	}
+	tmuxLog(t)
+	home := t.TempDir()
+	cfg := filepath.Join(home, "config.toml")
+	os.WriteFile(cfg, []byte("[defaults]\nplaybook = false\nauto_trust = false\n[profile.claude-copilot]\nmode = \"autopilot\"\n"), 0o644)
+	t.Setenv("FLEET_CONFIG", cfg)
+	t.Setenv("FLEET_HOME", home)
+	t.Setenv("FAKE_ACP_STATE", filepath.Join(home, "fake-state"))
+	exe := buildFleet(t)
+	bin := t.TempDir()
+	argsFile := filepath.Join(home, "copilot.args")
+	os.WriteFile(filepath.Join(bin, "copilot"), []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" >> "+argsFile+"\necho --- >> "+argsFile+"\nexec "+exe+" fakeagent cc1 --acp\n"), 0o755)
+	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
+	t.Setenv("HOME", t.TempDir()) // no ~/.local/bin/copilot ahead of the shim
+	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
+	t.Cleanup(func() { tc.KillServer() })
+	f, err := New(tc, home, exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	wt := false
+
+	a, err := f.SpawnWith(SpawnOpts{Worktree: &wt}, "cc1", "claude-copilot", dir, "fix it [slow 300] [ask]")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !a.ACP() {
+		t.Fatalf("claude-copilot with no driver configured: board driver %q, want acp", a.Driver)
+	}
+	waitStatus(t, f, "cc1", "waiting", 15*time.Second)
+	if c, err := f.Answer("cc1", "y", ""); err != nil || !strings.Contains(c.Label, "Allow") {
+		t.Fatalf("answer y: %+v %v", c, err)
+	}
+	sid := waitStatus(t, f, "cc1", "idle", 20*time.Second).SessionID
+	if sid == "" {
+		t.Fatal("no session id after the first turn")
+	}
+	b, _ := os.ReadFile(argsFile)
+	argv := strings.Split(strings.TrimSuffix(string(b), "---\n"), "\n")
+	cp, _ := tools.PeerMCP(exe, "cc1")
+	for _, want := range [][]string{{"--additional-mcp-config", cp}, {"--model", tools.CopilotClaudeModel}, {"--acp", "--allow-all"}} {
+		if !containsRun(argv, want) {
+			t.Errorf("copilot argv lacks %q:\n%q", want, argv)
+		}
+	}
+
+	if err := f.Park("cc1", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Wake("cc1", true); err != nil {
+		t.Fatal(err)
+	}
+	if got := waitStatus(t, f, "cc1", "idle", 15*time.Second); got.SessionID != sid || !got.ACP() {
+		t.Errorf("after wake: session %q driver %q, want %q acp", got.SessionID, got.Driver, sid)
+	}
+	if err := f.Close("cc1"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// containsRun reports whether run appears in s as consecutive elements.
+func containsRun(s, run []string) bool {
+	for i := 0; i+len(run) <= len(s); i++ {
+		if reflect.DeepEqual(s[i:i+len(run)], run) {
+			return true
+		}
+	}
+	return false
 }

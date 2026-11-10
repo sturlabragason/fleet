@@ -33,9 +33,10 @@ var ACPCallTimeout = 5 * time.Second
 
 // driverFor resolves a spawn's driver: the spawn's own choice, else the
 // profile's and then the [defaults] driver in config.toml, else the tool
-// profile's default (acp for copilot and agy since v1.0.0, ADR-74), else
-// tmux. A profile without an ACP server refuses the acp driver. An adapter
-// profile (claude, ADR-76) is opt-in: [defaults] never moves it.
+// profile's default (acp for every profile that runs copilot or agy, such
+// as claude-copilot; ADR-74 (h), (i)), else tmux. A profile without an ACP
+// server refuses the acp driver. An adapter profile (claude, ADR-76) is
+// opt-in: [defaults] never moves it.
 func (f *Fleet) driverFor(want, profile string) (string, error) {
 	d := f.Prefs.For(profile).Driver
 	if f.Profiles[profile].ACPOptIn() {
@@ -47,7 +48,7 @@ func (f *Fleet) driverFor(want, profile string) (string, error) {
 		}
 	}
 	if d == "" {
-		d = prefs.ParseDriver(f.Profiles[profile].Driver)
+		d = prefs.ParseDriver(f.Profiles[profile].DefaultDriver())
 	}
 	if d == "" {
 		d = prefs.DriverTmux

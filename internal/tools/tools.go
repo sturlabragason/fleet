@@ -121,6 +121,34 @@ func (p Profile) ACPSessionMode(mode string) string {
 	return p.ACPModes[mode]
 }
 
+// acpTools are the tools that serve ACP themselves and run under the acp
+// driver by default (ADR-74 (h), (i)): any profile whose command is one of
+// them gets it, whatever the profile is called.
+var acpTools = map[string]bool{"copilot": true, "agy": true}
+
+// acpTool is the built-in profile named for p's tool when that tool serves
+// ACP itself, else "".
+func (p Profile) acpTool() string {
+	if b := filepath.Base(p.Command); acpTools[b] {
+		return b
+	}
+	return ""
+}
+
+// DefaultDriver is the profile's own default driver, below config.toml and
+// the spawn flag: its driver key, else acp when it runs copilot or agy and
+// can run under acp (ADR-74 (i)), else "" (tmux). An adapter profile is
+// never acp by default (ADR-76).
+func (p Profile) DefaultDriver() string {
+	if p.Driver != "" {
+		return p.Driver
+	}
+	if p.acpTool() != "" && p.HasACP() && !p.ACPOptIn() {
+		return "acp"
+	}
+	return ""
+}
+
 // CommandPathVar in acp_env is the profile's command resolved on PATH.
 const CommandPathVar = "{command_path}"
 
@@ -218,7 +246,7 @@ subagent_log = "~/.copilot/session-state/{id}/events.jsonl"
 patterns = "copilot"
 peer_args = ["--additional-mcp-config", "{peer_mcp}"]
 acp = ["--acp"]
-acp_mode_args = { auto = "--allow-all" }
+acp_mode_args = { auto = "--allow-all", autopilot = "--allow-all" }
 driver = "acp"
 ` + copilotContext + `
 
@@ -234,7 +262,7 @@ subagent_log = "~/.copilot/session-state/{id}/events.jsonl"
 patterns = "copilot"
 peer_args = ["--additional-mcp-config", "{peer_mcp}"]
 acp = ["--acp"]
-acp_mode_args = { auto = "--allow-all" }
+acp_mode_args = { auto = "--allow-all", autopilot = "--allow-all" }
 ` + copilotContext + `
 
 [claude]
@@ -332,6 +360,17 @@ func LoadWith(home string, local conf.Doc) (map[string]Profile, error) {
 			continue
 		}
 		out[name] = inheritACP(p, b)
+	}
+	// A profile that runs copilot or agy and sets no acp keys takes the
+	// built-in's, so it can run under acp like the tool it runs (ADR-74 (i)).
+	for name, p := range out {
+		t := p.acpTool()
+		if t == "" || t == name || p.HasACP() || p.ACPFrom != "" {
+			continue
+		}
+		if b, ok := out[t]; ok {
+			out[name] = inheritACP(p, b)
+		}
 	}
 	return out, nil
 }
