@@ -75,9 +75,10 @@ const usage = `usage:
   fleet ls [--json]                         the agents; DRIVER is acp or tmux
   fleet info <name>                         one agent's facts, as fleet_info: driver (and ACP server),
                                             the fleet version that started it, status, git, session, spend
-  fleet spend [--json]                      what each agent has cost so far and the fleet total, read from
+  fleet spend [--today] [--json]            what each agent has cost so far and the fleet total, read from
                                             the agents' own session files (AI credits for copilot, tokens
-                                            for claude); no model is called
+                                            for claude); no model is called. --today: the usage bar's
+                                            figures per profile since midnight, with raw units
   fleet send [--force] [--resume] <name> "text"
                                             refused while the user is typing in that pane (keys
                                             there in the last 30 s, unsubmitted text in its box);

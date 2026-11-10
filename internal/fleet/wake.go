@@ -596,8 +596,10 @@ func Badge(ms []mail.Msg) string {
 	return fmt.Sprintf("%d reports: %s", n, list)
 }
 
-// syncBadge sets the tmux badge option to the admiral's unread reports.
+// syncBadge sets the tmux badge option to the admiral's unread reports,
+// and starts the usage bar's pass (same single writer, ADR-97).
 func (f *Fleet) syncBadge() {
+	f.syncUsage(time.Now())
 	var all []mail.Msg
 	for _, box := range f.AdmiralBoxes() {
 		all = append(all, f.Mail().Peek(box)...)

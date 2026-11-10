@@ -179,6 +179,16 @@ mode_args = { autopilot = "--allow-all --autopilot", plan = "--plan" }
 # profile = "claude-personal"
 # max = 3                # admirals on one fleet, main included; at most 3 (DESIGN §6.12)
 
+# The usage bar in the status line (DESIGN §7b, ADR-97): $ spent today per
+# profile at list price, and the share of the monthly Copilot AI-credit
+# allowance used. Defaults: a Copilot Enterprise seat (3,900 AI credits a
+# month; Business 1900, Pro 1500, Pro+ 7000) and Anthropic list prices in
+# USD per million tokens. day_usd adds a % of a daily budget to a profile.
+# [usage]
+# copilot_month_aic = 3900
+# day_usd = { claude-work = 40 }
+# price_opus = { input = 5, output = 25, cache_read = 0.5, cache_write = 6.25 }
+
 # How big a squad a leader may run, and how deep the hierarchy goes
 # (DESIGN §6.11). max_depth = 1 means a leader's own agents cannot lead.
 # 0 means no limit. Read live: a change applies without restarting fleet.
