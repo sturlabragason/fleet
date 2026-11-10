@@ -330,6 +330,7 @@ func ensureOverview(f *fleet.Fleet, target string) {
 	for _, p := range panes {
 		if p.Role == "sup" && p.Dead {
 			t.Run("respawn-pane", "-t", p.ID)
+			t.UnsetPaneOption(p.ID, "@fleet_exit_told")
 		}
 	}
 	ov, err := t.Run("split-window", "-d", "-h", "-t", target, "-P", "-F", "#{pane_id}", uiCmd)

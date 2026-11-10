@@ -431,3 +431,50 @@ func Age(d time.Duration) string {
 
 // Short is the first 8 characters of an ID.
 func Short(id string) string { return id[:min(8, len(id))] }
+
+// Newest is the most recently written session in p's store that started in
+// dir, has a user prompt and was written after since: the session a tool
+// running in dir switched to after /clear (ADR-101). ok is false when none.
+// A cheap dir check (Claude's project folder name, Copilot's workspace.yaml
+// cwd) runs before any transcript is parsed.
+func Newest(p tools.Profile, dir string, since time.Time) (Session, bool) {
+	if p.SessionPath == "" || dir == "" {
+		return Session{}, false
+	}
+	dir = filepath.Clean(dir)
+	proj := claudeProject(dir)
+	for _, c := range candidates(map[string]tools.Profile{p.Name: p}, p.SessionPath) {
+		if !c.mtime.After(since) {
+			break
+		}
+		if st, err := os.Stat(c.path); err == nil && st.IsDir() {
+			if filepath.Clean(workspaceCwd(c.path)) != dir {
+				continue
+			}
+		} else if filepath.Base(filepath.Dir(c.path)) != proj {
+			continue
+		}
+		if s := parse(c); s.HasPrompt && s.Dir != "" && filepath.Clean(s.Dir) == dir {
+			return s, true
+		}
+	}
+	return Session{}, false
+}
+
+var nonAlnum = regexp.MustCompile(`[^A-Za-z0-9]`)
+
+// claudeProject is the folder Claude keeps a dir's transcripts in.
+func claudeProject(dir string) string { return nonAlnum.ReplaceAllString(dir, "-") }
+
+// workspaceCwd is the cwd line of a Copilot session's workspace.yaml.
+func workspaceCwd(sessionDir string) string {
+	var cwd string
+	lines(filepath.Join(sessionDir, "workspace.yaml"), func(l string) bool {
+		if v, ok := strings.CutPrefix(l, "cwd:"); ok {
+			cwd = strings.Trim(strings.TrimSpace(v), `"'`)
+			return false
+		}
+		return true
+	})
+	return cwd
+}

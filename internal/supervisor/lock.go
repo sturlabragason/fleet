@@ -11,7 +11,14 @@ import (
 func Lock(home string) (unlock func(), err error) { return LockOf(home, Main) }
 
 // LockOf is Lock for one admiral (admirals/<name>/reset.lock).
-func LockOf(home, name string) (unlock func(), err error) {
+func LockOf(home, name string) (unlock func(), err error) { return lockOf(home, name, 0) }
+
+// TryLockOf is LockOf that fails at once when another process holds it.
+func TryLockOf(home, name string) (unlock func(), err error) {
+	return lockOf(home, name, syscall.LOCK_NB)
+}
+
+func lockOf(home, name string, nb int) (unlock func(), err error) {
 	dir, err := mkdirOf(home, name)
 	if err != nil {
 		return nil, err
@@ -20,7 +27,7 @@ func LockOf(home, name string) (unlock func(), err error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|nb); err != nil {
 		f.Close()
 		return nil, err
 	}

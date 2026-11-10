@@ -309,6 +309,12 @@ func swapAdmiralOf(f *fleet.Fleet, adm, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// After /clear the tool writes a new session: resume that one (ADR-101).
+	if from, to, err := supervisor.FollowOf(f.Home, adm, f.Profiles); err != nil {
+		log.Warn("follow session", "admiral", adm, "err", err)
+	} else if to != "" {
+		log.Info("session moved", "admiral", adm, "from", from, "to", to)
+	}
 	old := supervisor.CurrentOf(f.Home, f.T, mainTarget(), adm)
 	oldName := runningAdmiralOf(f, adm, old)
 	np, ok := f.Profiles[name]
@@ -510,7 +516,7 @@ func setAdmiralPaneOptsOf(f *fleet.Fleet, adm, pane, prof string) {
 	if prof != "" {
 		f.T.SetPaneOption(pane, "@fleet_admiral_profile", prof)
 	}
-	for _, o := range []string{"@fleet_ctx", "@fleet_ctx_color"} {
+	for _, o := range []string{"@fleet_ctx", "@fleet_ctx_color", "@fleet_exit_told"} {
 		f.T.UnsetPaneOption(pane, o)
 	}
 }
