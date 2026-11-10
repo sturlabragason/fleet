@@ -54,7 +54,7 @@ Session switchers make moving between agents faster, but you still do all the su
 - **Spend**: `fleet spend` shows what each agent has cost so far and the fleet total — AI credits for Copilot agents, tokens for Claude and agy — read from the agents' own session files or the usage agy reports over ACP, never from a model.
 - **Fake agents** that cycle through states and print scripted work (reads, edits, test runs), so you can try everything without spending tokens. `fleet send <name> "!wait"` (or `!work`, `!error`, `!done`) holds one in a chosen state, which is how the demo above is composed.
 
-Planned, not built yet: park/wake to save RAM, tool hooks instead of screen scraping, a spawn wizard, approve/reject keys in the TUI, notifications. See [Roadmap](#roadmap).
+Planned, not built yet: a spawn wizard and approve/reject keys in the TUI, desktop notifications, workflow files (`fleet run`) and `fleet doctor`. See [Roadmap](#roadmap).
 
 ## Requirements
 
@@ -94,13 +94,15 @@ make build      # bin/fleet and bin/fakeagent
 make install    # symlink bin/fleet to ~/.local/bin/fleet
 ```
 
-The admiral needs no setup: `fleet up` passes the MCP server (`fleet mcp`) to it on the command line, and its rules travel as the server's instructions. Its working directory is `supervisor/` next to the binary when you build from a checkout, your home directory otherwise; `FLEET_ADMIRAL_DIR` overrides it.
+The admiral needs no setup: `fleet up` passes the MCP server (`fleet mcp`) to it on the command line, and its rules travel as the server's instructions. Its working directory is `supervisor/` next to the binary when you build from a checkout, `~/.fleet/scratch/admiral` otherwise; `FLEET_ADMIRAL_DIR` overrides it.
+
+A binary install is all of fleet. What it lacks is the checkout's extras: `supervisor/`, and the skills in `.claude/skills` and agents in `.claude/agents`, which are for working on fleet itself. Example config is in [examples/](examples): [`tools.toml`](examples/tools.toml) and [`config.toml.example`](examples/config.toml.example).
 
 ## Quickstart (fake agents, no tokens)
 
+Fake agents run from the fleet binary itself, so an install is enough. From a checkout, run `make build && export PATH=$PWD/bin:$PATH` first.
+
 ```sh
-make build
-export PATH=$PWD/bin:$PATH
 fleet up --admiral-profile fake --no-attach   # fake admiral too, no tokens
 for n in api-auth web-nav infra-dns docs; do fleet spawn --fake $n; done
 fleet ls
@@ -288,22 +290,17 @@ Tests that need tmux use throwaway `fleet-test-*` servers. Architecture: [docs/a
 
 ## Roadmap
 
-Shipped so far: fake agents, scraped status and the overview; the live wall (screen-sized grid, status-aware eviction, a readability floor, pinning, a `▶` target slot and undo); `fleet adopt` and `fleet sessions`; the admiral's MCP server with handoff, notes, a context meter and profile swap; teams; agent mail with access control; the worker playbook and agent reports with a `✉` badge; a git worktree per agent on spawn; copy to the system clipboard from any pane; `fleet peek --summary` from a cheap model; and `fleet snap`, which turns a misread screen into a test fixture (Claude, agy and vibe read properly because of it).
-
-In progress:
-
-- Task cards on spawn (goal, done-check, result file) and a result file per agent (`result.md`, or `result-<name>.md` in a shared dir)
-- Park/wake with resume by session ID, a live cap and a RAM guard
-- Spend per agent on the tile, with an optional per-task cap
-- A stuck rule: same error twice, or no progress for N minutes
+Shipped so far: fake agents, scraped status and the overview; the live wall (screen-sized grid, status-aware eviction, a readability floor, pinning, a `▶` target slot and undo); `fleet adopt` and `fleet sessions`; the admiral's MCP server with handoff, notes, a context meter and profile swap; teams; agent mail with access control; the worker playbook and agent reports with a `✉` badge; a git worktree per agent on spawn; copy to the system clipboard from any pane; `fleet peek --summary` from a cheap model; and `fleet snap`, which turns a misread screen into a test fixture (Claude, agy and vibe read properly because of it). Since then: task cards with a done-check and a result file per agent (ADR-43); park/wake with a live cap and a RAM guard (ADR-44); a stuck rule (ADR-45); spend per agent (ADR-46); Claude status from its own hooks (ADR-49); `fleet web`, an optional browser view (ADR-66, alpha); `fleet wait` and `fleet_wait` (ADR-72); release binaries and a one-line installer (ADR-73, ADR-78); and ACP agents, the default for Copilot and agy since v1.0.0 (ADR-74).
 
 Planned:
 
-- Approve/reject and a spawn wizard in the TUI
-- Tool hooks (Claude Code, Copilot) instead of screen scraping
+- Approve/reject keys and a spawn wizard in the TUI
 - Workflow files (`fleet run plan.yaml`): tasks with dependencies, fanned out and back in
+- A review step after a passing task, and recipes (named spawn presets)
+- A per-task spend cap
 - Auto-slotting the longest-waiting agent, saved walls, desktop notifications
-- tmux control-mode events instead of polling; `fleet doctor`
+- tmux control-mode events instead of polling
+- `fleet doctor` ([#23](https://github.com/sturlabragason/fleet/issues/23))
 
 The long version, with reasoning, is [DESIGN.md §18](DESIGN.md#18-review-after-the-prototype-2026-11-04-what-would-make-it-a-real-agentic-fleet-manager).
 

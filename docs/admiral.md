@@ -7,7 +7,7 @@ It was called the supervisor until ADR-26. The old names still work (`fleet supe
 ## How it starts
 
 - Profile: `copilot`, unless you pass `fleet up --admiral-profile NAME`, set `FLEET_ADMIRAL_PROFILE`, pick one with `Alt-P`, or put an `[admiral]` entry in your config (see [examples/config.toml.example](../examples/config.toml.example)). Any profile works, including `fake`.
-- Directory: `supervisor/` next to the directory holding the `fleet` binary (so `make build` finds it), or `FLEET_ADMIRAL_DIR`, or your home directory when neither exists (`go install`).
+- Directory: `supervisor/` next to the directory holding the `fleet` binary (so `make build` finds it), or `FLEET_ADMIRAL_DIR`, or `~/.fleet/scratch/admiral` when neither exists (a release binary or `go install`; never your home directory, ADR-47).
 - No config file is needed. `fleet up` passes the MCP server on the command line: `--mcp-config` with an inline JSON for claude profiles, `--available-tools fleet --allow-tool fleet` for copilot ones.
 - Its rules (tools only, short replies, the confirmation rule) live in `internal/mcp/instructions.md`, built into the binary and sent as the MCP server's instructions; a Claude admiral gets them as a system prompt file instead, since Claude cuts MCP instructions at about 4 KB (ADR-86). Every fleet command maps to an admiral tool or a reason it has none in `internal/mcp/parity.go`.
 - With a `copilot` profile, `fleet up` starts it lean: `--no-custom-instructions --allow-all-mcp-server-instructions --disable-builtin-mcps`, plus `--disable-mcp-server` for each server in `~/.copilot/mcp-config.json`. It sees only the fleet tools: no shell, no file reading, and about 8k input tokens per turn instead of ~160k.
