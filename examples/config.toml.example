@@ -171,6 +171,7 @@ mode_args = { autopilot = "--allow-all --autopilot", plan = "--plan" }
 # guard = false          # switch the guard off entirely (default: on)
 # min_free = "4GB"       # park below this much free memory (B/KB/MB/GB/TB)
 # check_every = "30s"    # at most one park per interval, across all processes
+# park_idle = "10m"      # also park an agent idle this long, memory or not (default: off)
 
 # The admiral's tool profile when nothing else picks one (DESIGN §6.10).
 # Order: fleet --admiral-profile > $FLEET_ADMIRAL_PROFILE > last choice

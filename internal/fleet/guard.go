@@ -55,6 +55,7 @@ func LowMemoryNote(free uint64, m prefs.Memory) string {
 // one view of memory per poll.
 func (f *Fleet) guardMemory(as []*board.Agent, now time.Time, low bool, free uint64, m prefs.Memory) {
 	if !low {
+		f.parkIdle(as, now, m)
 		return
 	}
 	c := park.Candidates(as, f.pinned())
@@ -81,6 +82,32 @@ func (f *Fleet) guardMemory(as []*board.Agent, now time.Time, low bool, free uin
 	logx.For("fleet").Info("memory guard: parked", "agent", a.Name, "idle", idle, "free", park.Bytes(free), "min_free", park.Bytes(m.MinFree))
 	f.tellAdmiralBox(f.AdmiralBoxOf(a.Name), fmt.Sprintf("parked %s (idle %s) to free memory: %s. Wake it with fleet_park name=%s action=wake when there is room again.",
 		a.Name, idle, reason, a.Name))
+}
+
+// parkIdle parks the longest-idle agent once it has been idle for
+// [memory] park_idle (ADR-106), one per check_every like the low-memory
+// path. It only logs: the board shows the agent parked, and a report per
+// idle park would wake the admiral for nothing.
+func (f *Fleet) parkIdle(as []*board.Agent, now time.Time, m prefs.Memory) {
+	if !m.Guard || m.ParkIdle <= 0 {
+		return
+	}
+	c := park.Candidates(as, f.pinned())
+	if len(c) == 0 || now.Sub(c[0].StatusSince) < m.ParkIdle {
+		return
+	}
+	claimed, before := f.claimGuard(now, m.Every)
+	if !claimed {
+		return
+	}
+	a := c[0]
+	idle := now.Sub(a.StatusSince).Round(time.Second)
+	if err := f.Park(a.Name, fmt.Sprintf("idle %s, over park_idle %s", idle, m.ParkIdle)); err != nil {
+		f.releaseGuard(before)
+		logx.For("fleet").Warn("idle park failed", "agent", a.Name, "err", err)
+		return
+	}
+	logx.For("fleet").Info("idle park", "agent", a.Name, "idle", idle, "park_idle", m.ParkIdle)
 }
 
 // guardName is the sender of the guard's reports to the admiral.
