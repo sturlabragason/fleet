@@ -1,23 +1,18 @@
 package acphost
 
 import (
-	"bytes"
 	"io"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
-
-	"github.com/charmbracelet/x/ansi"
 )
 
-// The pane as a small console (ADR-82): the conversation scrolls above one
-// input line that the user types into. The terminal is in raw mode, so the
-// host reads key presses, not lines: Enter sends, Esc cancels the turn,
-// Ctrl-T hands the session to the tool's own screen. Output never lands in
-// the middle of a half-typed line: each write clears the input line, prints
-// and draws it again.
+// The pane as a small console (ADR-82, ADR-84): the conversation above one
+// input line that the user types into (drawn by view.go). The terminal is
+// in raw mode, so the host reads key presses, not lines: Enter sends, Esc
+// cancels the turn, Ctrl-T hands the session to the tool's own screen,
+// PgUp and PgDn scroll the conversation.
 
 // escWait is how long a lone Esc waits for the rest of an escape sequence
 // before it counts as the Esc key.
@@ -30,86 +25,6 @@ const (
 	PasteOn  = "\x1b[?2004h"
 	PasteOff = "\x1b[?2004l"
 )
-
-// Hint is the line the console starts with.
-const Hint = "type below · Enter sends (steers a running turn) · a digit answers a question · Esc cancels the turn · Ctrl-T takes over in the tool's own screen"
-
-// console is the pane's writer when the host reads keys: it keeps the
-// input line under whatever is printed.
-type console struct {
-	mu    sync.Mutex
-	out   io.Writer
-	width func() int
-	buf   []rune
-}
-
-func newConsole(out io.Writer, width func() int) *console {
-	return &console{out: out, width: width}
-}
-
-// Write prints p above the input line. Raw mode does no output processing,
-// so "\n" becomes "\r\n".
-func (c *console) Write(p []byte) (int, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	var b bytes.Buffer
-	b.WriteString("\r\x1b[2K")
-	b.Write(bytes.ReplaceAll(p, []byte("\n"), []byte("\r\n")))
-	if len(p) > 0 && p[len(p)-1] != '\n' {
-		b.WriteString("\r\n")
-	}
-	c.line(&b)
-	if _, err := c.out.Write(b.Bytes()); err != nil {
-		return 0, err
-	}
-	return len(p), nil
-}
-
-func (c *console) hint() { _, _ = c.Write([]byte(Hint + "\n")) }
-
-// line appends the input line, clipped from the left to the pane width.
-// Caller holds mu.
-func (c *console) line(b *bytes.Buffer) {
-	w := 80
-	if c.width != nil {
-		if n := c.width(); n > 0 {
-			w = n
-		}
-	}
-	room := w - ansi.StringWidth(inputPrompt) - 1
-	if room < 1 {
-		room = 1
-	}
-	shown := strings.ReplaceAll(string(c.buf), "\n", "↵")
-	for ansi.StringWidth(shown) > room {
-		_, n := utf8.DecodeRuneInString(shown)
-		shown = shown[n:]
-	}
-	b.WriteString("\r\x1b[2K" + inputPrompt + shown)
-}
-
-// edit changes the input line and draws it.
-func (c *console) edit(fn func(buf []rune) []rune) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.buf = fn(c.buf)
-	var b bytes.Buffer
-	c.line(&b)
-	_, _ = c.out.Write(b.Bytes())
-}
-
-// take empties the input line and returns what it held.
-func (c *console) take() string {
-	var s string
-	c.edit(func(buf []rune) []rune { s = string(buf); return buf[:0] })
-	return s
-}
-
-func (c *console) empty() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return len(c.buf) == 0
-}
 
 // keys reads key presses from r until it closes.
 func (h *host) keys(r io.Reader) {
@@ -148,6 +63,10 @@ func (h *host) keys(r io.Reader) {
 						pasting = true
 					case "201~":
 						pasting = false
+					case "5~":
+						con.scrollBy(1)
+					case "6~":
+						con.scrollBy(-1)
 					}
 				case 'O':
 					<-ch // SS3: F1-F4, keypad arrows
@@ -287,5 +206,9 @@ func (h *host) paneTakeover() {
 func (h *host) say(s string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.con != nil {
+		h.con.note(s)
+		return
+	}
 	io.WriteString(h.out, s+"\n")
 }

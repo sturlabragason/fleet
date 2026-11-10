@@ -15,6 +15,8 @@ package fake
 //	[subagent] a turn_start/idle Copilot event pair with agentId "sub1"
 //	[invoke]   an agy invoke_subagent tool call (Role "helper"): in_progress,
 //	           then completed after the [slow] gap
+//	[rich]     a thought, a tool call pending then completed after the [slow]
+//	           gap, and a markdown reply, for looking at the pane (ADR-84)
 //
 // Every prompt's response carries usage, as agy's does: 100 input and 10
 // output tokens.
@@ -574,6 +576,22 @@ func (s *server) work(ss *session, t *turn, text string) acp.StopReason {
 		}
 		s.update(id, acp.SessionUpdate{Kind: acp.UpdateToolCallUpdate, ToolCallID: call, Name: acp.SubagentTool,
 			RawInput: in, Status: "completed"})
+		return ""
+	}
+	if strings.Contains(text, "[rich]") {
+		s.update(id, acp.SessionUpdate{Kind: acp.UpdateAgentThought, Content: raw(acp.TextBlock(
+			"I'm weighing whether to build the board as one HTML file or as a page per section, " +
+				"since the reviewers open it offline and one file travels better."))})
+		s.update(id, acp.SessionUpdate{Kind: acp.UpdateToolCall, ToolCallID: call,
+			Title: "Build reference board HTML", ToolKind: "execute", Status: "pending"})
+		if !pause() {
+			return acp.StopCancelled
+		}
+		s.update(id, acp.SessionUpdate{Kind: acp.UpdateToolCallUpdate, ToolCallID: call, Status: "completed"})
+		say("## Reference board\n**DO-NOT list:** no gradients, no `box-shadow`, one accent.\n" +
+			"- one self-contained file, see [the style guide](docs/style.md)\n" +
+			"- images inlined with `scripts/inline-html.py`, so it renders offline in the sandboxed browser\n" +
+			"1. build\n2. check it renders")
 		return ""
 	}
 	s.update(id, acp.SessionUpdate{Kind: acp.UpdateToolCall, ToolCallID: call,

@@ -326,7 +326,7 @@ func TestClaudeACPSpawnAndWake(t *testing.T) {
 	_, peer := tools.PeerMCP(host, "a1")
 	wantArgv := []string{"acp-host", "a1", "--dir", dir, "--prompt-file", ACPPromptPath(home, "a1"),
 		"--mode", "bypassPermissions", "--mcp", peer, "--unset-env", "ANTHROPIC_API_KEY,ANTHROPIC_AUTH_TOKEN,CLAUDE_CODE_OAUTH_TOKEN",
-		"--", "npx", "-y", "@agentclientprotocol/claude-agent-acp@" + tools.ClaudeACPVersion}
+		"--profile", "claude", "--", "npx", "-y", "@agentclientprotocol/claude-agent-acp@" + tools.ClaudeACPVersion}
 	got := hostArgs(t, home)
 	if len(got) != 1 || !reflect.DeepEqual(got[0], wantArgv) {
 		t.Errorf("host argv %q\nwant %q", got, wantArgv)
@@ -445,11 +445,11 @@ patterns = "fake"
 		t.Errorf("acp info:\n%s", info)
 	}
 	pf := ACPPromptPath(home, "a1")
-	want := tools.ShellCommand([]string{host, "acp-host", "a1", "--dir", dir, "--prompt-file", pf, "--", "stubtool", "--x", "--acp"})
+	want := tools.ShellCommand([]string{host, "acp-host", "a1", "--dir", dir, "--prompt-file", pf, "--profile", "stub", "--", "stubtool", "--x", "--acp"})
 	if got := startCommand(t, tc, a.PaneID); got != want {
 		t.Errorf("acp window command:\n%s\nwant\n%s", got, want)
 	}
-	if got := hostArgs(t, home); len(got) != 1 || !reflect.DeepEqual(got[0], []string{"acp-host", "a1", "--dir", dir, "--prompt-file", pf, "--", "stubtool", "--x", "--acp"}) {
+	if got := hostArgs(t, home); len(got) != 1 || !reflect.DeepEqual(got[0], []string{"acp-host", "a1", "--dir", dir, "--prompt-file", pf, "--profile", "stub", "--", "stubtool", "--x", "--acp"}) {
 		t.Errorf("host argv %q", got)
 	}
 	if b, _ := os.ReadFile(pf); string(b) != "do it" {
@@ -571,7 +571,7 @@ patterns = "fake"
 	}
 	// The stub host never sent spawn's prompt, so the file is still there
 	// and the woken host gets it: an unsent prompt is not lost.
-	want = tools.ShellCommand([]string{host, "acp-host", "a1", "--dir", dir, "--session", "S1", "--prompt-file", pf, "--", "stubtool", "--x", "--acp"})
+	want = tools.ShellCommand([]string{host, "acp-host", "a1", "--dir", dir, "--session", "S1", "--prompt-file", pf, "--profile", "stub", "--", "stubtool", "--x", "--acp"})
 	if got := startCommand(t, tc, w.PaneID); got != want || w.Driver != "acp" {
 		t.Errorf("wake window command (driver %q):\n%s\nwant\n%s", w.Driver, got, want)
 	}

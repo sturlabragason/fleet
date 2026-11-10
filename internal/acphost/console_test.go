@@ -15,7 +15,7 @@ func TestKeysPromptAnswerCancelAndTakeover(t *testing.T) {
 	defer pw.Close()
 	var mu sync.Mutex
 	takeovers := 0
-	r := startRig(t, Config{In: pr, Keys: true, Width: func() int { return 40 },
+	r := startRig(t, Config{In: pr, Keys: true, Size: func() (int, int) { return 40, 12 },
 		Takeover: func(func(string)) error { mu.Lock(); takeovers++; mu.Unlock(); return nil }}, acp.AgentCapabilities{})
 	type_ := func(s string) {
 		t.Helper()
@@ -27,11 +27,14 @@ func TestKeysPromptAnswerCancelAndTakeover(t *testing.T) {
 
 	// Output while a line is half typed lands above it, and the line is drawn again.
 	type_("par")
-	r.waitFor(func() bool { return strings.HasSuffix(r.out.String(), "› par") }, "input line")
+	r.waitFor(func() bool { return strings.Contains(lastFrame(r.out.String()), "› par") }, "input line")
 	if _, err := r.call(Request{Op: OpPrompt, Text: "from fleet"}); err != nil {
 		t.Fatal(err)
 	}
-	r.waitFor(func() bool { return strings.Contains(r.out.String(), "> from fleet\r\n\r\x1b[2K› par") }, "redraw under output")
+	r.waitFor(func() bool {
+		f := lastFrame(r.out.String())
+		return strings.Contains(f, "› from fleet") && strings.Contains(f, "› par")
+	}, "redraw under output")
 	r.conn.turns <- func(handler) acp.StopReason { return acp.StopEndTurn }
 	r.waitStatus("idle")
 
@@ -102,9 +105,17 @@ func TestKeysPromptAnswerCancelAndTakeover(t *testing.T) {
 
 func TestConsoleClipsInputToWidth(t *testing.T) {
 	var b syncBuf
-	c := newConsole(&b, func() int { return 10 })
-	c.edit(func([]rune) []rune { return []rune("abcdefghijklmnop") })
-	if got := b.String(); !strings.HasSuffix(got, "› jklmnop") {
-		t.Fatalf("line = %q", got)
+	v := newView(&b, func() (int, int) { return 10, 3 }, 0, "a1", "")
+	v.edit(func([]rune) []rune { return []rune("abcdefghijklmnop") })
+	if got := lastFrame(b.String()); !strings.Contains(got, "› jklmnop") {
+		t.Fatalf("frame = %q", got)
 	}
+}
+
+// lastFrame is the last screen the view wrote.
+func lastFrame(out string) string {
+	if i := strings.LastIndex(out, "\x1b[?2026h"); i >= 0 {
+		return out[i:]
+	}
+	return out
 }
