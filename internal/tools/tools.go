@@ -372,6 +372,24 @@ func LoadWith(home string, local conf.Doc) (map[string]Profile, error) {
 			out[name] = inheritACP(p, b)
 		}
 	}
+	// A profile that runs a built-in tool (claude, copilot) and sets no
+	// peer_args or hook_args takes that tool's: a user's [claude-work]
+	// would otherwise start agents with no fleet_report tool and no status
+	// hooks. An explicit [] keeps them off.
+	for name, p := range out {
+		t := filepath.Base(p.Command)
+		b, ok := out[t]
+		if t == name || !ok || (p.PeerArgs != nil && p.HookArgs != nil) {
+			continue
+		}
+		if p.PeerArgs == nil {
+			p.PeerArgs = b.PeerArgs
+		}
+		if p.HookArgs == nil {
+			p.HookArgs = b.HookArgs
+		}
+		out[name] = p
+	}
 	return out, nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -118,5 +119,54 @@ func TestListPanesWithoutUTF8Locale(t *testing.T) {
 	ps, err := c.ListPanes("")
 	if err != nil || len(ps) != 1 || ps[0].ID != p || ps[0].Agent != "a1" {
 		t.Fatalf("list: %+v %v", ps, err)
+	}
+}
+
+// tmux 3.8 refuses send-keys while the best attached client is read-only;
+// SendKeys then writes the keys' bytes with paste-buffer instead.
+func TestSendKeysWithReadOnlyClient(t *testing.T) {
+	c := testClient(t)
+	p, err := c.Spawn("s", "w", "", nil, "cat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ro := exec.Command("tmux", append(c.base(), "-C", "attach", "-r", "-t", "s")...)
+	in, _ := ro.StdinPipe()
+	if err := ro.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { in.Close(); ro.Wait() })
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		out, _ := c.Run("list-clients", "-F", "#{client_readonly}")
+		if strings.Contains(out, "1") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("read-only client never attached")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if err := c.SendKeys(p, "-l", "--", "abcx"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SendKeys(p, "BSpace", "Enter"); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		out, _ := c.Capture(p, 0)
+		if strings.Count(out, "abc\n") >= 2 || strings.Count(out, "abc") >= 2 {
+			break
+		}
+		if time.Now().After(deadline.Add(2 * time.Second)) {
+			t.Fatalf("capture: %q", out)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	// Older tmux (before 3.8) does not refuse send-keys here at all.
+	if _, raw := c.Run("send-keys", "-t", p, "C-c"); raw != nil {
+		if err := c.SendKeys(p, "C-c"); err == nil {
+			t.Fatal("a key with no byte form must still fail")
+		}
 	}
 }

@@ -76,9 +76,53 @@ func (c *Client) Paste(pane, text string, enter bool) error {
 }
 
 // SendKeys sends tmux key names to a pane.
+// tmux 3.8 refuses send-keys while the client it picks for the command (the
+// most recently active one) is attached read-only, e.g. `attach -r`; then
+// the keys are written as raw bytes with paste-buffer, which has no such
+// check. Keys without a byte form keep the error.
 func (c *Client) SendKeys(pane string, keys ...string) error {
 	_, err := c.Run(append([]string{"send-keys", "-t", pane}, keys...)...)
+	if err == nil || !strings.Contains(err.Error(), "client is read-only") {
+		return err
+	}
+	raw, ok := keyBytes(keys)
+	if !ok {
+		return err
+	}
+	buf := "fleet-keys-" + strings.TrimPrefix(pane, "%")
+	if _, err := c.RunInput(raw, "load-buffer", "-b", buf, "-"); err != nil {
+		return err
+	}
+	_, err = c.Run("paste-buffer", "-d", "-r", "-b", buf, "-t", pane)
 	return err
+}
+
+// keyBytes turns send-keys arguments into the bytes the pane would get:
+// literal text after -l (with an optional --), Enter, BSpace, Tab, Escape.
+func keyBytes(keys []string) (string, bool) {
+	var sb strings.Builder
+	if len(keys) > 0 && keys[0] == "-l" {
+		keys = keys[1:]
+		if len(keys) > 0 && keys[0] == "--" {
+			keys = keys[1:]
+		}
+		return strings.Join(keys, ""), len(keys) > 0
+	}
+	for _, k := range keys {
+		switch k {
+		case "Enter":
+			sb.WriteByte('\r')
+		case "BSpace":
+			sb.WriteByte(0x7f)
+		case "Tab":
+			sb.WriteByte('\t')
+		case "Escape":
+			sb.WriteByte(0x1b)
+		default:
+			return "", false
+		}
+	}
+	return sb.String(), sb.Len() > 0
 }
 
 // KillPane kills one pane.
