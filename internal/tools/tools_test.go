@@ -426,6 +426,24 @@ func TestClaudeHookArgs(t *testing.T) {
 			t.Errorf("%s command %q", e, cmd.Command)
 		}
 	}
+	if strings.Contains(argv[i+1], "permissions") {
+		t.Fatalf("unfenced settings carry permissions: %s", argv[i+1])
+	}
+	// In a fleet worktree the file tools are fenced to <repo>.wt/ (ADR-79).
+	argv, _ = ps["claude"].Argv(AgentVars("/bin/fleet", "a1", "").Fenced("/src/repo.wt"), Launch{})
+	var fenced struct {
+		Hooks       map[string]any `json:"hooks"`
+		Permissions struct {
+			Block bool     `json:"blockWritesOutsideWorkingDirectories"`
+			Dirs  []string `json:"additionalDirectories"`
+		} `json:"permissions"`
+	}
+	if err := json.Unmarshal([]byte(argv[indexOf(argv, "--settings")+1]), &fenced); err != nil {
+		t.Fatal(err)
+	}
+	if !fenced.Permissions.Block || len(fenced.Permissions.Dirs) != 1 || fenced.Permissions.Dirs[0] != "/src/repo.wt" || len(fenced.Hooks) == 0 {
+		t.Fatalf("fenced settings %+v", fenced)
+	}
 	// Tools without hook_args are launched unchanged.
 	for _, prof := range []string{"copilot", "agy", "vibe", "fake"} {
 		if argv, _ := ps[prof].Argv(AgentVars("/bin/fleet", "a1", ""), Launch{}); indexOf(argv, "--settings") >= 0 {

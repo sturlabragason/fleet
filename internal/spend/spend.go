@@ -25,8 +25,11 @@ type Spend struct {
 	Uncredited int64  `json:"uncredited_tokens,omitempty"`
 	Model      string `json:"model,omitempty"` // the model of the last call
 	// Compactions is how often the tool summarised a full context to go on
-	// (Copilot only). Each one means the turns before it re-read a nearly
-	// full context, which is where most spend goes (ADR-71).
+	// (Copilot's session.compaction_complete, Claude's compact_boundary). Each
+	// one means the turns before it re-read a nearly full context, which is
+	// where most spend goes (ADR-71). Claude's idle compaction, run on an
+	// agent left waiting before its prompt cache expires, does not count
+	// (ADR-79).
 	Compactions int `json:"compactions,omitempty"`
 	// Context is how full the context window was at the last main-agent
 	// call or compaction, in percent (0 = unknown). Like Model it is the
@@ -160,7 +163,7 @@ func parserFor(k Kind) (parser, bool) {
 	case Copilot:
 		return parser{tags: [][]byte{[]byte(`"session.usage_record"`), []byte(`"session.compaction_complete"`)}, line: copilotLine}, true
 	case Claude:
-		return parser{tags: [][]byte{[]byte(`"output_tokens"`), []byte(`"cost-state"`)}, line: claudeLine}, true
+		return parser{tags: [][]byte{[]byte(`"output_tokens"`), []byte(`"cost-state"`), []byte(`"compact_boundary"`)}, line: claudeLine}, true
 	case ACP:
 		return parser{tags: [][]byte{[]byte(`"kind":"usage"`)}, line: acpLine}, true
 	}
@@ -178,6 +181,16 @@ func copilotLine(b []byte) (record, bool) {
 			Success    bool  `json:"success"`
 			TokenLimit int64 `json:"tokenLimit"`
 			PostTokens int64 `json:"postCompactionTokens"`
+			// The summarising call, billed but never a usage_record (ADR-79).
+			Used *struct {
+				InputTokens      int64 `json:"inputTokens"`
+				OutputTokens     int64 `json:"outputTokens"`
+				CacheReadTokens  int64 `json:"cacheReadTokens"`
+				CacheWriteTokens int64 `json:"cacheWriteTokens"`
+				CopilotUsage     struct {
+					TotalNanoAIU float64 `json:"totalNanoAiu"`
+				} `json:"copilotUsage"`
+			} `json:"compactionTokensUsed"`
 			// session.usage_record
 			Usage struct {
 				Model            string `json:"model"`
@@ -199,10 +212,20 @@ func copilotLine(b []byte) (record, bool) {
 	}
 	switch ev.Type {
 	case "session.compaction_complete":
-		if !ev.Data.Success {
+		var sp Spend
+		if u := ev.Data.Used; u != nil {
+			// A failed attempt that made the call still cost it.
+			sp = Spend{Input: max(u.InputTokens-u.CacheReadTokens-u.CacheWriteTokens, 0),
+				Output: u.OutputTokens, CacheRead: u.CacheReadTokens, CacheWrite: u.CacheWriteTokens,
+				AIC: u.CopilotUsage.TotalNanoAIU / nanoAIU, HasAIC: true}
+		}
+		if ev.Data.Success {
+			sp.Compactions, sp.Context = 1, percent(ev.Data.PostTokens, ev.Data.TokenLimit)
+		}
+		if !sp.Any() && sp.Compactions == 0 {
 			return record{}, false
 		}
-		return record{sp: Spend{Compactions: 1, Context: percent(ev.Data.PostTokens, ev.Data.TokenLimit)}}, true
+		return record{sp: sp, id: ev.ID}, true
 	case "session.usage_record":
 	default:
 		return record{}, false
@@ -237,7 +260,12 @@ func percent(n, max int64) int {
 
 func claudeLine(b []byte) (record, bool) {
 	var ev struct {
-		Type    string `json:"type"`
+		Type     string `json:"type"`
+		Subtype  string `json:"subtype"`
+		UUID     string `json:"uuid"`
+		Metadata struct {
+			Trigger string `json:"trigger"`
+		} `json:"compactMetadata"`
 		Message struct {
 			ID    string `json:"id"`
 			Model string `json:"model"`
@@ -260,6 +288,11 @@ func claudeLine(b []byte) (record, bool) {
 		return record{}, false
 	}
 	switch ev.Type {
+	case "system":
+		if ev.Subtype != "compact_boundary" || ev.Metadata.Trigger == "idle" {
+			return record{}, false
+		}
+		return record{sp: Spend{Compactions: 1}, id: ev.UUID}, true
 	case "cost-state":
 		if len(ev.ModelUsage) == 0 {
 			return record{}, false

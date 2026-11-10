@@ -520,15 +520,36 @@ var hookEvents = []string{"Stop", "Notification", "UserPromptSubmit", "PreToolUs
 // `exe hook <event> --agent name` on each of hookEvents. It is passed to
 // `claude --settings`, which merges it over the user's own settings for that
 // one process only (ADR-49): fleet never edits ~/.claude/settings.json.
-func ClaudeHooks(exe, name string) string {
+func ClaudeHooks(exe, name string) string { return ClaudeSettings(exe, name, "") }
+
+// ClaudeSettings is ClaudeHooks plus, when fence is a dir, the write fence
+// (ADR-79): Write, Edit and NotebookEdit refuse paths outside the working
+// dir and fence, in every permission mode. fence is the agent's <repo>.wt/
+// dir, so its own worktree and a throwaway one beside it stay writable and
+// the main checkout, home and other repos do not.
+func ClaudeSettings(exe, name, fence string) string {
 	hooks := map[string]any{}
 	for _, e := range hookEvents {
 		cmd := map[string]any{"type": "command",
 			"command": Quote(exe) + " hook " + strings.ToLower(e) + " --agent " + Quote(name)}
 		hooks[e] = []any{map[string]any{"hooks": []any{cmd}}}
 	}
-	b, _ := json.Marshal(map[string]any{"hooks": hooks})
+	doc := map[string]any{"hooks": hooks}
+	if fence != "" {
+		doc["permissions"] = map[string]any{"blockWritesOutsideWorkingDirectories": true,
+			"additionalDirectories": []string{fence}}
+	}
+	b, _ := json.Marshal(doc)
 	return string(b)
+}
+
+// Fenced returns v with the Claude settings carrying the write fence for
+// dir (see ClaudeSettings).
+func (v Vars) Fenced(dir string) Vars {
+	if dir != "" {
+		v.Hooks = ClaudeSettings(v.Fleet, v.Name, dir)
+	}
+	return v
 }
 
 // PeerMCP returns the one-server MCP configs that run `exe mcp --agent name`

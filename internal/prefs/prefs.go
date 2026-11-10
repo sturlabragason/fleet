@@ -56,6 +56,11 @@ type Spawn struct {
 	// tool's own config, so its "do you trust this folder?" dialog never
 	// appears (DESIGN §4, ADR-47). false leaves the tool to ask.
 	AutoTrust bool
+	// FenceWrites limits a Claude agent in a fleet worktree to writing in
+	// that worktree's <repo>.wt/ dir with its file tools
+	// (permissions.blockWritesOutsideWorkingDirectories, ADR-79). Shell,
+	// MCP and hooks are not fenced. false leaves Claude's own settings.
+	FenceWrites bool
 	// Driver is how fleet runs the agent: DriverTmux (the tool's TUI in a
 	// pane, read from the screen) or DriverACP (the tool's ACP server under
 	// `fleet acp-host`, DESIGN §7d, ADR-74). Empty = not set in config.toml:
@@ -100,7 +105,7 @@ const DefaultDeadPaneGrace = 5 * time.Minute
 // worker playbook on, DefaultDeadPaneGrace, a worktree per agent, auto-trust,
 // the stuck rule's default timeout and no action on stuck.
 func Neutral() Spawn {
-	return Spawn{AutoSubmit: true, ReadyTimeout: DefaultReadyTimeout, Playbook: true, DeadPaneGrace: DefaultDeadPaneGrace, Worktree: true, AutoTrust: true, StuckAfter: status.DefaultStuckAfter, StuckAction: StuckNone}
+	return Spawn{AutoSubmit: true, ReadyTimeout: DefaultReadyTimeout, Playbook: true, DeadPaneGrace: DefaultDeadPaneGrace, Worktree: true, AutoTrust: true, FenceWrites: true, StuckAfter: status.DefaultStuckAfter, StuckAction: StuckNone}
 }
 
 // DefaultMaxWorking caps how many agents may be working at once before new
@@ -314,6 +319,9 @@ func applySpawn(s Spawn, sec map[string]conf.Value) Spawn {
 	}
 	if v, ok := conf.Bool(sec, "auto_trust"); ok {
 		s.AutoTrust = v
+	}
+	if v, ok := conf.Bool(sec, "fence_writes"); ok {
+		s.FenceWrites = v
 	}
 	if v, ok := conf.Dur(sec, "ready_timeout"); ok && v > 0 {
 		s.ReadyTimeout = v
