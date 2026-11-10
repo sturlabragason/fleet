@@ -76,6 +76,9 @@ func (s *Server) send(a args) (string, error) {
 	if err := fleet.CheckKeys(a.Keys); err != nil {
 		return "", err
 	}
+	if a.Resume {
+		return s.resume(a)
+	}
 	if a.Name != "" {
 		held, err := s.sendOne(a, a.Name)
 		if err != nil {
@@ -121,6 +124,9 @@ func (s *Server) sendOne(a args, name string) (held bool, err error) {
 	if err := s.scope(name); err != nil {
 		return false, err
 	}
+	if err := s.F.ClosedError(name, "pass resume=true"); err != nil {
+		return false, err
+	}
 	if len(a.Keys) == 0 && a.Text != "" {
 		if held, err := s.F.HoldForQueued(name, a.Text); held || err != nil {
 			return held, err
@@ -144,6 +150,30 @@ func (s *Server) sendOne(a args, name string) (held bool, err error) {
 		return false, s.F.Send(name, a.Text)
 	}
 	return false, s.F.SendKeys(name, a.Text, a.Keys)
+}
+
+// resume is fleet_send resume=true: a closed agent of the caller's comes
+// back on its last session and gets text (ADR-95). One still on the board
+// just gets the send.
+func (s *Server) resume(a args) (string, error) {
+	if a.Name == "" || len(a.Names) > 0 || a.Team != "" || a.Text == "" || len(a.Keys) > 0 {
+		return "", fmt.Errorf("resume=true takes one name and text, no keys")
+	}
+	if err := s.scope(a.Name); err != nil {
+		return "", err
+	}
+	if s.F.ClosedError(a.Name, "") == nil {
+		a.Resume = false
+		return s.send(a)
+	}
+	ag, held, err := s.F.Resume(a.Name, a.Text)
+	if err != nil {
+		return "", err
+	}
+	if held {
+		return "resumed " + a.Name + ": " + fleet.HeldNote(a.Name), nil
+	}
+	return "resumed " + a.Name + " (session " + ag.SessionID + "); the text was pasted once it looked ready: check with fleet_status", nil
 }
 
 // answer runs fleet_answer: y/n, a numbered option, or an option picked by

@@ -513,8 +513,12 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 				return errNotStarting
 			}
 			a.Created = old.Created // a queued agent keeps its place in time
+		} else if ok && ex.Resume && old.PaneID != pane {
+			// Resume checked the name before its ready wait, not under the lock.
+			return fmt.Errorf("agent %q already exists", name)
 		}
 		b.Agents[name] = a
+		delete(b.Closed, name) // a new agent of the name is not the closed one
 		return nil
 	}); err != nil {
 		f.KillPane(pane)
@@ -535,6 +539,7 @@ type startExtra struct {
 	Role       Role
 	Effort     string
 	Driver     string // board.Agent.Driver
+	Resume     bool   // a resume: the name must still be free (ADR-95)
 }
 
 // Version is the running fleet build ("v1.2.0", else a revision), set by
@@ -713,7 +718,9 @@ func (f *Fleet) Close(name string) error {
 	if err := os.Remove(ACPPromptPath(f.Home, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		logx.For("fleet").Warn("acp: remove prompt file", "agent", name, "err", err)
 	}
+	team := ""
 	if f.Teams != nil {
+		team, _ = f.Teams.Of(name)
 		if err := f.Teams.DropAgent(name); err != nil {
 			logx.For("fleet").Warn("drop team membership", "agent", name, "err", err)
 		}
@@ -725,6 +732,11 @@ func (f *Fleet) Close(name string) error {
 			return fmt.Errorf("no agent %q", name)
 		}
 		wt = a.Worktree
+		// Kept so a send can resume it with its card (ADR-95); without a
+		// session there is nothing to resume.
+		if a.SessionID != "" {
+			b.AddClosed(a, team, time.Now())
+		}
 		delete(b.Agents, name)
 		return nil
 	})

@@ -348,6 +348,10 @@ type Report struct {
 // Board is the whole file.
 type Board struct {
 	Agents map[string]*Agent `json:"agents"`
+	// Closed are recently closed agents, kept so fleet_send resume=true can
+	// bring one back with its card, team and owner (ADR-95). They are not
+	// agents: nothing that lists Agents shows them.
+	Closed map[string]*Closed `json:"closed,omitempty"`
 	extra  jsonx.Extra
 }
 

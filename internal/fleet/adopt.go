@@ -8,9 +8,11 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/playbook"
 	"github.com/sturlabragason/fleet/internal/prefs"
 	"github.com/sturlabragason/fleet/internal/sessions"
 	"github.com/sturlabragason/fleet/internal/tools"
@@ -35,7 +37,13 @@ var (
 
 // Adopt resumes an existing session (started outside fleet) in a new agent
 // window, like Spawn but with the profile's resume args and no prompt.
-func (f *Fleet) Adopt(o AdoptOpts) (*board.Agent, error) {
+func (f *Fleet) Adopt(o AdoptOpts) (*board.Agent, error) { return f.adopt(o, nil, false, "") }
+
+// adopt is Adopt, and also a resume (ADR-95): then rec is the closed
+// agent's record, whose card, role, effort and worktree the new entry keeps,
+// claimed is set for a resume the queue drain starts, and prompt is pasted
+// once the tool is ready (an acp host sends it).
+func (f *Fleet) adopt(o AdoptOpts, rec *board.Agent, claimed bool, prompt string) (*board.Agent, error) {
 	id := o.SessionID
 	if !sessionIDRe.MatchString(id) {
 		return nil, fmt.Errorf("bad session id %q", id)
@@ -67,9 +75,11 @@ func (f *Fleet) Adopt(o AdoptOpts) (*board.Agent, error) {
 	if err != nil {
 		return nil, err
 	}
-	name, err := f.adoptName(o.Name, dir)
-	if err != nil {
-		return nil, err
+	name := o.Name
+	if rec == nil {
+		if name, err = f.adoptName(o.Name, dir); err != nil {
+			return nil, err
+		}
 	}
 	if acp {
 		if err := acpSocketFits(f.Home, name); err != nil {
@@ -83,27 +93,56 @@ func (f *Fleet) Adopt(o AdoptOpts) (*board.Agent, error) {
 	// An adopted session is a fresh process, so it needs the permission mode
 	// a spawn would have given it (ADR-56).
 	ex := startExtra{Worktree: adoptWorktree(dir), NoWorktree: true, Role: Role{Admiral: o.Admiral}}
+	apr := f.Prefs.For(o.Profile)
+	ctx, fence, goal := "", "", ""
+	if rec != nil {
+		// A resume comes back as a wake does: its card, role, effort and
+		// write fence (ADR-60).
+		ex = startExtra{Base: rec.Baseline, Worktree: rec.Worktree, NoWorktree: rec.NoWorktree, Card: rec.Card, Effort: rec.Effort,
+			Role: Role{Leader: rec.Leader, LeadBy: rec.LeadBy, Interactive: rec.Interactive, Admiral: o.Admiral}, Resume: !claimed}
+		if rec.Effort != "" {
+			ctx = contextKey(p, playbook.Level(rec.Effort), rec.Leader)
+		}
+		fence, goal = fenceDir(rec.Worktree, apr.FenceWrites), rec.Goal
+	}
 	var argv []string
 	if acp {
 		// A new host on the session, as a wake does; nothing an earlier
 		// agent of this name left may stand for it.
 		f.forgetACP(name)
-		argv, p, err = f.wakeACPArgv(&board.Agent{Name: name, Profile: o.Profile, Dir: dir, SessionID: id}, p, "")
+		if prompt != "" {
+			pf := ACPPromptPath(f.Home, name)
+			if err := os.MkdirAll(filepath.Dir(pf), 0o700); err != nil {
+				return nil, err
+			}
+			if err := os.WriteFile(pf, []byte(prompt), 0o600); err != nil {
+				return nil, err
+			}
+		}
+		argv, p, err = f.wakeACPArgv(&board.Agent{Name: name, Profile: o.Profile, Dir: dir, SessionID: id}, p, ctx)
 		if err != nil {
 			return nil, err
 		}
 		ex.Driver = board.DriverACP
 	} else {
-		apr := f.Prefs.For(o.Profile)
-		argv, _ = p.Argv(agentVars(f.Exe, name, id, p, apr),
-			tools.Launch{Resume: true, Mode: f.modeFor(name, o.Profile, p, apr.Mode), Extra: apr.ExtraArgs})
+		argv, _ = p.Argv(agentVars(f.Exe, name, id, p, apr).Fenced(fence),
+			tools.Launch{Resume: true, Mode: f.modeFor(name, o.Profile, p, apr.Mode), Extra: apr.ExtraArgs, Context: ctx})
 	}
 	// Adopt resumes a session that already has a dir, so it never makes a
 	// worktree; when that dir is one, the board records it so close and
 	// sweep can name the work left there (DESIGN §4, ADR-39).
-	a, err := f.start(name, o.Profile, p, dir, "", "", id, argv, false, ex)
+	a, err := f.start(name, o.Profile, p, dir, goal, prompt, id, argv, claimed, ex)
 	if err != nil {
 		return nil, err
+	}
+	if prompt != "" {
+		if !acp {
+			// A send is always submitted, and the resumed session keeps
+			// its mode: no mode keys, as at adopt and wake.
+			apr.AutoSubmit, apr.Mode = true, ""
+			f.autostart(f.T, time.Sleep, a.PaneID, p, apr, prompt, false)
+		}
+		f.notePrompt(name)
 	}
 	logx.For("fleet").Info("adopted", "agent", name, "profile", o.Profile, "session_id", id, "force", o.Force, "driver", driver)
 	return a, nil

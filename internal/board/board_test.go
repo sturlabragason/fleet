@@ -1,6 +1,7 @@
 package board
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -258,5 +259,20 @@ func TestDriverName(t *testing.T) {
 	}
 	if got := (&Agent{Driver: DriverACP}).DriverName(); got != "acp" {
 		t.Errorf("acp agent: %q", got)
+	}
+}
+
+func TestPruneClosed(t *testing.T) {
+	now := time.Now()
+	b := &Board{}
+	b.AddClosed(&Agent{Name: "old"}, "", now.Add(-ClosedKeep-time.Minute))
+	for i := 0; i < ClosedMax+1; i++ {
+		b.AddClosed(&Agent{Name: fmt.Sprintf("a%02d", i), PaneID: "%1"}, "t", now.Add(time.Duration(i)*time.Second))
+	}
+	if len(b.Closed) != ClosedMax || b.Closed["old"] != nil || b.Closed["a00"] != nil || b.Closed["a50"] == nil {
+		t.Fatalf("kept %d: old=%v a00=%v", len(b.Closed), b.Closed["old"], b.Closed["a00"])
+	}
+	if b.Closed["a50"].Agent.PaneID != "" || b.Closed["a50"].Team != "t" {
+		t.Errorf("record %+v", b.Closed["a50"])
 	}
 }

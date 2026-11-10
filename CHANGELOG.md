@@ -5,6 +5,7 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-10
+- A follow-up to an agent that closed (say after auto-close on `done`) is refused with when it closed; `fleet_send resume=true` or `fleet send --resume` brings it back on its last session with its task card, team and owner, then sends, queued if `max_working` is reached (#19, ADR-95).
 - Pasting a large block into an ACP agent's pane lands at once, shown as `[Paste #1 +N lines]` in the input line until you press Enter, instead of redrawing for minutes (#42).
 - The admiral costs less to keep running: reports that land within 30 s wake it once, it starts outside the fleet checkout so merges no longer reset its prompt cache, a Claude admiral keeps its cache for an hour, and it is told to hand off at 80k tokens of context; run `fleet admiral restart` to pick this up (ADR-93).
 - A squad leader can pass `force=true` to `fleet_squad_send` to send past stale text in its own agent's input box, as the admiral can with `fleet_send`; an agent on a permission prompt is still refused (#20).

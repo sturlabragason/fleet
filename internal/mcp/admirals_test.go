@@ -3,6 +3,7 @@ package mcp
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
@@ -149,5 +150,29 @@ func TestIdentityBoundCoversEveryWrite(t *testing.T) {
 		if !reads[d.Name] && !identityBound[d.Name] {
 			t.Errorf("%s is neither a read nor identity-bound", d.Name)
 		}
+	}
+}
+
+// fleet#19: a send to a closed agent names resume=true, only its owner may
+// resume it, and closed records stay out of fleet_status.
+func TestSendToClosedAgent(t *testing.T) {
+	f := admiralHome(t)
+	f.Store.Update(func(b *board.Board) error {
+		b.AddClosed(&board.Agent{Name: "c1", Profile: "fake", Dir: f.Home + "/gone", SessionID: "SESSION1", Admiral: "print"}, "", time.Now())
+		return nil
+	})
+	main := startRPC(t, NewAdmiral(f, wall.New(f.T, fleet.Session), ""))
+	if msg, isErr := main.tool("fleet_send", map[string]any{"name": "c1", "text": "x", "resume": true}); !isErr || !strings.Contains(msg, "belongs to admiral print") {
+		t.Fatalf("main resumed print's agent: %q %v", msg, isErr)
+	}
+	print := startRPC(t, NewAdmiral(f, wall.New(f.T, fleet.Session), "print"))
+	if msg, isErr := print.tool("fleet_send", map[string]any{"name": "c1", "text": "x"}); !isErr || !strings.Contains(msg, "c1 closed at ") || !strings.Contains(msg, "pass resume=true to resume its last session") {
+		t.Fatalf("refusal: %q %v", msg, isErr)
+	}
+	if msg, isErr := print.tool("fleet_send", map[string]any{"name": "c1", "text": "x", "resume": true}); !isErr || !strings.Contains(msg, "is gone") {
+		t.Fatalf("resume into a gone dir: %q %v", msg, isErr)
+	}
+	if msg, _ := print.tool("fleet_status", nil); strings.Contains(msg, "c1") {
+		t.Fatalf("status lists a closed agent: %q", msg)
 	}
 }

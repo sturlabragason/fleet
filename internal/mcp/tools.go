@@ -46,11 +46,12 @@ var toolDefs = []tool{
 		"raw":          map[string]any{"type": "boolean", "description": "screen as captured, with borders"},
 		"last_message": map[string]any{"type": "boolean", "description": "the agent's last reply from its session log (Copilot, Claude, ACP), at most 4000 chars; other tools get the end of the screen, headed (from the screen)"},
 		"summary":      map[string]any{"type": "boolean", "description": "about 5 lines from a cheap model instead of screen text (cached per screen)"}})},
-	{"fleet_send", "Send an ordinary prompt or follow-up text (pastes, presses Enter, re-presses it if the paste stays unsubmitted). Target exactly one of name, names or team; several targets get one line each. keys presses allowed keys instead of Enter (text+keys: paste, no Enter, then keys); text or keys to an agent on a prompt need confirmed=true (Enter would answer it). Refused while the user is typing in that pane (a key press there in the last 30 s, an interactive agent whose pane they have open, or unsubmitted text in its input box): wait or ask the user; force=true types anyway.", obj(nil, map[string]any{
+	{"fleet_send", "Send an ordinary prompt or follow-up text (pastes, presses Enter, re-presses it if the paste stays unsubmitted). Target exactly one of name, names or team; several targets get one line each. keys presses allowed keys instead of Enter (text+keys: paste, no Enter, then keys); text or keys to an agent on a prompt need confirmed=true (Enter would answer it). Refused while the user is typing in that pane (a key press there in the last 30 s, an interactive agent whose pane they have open, or unsubmitted text in its input box): wait or ask the user; force=true types anyway. An agent closed in the last 24 h is refused with when it closed: resume=true resumes its last session with its card, team and owner, then sends text (queued over max_working).", obj(nil, map[string]any{
 		"name": str("agent name"), "names": strList("several agent names"), "team": str("send to every member of this team"),
 		"text": str("text to send"), "keys": strList("key names: Enter, Escape, Up, Down, Left, Right, Tab, BTab, Space, BSpace, 1-9, y, n"),
 		"confirmed": map[string]any{"type": "boolean", "description": "only when an agent is waiting on a prompt (text or keys would answer it), after the user said yes"},
-		"force":     map[string]any{"type": "boolean", "description": "type even though the user is typing in that pane (it merges into their input and submits it); only after the user said so"}})},
+		"force":     map[string]any{"type": "boolean", "description": "type even though the user is typing in that pane (it merges into their input and submits it); only after the user said so"},
+		"resume":    map[string]any{"type": "boolean", "description": "name only, with text: the agent closed; resume its last session, then send"}})},
 	{"fleet_answer", "Answer an agent's prompt: answer y/n, option N of a numbered menu, or label for a menu whose options are not numbered on screen (fleet_status lists the options either way). Ask the user first; set confirmed=true only after an explicit yes, and pass expect = the question the user confirmed.", obj([]string{"name", "confirmed"}, map[string]any{
 		"name": str("agent name"), "answer": map[string]any{"type": "string", "enum": []string{"y", "n"}, "description": "y = option 1, n = the first option starting with No; plain y/n when there is no menu"},
 		"option": map[string]any{"type": "integer", "minimum": 1, "maximum": 9, "description": "menu option number; pass exactly one of answer, option or label"},
@@ -125,6 +126,8 @@ type args struct {
 	// squad with it (ADR-53).
 	Leader, Squad bool
 	Pin           bool
+	// Resume brings a closed agent back for a fleet_send (ADR-95).
+	Resume bool
 	// Interactive marks a fleet_spawn the user talks to directly (ADR-61).
 	Interactive         bool
 	LastMessage         bool `json:"last_message"`

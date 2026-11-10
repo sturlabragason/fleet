@@ -5,6 +5,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/theme"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
@@ -49,7 +50,12 @@ func (f *Fleet) OwnerOf(agent string) string {
 	if !ok {
 		return board.Main
 	}
-	if o := a.Owner(); supervisor.Exists(f.Home, o) {
+	return f.liveOwner(a.Owner())
+}
+
+// liveOwner is o, or main when admiral o is gone.
+func (f *Fleet) liveOwner(o string) string {
+	if supervisor.Exists(f.Home, o) {
 		return o
 	}
 	return board.Main
@@ -110,10 +116,16 @@ func ErrOtherAdmiral(agent, owner string) error {
 // CheckScope refuses admiral me acting on an agent another admiral owns.
 // me "" or "main" is main.
 func (f *Fleet) CheckScope(me, agent string) error {
-	if _, ok := f.Store.Load().Agents[agent]; !ok {
+	b := f.Store.Load()
+	var own string
+	if a, ok := b.Agents[agent]; ok {
+		own = f.liveOwner(a.Owner())
+	} else if c, ok := b.ClosedRecord(agent, time.Now()); ok {
+		own = f.liveOwner(c.Agent.Owner()) // only its owner may resume it (ADR-95)
+	} else {
 		return nil // the caller's own "no agent" error is clearer
 	}
-	own, mine := f.OwnerOf(agent), me
+	mine := me
 	if mine == "" {
 		mine = board.Main
 	}
