@@ -184,7 +184,7 @@ func (f *Fleet) launchACP(name, profile string, p tools.Profile, dir, goal, full
 	mode := acpMode(name, profile, p, pr.Mode)
 	v := f.launchVars(name, "", p, pr, fenceDir(ex.Worktree, pr.FenceWrites), true)
 	tool := p.ACPArgv(v, tools.Launch{
-		Mode: mode, Context: contextKey(p, lvl, ex.Role.Leader), Extra: pr.ExtraArgs})
+		Mode: mode, Context: contextKey(p, lvl, ex.Role.Leader), Extra: modelExtra(p, ex.Model, pr.ExtraArgs)})
 	p, o, err := f.acpSetup(name, profile, p, mode, v)
 	if err != nil {
 		return nil, err
@@ -217,7 +217,7 @@ func (f *Fleet) wakeACPArgv(old *board.Agent, p tools.Profile, ctx string) ([]st
 	mode := acpMode(old.Name, old.Profile, p, pr.Mode)
 	v := f.launchVars(old.Name, "", p, pr, fenceDir(old.Worktree, pr.FenceWrites), true)
 	tool := p.ACPArgv(v, tools.Launch{
-		Mode: mode, Context: ctx, Extra: pr.ExtraArgs})
+		Mode: mode, Context: ctx, Extra: modelExtra(p, old.Model, pr.ExtraArgs)})
 	p, o, err := f.acpSetup(old.Name, old.Profile, p, mode, v)
 	if err != nil {
 		return nil, p, err

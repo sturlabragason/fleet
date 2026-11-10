@@ -94,7 +94,7 @@ func (f *Fleet) adopt(o AdoptOpts, rec *board.Agent, claimed bool, prompt string
 	// a spawn would have given it (ADR-56).
 	ex := startExtra{Worktree: adoptWorktree(dir), NoWorktree: true, Role: Role{Admiral: o.Admiral}}
 	apr := f.Prefs.For(o.Profile)
-	ctx, fence, goal := "", "", ""
+	ctx, fence, goal, model := "", "", "", ""
 	if rec != nil {
 		// A resume comes back as a wake does: its card, role, effort and
 		// write fence (ADR-60).
@@ -104,7 +104,14 @@ func (f *Fleet) adopt(o AdoptOpts, rec *board.Agent, claimed bool, prompt string
 			ctx = contextKey(p, playbook.Level(rec.Effort), rec.Leader)
 		}
 		fence, goal = fenceDir(rec.Worktree, apr.FenceWrites), rec.Goal
+		model = rec.Model
 	}
+	// Adopted and resumed agents run Opus too (ADR-100).
+	p, model, err = f.withModel(o.Profile, p, model)
+	if err != nil {
+		return nil, err
+	}
+	ex.Model = model
 	var argv []string
 	if acp {
 		// A new host on the session, as a wake does; nothing an earlier
@@ -119,14 +126,14 @@ func (f *Fleet) adopt(o AdoptOpts, rec *board.Agent, claimed bool, prompt string
 				return nil, err
 			}
 		}
-		argv, p, err = f.wakeACPArgv(&board.Agent{Name: name, Profile: o.Profile, Dir: dir, SessionID: id}, p, ctx)
+		argv, p, err = f.wakeACPArgv(&board.Agent{Name: name, Profile: o.Profile, Dir: dir, SessionID: id, Model: model}, p, ctx)
 		if err != nil {
 			return nil, err
 		}
 		ex.Driver = board.DriverACP
 	} else {
 		argv, _ = p.Argv(f.launchVars(name, id, p, apr, fence, false),
-			tools.Launch{Resume: true, Mode: f.modeFor(name, o.Profile, p, apr.Mode), Extra: apr.ExtraArgs, Context: ctx})
+			tools.Launch{Resume: true, Mode: f.modeFor(name, o.Profile, p, apr.Mode), Extra: modelExtra(p, model, apr.ExtraArgs), Context: ctx})
 	}
 	// Adopt resumes a session that already has a dir, so it never makes a
 	// worktree; when that dir is one, the board records it so close and

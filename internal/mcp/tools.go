@@ -70,7 +70,8 @@ var toolDefs = []tool{
 		"interactive": map[string]any{"type": "boolean", "description": "the user will talk to this agent directly in its pane: never auto-closed, and told to report progress, not done, until the user ends the session"},
 		"leader":      map[string]any{"type": "boolean", "description": "make it a leader: it gets squad tools and may spawn a squad of its own, whose reports come to it instead of you. Use for a job you want planned, split and summarised by one agent."},
 		"driver":      map[string]any{"type": "string", "enum": []string{"tmux", "acp"}, "description": "how fleet runs the agent: tmux (the tool's own screen) or acp (the tool's ACP server under fleet acp-host: status, questions and sends over the protocol, no screen reading). Default: the user's config, else acp for every profile that runs copilot or agy (claude-copilot too) and tmux for the rest. Claude runs over acp only when asked (this field or the profile's config), never from [defaults]; vibe refuses acp."},
-		"effort":      map[string]any{"type": "string", "enum": []string{"light", "standard", "pro"}, "description": "how much process the agent is given. light: an errand or a quick read-only question (a few lines: stay in your dir, no secrets, report). standard: a contained change (plan, build and test, commit on its branch; no ADR, no review, no merge). pro: professional code work in this repo (the full playbook: worktree, failing test first, subagent review, pre-merge checklist, merge into local main). Default: pro with a worktree, light without one."}})},
+		"effort":      map[string]any{"type": "string", "enum": []string{"light", "standard", "pro"}, "description": "how much process the agent is given. light: an errand or a quick read-only question (a few lines: stay in your dir, no secrets, report). standard: a contained change (plan, build and test, commit on its branch; no ADR, no review, no merge). pro: professional code work in this repo (the full playbook: worktree, failing test first, subagent review, pre-merge checklist, merge into local main). Default: pro with a worktree, light without one."},
+		"model":       map[string]any{"type": "string", "description": "an Opus model in the profile's own ids (opus or claude-opus-4-8 for claude, claude-opus-4.8 for copilot). Default: the profile's Opus model, at every effort. Anything not Opus is refused (ADR-100), and so is any model for a profile whose tool has no model flag."}})},
 	{"fleet_sessions", "Find copilot/claude sessions the user started outside fleet, newest first: id | age | profile | dir | title | flags. Use before fleet_adopt.", obj(nil, map[string]any{
 		"query": str("optional words; every word must appear in title, dir, branch or id"), "limit": map[string]any{"type": "integer", "description": "max sessions (default 15)"}})},
 	{"fleet_adopt", "Resume an existing session the user started outside fleet as a fleet agent. Pass session_id (full id or unique 8+ char prefix) or query (words that match exactly one session), not both. Refuses if the session is missing or still open elsewhere.", obj(nil, map[string]any{
@@ -138,6 +139,9 @@ type args struct {
 	// Effort is fleet_spawn's worker playbook level (ADR-57); "" is the
 	// default for the spawn.
 	Effort string
+	// Model is fleet_spawn's and fleet_squad_spawn's model (ADR-100); ""
+	// lets the effort pick.
+	Model string
 	// Driver is fleet_spawn's and fleet_squad_spawn's driver, tmux or acp
 	// (ADR-74); "" is the config's.
 	Driver string
@@ -207,7 +211,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		ag, err := s.F.SpawnWith(fleet.SpawnOpts{Worktree: a.Worktree, Card: a.card(), Role: fleet.Role{Leader: a.Leader, Interactive: a.Interactive, Admiral: s.Me()}, Effort: a.Effort, Driver: a.Driver}, a.Name, prof, a.Dir, a.Prompt)
+		ag, err := s.F.SpawnWith(fleet.SpawnOpts{Worktree: a.Worktree, Card: a.card(), Role: fleet.Role{Leader: a.Leader, Interactive: a.Interactive, Admiral: s.Me()}, Effort: a.Effort, Driver: a.Driver, Model: a.Model}, a.Name, prof, a.Dir, a.Prompt)
 		if err != nil {
 			return "", err
 		}

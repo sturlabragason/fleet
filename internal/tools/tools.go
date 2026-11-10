@@ -105,6 +105,18 @@ type Profile struct {
 	// ACPMeta is "claude" when the adapter takes the plugin dir and the
 	// settings in session/new _meta.claudeCode.options (ADR-99).
 	ACPMeta string
+
+	// ModelArgs select a model on the tool's command line, with {model}
+	// ("--model", "{model}"). Empty = the tool has no model flag and fleet
+	// never picks one for it (ADR-100).
+	ModelArgs []string
+	// DefaultModel is the model fleet pins with model_args when neither
+	// args nor extra_args name one, so the agent never runs the tool's own
+	// default (ADR-100). Empty = leave the tool's default.
+	DefaultModel string
+	// ACPModelEnv is the variable an acp_command adapter reads its model
+	// from (ANTHROPIC_MODEL); WithModel sets it.
+	ACPModelEnv string
 }
 
 // HasACP reports whether the profile can run under the acp driver.
@@ -228,6 +240,16 @@ const (
 	ClaudeSubagentModel = "sonnet"
 )
 
+// copilotModels and claudeModels are the model keys of the built-in
+// profiles of each tool: every fleet agent runs Opus (ADR-100), so a
+// Copilot profile that names no model is pinned to CopilotClaudeModel.
+const copilotModels = `model_args = ["--model", "{model}"]
+default_model = "` + CopilotClaudeModel + `"`
+
+const claudeModels = `model_args = ["--model", "{model}"]
+default_model = "` + ClaudeModel + `"
+acp_model_env = "ANTHROPIC_MODEL"`
+
 // copilotLean are the Copilot CLI built-in tools no fleet agent uses, plus
 // its built-in GitHub MCP server (ADR-60). Their schemas are sent on every
 // model call, so a fresh agent starts about 20k tokens lighter without them.
@@ -272,6 +294,7 @@ acp = ["--acp"]
 acp_mode_args = { auto = "--allow-all", autopilot = "--allow-all" }
 driver = "acp"
 ` + copilotContext + `
+` + copilotModels + `
 
 [claude-copilot]
 command = "copilot"
@@ -291,6 +314,7 @@ user_mcp_off = ["--disable-mcp-server", "{server}"]
 acp = ["--acp"]
 acp_mode_args = { auto = "--allow-all", autopilot = "--allow-all" }
 ` + copilotContext + `
+` + copilotModels + `
 
 [claude]
 command = "claude"
@@ -313,6 +337,7 @@ acp_env = { CLAUDE_CODE_EXECUTABLE = "{command_path}", ANTHROPIC_MODEL = "` + Cl
 acp_mcp = "session"
 acp_meta = "claude"
 acp_unset_env = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"]
+` + claudeModels + `
 
 [agy]
 command = "agy"
@@ -406,7 +431,8 @@ func LoadWith(home string, local conf.Doc) (map[string]Profile, error) {
 	// A profile that runs a built-in tool (claude, copilot) and sets no
 	// peer_args, hook_args or plugin_args takes that tool's: a user's [claude-work]
 	// would otherwise start agents with no fleet_report tool and no status
-	// hooks. An explicit [] keeps them off.
+	// hooks. An explicit [] keeps them off. The same goes for model_args
+	// and default_model (ADR-100).
 	for name, p := range out {
 		t := filepath.Base(p.Command)
 		b, ok := out[t]
@@ -430,6 +456,12 @@ func LoadWith(home string, local conf.Doc) (map[string]Profile, error) {
 		}
 		if p.UserMCPOff == nil {
 			p.UserMCPOff = b.UserMCPOff
+		}
+		if p.ModelArgs == nil {
+			p.ModelArgs = b.ModelArgs
+		}
+		if p.DefaultModel == "" {
+			p.DefaultModel = b.DefaultModel
 		}
 		out[name] = p
 	}
@@ -461,6 +493,9 @@ func inheritACP(p, b Profile) Profile {
 	}
 	if p.ACPMeta == "" {
 		p.ACPMeta = b.ACPMeta
+	}
+	if p.ACPModelEnv == "" {
+		p.ACPModelEnv = b.ACPModelEnv
 	}
 	return p
 }
@@ -559,6 +594,15 @@ func apply(p *Profile, sec map[string]conf.Value) {
 	}
 	if v, ok := sec["acp_meta"]; ok {
 		p.ACPMeta, _ = v.(string)
+	}
+	if v, ok := sec["model_args"]; ok {
+		p.ModelArgs, _ = v.([]string)
+	}
+	if v, ok := sec["default_model"]; ok {
+		p.DefaultModel, _ = v.(string)
+	}
+	if v, ok := sec["acp_model_env"]; ok {
+		p.ACPModelEnv, _ = v.(string)
 	}
 }
 

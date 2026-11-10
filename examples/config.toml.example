@@ -135,6 +135,9 @@ ready_timeout = "15s"
 # --allow-all is part of the mode.)
 mode = "autopilot"
 extra_args = ["--reasoning-effort", "high"]
+# Every fleet agent runs Opus, at every effort (ADR-100). A --model here must
+# name an Opus model (extra_args = ["--model", "claude-opus-4.8"]); anything
+# else is refused at spawn. Without one, fleet pins the profile's default_model.
 
 [profile.claude]
 # "accept-edits", "plan" or "bypass" -> claude --permission-mode ...

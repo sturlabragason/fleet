@@ -180,6 +180,10 @@ type SpawnOpts struct {
 	// Driver is "tmux" or "acp" (DESIGN §7d, ADR-74); "" takes the
 	// profile's driver from config.toml, else tmux.
 	Driver string
+	// Model is the model the agent runs (ADR-100); "" is the profile's,
+	// pinned to Opus. A model that is not Opus is refused, and so is any
+	// model for a profile whose tool has no model flag.
+	Model string
 }
 
 // Spawn starts an agent in its own hidden window, with the config file's
@@ -228,6 +232,10 @@ func (f *Fleet) SpawnWith(o SpawnOpts, name, profile, dir, prompt string) (*boar
 		}
 		o.Effort = string(l) // the board keeps the canonical name, not "PRO"
 	}
+	o.Model = strings.TrimSpace(o.Model)
+	if _, err := f.pickModel(profile, f.Profiles[profile], o.Model); err != nil {
+		return nil, err
+	}
 	driver, err := f.driverFor(o.Driver, profile)
 	if err != nil {
 		return nil, err
@@ -247,13 +255,13 @@ func (f *Fleet) SpawnWith(o SpawnOpts, name, profile, dir, prompt string) (*boar
 	if o.Role.Leader {
 		f.MakeLeader(name)
 	}
-	if a, err := f.enqueue(name, profile, dir, prompt, wt, card, o.Role, o.Effort, driver); a != nil || err != nil {
+	if a, err := f.enqueue(name, profile, dir, prompt, wt, card, o.Role, o.Effort, driver, o.Model); a != nil || err != nil {
 		return a, err
 	}
 	// The busy count and the launch are not one critical section, so two
 	// concurrent spawns can both see the last free slot: the cap is
 	// best-effort and may be exceeded by one per racing spawn.
-	return f.launch(name, profile, dir, prompt, false, wt, card, o.Role, o.Effort, driver)
+	return f.launch(name, profile, dir, prompt, false, wt, card, o.Role, o.Effort, driver, o.Model)
 }
 
 // agentWorktree gives the agent its own worktree and branch for a spawn into
@@ -307,7 +315,7 @@ func contextKey(p tools.Profile, lvl playbook.Level, leader bool) string {
 // for the agent's own git worktree; the playbook and the baseline are then
 // read from that worktree, not from the spawn dir. card is the task card
 // (ADR-43): it goes on the board and its block is appended to the prompt.
-func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, card *board.Card, role Role, effort, driver string) (*board.Agent, error) {
+func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, card *board.Card, role Role, effort, driver, model string) (*board.Agent, error) {
 	p, ok := f.Profiles[profile]
 	if !ok {
 		return nil, fmt.Errorf("unknown profile %q (have %v)", profile, tools.Names(f.Profiles))
@@ -334,6 +342,12 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	// resumed process the same context args (ADR-60).
 	lvl := effortLevel(effort, code)
 	ex.Effort = string(lvl)
+	// The board records the model so wake starts the same one (ADR-100).
+	p, m, err := f.withModel(profile, p, model)
+	if err != nil {
+		return nil, err
+	}
+	ex.Model = m
 	acp := driver == prefs.DriverACP
 	// The dir is final here (worktree or not), so this is the last moment
 	// before the tool reads it: pre-answer its trust dialog (ADR-47). An
@@ -344,6 +358,7 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 		id = tools.NewUUID()
 	}
 	pr := f.Prefs.For(profile)
+	pr.ExtraArgs = modelExtra(p, ex.Model, pr.ExtraArgs)
 	pr.Mode = f.modeFor(name, profile, p, pr.Mode)
 	// The worker playbook goes in front of the first prompt only; the board
 	// keeps the user's prompt as the goal (DESIGN §4, ADR-22). No prompt, no
@@ -521,7 +536,7 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 	now := time.Now()
 	a := &board.Agent{Name: name, Profile: profile, Patterns: p.Patterns, Dir: dir, Goal: goal, SessionID: id,
 		PaneID: pane, Status: string(status.Unknown), Created: now, StatusSince: now, LastChange: now,
-		Baseline: ex.Base, Worktree: ex.Worktree, NoWorktree: ex.NoWorktree, Card: ex.Card, Effort: ex.Effort,
+		Baseline: ex.Base, Worktree: ex.Worktree, NoWorktree: ex.NoWorktree, Card: ex.Card, Effort: ex.Effort, Model: ex.Model,
 		Leader: ex.Role.Leader, LeadBy: ex.Role.LeadBy, Interactive: ex.Role.Interactive, Driver: ex.Driver,
 		FleetVersion: Version}
 	if a.ACP() {
@@ -565,6 +580,7 @@ type startExtra struct {
 	Card       *board.Card
 	Role       Role
 	Effort     string
+	Model      string // board.Agent.Model
 	Driver     string // board.Agent.Driver
 	Resume     bool   // a resume: the name must still be free (ADR-95)
 }

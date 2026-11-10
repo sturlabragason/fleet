@@ -87,12 +87,12 @@ func QueueOrder(as []*board.Agent) []*board.Agent {
 // should launch. wantWT is kept on the entry so the drain makes the same
 // worktree choice the spawn asked for, whatever config.toml says by then;
 // card is kept for the same reason (ADR-43), and so is the effort level
-// (ADR-57).
-func (f *Fleet) enqueue(name, profile, dir, prompt string, wantWT bool, card *board.Card, role Role, effort, driver string) (*board.Agent, error) {
+// (ADR-57) and the model the spawn named (ADR-100).
+func (f *Fleet) enqueue(name, profile, dir, prompt string, wantWT bool, card *board.Card, role Role, effort, driver, model string) (*board.Agent, error) {
 	return f.enqueueWith(func(now time.Time, note string) *board.Agent {
 		a := &board.Agent{Name: name, Profile: profile, Patterns: f.Profiles[profile].Patterns, Dir: dir, Goal: prompt,
 			Status: string(status.Queued), Created: now, StatusSince: now, NoWorktree: !wantWT, LastLine: note, Card: card,
-			Leader: role.Leader, LeadBy: role.LeadBy, Interactive: role.Interactive, Effort: effort, Driver: boardDriver(driver)}
+			Leader: role.Leader, LeadBy: role.LeadBy, Interactive: role.Interactive, Effort: effort, Driver: boardDriver(driver), Model: model}
 		a.SetOwner(role.Admiral)
 		return a
 	})
@@ -167,7 +167,7 @@ func (f *Fleet) claimQueued(b *board.Board, now time.Time, low bool, limit int) 
 // poll never waits on tmux or the tool's ready check.
 func (f *Fleet) startQueued(a *board.Agent) {
 	start := func() error {
-		_, err := f.launch(a.Name, a.Profile, a.Dir, a.Goal, true, !a.NoWorktree, a.Card, Role{Leader: a.Leader, LeadBy: a.LeadBy, Interactive: a.Interactive, Admiral: a.Admiral}, a.Effort, queuedDriver(a))
+		_, err := f.launch(a.Name, a.Profile, a.Dir, a.Goal, true, !a.NoWorktree, a.Card, Role{Leader: a.Leader, LeadBy: a.LeadBy, Interactive: a.Interactive, Admiral: a.Admiral}, a.Effort, queuedDriver(a), a.Model)
 		return err
 	}
 	if a.SessionID != "" { // a queued resume (ADR-95)

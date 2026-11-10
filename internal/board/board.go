@@ -82,6 +82,11 @@ type Agent struct {
 	// wake reuses for the context args (ADR-60). "" on a started agent
 	// means adopted, or started by an older fleet.
 	Effort string `json:"effort,omitempty"`
+	// Model is the model the agent runs (ADR-100). A queued agent keeps the
+	// model its spawn named, "" being none; once started it holds the model
+	// fleet launched it with, which wake reuses. "" on a started agent
+	// means the profile's own model.
+	Model string `json:"model,omitempty"`
 	// Interactive marks an agent the user talks to directly: it is never
 	// auto-closed, and fleet_send refuses to type while the user has its
 	// pane open (ADR-61).
