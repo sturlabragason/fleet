@@ -39,6 +39,9 @@ const usage = `usage:
   fleet [--admiral-profile NAME] up [--no-attach]
                                             run the admiral under profile NAME (alone: fleet up); default
                                             $FLEET_ADMIRAL_PROFILE, last choice, [admiral] profile, copilot
+  fleet up --monitors 2                     two screens: the admiral here, overview + wall in a new
+                                            terminal window ($FLEET_TERMINAL picks it); --monitors 1 undoes it
+  fleet wall attach                         show the overview + wall in this terminal (the second screen)
   fleet ui                                  run the overview TUI in this terminal
   fleet spawn [--worktree|--no-worktree] [--leader] [--interactive] [--effort LEVEL] [--admiral NAME] <name> <profile> [dir] ["prompt"]
              [--driver tmux|acp] [--model MODEL] [--goal "one line"] [--check "cmd"] [--check-exit N] [--result FILE]

@@ -76,15 +76,23 @@ func TestTopLevelProfile(t *testing.T) {
 			t.Errorf("%v: got %v err %v", c.in, got, err)
 		}
 	}
-	na, prof, err := parseUpArgs([]string{"--admiral-profile", "claude", "--no-attach"})
+	na, prof, _, err := parseUpArgs([]string{"--admiral-profile", "claude", "--no-attach"})
 	if err != nil || !na || prof != "claude" {
 		t.Errorf("up flags: %v %q %v", na, prof, err)
 	}
-	if na, prof, err := parseUpArgs([]string{"--no-attach"}); err != nil || !na || prof != "" {
+	if na, prof, _, err := parseUpArgs([]string{"--no-attach"}); err != nil || !na || prof != "" {
 		t.Errorf("--no-attach alone: %v %q %v", na, prof, err)
 	}
-	if _, prof, _ := parseUpArgs([]string{"--supervisor-profile", "x"}); prof != "x" {
+	if _, prof, _, _ := parseUpArgs([]string{"--supervisor-profile", "x"}); prof != "x" {
 		t.Errorf("deprecated alias: %q", prof)
+	}
+	if _, _, mo, err := parseUpArgs([]string{"--monitors", "2"}); err != nil || mo != 2 {
+		t.Errorf("--monitors 2: %d %v", mo, err)
+	}
+	for _, bad := range []string{"3", "-1"} {
+		if _, _, _, err := parseUpArgs([]string{"--monitors", bad}); err == nil {
+			t.Errorf("--monitors %s: want an error", bad)
+		}
 	}
 }
 

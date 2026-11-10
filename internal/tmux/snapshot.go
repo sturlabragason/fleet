@@ -49,16 +49,22 @@ func (c *Client) Snapshot() (*Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
+	return parseSnapshot(at, out), nil
+}
+
+func parseSnapshot(at time.Time, out string) *Snapshot {
 	s := &Snapshot{At: at, Windows: map[string]map[string]string{}}
+	seen := map[string]bool{}
 	for _, line := range strings.Split(out, "\n") {
 		f := strings.Split(line, "\t")
 		if len(f) < paneFields+len(WindowKeys)+1 {
 			continue
 		}
 		p, ok := parsePane(f[:paneFields])
-		if !ok {
+		if !ok || seen[p.ID] {
 			continue
 		}
+		seen[p.ID] = true
 		s.Panes = append(s.Panes, p)
 		if _, seen := s.Windows[p.WindowID]; !seen {
 			w := make(map[string]string, len(WindowKeys))
@@ -68,7 +74,7 @@ func (c *Client) Snapshot() (*Snapshot, error) {
 			s.Windows[p.WindowID] = w
 		}
 	}
-	return s, nil
+	return s
 }
 
 // PanesOf is ListPanes over the snapshot: target "" is every pane, "sess:"

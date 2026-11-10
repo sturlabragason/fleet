@@ -153,6 +153,15 @@ flowchart LR
 - **Wall** (below). Live agent panes. Each pane border shows the agent's name and status in its status colour. `fleet up` starts `fleet watch`, which keeps those borders, `fleet ls`, the board and the admiral's view agreeing within about a second whether or not the overview is open.
 - Agents not on the wall live in hidden windows `ag-<name>`.
 
+### Two monitors
+
+```sh
+fleet up --monitors 2    # this terminal: the admiral, full screen
+                         # a new terminal window: overview + wall, full screen
+```
+
+Drag the new window to the second screen. If no window opens (fleet tries `$FLEET_TERMINAL`, then `$TERMINAL`, then Ptyxis, GNOME Terminal, kitty, foot, Alacritty, WezTerm, Ghostty, Konsole, xterm), run `fleet wall attach` in a second terminal yourself. Every wall key (`Alt+1/2/4/6/9/m`, `Alt+X`, `Alt+w`) and the overview work from either screen, and each screen keeps its own size. Closing either window only detaches it: agents keep running; `fleet up` brings back the admiral's screen and `fleet wall attach` the wall's. `fleet up --monitors 1` puts the admiral back in `fleet:main` and closes the wall's window (ADR-108).
+
 All geometry is in [`internal/layout`](internal/layout/config.go).
 
 ## Keys
