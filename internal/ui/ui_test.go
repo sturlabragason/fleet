@@ -692,3 +692,23 @@ func TestTileACPMarker(t *testing.T) {
 		t.Errorf("wide: %q", got)
 	}
 }
+
+// Animation ticks must not change the frame when nothing on it animates:
+// bubbletea then writes nothing, and tmux has nothing to repaint (each
+// repaint moved the cursor out of the admiral pane and flickered it).
+func TestAnimTickLeavesStillFrameAlone(t *testing.T) {
+	m := New(&fakeBE{}, "")
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 20})
+	t0 := time.Now().Add(-time.Minute)
+	m.Update(agentsMsg{agents: []*board.Agent{
+		{Name: "echo", Profile: "fake", Status: "idle", StatusSince: t0},
+		{Name: "foxtrot", Profile: "fake", Status: "error", StatusSince: t0},
+	}})
+	first := m.View()
+	for i := 0; i < 20; i++ {
+		m.Update(animMsg{})
+		if v := m.View(); v != first {
+			t.Fatalf("tick %d redrew a still frame:\n%s\nwas:\n%s", i, v, first)
+		}
+	}
+}

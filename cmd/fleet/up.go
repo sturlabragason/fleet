@@ -328,6 +328,12 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 	set := [][]string{
 		{"set-option", "-g", "mouse", "on"},
 		{"set-option", "-s", "escape-time", "10"},
+		// Synchronized output: tmux paints each update in one go, so
+		// VTE/Ptyxis (whose TERM tmux does not know has it) stops showing
+		// half-drawn frames and a cursor that jumps out of the active pane
+		// on every overview repaint. Terminals without it ignore the mode.
+		// A fixed index, not -a: `fleet up` runs again on every attach.
+		{"set-option", "-s", "terminal-features[90]", "xterm*:sync"},
 		{"set-option", "-g", "pane-border-status", "top"},
 		{"set-option", "-g", "pane-border-lines", "heavy"},
 		{"set-option", "-g", "pane-border-style", "fg=" + theme.Surface1},

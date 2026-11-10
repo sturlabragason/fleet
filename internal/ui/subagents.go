@@ -14,7 +14,7 @@ const subDot = "•"
 
 // subagentDots picks the dots that fit in width (the newest, in start order)
 // and their colours for this animation frame; hidden is how many didn't fit.
-// Running dots carry a wave: one step per 3 frames (300 ms), every third
+// Running dots carry a wave: one step per frame (300 ms), every third
 // running dot lit, so even a single running dot pulses.
 func subagentDots(subs []status.Subagent, width, frame int) (cols []lipgloss.Color, hidden int) {
 	n := len(subs)
@@ -28,7 +28,7 @@ func subagentDots(subs []status.Subagent, width, frame int) (cols []lipgloss.Col
 			}
 		}
 	}
-	step := (frame / 3) % 3
+	step := frame % 3
 	ri := 0
 	for _, s := range subs[n-show:] {
 		switch s.State {
