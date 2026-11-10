@@ -73,6 +73,12 @@ curl -fsSL https://raw.githubusercontent.com/sturlabragason/fleet/main/install.s
 
 It downloads the latest release's binary for your OS and architecture (linux or macOS, amd64 or arm64), checks it against the release's `SHA256SUMS` and refuses on a mismatch, and puts it in `~/.local/bin`. No sudo, and it doesn't touch your shell's rc files; if the directory isn't on your `PATH` it says what to add. Run it again to upgrade. `FLEET_VERSION=v1.3.0` pins a release, `FLEET_INSTALL_DIR` picks another directory, `--dry-run` shows what it would do.
 
+Releases carry GitHub [artifact attestations](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations) that tie each binary and `SHA256SUMS` to the workflow run that built them. If [`gh`](https://cli.github.com) is installed and logged in, the installer checks the binary's attestation too and refuses on a failure; otherwise it says that provenance was not checked. Releases made before attestations were added have none: `FLEET_SKIP_ATTEST=1` installs them on the SHA-256 check alone. To check a download yourself:
+
+```sh
+gh attestation verify fleet-linux-amd64 -R sturlabragason/fleet
+```
+
 To read it before you run it:
 
 ```sh
