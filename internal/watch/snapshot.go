@@ -13,7 +13,7 @@ import (
 // means it stalled, and the reader goes back to asking tmux itself.
 const SnapshotMaxAge = 3 * time.Second
 
-// SnapshotPath is the watcher's shared tmux snapshot under home (ADR-94).
+// SnapshotPath is the watcher's shared tmux snapshot under home (ADR-98).
 func SnapshotPath(home string) string { return filepath.Join(home, "tmux.json") }
 
 // WriteSnapshot shares s for the overview.

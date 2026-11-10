@@ -12,7 +12,7 @@ import (
 )
 
 // A poll reads the watcher's snapshot only while the watcher is live and the
-// snapshot is newer than the overview's own last wall change (ADR-94).
+// snapshot is newer than the overview's own last wall change (ADR-98).
 func TestForPollUsesAFreshSnapshotOnly(t *testing.T) {
 	home := t.TempDir()
 	tc := &tmux.Client{Socket: "fleet-test-none", Config: "/dev/null"}

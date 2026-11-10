@@ -23,7 +23,7 @@ type AdmiralBackend interface {
 
 // PollBackend is a Backend that can answer one poll more cheaply: ForPoll
 // returns the backend the poll's reads go to (cmd/fleet hands back one that
-// reads the watcher's shared tmux snapshot, ADR-94). Key actions keep
+// reads the watcher's shared tmux snapshot, ADR-98). Key actions keep
 // using the Backend itself.
 type PollBackend interface {
 	ForPoll() Backend

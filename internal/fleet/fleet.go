@@ -79,7 +79,7 @@ type Fleet struct {
 	// (every pane plus the window options the wall reads) instead of a plain
 	// list-panes, and hands it over with this refresh's own pane tags
 	// applied. The watcher sets it and writes the snapshot to a file the
-	// overview reads instead of running tmux (ADR-94).
+	// overview reads instead of running tmux (ADR-98).
 	ShareSnapshot func(*tmux.Snapshot)
 	// DrainQueue lets Refresh start the oldest queued agent when a working
 	// slot is free, and lets the memory guard park an idle agent when RAM

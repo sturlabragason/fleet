@@ -875,7 +875,7 @@ func TestMinimizeAdmiral(t *testing.T) {
 
 // With a current snapshot the overview's per-poll reads (cached apply, on
 // wall, pins, target) run no tmux at all; a snapshot showing work to do
-// hands the apply to tmux (ADR-94).
+// hands the apply to tmux (ADR-98).
 func TestSnapshotPollRunsNoTmux(t *testing.T) {
 	c, w, agents := setupWall(t, 3)
 	for _, p := range agents {

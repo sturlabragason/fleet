@@ -68,7 +68,7 @@ func cmdWatch(f *fleet.Fleet, args []string) error {
 	// Those done-checks may take minutes; off the loop they cannot stall it.
 	f.Async()
 	// Each refresh's one tmux read is shared, so the overview makes no
-	// tmux calls of its own while this watcher is live (ADR-94).
+	// tmux calls of its own while this watcher is live (ADR-98).
 	f.ShareSnapshot = func(s *tmux.Snapshot) {
 		if err := watch.WriteSnapshot(f.Home, s); err != nil {
 			logx.For("watch").Warn("snapshot", "err", err)

@@ -28,7 +28,7 @@ type Wall struct {
 	KeepFocus bool
 	// Snap, when set, answers the read-only hot path (Read, OnWall,
 	// Pinned, TargetAgent, ApplyCached) from the watcher's shared snapshot
-	// instead of tmux (ADR-94). Only copies made by WithSnapshot set it.
+	// instead of tmux (ADR-98). Only copies made by WithSnapshot set it.
 	Snap  *tmux.Snapshot
 	wrote *bool // set when a snapshot-backed plan wanted to write
 }
@@ -232,7 +232,7 @@ func (w *Wall) apply(force bool) error {
 // snapUnchanged reports whether the snapshot proves a cached apply has
 // nothing to do: no pane to shed or hide, no option to write, and the plan's
 // layout is the one last applied. Anything else is left to a live apply,
-// which reads tmux again before it changes a thing (ADR-94).
+// which reads tmux again before it changes a thing (ADR-98).
 func (w *Wall) snapUnchanged() bool {
 	s, err := w.Read()
 	if err != nil || len(s.Wall) > s.MaxPanes() {

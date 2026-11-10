@@ -34,7 +34,7 @@ type backend struct {
 	supProf  string            // last @fleet_admiral_profile set on the admiral border
 	otherCtx map[string]string // other admirals' pane -> profile|ctx|color last set
 	// lastAct is when this overview last changed the wall (unix ns). A
-	// shared snapshot taken before it is stale for this process (ADR-94).
+	// shared snapshot taken before it is stale for this process (ADR-98).
 	lastAct atomic.Int64
 	// supCtx is the admiral meter the last snapshot poll computed, and
 	// supAt when; polls only touch them, one at a time.
@@ -52,7 +52,7 @@ func (b *backend) acted() { b.lastAct.Store(time.Now().UnixNano()) }
 // live and its shared snapshot is newer than this overview's last wall
 // change, every tmux read of the poll comes from that snapshot, and the
 // admiral meter is recomputed at most every 5 s: the overview runs no tmux
-// of its own once a second (ADR-94). Otherwise it is b, as before.
+// of its own once a second (ADR-98). Otherwise it is b, as before.
 func (b *backend) ForPoll() ui.Backend {
 	if !b.enabled {
 		return b
