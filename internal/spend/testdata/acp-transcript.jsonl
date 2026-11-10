@@ -1,0 +1,11 @@
+{"at":"2026-11-10T09:03:46Z","kind":"session","session_id":"5de25b63-683b-4374-ae7a-6695bd7132d8","text":"new"}
+{"at":"2026-11-10T09:03:47Z","kind":"user","text":"Reply with the single word OK and do nothing else."}
+{"at":"2026-11-10T09:03:47Z","kind":"status","status":"working","text":"acp:prompt"}
+{"at":"2026-11-10T09:03:52Z","kind":"agent","text":"OK"}
+{"at":"2026-11-10T09:03:52Z","kind":"usage","usage":{"inputTokens":22594,"outputTokens":19,"thoughtTokens":14,"totalTokens":22613}}
+{"at":"2026-11-10T09:03:52Z","kind":"status","status":"idle","text":"acp:end_turn"}
+{"at":"2026-11-10T09:06:10Z","kind":"user","text":"Use the invoke_subagent tool to start one subagent whose only task is to reply with the word OK."}
+{"at":"2026-11-10T09:06:14Z","kind":"tool","title":"Run invoke_subagent","status":"in_progress","tool_id":"call_5522603589867128412","sub":"OK Responder"}
+{"at":"2026-11-10T09:06:31Z","kind":"tool","title":"Run invoke_subagent","status":"completed","tool_id":"call_5522603589867128412","sub":"OK Responder"}
+{"at":"2026-11-10T09:06:33Z","kind":"agent","text":"DONE"}
+{"at":"2026-11-10T09:06:33Z","kind":"usage","usage":{"inputTokens":4135,"outputTokens":102,"cachedReadTokens":41080,"thoughtTokens":34,"totalTokens":45317}}

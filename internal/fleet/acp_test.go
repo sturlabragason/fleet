@@ -56,14 +56,45 @@ func TestDriverResolution(t *testing.T) {
 	}
 	t.Setenv("FLEET_CONFIG", filepath.Join(home, "none.toml"))
 	f, _ = New(&tmux.Client{Socket: "fleet-test-unused"}, home, "/bin/fleet")
-	if got, _ := f.driverFor("", "copilot"); got != "tmux" {
-		t.Errorf("no config: %q want tmux", got)
+	// v1.0.0 (ADR-74): with no config, copilot and agy default to acp and
+	// every other profile stays on tmux.
+	for profile, want := range map[string]string{"copilot": "acp", "agy": "acp", "claude-copilot": "tmux", "claude": "tmux", "vibe": "tmux", "fake": "tmux"} {
+		if got, err := f.driverFor("", profile); err != nil || got != want {
+			t.Errorf("no config, %s: %q, %v want %q", profile, got, err, want)
+		}
 	}
 	if _, err := f.SpawnWith(SpawnOpts{Driver: "acp"}, "c1", "claude", home, ""); err == nil || !strings.Contains(err.Error(), "no ACP server") {
 		t.Errorf("spawn claude --driver acp: %v", err)
 	}
 	if len(f.Store.Load().Agents) != 0 {
 		t.Error("a refused spawn left a board entry")
+	}
+}
+
+// The migration note's two ways back to tmux, and the per-spawn override,
+// beat the v1.0.0 default (ADR-74 (f)).
+func TestDriverDefaultOverrides(t *testing.T) {
+	home := t.TempDir()
+	for _, c := range []struct{ conf, flag, profile, want string }{
+		{"[defaults]\ndriver = \"tmux\"\n", "", "copilot", "tmux"},
+		{"[defaults]\ndriver = \"tmux\"\n", "", "agy", "tmux"},
+		{"[defaults]\ndriver = \"tmux\"\n", "acp", "agy", "acp"},
+		{"[profile.copilot]\ndriver = \"tmux\"\n", "", "copilot", "tmux"},
+		{"[profile.copilot]\ndriver = \"tmux\"\n", "", "agy", "acp"},
+		{"[defaults]\ndriver = \"bogus\"\n", "", "copilot", "acp"},
+		{"", "tmux", "copilot", "tmux"},
+		{"", "tmux", "agy", "tmux"},
+	} {
+		cfg := filepath.Join(home, "config.toml")
+		os.WriteFile(cfg, []byte(c.conf), 0o644)
+		t.Setenv("FLEET_CONFIG", cfg)
+		f, err := New(&tmux.Client{Socket: "fleet-test-unused"}, home, "/bin/fleet")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, err := f.driverFor(c.flag, c.profile); err != nil || got != c.want {
+			t.Errorf("%q flag %q %s: %q, %v want %q", c.conf, c.flag, c.profile, got, err, c.want)
+		}
 	}
 }
 
@@ -387,7 +418,9 @@ patterns = "fake"
 	if err != nil {
 		t.Fatal(err)
 	}
-	want = tools.ShellCommand([]string{host, "acp-host", "a1", "--dir", dir, "--session", "S1", "--", "stubtool", "--x", "--acp"})
+	// The stub host never sent spawn's prompt, so the file is still there
+	// and the woken host gets it: an unsent prompt is not lost.
+	want = tools.ShellCommand([]string{host, "acp-host", "a1", "--dir", dir, "--session", "S1", "--prompt-file", pf, "--", "stubtool", "--x", "--acp"})
 	if got := startCommand(t, tc, w.PaneID); got != want || w.Driver != "acp" {
 		t.Errorf("wake window command (driver %q):\n%s\nwant\n%s", w.Driver, got, want)
 	}

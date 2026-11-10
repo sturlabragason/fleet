@@ -68,13 +68,14 @@ var toolDefs = []tool{
 		"may":         mayProp,
 		"interactive": map[string]any{"type": "boolean", "description": "the user will talk to this agent directly in its pane: never auto-closed, and told to report progress, not done, until the user ends the session"},
 		"leader":      map[string]any{"type": "boolean", "description": "make it a leader: it gets squad tools and may spawn a squad of its own, whose reports come to it instead of you. Use for a job you want planned, split and summarised by one agent."},
-		"driver":      map[string]any{"type": "string", "enum": []string{"tmux", "acp"}, "description": "how fleet runs the agent: tmux (the tool's own screen) or acp (the tool's ACP server under fleet acp-host: status, questions and sends over the protocol, no screen reading). Default: the user's config, normally tmux. Profiles without an ACP server (claude, vibe) refuse acp."},
+		"driver":      map[string]any{"type": "string", "enum": []string{"tmux", "acp"}, "description": "how fleet runs the agent: tmux (the tool's own screen) or acp (the tool's ACP server under fleet acp-host: status, questions and sends over the protocol, no screen reading). Default: the user's config, else acp for copilot and agy and tmux for every other profile. Profiles without an ACP server (claude, vibe) refuse acp."},
 		"effort":      map[string]any{"type": "string", "enum": []string{"light", "standard", "pro"}, "description": "how much process the agent is given. light: an errand or a quick read-only question (a few lines: stay in your dir, no secrets, report). standard: a contained change (plan, build and test, commit on its branch; no ADR, no review, no merge). pro: professional code work in this repo (the full playbook: worktree, failing test first, subagent review, pre-merge checklist, merge into local main). Default: pro with a worktree, light without one."}})},
 	{"fleet_sessions", "Find copilot/claude sessions the user started outside fleet, newest first: id | age | profile | dir | title | flags. Use before fleet_adopt.", obj(nil, map[string]any{
 		"query": str("optional words; every word must appear in title, dir, branch or id"), "limit": map[string]any{"type": "integer", "description": "max sessions (default 15)"}})},
 	{"fleet_adopt", "Resume an existing session the user started outside fleet as a fleet agent. Pass session_id (full id or unique 8+ char prefix) or query (words that match exactly one session), not both. Refuses if the session is missing or still open elsewhere.", obj(nil, map[string]any{
 		"session_id": str("session id from fleet_sessions"), "query": str("words matching exactly one session"), "profile": str("optional tool profile; default the suggested one"),
-		"dir": str("optional working directory (absolute); default from the session"), "name": str("optional agent name; default base name of dir")})},
+		"dir": str("optional working directory (absolute); default from the session"), "name": str("optional agent name; default base name of dir"),
+		"driver": map[string]any{"type": "string", "enum": []string{"tmux", "acp"}, "description": "as for fleet_spawn: acp loads the session in the tool's ACP server, tmux resumes it in the tool's own screen. Default as for fleet_spawn."}})},
 	{"fleet_profiles", "List tool profiles that fleet_spawn accepts.", obj(nil, map[string]any{})},
 	{"fleet_close", "Stop an agent and remove it from the board. Ask the user first; set confirmed=true only after an explicit yes. The reply notes uncommitted or unmerged work in its dir. Closing a leader leaves its squad running and hands it back to you; squad=true closes its agents too.", obj([]string{"name", "confirmed"}, map[string]any{
 		"name": str("agent name"), "confirmed": confirmedProp,
@@ -208,7 +209,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 	case "fleet_sessions":
 		return s.sessions(a.Query, a.Limit)
 	case "fleet_adopt":
-		o := fleet.AdoptOpts{Profile: a.Profile, Dir: a.Dir, Name: a.Name, Admiral: s.Me()}
+		o := fleet.AdoptOpts{Profile: a.Profile, Dir: a.Dir, Name: a.Name, Admiral: s.Me(), Driver: a.Driver}
 		id, q := strings.TrimSpace(a.SessionID), strings.TrimSpace(a.Query)
 		var res sessions.Session
 		switch {
@@ -398,7 +399,7 @@ func (s *Server) status() (string, error) {
 			sub = strconv.Itoa(n)
 		}
 		sp := ""
-		if x, ok := spend.Default.Agent(s.F.Profiles[a.Profile], a.SessionID); ok {
+		if x, ok := s.F.SpendOf(a); ok {
 			sp = x.Short()
 			total.Add(x)
 		}

@@ -171,12 +171,12 @@ func (cl *Client) ResumeSession(ctx context.Context, id, cwd string, mcp []MCPSe
 }
 
 // Prompt sends text as the user's turn and blocks until the turn ends.
-func (cl *Client) Prompt(ctx context.Context, id, text string) (StopReason, error) {
+func (cl *Client) Prompt(ctx context.Context, id, text string) (PromptResult, error) {
 	var res PromptResult
 	if err := cl.c.call(ctx, MethodSessionPrompt, PromptParams{SessionID: id, Prompt: []ContentBlock{TextBlock(text)}}, &res); err != nil {
-		return "", err
+		return PromptResult{}, err
 	}
-	return res.StopReason, nil
+	return res, nil
 }
 
 // Cancel asks the agent to stop the running turn (a notification); the

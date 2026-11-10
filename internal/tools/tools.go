@@ -62,6 +62,10 @@ type Profile struct {
 	// ACPModeArgs maps a starting-mode name to its args under the acp
 	// driver, where keystroke modes don't exist.
 	ACPModeArgs map[string][]string
+	// Driver is the profile's default driver, "tmux" or "acp", used when
+	// neither the spawn nor config.toml picks one (DESIGN §7d, ADR-74).
+	// Empty = tmux.
+	Driver string
 }
 
 // HasACP reports whether the profile can run under the acp driver.
@@ -134,6 +138,7 @@ patterns = "copilot"
 peer_args = ["--additional-mcp-config", "{peer_mcp}"]
 acp = ["--acp"]
 acp_mode_args = { auto = "--allow-all" }
+driver = "acp"
 ` + copilotContext + `
 
 [claude-copilot]
@@ -171,6 +176,7 @@ resume = ["--conversation", "{id}"]
 patterns = "agy"
 acp = ["acp"]
 acp_mode_args = { auto = "--dangerously-skip-permissions" }
+driver = "acp"
 
 [vibe]
 command = "vibe"
@@ -282,6 +288,9 @@ func apply(p *Profile, sec map[string]conf.Value) {
 	}
 	if v, ok := sec["acp"]; ok {
 		p.ACP, _ = v.([]string)
+	}
+	if v := conf.Str(sec, "driver"); v != "" {
+		p.Driver = v
 	}
 	if v := conf.Map(sec, "acp_mode_args"); v != nil {
 		p.ACPModeArgs = splitModes(v)

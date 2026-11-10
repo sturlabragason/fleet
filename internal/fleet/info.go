@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
-	"github.com/sturlabragason/fleet/internal/spend"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/worktree"
@@ -223,7 +222,7 @@ func (f *Fleet) Info(name string) (string, error) {
 		}
 	}
 	kv("context", ctx)
-	if s, ok := spend.Default.Agent(f.Profiles[a.Profile], a.SessionID); ok {
+	if s, ok := f.SpendOf(a); ok {
 		kv("spend", s.Long())
 	}
 	mode := ""

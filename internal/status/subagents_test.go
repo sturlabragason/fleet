@@ -356,3 +356,47 @@ func TestScanSubagentsQueuedWake(t *testing.T) {
 		}
 	}
 }
+
+// agy's subagents come from fleet's ACP transcript: an invoke_subagent call
+// runs until its tool call completes or the turn ends.
+func TestReadACPSubagents(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "a1.jsonl")
+	now := time.Date(2026, 11, 10, 9, 6, 20, 0, time.UTC)
+	lines := `{"at":"2026-11-10T09:06:10Z","kind":"user","text":"go"}
+{"at":"2026-11-10T09:06:14Z","kind":"tool","title":"Run invoke_subagent","status":"in_progress","tool_id":"c1","sub":"OK Responder"}
+{"at":"2026-11-10T09:06:15Z","kind":"tool","title":"Run invoke_subagent","status":"in_progress","tool_id":"c2","sub":"research"}
+{"at":"2026-11-10T09:06:16Z","kind":"tool","title":"Read file","status":"completed","tool_id":"c3"}
+`
+	if err := os.WriteFile(path, []byte(lines), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st, off := ReadACPSubagents(path, 0, Subs{}, now)
+	if RunningCount(st.List) != 2 || st.List[0].Name != "OK Responder" || off != int64(len(lines)) {
+		t.Fatalf("running %+v off %d", st.List, off)
+	}
+	more := `{"at":"2026-11-10T09:06:31Z","kind":"tool","title":"Run invoke_subagent","status":"completed","tool_id":"c1","sub":"OK Responder"}
+`
+	appendTo(t, path, more)
+	st, off = ReadACPSubagents(path, off, st, now)
+	if RunningCount(st.List) != 1 || st.List[0].State != SubDone {
+		t.Fatalf("after completion %+v", st.List)
+	}
+	appendTo(t, path, `{"at":"2026-11-10T09:06:33Z","kind":"status","status":"idle","text":"acp:end_turn"}
+`)
+	st, _ = ReadACPSubagents(path, off, st, now)
+	if RunningCount(st.List) != 0 {
+		t.Fatalf("turn end left %+v running", st.List)
+	}
+}
+
+func appendTo(t *testing.T, path, s string) {
+	t.Helper()
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := f.WriteString(s); err != nil {
+		t.Fatal(err)
+	}
+}

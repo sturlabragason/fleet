@@ -257,3 +257,19 @@ func TestAdoptStorelessWords(t *testing.T) {
 		t.Errorf("store-less id: %v", err)
 	}
 }
+
+// Adopt takes the driver like spawn: a profile without an ACP server refuses
+// --driver acp before anything starts, and acp needs no resume args.
+func TestAdoptDriver(t *testing.T) {
+	f, sess := adoptFleet(t)
+	os.MkdirAll(filepath.Join(sess, "SESSION1"), 0o755)
+	if _, err := f.Adopt(AdoptOpts{Profile: "rs", SessionID: "SESSION1", Driver: "acp"}); err == nil || !strings.Contains(err.Error(), "no ACP server") {
+		t.Errorf("adopt --driver acp on rs: %v", err)
+	}
+	if _, err := f.Adopt(AdoptOpts{Profile: "noresume", SessionID: "SESSION1", Driver: "tmux"}); err == nil || !strings.Contains(err.Error(), "can't resume") {
+		t.Errorf("adopt noresume on tmux: %v", err)
+	}
+	if len(f.Store.Load().Agents) != 0 {
+		t.Error("a refused adopt left a board entry")
+	}
+}

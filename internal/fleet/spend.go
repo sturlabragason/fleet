@@ -3,6 +3,8 @@ package fleet
 import (
 	"sort"
 
+	"github.com/sturlabragason/fleet/internal/acphost"
+	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/spend"
 )
 
@@ -22,7 +24,18 @@ func (f *Fleet) Spend(name string) (spend.Spend, bool) {
 	if !ok {
 		return spend.Spend{}, false
 	}
-	return spend.Default.Agent(f.Profiles[a.Profile], a.SessionID)
+	return f.SpendOf(a)
+}
+
+// SpendOf reads one agent's usage from its tool's session file or, for an
+// ACP agent whose tool keeps none fleet can read (agy), from the usage the
+// host recorded in its transcript (DESIGN §7d).
+func (f *Fleet) SpendOf(a *board.Agent) (spend.Spend, bool) {
+	p := f.Profiles[a.Profile]
+	if path, _ := spend.Source(p, a.SessionID); path == "" && a.ACP() {
+		return spend.Default.File(acphost.TranscriptPath(f.Home, a.Name), spend.ACP)
+	}
+	return spend.Default.Agent(p, a.SessionID)
 }
 
 // SpendAll reads every agent on the board, sorted by name, and the
@@ -31,7 +44,7 @@ func (f *Fleet) Spend(name string) (spend.Spend, bool) {
 func (f *Fleet) SpendAll() (rows []AgentSpend, total spend.Spend) {
 	for _, a := range f.Store.Load().Agents {
 		r := AgentSpend{Name: a.Name, Profile: a.Profile, Session: a.SessionID}
-		if s, ok := spend.Default.Agent(f.Profiles[a.Profile], a.SessionID); ok {
+		if s, ok := f.SpendOf(a); ok {
 			r.Spend, r.Known = s, true
 			total.Add(s)
 		}

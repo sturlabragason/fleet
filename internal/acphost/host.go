@@ -41,7 +41,7 @@ type agentConn interface {
 	NewSession(ctx context.Context, cwd string, mcp []acp.MCPServer) (string, error)
 	LoadSession(ctx context.Context, id, cwd string, mcp []acp.MCPServer) error
 	ResumeSession(ctx context.Context, id, cwd string, mcp []acp.MCPServer) error
-	Prompt(ctx context.Context, id, text string) (acp.StopReason, error)
+	Prompt(ctx context.Context, id, text string) (acp.PromptResult, error)
 	Cancel(id string) error
 	CloseSession(ctx context.Context, id string) error
 	Done() <-chan struct{}
@@ -121,6 +121,7 @@ type host struct {
 	pending   []string          // prompts that came before the session was ready
 	inflight  int               // prompts sent and not yet answered
 	titles    map[string]string // tool call id → title
+	subs      map[string]string // tool call id → the subagent it starts
 	buf       struct {
 		kind   string
 		replay bool
@@ -157,7 +158,7 @@ func run(ctx context.Context, cfg Config, start starter, tr stateTracker) error 
 	bg, cancelBg := context.WithCancel(context.Background())
 	defer cancelBg()
 	h := &host{cfg: cfg, home: cfg.Home, tr: tr, tx: tx, out: cfg.Out, bg: bg,
-		stopC: make(chan struct{}), titles: map[string]string{}}
+		stopC: make(chan struct{}), titles: map[string]string{}, subs: map[string]string{}}
 	if h.out == nil {
 		h.out = io.Discard
 	}
@@ -358,11 +359,16 @@ func (h *host) SessionUpdate(n acp.SessionNotification) {
 		} else {
 			title = h.titles[u.ToolCallID]
 		}
+		sub := h.subs[u.ToolCallID]
+		if s, ok := u.Subagent(); ok && sub == "" {
+			sub = s
+			h.subs[u.ToolCallID] = s
+		}
 		if u.Kind == acp.UpdateToolCall || u.Status != "" || u.Title != "" {
 			if title == "" {
 				title = u.ToolCallID
 			}
-			h.emit(Entry{Kind: KindTool, Title: title, Status: u.Status, ToolID: u.ToolCallID}, !h.replaying)
+			h.emit(Entry{Kind: KindTool, Title: title, Status: u.Status, ToolID: u.ToolCallID, Sub: sub}, !h.replaying)
 		}
 	}
 	if !h.replaying {
@@ -517,12 +523,15 @@ func (h *host) send(text string) {
 		if err != nil {
 			h.emit(Entry{Kind: KindError, Text: "prompt: " + err.Error()}, true)
 		}
+		if r.Usage != nil {
+			h.emit(Entry{Kind: KindUsage, Usage: r.Usage}, true)
+		}
 		if h.inflight == 0 {
 			for len(h.questions) > 0 {
 				h.dropQuestion(h.questions[0], acp.CancelledOutcome(), "cancelled")
 			}
 		}
-		h.apply(h.tr.PromptDone(r, err))
+		h.apply(h.tr.PromptDone(r.StopReason, err))
 	}()
 }
 
@@ -596,6 +605,7 @@ func (h *host) childExited(werr error) error {
 	}
 	h.flush()
 	h.emit(Entry{Kind: KindError, Text: msg}, true)
+	h.keepUnsent()
 	h.apply(h.tr.Exited(werr))
 	h.mu.Unlock()
 	return errors.New("acp-host: " + msg)
@@ -606,7 +616,36 @@ func (h *host) fail(err error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.emit(Entry{Kind: KindError, Text: err.Error()}, true)
+	h.keepUnsent()
 	h.apply(h.tr.Exited(err))
+}
+
+// keepUnsent saves the prompts of a host that ends before its session was
+// ready (the first prompt and any queued since) in the prompt file, where
+// the next host for the agent finds them, and says so in the transcript.
+// Caller holds mu.
+func (h *host) keepUnsent() {
+	if h.ready {
+		return
+	}
+	var all []string
+	if h.cfg.Prompt != "" {
+		all = append(all, h.cfg.Prompt)
+	}
+	all = append(all, h.pending...)
+	h.pending = nil
+	if len(all) == 0 {
+		return
+	}
+	path := PromptPath(h.home, h.cfg.Name)
+	text := fmt.Sprintf("%d prompt(s) not sent; kept in %s for the next start", len(all), path)
+	if err := os.WriteFile(path, []byte(strings.Join(all, "\n\n")), 0o600); err != nil {
+		text = fmt.Sprintf("%d prompt(s) not sent and not kept (%v)", len(all), err)
+	}
+	for _, p := range all {
+		text += "\n  > " + clip(firstLine(p))
+	}
+	h.emit(Entry{Kind: KindError, Text: text}, true)
 }
 
 // input reads typed lines: a digit answers the open question, anything

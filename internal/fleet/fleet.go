@@ -674,6 +674,11 @@ func (f *Fleet) Close(name string) error {
 	logx.For("fleet").Info("closed", "agent", name)
 	f.forgetMail(name)
 	f.forgetHook(name)
+	// Prompts a failed acp host kept are listed in its transcript and the
+	// dead-pane report; a closed agent has no next host to send them.
+	if err := os.Remove(ACPPromptPath(f.Home, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		logx.For("fleet").Warn("acp: remove prompt file", "agent", name, "err", err)
+	}
 	if f.Teams != nil {
 		if err := f.Teams.DropAgent(name); err != nil {
 			logx.For("fleet").Warn("drop team membership", "agent", name, "err", err)

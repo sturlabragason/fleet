@@ -29,6 +29,8 @@ Each `[section]` is a profile. A section with a built-in name overrides only the
 | `context_args` | Extra arguments per effort level (`light`, `standard`, `pro`, and `leader` for a squad leader), as an inline table of space-separated flags. The built-in Copilot profiles use it to leave out built-in tools an agent at that level does not need (ADR-60). Setting it replaces the whole table, so `context_args = { light = "" }` turns it off for every level. |
 | `prompt_args` | Arguments that carry the first prompt, with `{prompt}`, so the tool submits it itself instead of fleet pasting it |
 | `patterns` | Status pattern set: `copilot`, `claude`, `agy`, `vibe`, `fake` or your own. Defaults to the profile name. |
+| `acp`, `acp_mode_args` | Arguments that start the tool's ACP server instead of its TUI, and its starting modes under ACP. Only a profile with `acp` can run over ACP (DESIGN §7d). |
+| `driver` | `acp` or `tmux`: how agents of this profile run unless config.toml or `--driver` says otherwise. `acp` on the built-in `copilot` and `agy`; empty (tmux) on the rest. |
 
 Placeholders in `command` and `args`: `{fleet}` is the fleet binary, `{name}` the agent name, `{id}` the session ID.
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/prefs"
 	"github.com/sturlabragason/fleet/internal/sessions"
 	"github.com/sturlabragason/fleet/internal/tools"
 	"github.com/sturlabragason/fleet/internal/worktree"
@@ -22,6 +23,9 @@ type AdoptOpts struct {
 	Force                         bool // skip the session-exists and in-use checks
 	// Admiral owns the adopted agent ("" = main, DESIGN §6.12).
 	Admiral string
+	// Driver is "tmux", "acp" or "" for the profile's default, as for spawn
+	// (DESIGN §7d, ADR-74).
+	Driver string
 }
 
 var (
@@ -40,7 +44,14 @@ func (f *Fleet) Adopt(o AdoptOpts) (*board.Agent, error) {
 	if !ok {
 		return nil, fmt.Errorf("unknown profile %q (have %v)", o.Profile, tools.Names(f.Profiles))
 	}
-	if len(p.Resume) == 0 {
+	driver, err := f.driverFor(o.Driver, o.Profile)
+	if err != nil {
+		return nil, err
+	}
+	acp := driver == prefs.DriverACP
+	// Under acp the session is resumed or loaded over the protocol, so the
+	// profile's own resume args don't matter.
+	if !acp && len(p.Resume) == 0 {
 		return nil, fmt.Errorf("profile %s can't resume", o.Profile)
 	}
 	matches := p.SessionMatches(id)
@@ -60,24 +71,41 @@ func (f *Fleet) Adopt(o AdoptOpts) (*board.Agent, error) {
 	if err != nil {
 		return nil, err
 	}
+	if acp {
+		if err := acpSocketFits(f.Home, name); err != nil {
+			return nil, err
+		}
+	}
 	// Resuming in the home directory is the same mistake as spawning there
 	// (ADR-47): the session keeps its history, it just gets a dir of its own.
 	dir, _ = f.safeDir(name, dir)
 	f.TrustDir(o.Profile, p, dir)
 	// An adopted session is a fresh process, so it needs the permission mode
 	// a spawn would have given it (ADR-56).
-	apr := f.Prefs.For(o.Profile)
-	argv, _ := p.Argv(tools.AgentVars(f.Exe, name, id),
-		tools.Launch{Resume: true, Mode: f.modeFor(name, o.Profile, p, apr.Mode), Extra: apr.ExtraArgs})
+	ex := startExtra{Worktree: adoptWorktree(dir), NoWorktree: true, Role: Role{Admiral: o.Admiral}}
+	var argv []string
+	if acp {
+		// A new host on the session, as a wake does; nothing an earlier
+		// agent of this name left may stand for it.
+		f.forgetACP(name)
+		argv, err = f.wakeACPArgv(&board.Agent{Name: name, Profile: o.Profile, Dir: dir, SessionID: id}, p, "")
+		if err != nil {
+			return nil, err
+		}
+		ex.Driver = board.DriverACP
+	} else {
+		apr := f.Prefs.For(o.Profile)
+		argv, _ = p.Argv(tools.AgentVars(f.Exe, name, id),
+			tools.Launch{Resume: true, Mode: f.modeFor(name, o.Profile, p, apr.Mode), Extra: apr.ExtraArgs})
+	}
 	// Adopt resumes a session that already has a dir, so it never makes a
 	// worktree; when that dir is one, the board records it so close and
 	// sweep can name the work left there (DESIGN §4, ADR-39).
-	a, err := f.start(name, o.Profile, p, dir, "", "", id, argv, false,
-		startExtra{Worktree: adoptWorktree(dir), NoWorktree: true, Role: Role{Admiral: o.Admiral}})
+	a, err := f.start(name, o.Profile, p, dir, "", "", id, argv, false, ex)
 	if err != nil {
 		return nil, err
 	}
-	logx.For("fleet").Info("adopted", "agent", name, "profile", o.Profile, "session_id", id, "force", o.Force)
+	logx.For("fleet").Info("adopted", "agent", name, "profile", o.Profile, "session_id", id, "force", o.Force, "driver", driver)
 	return a, nil
 }
 

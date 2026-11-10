@@ -32,14 +32,18 @@ import (
 var ACPCallTimeout = 5 * time.Second
 
 // driverFor resolves a spawn's driver: the spawn's own choice, else the
-// profile's and then the [defaults] driver in config.toml, else tmux. A
-// profile without an ACP server refuses the acp driver.
+// profile's and then the [defaults] driver in config.toml, else the tool
+// profile's default (acp for copilot and agy since v1.0.0, ADR-74), else
+// tmux. A profile without an ACP server refuses the acp driver.
 func (f *Fleet) driverFor(want, profile string) (string, error) {
 	d := f.Prefs.For(profile).Driver
 	if want != "" {
 		if d = prefs.ParseDriver(want); d == "" {
 			return "", fmt.Errorf("unknown driver %q (use tmux or acp)", want)
 		}
+	}
+	if d == "" {
+		d = prefs.ParseDriver(f.Profiles[profile].Driver)
 	}
 	if d == "" {
 		d = prefs.DriverTmux
@@ -63,9 +67,7 @@ func (f *Fleet) isACP(name string) bool { return f.Store.Load().Agents[name].ACP
 
 // ACPPromptPath is where spawn leaves an acp agent's first prompt for its
 // host (--prompt-file): too long for a command line, and kept out of logs.
-func ACPPromptPath(home, name string) string {
-	return filepath.Join(acphost.Dir(home), name+".prompt")
-}
+func ACPPromptPath(home, name string) string { return acphost.PromptPath(home, name) }
 
 // ACPHostArgv is the command an acp agent's window runs: the host, its
 // options, then the tool's ACP argv after "--".
@@ -128,7 +130,12 @@ func (f *Fleet) wakeACPArgv(old *board.Agent, p tools.Profile, ctx string) ([]st
 	pr := f.Prefs.For(old.Profile)
 	tool := p.ACPArgv(tools.AgentVars(f.Exe, old.Name, ""), tools.Launch{
 		Mode: acpMode(old.Name, old.Profile, p, pr.Mode), Context: ctx, Extra: pr.ExtraArgs})
-	return ACPHostArgv(f.Exe, old.Name, old.Dir, old.SessionID, "", copilotEvents(p), tool), nil
+	// Prompts an earlier host queued but never sent wait in the prompt file.
+	pf := ACPPromptPath(f.Home, old.Name)
+	if _, err := os.Stat(pf); err != nil {
+		pf = ""
+	}
+	return ACPHostArgv(f.Exe, old.Name, old.Dir, old.SessionID, pf, copilotEvents(p), tool), nil
 }
 
 // forgetACP drops what an earlier agent of this name left behind, so a new

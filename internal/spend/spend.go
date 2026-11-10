@@ -149,6 +149,10 @@ type Kind string
 const (
 	Copilot Kind = "copilot"
 	Claude  Kind = "claude"
+	// ACP is fleet's own transcript of an ACP agent (~/.fleet/acp/<name>.jsonl),
+	// for a tool that keeps no usage log fleet can read (agy): one usage
+	// entry per turn, from the session/prompt response.
+	ACP Kind = "acp"
 )
 
 func parserFor(k Kind) (parser, bool) {
@@ -157,6 +161,8 @@ func parserFor(k Kind) (parser, bool) {
 		return parser{tags: [][]byte{[]byte(`"session.usage_record"`), []byte(`"session.compaction_complete"`)}, line: copilotLine}, true
 	case Claude:
 		return parser{tags: [][]byte{[]byte(`"output_tokens"`), []byte(`"cost-state"`)}, line: claudeLine}, true
+	case ACP:
+		return parser{tags: [][]byte{[]byte(`"kind":"usage"`)}, line: acpLine}, true
 	}
 	return parser{}, false
 }
@@ -279,6 +285,33 @@ func claudeLine(b []byte) (record, bool) {
 		}, id: ev.Message.ID}, true
 	}
 	return record{}, false
+}
+
+// acpLine reads a usage entry of an ACP transcript. A record is a turn, not
+// a model call: the protocol reports usage per turn.
+func acpLine(b []byte) (record, bool) {
+	var e struct {
+		Kind  string `json:"kind"`
+		Usage *struct {
+			InputTokens       int64 `json:"inputTokens"`
+			OutputTokens      int64 `json:"outputTokens"`
+			CachedReadTokens  int64 `json:"cachedReadTokens"`
+			CachedWriteTokens int64 `json:"cachedWriteTokens"`
+			TotalTokens       int64 `json:"totalTokens"`
+		} `json:"usage"`
+	}
+	if json.Unmarshal(b, &e) != nil || e.Kind != "usage" || e.Usage == nil {
+		return record{}, false
+	}
+	u := e.Usage
+	in := u.InputTokens
+	// agy counts cached tokens apart from input; an agent whose total shows
+	// they are inside input has them taken out, so each is counted once.
+	if cached := u.CachedReadTokens + u.CachedWriteTokens; cached > 0 && u.TotalTokens == u.InputTokens+u.OutputTokens && in >= cached {
+		in -= cached
+	}
+	return record{sp: Spend{Calls: 1, Input: in, Output: u.OutputTokens,
+		CacheRead: u.CachedReadTokens, CacheWrite: u.CachedWriteTokens}}, true
 }
 
 // result is what one pass over a buffer found.

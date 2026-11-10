@@ -5,6 +5,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/acphost"
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/status"
@@ -45,6 +46,8 @@ func (f *Fleet) sessionLogs(a *board.Agent) []string {
 	var out []string
 	if l := p.SubagentLogPath(a.SessionID); l != "" {
 		out = append(out, l)
+	} else if a.ACP() {
+		out = append(out, acphost.TranscriptPath(f.Home, a.Name))
 	}
 	if g := p.SessionGlob(a.SessionID); g != "" {
 		out = append(out, f.resolveGlob(a.Name, g))

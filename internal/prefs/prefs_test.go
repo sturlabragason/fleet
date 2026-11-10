@@ -255,7 +255,8 @@ func TestDriver(t *testing.T) {
 			t.Errorf("%s: driver %q want %q", prof, got, want)
 		}
 	}
-	if Neutral().Driver != DriverTmux || (*Prefs)(nil).For("x").Driver != DriverTmux {
-		t.Error("default driver is not tmux")
+	// Unset in config.toml: the tool profile's default decides (ADR-74).
+	if Neutral().Driver != "" || (*Prefs)(nil).For("x").Driver != "" {
+		t.Error("config sets a driver nobody asked for")
 	}
 }

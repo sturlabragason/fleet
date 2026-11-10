@@ -96,6 +96,8 @@ type stubConn struct {
 	calls  []string
 	cancel chan struct{}
 	gate   chan struct{} // NewSession waits for it when set
+	usage  *acp.Usage    // every prompt's usage, when set
+	newErr error         // NewSession fails with it, when set
 }
 
 func newStubConn(caps acp.AgentCapabilities) *stubConn {
@@ -120,6 +122,9 @@ func (c *stubConn) NewSession(ctx context.Context, cwd string, _ []acp.MCPServer
 		<-c.gate
 	}
 	c.call("new " + cwd)
+	if c.newErr != nil {
+		return "", c.newErr
+	}
 	return "s1", nil
 }
 func (c *stubConn) LoadSession(ctx context.Context, id, cwd string, _ []acp.MCPServer) error {
@@ -132,16 +137,16 @@ func (c *stubConn) ResumeSession(ctx context.Context, id, cwd string, _ []acp.MC
 	c.call("resume " + id)
 	return nil
 }
-func (c *stubConn) Prompt(ctx context.Context, id, text string) (acp.StopReason, error) {
+func (c *stubConn) Prompt(ctx context.Context, id, text string) (acp.PromptResult, error) {
 	c.call("prompt " + text)
 	select {
 	case f := <-c.turns:
 		if r := f(c.h); r != "ERR" {
-			return r, nil
+			return acp.PromptResult{StopReason: r, Usage: c.usage}, nil
 		}
-		return "", errors.New("rejected")
+		return acp.PromptResult{}, errors.New("rejected")
 	case <-c.done:
-		return "", errors.New("closed")
+		return acp.PromptResult{}, errors.New("closed")
 	}
 }
 func (c *stubConn) Cancel(id string) error { c.call("cancel"); c.cancel <- struct{}{}; return nil }
@@ -613,5 +618,89 @@ func TestListenRefusesLongPath(t *testing.T) {
 	p := filepath.Join(t.TempDir(), strings.Repeat("x", 120)+".sock")
 	if _, err := listen(p); err == nil || !strings.Contains(err.Error(), "too long") {
 		t.Fatalf("listen = %v", err)
+	}
+}
+
+// A turn's usage and agy's subagent calls go into the transcript, where
+// fleet reads spend and subagent dots for a tool that keeps no log of its
+// own (DESIGN §7d).
+func TestUsageAndSubagentInTranscript(t *testing.T) {
+	r := startRig(t, Config{}, acp.AgentCapabilities{})
+	r.conn.usage = &acp.Usage{InputTokens: 4135, OutputTokens: 102, CachedReadTokens: 41080, TotalTokens: 45317}
+	if _, err := r.call(Request{Op: OpPrompt, Text: "go"}); err != nil {
+		t.Fatal(err)
+	}
+	r.waitStatus("working")
+	in := json.RawMessage(`{"Prompt":"say OK","Role":"OK Responder","TypeName":"research"}`)
+	r.conn.turns <- func(h handler) acp.StopReason {
+		h.SessionUpdate(acp.SessionNotification{Update: acp.SessionUpdate{Kind: acp.UpdateToolCall, ToolCallID: "c1", Name: acp.SubagentTool, RawInput: in, Title: "Run invoke_subagent", Status: "in_progress"}})
+		h.SessionUpdate(acp.SessionNotification{Update: acp.SessionUpdate{Kind: acp.UpdateToolCallUpdate, ToolCallID: "c1", Name: acp.SubagentTool, Status: "completed"}})
+		return acp.StopEndTurn
+	}
+	r.waitStatus("idle")
+	var subs []string
+	var u *acp.Usage
+	r.waitFor(func() bool {
+		subs, u = nil, nil
+		for _, e := range Tail(TranscriptPath(r.home, "a1"), 100) {
+			if e.Kind == KindTool && e.Sub != "" {
+				subs = append(subs, e.Sub+" "+e.Status)
+			}
+			if e.Kind == KindUsage {
+				u = e.Usage
+			}
+		}
+		return u != nil
+	}, "usage entry")
+	if *u != *r.conn.usage {
+		t.Errorf("usage %+v", u)
+	}
+	if got := strings.Join(subs, ","); got != "OK Responder in_progress,OK Responder completed" {
+		t.Errorf("subagent entries %q", got)
+	}
+}
+
+// A host that ends before its session is ready keeps the first prompt and
+// every prompt queued since in the prompt file for the next host, and says
+// so in the transcript (the queued prompts used to be lost).
+func TestUnsentPromptsKeptWhenSetupFails(t *testing.T) {
+	for _, how := range []string{"child exit", "session error"} {
+		t.Run(how, func(t *testing.T) {
+			gate := make(chan struct{})
+			r := startRigGated(t, Config{Prompt: "first goal"}, acp.AgentCapabilities{}, gate)
+			if _, err := r.call(Request{Op: OpPrompt, Text: "queued one"}); err != nil {
+				t.Fatal(err)
+			}
+			if how == "child exit" {
+				r.conn.crash(errors.New("exit status 1"))
+			} else {
+				r.conn.newErr = errors.New("auth required")
+				close(gate)
+			}
+			select {
+			case err := <-r.errC:
+				if err == nil {
+					t.Fatal("run returned nil")
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("host did not end")
+			}
+			if how == "child exit" {
+				close(gate)
+			}
+			b, err := os.ReadFile(PromptPath(r.home, "a1"))
+			if err != nil || string(b) != "first goal\n\nqueued one" {
+				t.Fatalf("prompt file %q, %v", b, err)
+			}
+			var note string
+			for _, e := range Tail(TranscriptPath(r.home, "a1"), 100) {
+				if e.Kind == KindError && strings.Contains(e.Text, "not sent") {
+					note = e.Text
+				}
+			}
+			if !strings.Contains(note, "2 prompt(s) not sent") || !strings.Contains(note, "> queued one") {
+				t.Fatalf("transcript note %q", note)
+			}
+		})
 	}
 }

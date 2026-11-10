@@ -63,7 +63,9 @@ ready_timeout = "15s"
 # worktree = true
 # How fleet runs an agent: "tmux" (the tool's own screen) or "acp" (the tool's
 # ACP server under fleet acp-host; copilot, claude-copilot, agy and fake only).
-# Also per profile under [profile.<name>]. `fleet spawn --driver` wins (ADR-74).
+# Unset, copilot and agy use acp and the rest tmux (since v1.0.0). "tmux" here
+# restores the v0 behaviour for every profile; per profile under
+# [profile.<name>]. `fleet spawn --driver` wins (ADR-74).
 # driver = "tmux"
 # Before an agent starts, write its dir into the tool's own trust store so it
 # never stops on "Do you trust this folder?" (Claude's ~/.claude.json or the

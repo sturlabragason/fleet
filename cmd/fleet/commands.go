@@ -53,8 +53,9 @@ const usage = `usage:
                                             --effort light|standard|pro sizes the worker playbook
                                             (default: pro with a worktree, light without one);
                                             --driver acp runs the tool's ACP server under fleet acp-host
-                                            instead of its screen (copilot, claude-copilot, agy, fake;
-                                            default: driver in config.toml, else tmux);
+                                            instead of its screen (copilot, claude-copilot, agy, fake),
+                                            --driver tmux the tool's own screen; default: driver in
+                                            config.toml, else acp for copilot and agy, tmux otherwise;
                                             --leader makes it a leader: it gets squad tools, spawns a
                                             squad of its own and its agents report to it, not to the
                                             admiral ([squad] max_members, max_depth in config.toml);
@@ -64,9 +65,10 @@ const usage = `usage:
                                             the overview TUI starts it when a slot frees
   fleet spawn --fake [--driver acp] <name> [dir]
                                             shorthand for profile "fake"
-  fleet adopt [--name N] [--dir D] [--force] [profile] <id | words...>
+  fleet adopt [--name N] [--dir D] [--force] [--driver tmux|acp] [profile] <id | words...>
                                             resume an existing session (started outside fleet) as an agent;
-                                            by ID, unique ID prefix (8+ chars) or words from fleet sessions
+                                            by ID, unique ID prefix (8+ chars) or words from fleet sessions;
+                                            --driver as for spawn
   fleet sessions [--all] [--json] [-n 20] [words...]
                                             list copilot/claude sessions to adopt, newest first
   fleet ls [--json]
@@ -513,14 +515,15 @@ func cmdAdopt(f *fleet.Fleet, args []string) error {
 	name := fs.String("name", "", "agent name (default: base name of dir)")
 	dir := fs.String("dir", "", "working dir (default: the session's)")
 	force := fs.Bool("force", false, "skip the session-exists and in-use checks")
+	driver := fs.String("driver", "", "tmux or acp: how fleet runs the agent (default as for spawn)")
 	a, err := parseInterleaved(fs, args)
 	if err != nil {
 		return err
 	}
 	if len(a) == 0 {
-		return fmt.Errorf("usage: fleet adopt [--name N] [--dir D] [--force] [profile] <id | words...>")
+		return fmt.Errorf("usage: fleet adopt [--name N] [--dir D] [--force] [--driver tmux|acp] [profile] <id | words...>")
 	}
-	ag, err := f.AdoptArgs(fleet.AdoptOpts{Name: *name, Dir: *dir, Force: *force}, a)
+	ag, err := f.AdoptArgs(fleet.AdoptOpts{Name: *name, Dir: *dir, Force: *force, Driver: *driver}, a)
 	if err != nil {
 		return err
 	}
