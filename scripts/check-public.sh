@@ -50,18 +50,30 @@ email_re='[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}'
 email_ok=(-e noreply -e example. -e git@github.com)
 for a in "${emails[@]}"; do email_ok+=(-e "$a"); done
 
-# Reads "<where>:<text>" lines, prints the ones that are denied and not allowed.
+# Reads "<where>: <text>" lines and prints the denied ones. Allowed substrings are cut out of a
+# line before it is checked again, so an allowed placeholder can't hide a leak next to it.
 hits() {
-  local in
+  local in cand line t sep=$'\x01'
   in=$(cat)
-  {
-    grep -i -E -- "$deny" <<<"$in" || true
-    [[ -z $deny_cs ]] || grep -E -- "$deny_cs" <<<"$in" || true
-    grep -E -- "$email_re" <<<"$in" | grep -v -F "${email_ok[@]}" || true
-  } | grep -v -E -- "$allow" | sort -u || true
+  cand=$({
+    grep -i -E -- "$deny" <<<"$in"
+    [[ -z $deny_cs ]] || grep -E -- "$deny_cs" <<<"$in"
+    grep -E -- "$email_re" <<<"$in"
+  } || true)
+  while IFS= read -r line; do
+    [[ -n $line ]] || continue
+    t=$(sed -E "s${sep}${allow}${sep}${sep}g" <<<"$line")
+    if grep -q -i -E -- "$deny" <<<"$t" || { [[ -n $deny_cs ]] && grep -q -E -- "$deny_cs" <<<"$t"; } ||
+      grep -o -E -- "$email_re" <<<"$t" | grep -q -v -F "${email_ok[@]}"; then
+      echo "$line"
+    fi
+  done <<<"$cand" | sort -u
 }
+# In CI the log is public: print where a hit is, never the matched text.
 report() { # report <what> <hits>
-  [[ -z $2 ]] || { echo "$2" >&2; err "$1 (above)"; }
+  [[ -n $2 ]] || return 0
+  if [[ -n ${GITHUB_ACTIONS:-} ]]; then sed 's/: .*//' <<<"$2" >&2; else echo "$2" >&2; fi
+  err "$1 (above)"
 }
 
 if [[ $1 == --gh ]]; then
@@ -104,11 +116,12 @@ report "denied strings in commit messages" "$(hits <<<"$msgs")"
 
 # Every line each commit adds, so a string added and removed again within the range is still caught.
 added=$(git log --no-color --no-ext-diff --no-renames -p --format='@@@ %h' --no-walk=unsorted $commits -- . ":!$self" |
-  awk '/^@@@ /{c=$2; next} /^\+\+\+ /{f=substr($0,7); next} /^\+/{print c ":" f ": " substr($0,2)}')
+  awk '/^@@@ /{c=$2; next} /^diff --git /{h=1; next} h && /^\+\+\+ /{f=substr($0,7); next} /^@@ /{h=0; next}
+       !h && /^\+/{print c ":" f ": " substr($0,2)}')
 report "denied strings added by a commit" "$(hits <<<"$added")"
 
 tip=$(head -1 <<<"$commits")
-tree=$(git grep -n -I --full-name -e '' "$(git rev-parse --short "$tip")" -- . ":!$self" || true)
+tree=$(git grep -n -I --full-name -e '' "$(git rev-parse --short "$tip")" -- . ":!$self" | sed -E 's/^([^:]*:[^:]*:[0-9]+):/\1: /' || true)
 report "denied strings in the tree at $(git rev-parse --short "$tip")" "$(hits <<<"$tree")"
 
 gl=$(command -v gitleaks || true)
