@@ -37,9 +37,10 @@ Each `[section]` is a profile. A section with a built-in name overrides only the
 | `acp_env` | Extra env under ACP only. `{command_path}` is the profile's `command` found in `~/.local/bin` or on PATH. |
 | `acp_modes` | Fleet mode → ACP session mode, set with `session/set_mode` before the first prompt; `default` is used when no mode is set. |
 | `user_mcp_config` | The tool's file of user-global MCP servers (`~/.copilot/mcp-config.json`, `~/.claude.json`). |
-| `user_mcp_off` | Arguments that switch those servers off for a worker, added after the peer args under both drivers. Holding `{server}`, they repeat per server (`["--disable-mcp-server", "{server}"]`); without it they are added once. Claude's is `["--disallowedTools=mcp__{server}"]`. `[]` keeps every server. `keep_mcp` in `config.toml` keeps named ones (ADR-91). |
+| `user_mcp_off` | Arguments that switch those servers off for a worker, added after the peer and plugin args under both drivers. Holding `{server}`, they repeat per server (`["--disable-mcp-server", "{server}"]`); without it they are added once. Claude's is `["--disallowedTools=mcp__{server}"]`. `[]` keeps every server. `keep_mcp` in `config.toml` keeps named ones (ADR-91). |
 | `plugin_args` | Arguments that load fleet's per-agent plugin (hooks, and fleet-peer for Copilot), with `{plugin}` the plugin dir: `["--plugin-dir", "{plugin}"]` on the built-in `copilot`, `claude-copilot` and `claude`. Inherited like `peer_args`; `[]` turns the plugin off (ADR-99). |
 | `plugin_mcp` | `true`: fleet-peer goes in the plugin's `.mcp.json` instead of `peer_args` (Copilot). |
+| `native_binary` | `true`: start the Copilot CLI's native binary directly, under tmux and ACP, instead of the Node launcher `copilot` on PATH; saves about 65 MB per agent. **This skips the launcher's version pick and auto-update**: the agent runs whatever native binary npm last installed until you update with `npm install -g @github/copilot`. When fleet can't find the binary it logs why and starts the launcher. Default off. |
 | `acp_meta` | `claude`: send the plugin and write fence in `session/new` `_meta.claudeCode.options` (the claude-agent-acp adapter). |
 | `acp_mcp` | `session`: pass the peer MCP server in the ACP session's `mcpServers` instead of `peer_args`. |
 | `acp_unset_env` | Env vars removed before the ACP server starts (the built-in `claude` drops API keys and OAuth tokens). |
@@ -110,6 +111,8 @@ args = ["--allow-all"]
 ## How agents are started
 
 Each agent runs as `bash -lc 'exec <command> <args>…'` in a new hidden tmux window `ag-<name>` on the `fleet` server, in the directory you give (default: the current directory). The login shell gives the agent your normal `PATH`, with `~/.local/bin` put first.
+
+The argv is the same for every agent of one profile, in one order under both drivers (command, peer MCP, plugin, user MCP switches, hooks, args, mode, context, session id, extra args, prompt), apart from the agent's own name, session id, plugin dir and prompt. Agents of one profile started a few minutes apart then share the tool's cached prompt prefix. The built-in `claude` adds `--exclude-dynamic-system-prompt-sections` for the same reason: it moves the working dir and git status out of the system prompt.
 
 Shell aliases and functions are not available in that shell. If you use `alias cw='CLAUDE_CONFIG_DIR=… claude'`, make it a profile instead.
 

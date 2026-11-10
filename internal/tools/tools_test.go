@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -26,7 +27,7 @@ func TestDefaultsAndArgv(t *testing.T) {
 	}{
 		{"copilot", false, "U", []string{"copilot", "--session-id", "U"}, "copilot"},
 		{"copilot", true, "U", []string{"copilot", "--resume", "U"}, "copilot"},
-		{"claude", false, "U", []string{"claude", "--model", "opus", "--session-id", "U"}, "claude"},
+		{"claude", false, "U", []string{"claude", "--model", "opus", "--exclude-dynamic-system-prompt-sections", "--session-id", "U"}, "claude"},
 		{"agy", true, "C", []string{"agy", "--conversation", "C"}, "agy"},
 		{"agy", false, "C", []string{"agy"}, "agy"},
 		{"vibe", true, "V", []string{"vibe", "--resume", "V"}, "vibe"},
@@ -159,7 +160,7 @@ func TestModeArgsAndPrompt(t *testing.T) {
 	}
 	// Claude takes the prompt positionally.
 	got, embedded = ps["claude"].Argv(Vars{}, Launch{Mode: "accept-edits", Prompt: "hi"})
-	want = []string{"claude", "--model", "opus", "--permission-mode", "acceptEdits", "hi"}
+	want = []string{"claude", "--model", "opus", "--exclude-dynamic-system-prompt-sections", "--permission-mode", "acceptEdits", "hi"}
 	if !reflect.DeepEqual(got, want) || !embedded {
 		t.Errorf("claude argv %v embedded=%v want %v true", got, embedded, want)
 	}
@@ -675,7 +676,8 @@ func TestClaudeACPProfile(t *testing.T) {
 	}
 }
 
-// The tmux argv of claude is what it was before ADR-76.
+// The tmux argv of claude is what it was before ADR-76, plus the
+// cache-friendly system prompt flag (PF7).
 func TestClaudeTmuxArgvUnchanged(t *testing.T) {
 	ps, err := Load(t.TempDir())
 	if err != nil {
@@ -685,7 +687,7 @@ func TestClaudeTmuxArgvUnchanged(t *testing.T) {
 	got, embedded := ps["claude"].Argv(Vars{Fleet: "/bin/fleet", Name: "a1", ID: "U", PeerMCP: cp, PeerMCPClaude: cl, Hooks: "H"},
 		Launch{Mode: AutoMode, Prompt: "hi"})
 	want := []string{"claude", "--mcp-config", cl, "--settings", "H", "--model", ClaudeModel,
-		"--permission-mode", "bypassPermissions", "--session-id", "U", "hi"}
+		"--exclude-dynamic-system-prompt-sections", "--permission-mode", "bypassPermissions", "--session-id", "U", "hi"}
 	if !embedded || !reflect.DeepEqual(got, want) {
 		t.Errorf("%q\nwant %q", got, want)
 	}
@@ -981,5 +983,106 @@ func TestModelFlagProfilesPinOpus(t *testing.T) {
 	}
 	if !IsOpus("claude-opus-5.5") || IsOpus("claude-sonnet-5.5") || IsOpus("haiku") {
 		t.Error("IsOpus")
+	}
+}
+
+// Two agents of one profile get the same argv apart from their own name,
+// id, peer config, hooks and plugin dir, in one order shared by both
+// drivers, so they share the tool's cached prompt prefix (PF7).
+func TestArgvIdenticalAcrossAgents(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "mcp.json")
+	os.WriteFile(cfg, []byte(`{"mcpServers":{"zeta":{},"alpha":{},"mid":{},"fleet":{}}}`), 0o644)
+	ps, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"copilot", "claude-copilot", "claude"} {
+		p := ps[name]
+		p.UserMCPConfig = cfg
+		build := func(agent, id string) (tm, acp []string, v Vars) {
+			v = AgentVars("/bin/fleet", agent, id).UserMCP(p, nil)
+			if len(p.PluginArgs) > 0 {
+				v = v.WithPlugin("/h/.fleet/plugins/"+agent, p)
+			}
+			tm, _ = p.Argv(v, Launch{Mode: AutoMode, Context: "standard"})
+			return tm, p.ACPArgv(v, Launch{Mode: AutoMode, Context: "standard"}), v
+		}
+		mask := func(argv []string, v Vars) string {
+			r := strings.NewReplacer(v.Plugin, "<plugin>", v.Hooks, "<hooks>", v.PeerMCP, "<peer>",
+				v.PeerMCPClaude, "<peer>", v.ID, "<id>")
+			return r.Replace(strings.Join(argv, "\x00"))
+		}
+		t1, a1, v1 := build("a1", "11111111-1111")
+		t2, a2, v2 := build("a2", "22222222-2222")
+		if m1, m2 := mask(t1, v1), mask(t2, v2); m1 != m2 {
+			t.Errorf("%s tmux argv differs:\n%q\n%q", name, m1, m2)
+		}
+		if m1, m2 := mask(a1, v1), mask(a2, v2); m1 != m2 {
+			t.Errorf("%s acp argv differs:\n%q\n%q", name, m1, m2)
+		}
+		for _, argv := range [][]string{t1, a1} {
+			if argv[0] == "npx" {
+				continue // an adapter takes none of the tool's flags (ADR-76)
+			}
+			j := strings.Join(argv, " ")
+			if !(strings.Index(j, "alpha") < strings.Index(j, "mid") && strings.Index(j, "mid") < strings.Index(j, "zeta")) {
+				t.Errorf("%s: MCP servers not sorted: %q", name, argv)
+			}
+			// peer and plugin come before the user MCP switches, then hooks.
+			last := -1
+			for _, f := range []string{"--additional-mcp-config", "--mcp-config", "--plugin-dir", "alpha", "--settings"} {
+				k := strings.Index(j, f)
+				if k < 0 {
+					continue
+				}
+				if k < last {
+					t.Errorf("%s: %s out of order in %q", name, f, argv)
+				}
+				last = k
+			}
+		}
+	}
+}
+
+// native_binary starts the binary the Node launcher would run, and keeps
+// the launcher when there is none (PF6).
+func TestNativeBinary(t *testing.T) {
+	arch := map[string]string{"amd64": "x64", "arm64": "arm64"}[runtime.GOARCH]
+	if arch == "" || (runtime.GOOS != "linux" && runtime.GOOS != "darwin") {
+		t.Skip("no native Copilot package for this platform")
+	}
+	root := t.TempDir()
+	pkg := filepath.Join(root, "lib", "node_modules", "@github", "copilot")
+	native := filepath.Join(root, "lib", "node_modules", "@github", "copilot-"+runtime.GOOS+"-"+arch, "copilot")
+	os.MkdirAll(pkg, 0o755)
+	os.MkdirAll(filepath.Dir(native), 0o755)
+	os.WriteFile(filepath.Join(pkg, "npm-loader.js"), []byte("#!/usr/bin/env node\n"), 0o755)
+	os.WriteFile(native, []byte("\x7fELF"), 0o755)
+	os.MkdirAll(filepath.Join(root, "bin"), 0o755)
+	launcher := filepath.Join(root, "bin", "copilot")
+	os.Symlink(filepath.Join(pkg, "npm-loader.js"), launcher)
+
+	want, _ := filepath.EvalSymlinks(native)
+	p := Profile{Command: launcher, NativeBinary: true}
+	if got, _ := p.Argv(Vars{}, Launch{}); got[0] != want {
+		t.Errorf("tmux argv[0] %q want %q", got[0], want)
+	}
+	if got := p.ACPArgv(Vars{}, Launch{}); got[0] != want {
+		t.Errorf("acp argv[0] %q want %q", got[0], want)
+	}
+	if got, err := NativeBinary(native); err != nil || got != want {
+		t.Errorf("a native command: %q %v", got, err)
+	}
+	os.Remove(native)
+	if got, _ := p.Argv(Vars{}, Launch{}); got[0] != launcher {
+		t.Errorf("no native binary: argv[0] %q, want the launcher", got[0])
+	}
+	if got, _ := (Profile{Command: launcher}).Argv(Vars{}, Launch{}); got[0] != launcher {
+		t.Errorf("off by default: %q", got[0])
+	}
+	ps, err := LoadWith(t.TempDir(), conf.Doc{"copilot": {"native_binary": "true"}})
+	if err != nil || !ps["copilot"].NativeBinary || ps["claude-copilot"].NativeBinary {
+		t.Errorf("native_binary key: %v %v", ps["copilot"].NativeBinary, err)
 	}
 }
