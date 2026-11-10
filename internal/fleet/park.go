@@ -205,10 +205,19 @@ func (f *Fleet) Wake(name string, force bool) (*board.Agent, error) {
 	if old.Effort != "" {
 		ctx = contextKey(p, playbook.Level(old.Effort), role.Leader)
 	}
+	// The model it was started with; an agent from before ADR-100 gets the
+	// profile's Opus pin.
+	p, model, err := f.withModel(old.Profile, p, old.Model)
+	if err != nil {
+		f.unclaimWake(name, old)
+		return nil, err
+	}
 	var argv []string
 	if old.ACP() {
 		var err error
-		if argv, p, err = f.wakeACPArgv(old, p, ctx); err != nil {
+		w := *old
+		w.Model = model
+		if argv, p, err = f.wakeACPArgv(&w, p, ctx); err != nil {
 			f.unclaimWake(name, old)
 			return nil, err
 		}
@@ -217,10 +226,10 @@ func (f *Fleet) Wake(name string, force bool) (*board.Agent, error) {
 		f.forgetHook(name)
 	} else {
 		argv, _ = p.Argv(f.launchVars(name, old.SessionID, p, wpr, fenceDir(old.Worktree, wpr.FenceWrites), false),
-			tools.Launch{Resume: true, Mode: f.modeFor(name, old.Profile, p, wpr.Mode), Extra: wpr.ExtraArgs, Context: ctx})
+			tools.Launch{Resume: true, Mode: f.modeFor(name, old.Profile, p, wpr.Mode), Extra: modelExtra(p, model, wpr.ExtraArgs), Context: ctx})
 	}
 	a, err := f.start(name, old.Profile, p, old.Dir, old.Goal, "", old.SessionID, argv, true,
-		startExtra{Base: old.Baseline, Worktree: old.Worktree, NoWorktree: old.NoWorktree, Effort: old.Effort, Role: role, Driver: old.Driver})
+		startExtra{Base: old.Baseline, Worktree: old.Worktree, NoWorktree: old.NoWorktree, Effort: old.Effort, Model: model, Role: role, Driver: old.Driver})
 	if err != nil {
 		f.unclaimWake(name, old)
 		return nil, err

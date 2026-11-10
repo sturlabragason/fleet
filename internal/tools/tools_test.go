@@ -933,3 +933,53 @@ func containsSeq(s []string, a, b string) bool {
 	}
 	return false
 }
+
+// ADR-100: WithModel swaps the profile's own model for the picked one on
+// the command line and in an ACP adapter's model variable; a tool with no
+// model flag is left alone.
+func TestWithModel(t *testing.T) {
+	ps, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := ps["claude"].WithModel("claude-opus-4-8")
+	if got := ModelArg(c.Args); got != "claude-opus-4-8" || indexOf(c.Args, ClaudeModel) >= 0 {
+		t.Errorf("claude args %v", c.Args)
+	}
+	if c.ACPEnvVars["ANTHROPIC_MODEL"] != "claude-opus-4-8" || ps["claude"].ACPEnvVars["ANTHROPIC_MODEL"] != ClaudeModel {
+		t.Errorf("acp env %v, original %v", c.ACPEnvVars, ps["claude"].ACPEnvVars)
+	}
+	cc := ps["copilot"].WithModel(CopilotClaudeModel)
+	if got := ModelArg(cc.Args); got != CopilotClaudeModel {
+		t.Errorf("copilot args %v", cc.Args)
+	}
+	if v := ps["vibe"]; !reflect.DeepEqual(v.WithModel("x").Args, v.Args) || v.HasModelFlag() {
+		t.Errorf("vibe changed: %v", v.WithModel("x").Args)
+	}
+	if got := ps["claude"].StripModel([]string{"--model=a", "-x", "--model", "b", "y"}); !reflect.DeepEqual(got, []string{"-x", "y"}) {
+		t.Errorf("StripModel %v", got)
+	}
+}
+
+// Every built-in or inherited profile with a model flag pins Opus, so no
+// fleet agent starts on a tool's own default model (ADR-100).
+func TestModelFlagProfilesPinOpus(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(Path(dir), []byte("[cp-work]\ncommand = \"copilot\"\n[cl-work]\ncommand = \"claude\"\n"), 0o644)
+	ps, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"copilot", "claude-copilot", "claude", "cp-work", "cl-work"} {
+		p := ps[name]
+		if !p.HasModelFlag() || !IsOpus(p.DefaultModel) {
+			t.Errorf("%s: model_args %v default_model %q", name, p.ModelArgs, p.DefaultModel)
+		}
+		if m := ModelArg(p.Args); m != "" && !IsOpus(m) {
+			t.Errorf("%s: args name %q", name, m)
+		}
+	}
+	if !IsOpus("claude-opus-5.5") || IsOpus("claude-sonnet-5.5") || IsOpus("haiku") {
+		t.Error("IsOpus")
+	}
+}

@@ -208,6 +208,19 @@ func TestDefaultCarriesStandingRules(t *testing.T) {
 	}
 }
 
+// ADR-100: the pro playbook a spawn injects carries the subagent model rule.
+func TestInjectedPlaybookCarriesSubagentModelRule(t *testing.T) {
+	home, _, repo := fixture(t)
+	text, _ := Resolve(Pro, home, repo)
+	for _, want := range []string{"Subagent models: Opus by default, never Haiku.",
+		"Sonnet only for a clearly scoped subtask with a machine-checkable done condition",
+		"Design, review, debugging and judgment stay on Opus."} {
+		if !strings.Contains(Compose(text, "task"), want) {
+			t.Errorf("injected playbook lacks %q", want)
+		}
+	}
+}
+
 // The playbook is paid for on every spawn, so DESIGN §4 pins its size.
 func TestDefaultStaysShort(t *testing.T) {
 	if n := strings.Count(strings.TrimSpace(Default()), "\n") + 1; n > 40 {

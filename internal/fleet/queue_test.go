@@ -191,7 +191,7 @@ func TestNoDrainWhenPaneListingFails(t *testing.T) {
 func TestClosedWhileStartingKillsPane(t *testing.T) {
 	f := queueFleet(t, 1)
 	// No board entry in "starting": as if fleet close ran mid-launch.
-	if _, err := f.launch("gone1", "cat", t.TempDir(), "", true, false, nil, Role{}, "", ""); err == nil {
+	if _, err := f.launch("gone1", "cat", t.TempDir(), "", true, false, nil, Role{}, "", "", ""); err == nil {
 		t.Fatal("launch of a closed claim succeeded")
 	}
 	if p := f.paneOf("gone1"); p != "" {
@@ -213,7 +213,7 @@ func TestRefreshDuringQueuedStartKeepsPane(t *testing.T) {
 	}
 	afterTag = func(f *Fleet, pane string) { f.Refresh() }
 	defer func() { afterTag = nil }()
-	if _, err := f.launch("q1", "cat", t.TempDir(), "", true, false, nil, Role{}, "", ""); err != nil {
+	if _, err := f.launch("q1", "cat", t.TempDir(), "", true, false, nil, Role{}, "", "", ""); err != nil {
 		t.Fatalf("launch after a racing Refresh: %v", err)
 	}
 	if f.paneOf("q1") == "" {

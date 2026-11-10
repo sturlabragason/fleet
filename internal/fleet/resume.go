@@ -60,7 +60,7 @@ func (f *Fleet) Resume(name, text string) (a *board.Agent, held bool, err error)
 		return &board.Agent{Name: name, Profile: rec.Profile, Patterns: f.Profiles[rec.Profile].Patterns, Dir: rec.Dir,
 			Goal: text, SessionID: rec.SessionID, Status: string(status.Queued), Created: now, StatusSince: now, LastLine: note,
 			Baseline: rec.Baseline, Worktree: rec.Worktree, NoWorktree: rec.NoWorktree, Card: rec.Card, Leader: rec.Leader,
-			LeadBy: rec.LeadBy, Admiral: rec.Admiral, Effort: rec.Effort, Interactive: rec.Interactive, Driver: rec.Driver}
+			LeadBy: rec.LeadBy, Admiral: rec.Admiral, Effort: rec.Effort, Interactive: rec.Interactive, Driver: rec.Driver, Model: rec.Model}
 	})
 	if err != nil {
 		return nil, false, err
