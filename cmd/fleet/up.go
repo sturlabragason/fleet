@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -202,7 +201,7 @@ func disableUserMCPArgs(path string) []string {
 func cmdUp(f *fleet.Fleet, args []string) error {
 	t := f.T
 	log := logx.For("up")
-	noAttach, explicit, err := parseUpArgs(args)
+	noAttach, explicit, monitors, err := parseUpArgs(args)
 	if err != nil {
 		return err
 	}
@@ -250,26 +249,43 @@ func cmdUp(f *fleet.Fleet, args []string) error {
 	// One watcher per fleet keeps status fresh whatever is open (ADR-49).
 	startWatcher(f)
 	warnAdmiral(f, warns)
-	w := wall.New(t, fleet.Session)
-	if err := w.Apply(); err != nil {
-		log.Error("apply", "err", err)
+	switch {
+	case monitors == 2:
+		if err := splitMonitors(f); err != nil {
+			log.Error("two monitors", "err", err)
+		}
+	case monitors == 1 && twoMonitors(f):
+		if err := joinMonitors(f); err != nil {
+			log.Error("one monitor", "err", err)
+		}
+	default:
+		if err := wall.New(t, fleet.Session).Apply(); err != nil {
+			log.Error("apply", "err", err)
+		}
 	}
-	if noAttach || !term.IsTerminal(int(os.Stdin.Fd())) {
+	attach := term.IsTerminal(int(os.Stdin.Fd())) && !noAttach
+	if twoMonitors(f) {
+		if w := admiralTarget(f); w != "" {
+			target = fleet.Session + ":" + w
+		}
+		if monitors == 2 {
+			if !attach {
+				fmt.Println("fleet is up on two monitors.\n  monitor 1: tmux -L fleet attach -t fleet:" + admiralWindow + "\n  monitor 2: fleet wall attach")
+				return nil
+			}
+			if line, err := openWallTerminal(f); err != nil {
+				fmt.Fprintf(os.Stderr, "fleet: could not open the wall's terminal: %v\nrun `fleet wall attach` in a second terminal\n", err)
+			} else {
+				log.Info("wall terminal", "cmd", line)
+			}
+		}
+	}
+	if !attach {
 		fmt.Println("fleet is up. attach with: tmux -L fleet attach -t fleet:main")
 		return nil
 	}
 	t.Run("select-window", "-t", target)
-	tm, err := exec.LookPath("tmux")
-	if err != nil {
-		return err
-	}
-	env := []string{}
-	for _, e := range os.Environ() {
-		if !strings.HasPrefix(e, "TMUX=") {
-			env = append(env, e)
-		}
-	}
-	return syscall.Exec(tm, []string{"tmux", "-L", fleet.Socket, "attach-session", "-t", target}, env)
+	return attachTmux("attach-session", "-t", target)
 }
 
 func windowExists(f *fleet.Fleet, name string) bool {
@@ -521,7 +537,7 @@ func wallCmdAct(exe, verb string) string {
 }
 
 // wallUsage lists the `fleet wall` verbs.
-const wallUsage = "fleet wall apply|refresh|preset N|sup|side|chips|emphasis|show NAME|hide NAME|add NAME|next|prev|untarget|undo|pin NAME|hide-all|restore|toggle-all [--keep-focus] [--notify]"
+const wallUsage = "fleet wall attach|apply|refresh|preset N|sup|side|chips|emphasis|show NAME|hide NAME|add NAME|next|prev|untarget|undo|pin NAME|hide-all|restore|toggle-all [--keep-focus] [--notify]"
 
 // pinMsg says what a pin toggle did (the overview's p says the same).
 func pinMsg(name string, on bool) string {
@@ -551,6 +567,9 @@ func cmdWall(f *fleet.Fleet, args []string) error {
 	args = rest
 	if len(args) == 0 {
 		return fmt.Errorf("usage: %s", wallUsage)
+	}
+	if args[0] == "attach" {
+		return wallAttach(f)
 	}
 	say := func(msg string) {
 		if msg == "" {

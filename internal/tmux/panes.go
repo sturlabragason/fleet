@@ -164,13 +164,20 @@ func (c *Client) ListPanes(target string) ([]PaneInfo, error) {
 		return nil, err
 	}
 	var ps []PaneInfo
+	seen := map[string]bool{}
 	for _, line := range strings.Split(out, "\n") {
-		if p, ok := parsePane(strings.Split(line, "\t")); ok {
+		if p, ok := parsePane(strings.Split(line, "\t")); ok && !seen[p.ID] {
+			seen[p.ID] = true
 			ps = append(ps, p)
 		}
 	}
 	return ps, nil
 }
+
+// A window linked into two sessions (a grouped session, ADR-108) is listed
+// once per session by `list-panes -a`. ListPanes and Snapshot keep a pane's
+// first row: sessions are listed by name, so the fleet session's row wins
+// over that of a session whose name extends it.
 
 // parsePane reads one paneFmt row; extra fields after it are ignored.
 func parsePane(f []string) (PaneInfo, bool) {

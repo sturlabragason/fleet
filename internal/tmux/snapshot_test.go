@@ -54,3 +54,36 @@ func TestSnapshotPanesAndWindowOptions(t *testing.T) {
 		t.Errorf("agent pane %+v", p)
 	}
 }
+
+// A grouped session (the two-monitor wall session, ADR-108) shares every
+// window, and list-panes -a lists each pane once per session: ListPanes and
+// Snapshot keep one row per pane, the first session's.
+func TestGroupedSessionListsEachPaneOnce(t *testing.T) {
+	c := &Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
+	t.Cleanup(func() { c.KillServer() })
+	if _, err := c.Run("new-session", "-d", "-s", "f", "-n", "main", "cat"); err != nil {
+		t.Skip("tmux unavailable")
+	}
+	c.Spawn("f", "ag-a1", "", nil, "cat")
+	if _, err := c.Run("new-session", "-d", "-t", "=f", "-s", "f-wall"); err != nil {
+		t.Fatal(err)
+	}
+	ps, err := c.ListPanes("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := c.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, got := range map[string][]PaneInfo{"ListPanes": ps, "Snapshot": s.Panes} {
+		if len(got) != 2 {
+			t.Fatalf("%s: %d panes, want 2: %+v", name, len(got), got)
+		}
+		for _, p := range got {
+			if p.Session != "f" {
+				t.Errorf("%s: pane %s from session %q, want f", name, p.ID, p.Session)
+			}
+		}
+	}
+}

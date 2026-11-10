@@ -167,17 +167,22 @@ func writeAdmiralMCP(home, exe, adm string) (string, error) {
 // mcpCapable: the admiral gets fleet tools under this profile.
 func mcpCapable(p tools.Profile) bool { return p.Patterns == "copilot" || p.Patterns == "claude" }
 
-// parseUpArgs parses `fleet up [--no-attach] [--admiral-profile NAME]`.
-func parseUpArgs(args []string) (noAttach bool, prof string, err error) {
+// parseUpArgs parses `fleet up [--no-attach] [--admiral-profile NAME]
+// [--monitors 1|2]`. monitors is 0 when the flag is not given.
+func parseUpArgs(args []string) (noAttach bool, prof string, monitors int, err error) {
 	fs := flag.NewFlagSet("up", flag.ContinueOnError)
 	na := fs.Bool("no-attach", false, "start without attaching")
 	ap := fs.String("admiral-profile", "", "tool profile for the admiral")
 	sp := fs.String("supervisor-profile", "", "deprecated: use --admiral-profile")
+	mo := fs.Int("monitors", 0, "1: one window; 2: admiral here, overview and wall in a second terminal")
 	if err := fs.Parse(args); err != nil {
-		return false, "", err
+		return false, "", 0, err
 	}
 	if fs.NArg() > 0 {
-		return false, "", fmt.Errorf("usage: fleet up [--no-attach] [--admiral-profile NAME]")
+		return false, "", 0, fmt.Errorf("usage: %s", upUsage)
+	}
+	if *mo < 0 || *mo > 2 {
+		return false, "", 0, fmt.Errorf("--monitors is 1 or 2, got %d", *mo)
 	}
 	if *sp != "" {
 		fmt.Fprintln(os.Stderr, "fleet: --supervisor-profile is deprecated; use --admiral-profile")
@@ -185,8 +190,10 @@ func parseUpArgs(args []string) (noAttach bool, prof string, err error) {
 			*ap = *sp
 		}
 	}
-	return *na, *ap, nil
+	return *na, *ap, *mo, nil
 }
+
+const upUsage = "fleet up [--no-attach] [--admiral-profile NAME] [--monitors 1|2]"
 
 // topLevelProfile handles `fleet --admiral-profile NAME [up ...]`: the flag
 // alone means up; with up it is passed on; any other command is an error.
