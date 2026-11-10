@@ -34,6 +34,8 @@ func testFleet(t *testing.T) *fleet.Fleet {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// copilot and claude need not be installed where the tests run.
+	f.LookCmd = func(string) error { return nil }
 	return f
 }
 

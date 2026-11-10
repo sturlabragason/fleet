@@ -292,6 +292,7 @@ func TestClaudeACPSpawnAndWake(t *testing.T) {
 	bin := t.TempDir()
 	claude := filepath.Join(bin, "claude")
 	os.WriteFile(claude, []byte("#!/bin/sh\nexec sleep 600\n"), 0o755)
+	os.WriteFile(filepath.Join(bin, "npx"), []byte("#!/bin/sh\n"), 0o755) // the adapter's launcher; the host stub never runs it
 	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
 	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
 	t.Cleanup(func() { tc.KillServer() })
@@ -385,8 +386,14 @@ func TestClaudeACPNeedsInstalledClaude(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	f.LookCmd = func(c string) error {
+		if c == "npx" {
+			return nil
+		}
+		return errors.New("missing")
+	}
 	wt := false
-	if _, err := f.SpawnWith(SpawnOpts{Driver: "acp", Worktree: &wt}, "c1", "claude", t.TempDir(), ""); err == nil || !strings.Contains(err.Error(), "not on PATH") {
+	if _, err := f.SpawnWith(SpawnOpts{Driver: "acp", Worktree: &wt}, "c1", "claude", t.TempDir(), ""); err == nil || !strings.Contains(err.Error(), "claude not found on PATH") {
 		t.Errorf("spawn without claude on PATH: %v", err)
 	}
 	if len(f.Store.Load().Agents) != 0 {
@@ -429,6 +436,7 @@ patterns = "fake"
 	if err != nil {
 		t.Fatal(err)
 	}
+	f.LookCmd = func(string) error { return nil }
 	old := Version
 	Version = "v9.9.9"
 	t.Cleanup(func() { Version = old })
@@ -681,6 +689,7 @@ func TestACPSpawnRefusesLongSocketPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	f.LookCmd = func(string) error { return nil }
 	wt := false
 	_, err = f.SpawnWith(SpawnOpts{Driver: "acp", Worktree: &wt}, "a1", "fake", t.TempDir(), "")
 	if err == nil || !strings.Contains(err.Error(), "socket path") {

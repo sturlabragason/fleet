@@ -59,6 +59,52 @@ patterns = "fake"
 	}
 }
 
+// A spawn into a missing dir or with a command not on PATH fails before it
+// leaves anything behind (fleet#38, fleet#23).
+func TestSpawnRefusesMissingDirOrCommand(t *testing.T) {
+	home := t.TempDir()
+	noPlaybook(t, home)
+	t.Setenv("FLEET_CONFIG", filepath.Join(home, "no-config.toml"))
+	t.Setenv("HOME", t.TempDir())
+	bin := t.TempDir()
+	os.WriteFile(filepath.Join(bin, "stubtool"), []byte("#!/bin/sh\n"), 0o755)
+	t.Setenv("PATH", bin)
+	os.WriteFile(filepath.Join(home, "tools.toml"), []byte(`[stub]
+command = "stubtool"
+[gone]
+command = "fleet-no-such-cli"
+[self]
+command = "{fleet}"
+`), 0o644)
+	exe := filepath.Join(bin, "fleet")
+	os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755)
+	f, err := New(&tmux.Client{Socket: "fleet-test-unused"}, home, exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	file := filepath.Join(dir, "f")
+	os.WriteFile(file, nil, 0o644)
+	wt := false
+	for _, c := range []struct{ profile, dir, want string }{
+		{"stub", filepath.Join(dir, "nope"), "dir " + filepath.Join(dir, "nope") + " does not exist"},
+		{"stub", file, "dir " + file + " is not a directory"},
+		{"gone", dir, "profile gone: fleet-no-such-cli not found on PATH"},
+	} {
+		if _, err := f.SpawnWith(SpawnOpts{Worktree: &wt}, "a1", c.profile, c.dir, "hi"); err == nil || err.Error() != c.want {
+			t.Errorf("%s in %s: %v, want %q", c.profile, c.dir, err, c.want)
+		}
+	}
+	if n := len(f.Store.Load().Agents); n != 0 {
+		t.Errorf("refused spawns left %d board entries", n)
+	}
+	for _, p := range []string{"stub", "self"} {
+		if err := f.CheckCommand(p, f.Profiles[p], ""); err != nil {
+			t.Errorf("%s: %v", p, err)
+		}
+	}
+}
+
 // TestSpawnPromptWaitsForReady covers the bug ADR-13 fixes: the pane only
 // accepts input well after the old fixed 1500 ms sleep, so a timed paste lost
 // the prompt. Spawn must wait for the pane to look ready instead.
