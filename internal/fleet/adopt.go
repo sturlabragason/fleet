@@ -88,7 +88,7 @@ func (f *Fleet) Adopt(o AdoptOpts) (*board.Agent, error) {
 		// A new host on the session, as a wake does; nothing an earlier
 		// agent of this name left may stand for it.
 		f.forgetACP(name)
-		argv, err = f.wakeACPArgv(&board.Agent{Name: name, Profile: o.Profile, Dir: dir, SessionID: id}, p, "")
+		argv, p, err = f.wakeACPArgv(&board.Agent{Name: name, Profile: o.Profile, Dir: dir, SessionID: id}, p, "")
 		if err != nil {
 			return nil, err
 		}

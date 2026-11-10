@@ -14,13 +14,14 @@ const ProtocolVersion = 1
 
 // Method names, client to agent.
 const (
-	MethodInitialize    = "initialize"
-	MethodSessionNew    = "session/new"
-	MethodSessionLoad   = "session/load"
-	MethodSessionResume = "session/resume"
-	MethodSessionPrompt = "session/prompt"
-	MethodSessionCancel = "session/cancel" // a notification, no response
-	MethodSessionClose  = "session/close"
+	MethodInitialize     = "initialize"
+	MethodSessionNew     = "session/new"
+	MethodSessionLoad    = "session/load"
+	MethodSessionResume  = "session/resume"
+	MethodSessionPrompt  = "session/prompt"
+	MethodSessionCancel  = "session/cancel" // a notification, no response
+	MethodSessionClose   = "session/close"
+	MethodSessionSetMode = "session/set_mode"
 )
 
 // Method names, agent to client.
@@ -159,6 +160,12 @@ type SessionRefParams struct {
 	SessionID  string      `json:"sessionId"`
 	Cwd        string      `json:"cwd"`
 	MCPServers []MCPServer `json:"mcpServers"`
+}
+
+// SetModeParams switches a session's mode (session/set_mode).
+type SetModeParams struct {
+	SessionID string `json:"sessionId"`
+	ModeID    string `json:"modeId"`
 }
 
 // SessionIDParams is the params of session/cancel and session/close.

@@ -66,10 +66,72 @@ type Profile struct {
 	// neither the spawn nor config.toml picks one (DESIGN §7d, ADR-74).
 	// Empty = tmux.
 	Driver string
+
+	// ACPCommand is a separate ACP server (an adapter) that replaces
+	// command, args, peer_args, context args and extra args under the acp
+	// driver (ADR-76). Empty = the tool itself serves ACP.
+	ACPCommand []string
+	// ACPModes maps a starting-mode name to the ACP session mode the host
+	// sets with session/set_mode; "default" is used when no mode is set.
+	ACPModes map[string]string
+	// ACPEnvVars is extra env under the acp driver, over Env. The value
+	// {command_path} is the profile's command looked up on PATH.
+	ACPEnvVars map[string]string
+	// ACPMCP is "session" when the peer MCP server goes in the session's
+	// mcpServers instead of peer_args.
+	ACPMCP string
+	// ACPUnsetEnv are inherited variables the host drops before it starts
+	// the ACP server (ADR-76: never an API key or token for a subscription).
+	ACPUnsetEnv []string
+	// ACPFrom names a profile whose acp keys this one takes where it sets
+	// none itself.
+	ACPFrom string
 }
 
 // HasACP reports whether the profile can run under the acp driver.
-func (p Profile) HasACP() bool { return len(p.ACP) > 0 }
+func (p Profile) HasACP() bool { return len(p.ACP) > 0 || len(p.ACPCommand) > 0 }
+
+// ACPOptIn reports whether the acp driver must be chosen for this profile
+// by name (--driver, its own config section or its tool profile): an
+// adapter profile is never moved to acp by [defaults] (ADR-76).
+func (p Profile) ACPOptIn() bool { return len(p.ACPCommand) > 0 }
+
+// ACPSessionMCP reports whether the peer MCP server goes over the session.
+func (p Profile) ACPSessionMCP() bool { return p.ACPMCP == "session" }
+
+// ACPSessionMode is the session mode to set for a starting mode ("" = none).
+func (p Profile) ACPSessionMode(mode string) string {
+	if mode == "" {
+		mode = "default"
+	}
+	return p.ACPModes[mode]
+}
+
+// CommandPathVar in acp_env is the profile's command resolved on PATH.
+const CommandPathVar = "{command_path}"
+
+// ACPNeedsCommandPath reports whether acp_env uses {command_path}.
+func (p Profile) ACPNeedsCommandPath() bool {
+	for _, v := range p.ACPEnvVars {
+		if strings.Contains(v, CommandPathVar) {
+			return true
+		}
+	}
+	return false
+}
+
+// ACPEnv is the env under the acp driver: Env, then acp_env with
+// {command_path} replaced by commandPath.
+func (p Profile) ACPEnv(commandPath string) map[string]string {
+	out := make(map[string]string, len(p.Env)+len(p.ACPEnvVars))
+	for k, v := range p.Env {
+		out[k] = v
+	}
+	for k, v := range p.ACPEnvVars {
+		out[k] = strings.ReplaceAll(v, CommandPathVar, commandPath)
+	}
+	return out
+}
 
 // AutoMode is the canonical starting mode that means "run every tool call
 // without asking". Each tool spells it differently (`--allow-all --autopilot`,
@@ -88,6 +150,11 @@ func (p Profile) HasMode(mode string) bool {
 	_, k := p.ModeKeys[mode]
 	return a || k
 }
+
+// ClaudeACPVersion pins the Claude ACP adapter (ADR-76). It releases daily,
+// with breaking changes, so bump it on purpose: see DESIGN.md ADR-76 for the
+// steps and TestClaudeACPLive for the check.
+const ClaudeACPVersion = "0.103.0"
 
 // Models for the built-in Claude profiles (ADR-63). The claude CLI takes the
 // aliases "opus" and "sonnet", which always resolve to the newest model, so
@@ -168,6 +235,11 @@ session_path = "~/.claude/projects/*/{id}.jsonl"
 peer_args = ["--mcp-config", "{peer_mcp_claude}"]
 hook_args = ["--settings", "{hooks}"]
 patterns = "claude"
+acp_command = ["npx", "-y", "@agentclientprotocol/claude-agent-acp@` + ClaudeACPVersion + `"]
+acp_modes = { default = "default", auto = "bypassPermissions", bypass = "bypassPermissions", accept-edits = "acceptEdits", plan = "plan" }
+acp_env = { CLAUDE_CODE_EXECUTABLE = "{command_path}", ANTHROPIC_MODEL = "` + ClaudeModel + `" }
+acp_mcp = "session"
+acp_unset_env = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"]
 
 [agy]
 command = "agy"
@@ -236,7 +308,44 @@ func LoadWith(home string, local conf.Doc) (map[string]Profile, error) {
 			out[name] = p
 		}
 	}
+	for name, p := range out {
+		if p.ACPFrom == "" || p.ACPFrom == name {
+			continue
+		}
+		b, ok := out[p.ACPFrom]
+		if !ok {
+			logx.For("tools").Warn("acp_from names no profile", "profile", name, "acp_from", p.ACPFrom)
+			continue
+		}
+		out[name] = inheritACP(p, b)
+	}
 	return out, nil
+}
+
+// inheritACP fills the acp keys p leaves unset from b (acp_from).
+func inheritACP(p, b Profile) Profile {
+	if p.ACP == nil {
+		p.ACP = b.ACP
+	}
+	if p.ACPModeArgs == nil {
+		p.ACPModeArgs = b.ACPModeArgs
+	}
+	if p.ACPCommand == nil {
+		p.ACPCommand = b.ACPCommand
+	}
+	if p.ACPModes == nil {
+		p.ACPModes = b.ACPModes
+	}
+	if p.ACPEnvVars == nil {
+		p.ACPEnvVars = b.ACPEnvVars
+	}
+	if p.ACPMCP == "" {
+		p.ACPMCP = b.ACPMCP
+	}
+	if p.ACPUnsetEnv == nil {
+		p.ACPUnsetEnv = b.ACPUnsetEnv
+	}
+	return p
 }
 
 // apply overlays one TOML section onto a profile; absent keys are left alone.
@@ -294,6 +403,24 @@ func apply(p *Profile, sec map[string]conf.Value) {
 	}
 	if v := conf.Map(sec, "acp_mode_args"); v != nil {
 		p.ACPModeArgs = splitModes(v)
+	}
+	if v, ok := sec["acp_command"]; ok {
+		p.ACPCommand, _ = v.([]string)
+	}
+	if v := conf.Map(sec, "acp_modes"); v != nil {
+		p.ACPModes = v
+	}
+	if v := conf.Map(sec, "acp_env"); v != nil {
+		p.ACPEnvVars = v
+	}
+	if v, ok := sec["acp_mcp"]; ok {
+		p.ACPMCP, _ = v.(string)
+	}
+	if v, ok := sec["acp_unset_env"]; ok {
+		p.ACPUnsetEnv, _ = v.([]string)
+	}
+	if v, ok := sec["acp_from"]; ok {
+		p.ACPFrom, _ = v.(string)
 	}
 }
 
@@ -433,15 +560,25 @@ func (p Profile) Argv(v Vars, l Launch) (argv []string, embedded bool) {
 // driver (ADR-74): command, peer MCP args, the profile's args, its ACP args,
 // the ACP mode args, the context args and the extra args. No launch id,
 // resume or prompt args: the host carries the session and the prompt over
-// ACP, and no hook args: the host writes the status itself.
+// ACP, and no hook args: the host writes the status itself. With an
+// acp_command (ADR-76) it is that command, the ACP args and the ACP mode
+// args only: the rest are the tool's own flags, which an adapter doesn't
+// take.
 func (p Profile) ACPArgv(v Vars, l Launch) []string {
-	argv := []string{v.expand(p.Command)}
+	var argv []string
 	add := func(as []string) {
 		for _, a := range as {
 			argv = append(argv, v.expand(a))
 		}
 	}
-	if v.PeerMCP != "" || v.PeerMCPClaude != "" {
+	if len(p.ACPCommand) > 0 {
+		add(p.ACPCommand)
+		add(p.ACP)
+		add(p.ACPModeArgs[l.Mode])
+		return argv
+	}
+	argv = []string{v.expand(p.Command)}
+	if (v.PeerMCP != "" || v.PeerMCPClaude != "") && !p.ACPSessionMCP() {
 		add(p.PeerArgs)
 	}
 	add(p.Args)
@@ -458,7 +595,8 @@ func (p Profile) HasACPMode(mode string) bool {
 		return true
 	}
 	_, ok := p.ACPModeArgs[mode]
-	return ok
+	_, ok2 := p.ACPModes[mode]
+	return ok || ok2
 }
 
 // SessionGlob returns SessionPath with {id} substituted and a leading ~ expanded.

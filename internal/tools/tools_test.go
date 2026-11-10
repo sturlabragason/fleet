@@ -568,7 +568,7 @@ func TestACPArgv(t *testing.T) {
 			t.Errorf("%s mode %q: %q want %q", c.profile, c.mode, got, c.want)
 		}
 	}
-	for _, n := range []string{"claude", "vibe"} {
+	for _, n := range []string{"vibe"} {
 		if ps[n].HasACP() {
 			t.Errorf("%s: has no ACP server, got %v", n, ps[n].ACP)
 		}
@@ -591,5 +591,126 @@ func TestACPUserOverride(t *testing.T) {
 	got := ps["vibe"].ACPArgv(Vars{}, Launch{Mode: AutoMode})
 	if want := []string{"vibe", "--acp", "--yolo", "--x"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("%q want %q", got, want)
+	}
+}
+
+// Claude over the adapter (ADR-76): acp_command replaces the claude argv, the
+// mode is a session mode, the model and the claude binary go in the env, and
+// peer MCP goes over the session, not argv.
+func TestClaudeACPProfile(t *testing.T) {
+	ps, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := ps["claude"]
+	if !p.HasACP() || p.Driver != "" {
+		t.Fatalf("claude: HasACP %v driver %q; want an ACP server and no default driver (opt-in)", p.HasACP(), p.Driver)
+	}
+	if !p.ACPOptIn() {
+		t.Error("claude: an adapter profile must be opt-in")
+	}
+	for _, n := range []string{"copilot", "agy", "fake"} {
+		if ps[n].ACPOptIn() {
+			t.Errorf("%s: native ACP is not opt-in", n)
+		}
+	}
+	cp, cl := PeerMCP("/bin/fleet", "a1")
+	v := Vars{Fleet: "/bin/fleet", Name: "a1", PeerMCP: cp, PeerMCPClaude: cl, Hooks: "{}"}
+	want := []string{"npx", "-y", "@agentclientprotocol/claude-agent-acp@" + ClaudeACPVersion}
+	for _, mode := range []string{"", AutoMode, "plan"} {
+		got := p.ACPArgv(v, Launch{Mode: mode, Context: "pro", Extra: []string{"--model", "x"}, Prompt: "hi"})
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("mode %q: %q want %q", mode, got, want)
+		}
+	}
+	for mode, id := range map[string]string{"": "default", AutoMode: "bypassPermissions", "bypass": "bypassPermissions", "accept-edits": "acceptEdits", "plan": "plan"} {
+		if !p.HasACPMode(mode) || p.ACPSessionMode(mode) != id {
+			t.Errorf("mode %q: HasACPMode %v session mode %q want %q", mode, p.HasACPMode(mode), p.ACPSessionMode(mode), id)
+		}
+	}
+	if p.HasACPMode("bogus") || p.ACPSessionMode("bogus") != "" {
+		t.Error("unknown mode accepted")
+	}
+	if !p.ACPSessionMCP() || ps["copilot"].ACPSessionMCP() {
+		t.Error("peer MCP: session for claude, argv for copilot")
+	}
+	env := p.ACPEnv("/usr/local/bin/claude")
+	if env["CLAUDE_CODE_EXECUTABLE"] != "/usr/local/bin/claude" || env["ANTHROPIC_MODEL"] != ClaudeModel ||
+		env["CLAUDE_CODE_SUBAGENT_MODEL"] != ClaudeSubagentModel {
+		t.Errorf("acp env %v", env)
+	}
+	// Terms (ADR-76): no API key or token is ever set, and one inherited is dropped.
+	for _, k := range []string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"} {
+		if _, ok := env[k]; ok {
+			t.Errorf("claude acp env sets %s", k)
+		}
+		if !slices.Contains(p.ACPUnsetEnv, k) {
+			t.Errorf("claude acp does not drop an inherited %s: %v", k, p.ACPUnsetEnv)
+		}
+	}
+	if !p.ACPNeedsCommandPath() || ps["copilot"].ACPNeedsCommandPath() {
+		t.Error("{command_path} only in claude's acp_env")
+	}
+	// Copilot's ACP env is its env.
+	if e := ps["copilot"].ACPEnv("x"); len(e) != 0 {
+		t.Errorf("copilot acp env %v", e)
+	}
+}
+
+// The tmux argv of claude is what it was before ADR-76.
+func TestClaudeTmuxArgvUnchanged(t *testing.T) {
+	ps, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cp, cl := PeerMCP("/bin/fleet", "a1")
+	got, embedded := ps["claude"].Argv(Vars{Fleet: "/bin/fleet", Name: "a1", ID: "U", PeerMCP: cp, PeerMCPClaude: cl, Hooks: "H"},
+		Launch{Mode: AutoMode, Prompt: "hi"})
+	want := []string{"claude", "--mcp-config", cl, "--settings", "H", "--model", ClaudeModel,
+		"--permission-mode", "bypassPermissions", "--session-id", "U", "hi"}
+	if !embedded || !reflect.DeepEqual(got, want) {
+		t.Errorf("%q\nwant %q", got, want)
+	}
+	if e := ps["claude"].Env; len(e) != 1 || e["CLAUDE_CODE_SUBAGENT_MODEL"] != ClaudeSubagentModel {
+		t.Errorf("claude tmux env %v", e)
+	}
+}
+
+// acp_from copies the acp keys a profile doesn't set from another profile,
+// so per-account claude profiles share the built-in's pinned adapter.
+func TestACPFrom(t *testing.T) {
+	home := t.TempDir()
+	os.WriteFile(filepath.Join(home, "tools.toml"), []byte(`[claude-work]
+command = "claude"
+env = { CLAUDE_CONFIG_DIR = "/x/.claude-work" }
+patterns = "claude"
+acp_from = "claude"
+
+[claude-own]
+command = "claude"
+acp_from = "claude"
+acp_env = { ANTHROPIC_MODEL = "haiku", CLAUDE_CODE_EXECUTABLE = "{command_path}" }
+
+[bad]
+command = "x"
+acp_from = "nope"
+`), 0o644)
+	ps, err := Load(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, c := ps["claude-work"], ps["claude"]
+	if !reflect.DeepEqual(w.ACPCommand, c.ACPCommand) || !reflect.DeepEqual(w.ACPModes, c.ACPModes) ||
+		!w.ACPSessionMCP() || !reflect.DeepEqual(w.ACPUnsetEnv, c.ACPUnsetEnv) || w.Driver != "" {
+		t.Errorf("claude-work did not take claude's acp keys: %+v", w)
+	}
+	if e := w.ACPEnv("/b/claude"); e["CLAUDE_CONFIG_DIR"] != "/x/.claude-work" || e["CLAUDE_CODE_EXECUTABLE"] != "/b/claude" {
+		t.Errorf("claude-work acp env %v", e)
+	}
+	if e := ps["claude-own"].ACPEnv("/b/claude"); e["ANTHROPIC_MODEL"] != "haiku" {
+		t.Errorf("own acp_env lost: %v", e)
+	}
+	if ps["bad"].HasACP() {
+		t.Error("acp_from an unknown profile gave an ACP server")
 	}
 }

@@ -35,6 +35,7 @@ resume = ["--resume", "{id}"]
 session_path = "~/.claude-personal/projects/*/{id}.jsonl"
 peer_args = ["--mcp-config", "{peer_mcp_claude}"]
 patterns = "claude"
+acp_from = "claude"  # --driver acp uses the built-in claude adapter (ADR-76)
 
 [claude-work]
 command = "claude"
@@ -47,6 +48,7 @@ resume = ["--resume", "{id}"]
 session_path = "~/.claude-work/projects/*/{id}.jsonl"
 peer_args = ["--mcp-config", "{peer_mcp_claude}"]
 patterns = "claude"
+acp_from = "claude"  # --driver acp uses the built-in claude adapter (ADR-76)
 
 # Override a built-in: always start copilot with an extra flag.
 # [copilot]

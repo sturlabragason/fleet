@@ -1,15 +1,18 @@
 package fleet
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/acp"
 	"github.com/sturlabragason/fleet/internal/acphost"
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/status"
@@ -185,4 +188,129 @@ func TestACPEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitStatus(t, f, "c1", "error", 20*time.Second)
+}
+
+// fakeSession reads the fake ACP agent's record of session id.
+func fakeSession(t *testing.T, home, id string) (s struct {
+	Mode string              `json:"mode"`
+	MCP  []acp.MCPServer     `json:"mcp"`
+	Env  map[string]string   `json:"env"`
+	Hist []map[string]string `json:"history"`
+}) {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(home, "fake-state", id+".json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(b, &s); err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+// TestClaudeACPEndToEnd runs a claude-shaped profile (the built-in claude's
+// acp keys through acp_from, the fake agent as its adapter) under the real
+// acp-host (ADR-76): the session mode, peer MCP over the session, the
+// installed claude in CLAUDE_CODE_EXECUTABLE and no inherited API key or
+// token, through spawn, a question, cancel, park and wake.
+func TestClaudeACPEndToEnd(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds the fleet binary")
+	}
+	tmuxLog(t)
+	home := t.TempDir()
+	cfg := filepath.Join(home, "config.toml")
+	os.WriteFile(cfg, []byte("[defaults]\nplaybook = false\nauto_trust = false\nmode = \"auto\"\n[profile.fakeclaude]\ndriver = \"acp\"\n"), 0o644)
+	t.Setenv("FLEET_CONFIG", cfg)
+	t.Setenv("FLEET_HOME", home)
+	t.Setenv("FAKE_ACP_STATE", filepath.Join(home, "fake-state"))
+	t.Setenv("FAKE_ACP_ENV", "CLAUDE_CODE_EXECUTABLE,ANTHROPIC_MODEL,ANTHROPIC_API_KEY,CLAUDE_CODE_OAUTH_TOKEN,CLAUDE_CONFIG_DIR")
+	t.Setenv("ANTHROPIC_API_KEY", "sk-must-not-pass")
+	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "must-not-pass")
+	bin := t.TempDir()
+	claude := filepath.Join(bin, "claude")
+	os.WriteFile(claude, []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
+	os.WriteFile(filepath.Join(home, "tools.toml"), []byte(`[fakeclaude]
+command = "claude"
+patterns = "fake"
+env = { CLAUDE_CONFIG_DIR = "/x/.claude-personal" }
+acp_from = "claude"
+acp_command = ["{fleet}", "fakeagent", "{name}", "--acp", "--resume"]
+`), 0o644)
+	exe := buildFleet(t)
+	t.Setenv("HOME", t.TempDir()) // after the build: no ~/.local/bin/claude ahead of the test's
+	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
+	t.Cleanup(func() { tc.KillServer() })
+	f, err := New(tc, home, exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	wt := false
+
+	a, err := f.SpawnWith(SpawnOpts{Worktree: &wt}, "c1", "fakeclaude", dir, "fix it [slow 300] [ask]")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !a.ACP() {
+		t.Fatalf("[profile.fakeclaude] driver = acp: got %q", a.Driver)
+	}
+	waitStatus(t, f, "c1", "waiting", 15*time.Second)
+	if c, err := f.Answer("c1", "y", ""); err != nil || !strings.Contains(c.Label, "Allow") {
+		t.Fatalf("answer y: %+v %v", c, err)
+	}
+	sid := waitStatus(t, f, "c1", "idle", 20*time.Second).SessionID
+	s := fakeSession(t, home, sid)
+	if s.Mode != "bypassPermissions" {
+		t.Errorf("session mode %q want bypassPermissions", s.Mode)
+	}
+	if len(s.MCP) != 1 || s.MCP[0].Name != "fleet-peer" || s.MCP[0].Command != exe ||
+		strings.Join(s.MCP[0].Args, " ") != "mcp --agent c1" {
+		t.Errorf("session MCP %+v", s.MCP)
+	}
+	want := map[string]string{"CLAUDE_CODE_EXECUTABLE": claude, "ANTHROPIC_MODEL": "opus", "CLAUDE_CONFIG_DIR": "/x/.claude-personal"}
+	if !reflect.DeepEqual(s.Env, want) {
+		t.Errorf("adapter env %v want %v", s.Env, want)
+	}
+
+	// Cancel a running turn.
+	if err := f.Send("c1", "long one [hang]"); err != nil {
+		t.Fatal(err)
+	}
+	waitStatus(t, f, "c1", "working", 10*time.Second)
+	if err := f.SendKeys("c1", "", []string{"Escape"}); err != nil {
+		t.Fatal(err)
+	}
+	waitStatus(t, f, "c1", "idle", 10*time.Second)
+
+	// Park and wake: the same session, its mode set again (now plan), MCP again.
+	if err := f.Park("c1", ""); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(cfg, []byte("[defaults]\nplaybook = false\nauto_trust = false\nmode = \"plan\"\n[profile.fakeclaude]\ndriver = \"acp\"\n"), 0o644)
+	if f, err = New(tc, home, exe); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Wake("c1", true); err != nil {
+		t.Fatal(err)
+	}
+	if got := waitStatus(t, f, "c1", "idle", 15*time.Second).SessionID; got != sid {
+		t.Errorf("session after wake %q want %q", got, sid)
+	}
+	if err := f.Send("c1", "after wake [slow 200]"); err != nil {
+		t.Fatal(err)
+	}
+	waitStatus(t, f, "c1", "working", 10*time.Second)
+	waitStatus(t, f, "c1", "idle", 15*time.Second)
+	s = fakeSession(t, home, sid)
+	if s.Mode != "plan" || len(s.MCP) != 1 || !reflect.DeepEqual(s.Env, want) {
+		t.Errorf("after wake: mode %q mcp %+v env %v", s.Mode, s.MCP, s.Env)
+	}
+	if n := len(s.Hist); n < 4 {
+		t.Errorf("history after wake: %d entries", n)
+	}
+	if err := f.Close("c1"); err != nil {
+		t.Fatal(err)
+	}
 }

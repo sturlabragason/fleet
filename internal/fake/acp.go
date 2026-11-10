@@ -74,6 +74,22 @@ type sessionFile struct {
 	ID      string      `json:"id"`
 	Cwd     string      `json:"cwd"`
 	History []histEntry `json:"history"`
+	// What the last host gave it (ADR-76): the mode it set, the MCP servers
+	// and the env named in FAKE_ACP_ENV, for tests to check.
+	Mode string            `json:"mode,omitempty"`
+	MCP  []acp.MCPServer   `json:"mcp,omitempty"`
+	Env  map[string]string `json:"env,omitempty"`
+}
+
+// recordEnv is the env named in FAKE_ACP_ENV (comma-separated) that is set.
+func recordEnv() map[string]string {
+	out := map[string]string{}
+	for _, k := range strings.Split(os.Getenv("FAKE_ACP_ENV"), ",") {
+		if v, ok := os.LookupEnv(k); ok && k != "" {
+			out[k] = v
+		}
+	}
+	return out
 }
 
 type session struct {
@@ -226,7 +242,7 @@ func (s *server) handle(b []byte) {
 		var p acp.NewSessionParams
 		_ = json.Unmarshal(m.Params, &p)
 		id := s.opt.NewID()
-		f := sessionFile{ID: id, Cwd: p.Cwd, History: []histEntry{}}
+		f := sessionFile{ID: id, Cwd: p.Cwd, History: []histEntry{}, MCP: p.MCPServers, Env: recordEnv()}
 		s.mu.Lock()
 		s.sess[id] = &session{sessionFile: f}
 		s.mu.Unlock()
@@ -246,6 +262,25 @@ func (s *server) handle(b []byte) {
 		s.open(m, false)
 	case acp.MethodSessionPrompt:
 		s.prompt(m)
+	case acp.MethodSessionSetMode:
+		var p acp.SetModeParams
+		_ = json.Unmarshal(m.Params, &p)
+		s.mu.Lock()
+		ss := s.sess[p.SessionID]
+		var f sessionFile
+		if ss != nil {
+			ss.Mode = p.ModeID
+			f = ss.sessionFile
+			f.History = append([]histEntry(nil), ss.History...)
+		}
+		s.mu.Unlock()
+		if ss == nil || p.ModeID == "" {
+			s.fail(m.ID, acp.CodeInvalidParams, "unknown session or mode")
+			return
+		}
+		s.save(f)
+		s.reply(m.ID, struct{}{})
+		s.update(p.SessionID, acp.SessionUpdate{Kind: acp.UpdateModeChange, ModeID: p.ModeID})
 	case acp.MethodSessionCancel:
 		var p acp.SessionIDParams
 		_ = json.Unmarshal(m.Params, &p)
@@ -315,6 +350,8 @@ func (s *server) open(m acp.Message, replay bool) {
 	if p.Cwd != "" {
 		f.Cwd = p.Cwd
 	}
+	f.MCP, f.Env = p.MCPServers, recordEnv()
+	s.save(f)
 	s.mu.Lock()
 	s.sess[f.ID] = &session{sessionFile: f}
 	s.mu.Unlock()

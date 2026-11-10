@@ -37,7 +37,8 @@ func TestDriverResolution(t *testing.T) {
 		{"", "agy", "tmux", ""},         // [profile.agy] beats [defaults]
 		{"acp", "agy", "acp", ""},       // the flag beats both
 		{"tmux", "copilot", "tmux", ""}, // and back
-		{"", "claude", "", "no ACP server"},
+		{"", "claude", "tmux", ""},      // ADR-76: [defaults] never moves claude to acp
+		{"acp", "claude", "acp", ""},    // but --driver acp does
 		{"acp", "vibe", "", "no ACP server"},
 		{"tmux", "claude", "tmux", ""},
 		{"ssh", "copilot", "", "unknown driver"},
@@ -63,8 +64,8 @@ func TestDriverResolution(t *testing.T) {
 			t.Errorf("no config, %s: %q, %v want %q", profile, got, err, want)
 		}
 	}
-	if _, err := f.SpawnWith(SpawnOpts{Driver: "acp"}, "c1", "claude", home, ""); err == nil || !strings.Contains(err.Error(), "no ACP server") {
-		t.Errorf("spawn claude --driver acp: %v", err)
+	if _, err := f.SpawnWith(SpawnOpts{Driver: "acp"}, "c1", "vibe", home, ""); err == nil || !strings.Contains(err.Error(), "no ACP server") {
+		t.Errorf("spawn vibe --driver acp: %v", err)
 	}
 	if len(f.Store.Load().Agents) != 0 {
 		t.Error("a refused spawn left a board entry")
@@ -99,13 +100,18 @@ func TestDriverDefaultOverrides(t *testing.T) {
 }
 
 func TestACPHostArgvGolden(t *testing.T) {
-	got := ACPHostArgv("/bin/fleet", "a1", "/w", "S1", "/h/acp/a1.prompt", true, []string{"copilot", "--acp"})
+	got := ACPHostArgv("/bin/fleet", "a1", "/w", ACPHostOpts{Session: "S1", PromptFile: "/h/acp/a1.prompt", CopilotEvents: true}, []string{"copilot", "--acp"})
 	want := []string{"/bin/fleet", "acp-host", "a1", "--dir", "/w", "--session", "S1", "--prompt-file", "/h/acp/a1.prompt",
 		"--copilot-events", "--", "copilot", "--acp"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("%q\nwant %q", got, want)
 	}
-	got = ACPHostArgv("/bin/fleet", "a1", "/w", "", "", false, []string{"agy", "acp"})
+	got = ACPHostArgv("/bin/fleet", "a1", "/w", ACPHostOpts{Mode: "plan", MCP: "{}", UnsetEnv: []string{"A", "B"}}, []string{"npx", "x"})
+	want = []string{"/bin/fleet", "acp-host", "a1", "--dir", "/w", "--mode", "plan", "--mcp", "{}", "--unset-env", "A,B", "--", "npx", "x"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("%q\nwant %q", got, want)
+	}
+	got = ACPHostArgv("/bin/fleet", "a1", "/w", ACPHostOpts{}, []string{"agy", "acp"})
 	want = []string{"/bin/fleet", "acp-host", "a1", "--dir", "/w", "--", "agy", "acp"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("%q\nwant %q", got, want)
@@ -260,6 +266,134 @@ func hostArgs(t *testing.T, home string) [][]string {
 			return out
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// Claude over the adapter (ADR-76), with a stub host that records its argv
+// and env: the adapter argv, the session mode, peer MCP over the session,
+// the dropped secrets, the installed claude in CLAUDE_CODE_EXECUTABLE; then
+// a wake on the same session; and a claude agent on tmux beside it that
+// launches exactly as before.
+func TestClaudeACPSpawnAndWake(t *testing.T) {
+	tmuxLog(t)
+	home := t.TempDir()
+	cfg := filepath.Join(home, "config.toml")
+	os.WriteFile(cfg, []byte("[defaults]\nplaybook = false\nmode = \"auto\"\ndriver = \"acp\"\nauto_trust = false\n"), 0o644)
+	t.Setenv("FLEET_CONFIG", cfg)
+	t.Setenv("HOME", t.TempDir()) // no ~/.local/bin/claude ahead of the test's
+	bin := t.TempDir()
+	claude := filepath.Join(bin, "claude")
+	os.WriteFile(claude, []byte("#!/bin/sh\nexec sleep 600\n"), 0o755)
+	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
+	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
+	t.Cleanup(func() { tc.KillServer() })
+	host := filepath.Join(home, "fakehost")
+	os.WriteFile(host, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" >> "+home+"/host.args\necho --- >> "+home+"/host.args\n"+
+		"echo \"exe=$CLAUDE_CODE_EXECUTABLE model=$ANTHROPIC_MODEL sub=$CLAUDE_CODE_SUBAGENT_MODEL\" >> "+home+"/host.env\nexec sleep 600\n"), 0o755)
+	f, err := New(tc, home, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	wt := false
+	// [defaults] driver = "acp" leaves claude on tmux (opt-in), as before.
+	tm, err := f.SpawnWith(SpawnOpts{Worktree: &wt}, "t1", "claude", dir, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tm.ACP() {
+		t.Fatal("claude went to acp without opting in")
+	}
+	if got := startCommand(t, tc, tm.PaneID); !strings.Contains(got, "claude --mcp-config") || !strings.Contains(got, "--permission-mode bypassPermissions") || strings.Contains(got, "acp-host") {
+		t.Errorf("claude tmux command %q", got)
+	}
+
+	a, err := f.SpawnWith(SpawnOpts{Driver: "acp", Worktree: &wt}, "a1", "claude", dir, "do it")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !a.ACP() {
+		t.Fatalf("driver %q", a.Driver)
+	}
+	_, peer := tools.PeerMCP(host, "a1")
+	wantArgv := []string{"acp-host", "a1", "--dir", dir, "--prompt-file", ACPPromptPath(home, "a1"),
+		"--mode", "bypassPermissions", "--mcp", peer, "--unset-env", "ANTHROPIC_API_KEY,ANTHROPIC_AUTH_TOKEN,CLAUDE_CODE_OAUTH_TOKEN",
+		"--", "npx", "-y", "@agentclientprotocol/claude-agent-acp@" + tools.ClaudeACPVersion}
+	got := hostArgs(t, home)
+	if len(got) != 1 || !reflect.DeepEqual(got[0], wantArgv) {
+		t.Errorf("host argv %q\nwant %q", got, wantArgv)
+	}
+	envOf := func(n int) string {
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			b, _ := os.ReadFile(filepath.Join(home, "host.env"))
+			if lines := strings.Split(strings.TrimSpace(string(b)), "\n"); len(lines) >= n && lines[0] != "" {
+				return lines[n-1]
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("host env: %q", b)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	if e, want := envOf(1), "exe="+claude+" model=opus sub=sonnet"; e != want {
+		t.Errorf("host env %q want %q", e, want)
+	}
+
+	// Wake resumes the same session with the same mode, MCP and env.
+	os.MkdirAll(acphost.Dir(home), 0o700)
+	os.WriteFile(acphost.TranscriptPath(home, "a1"), []byte(`{"kind":"session","session_id":"S9","text":"new"}`+"\n"), 0o600)
+	f.Store.Update(func(b *board.Board) error {
+		b.Agents["a1"].Status = "idle"
+		b.Agents["a1"].SessionID = "S9"
+		return nil
+	})
+	(&stubHost{exitAfter: 10 * time.Millisecond}).serve(t, home, "a1")
+	if err := f.Park("a1", ""); err != nil {
+		t.Fatal(err)
+	}
+	w, err := f.Wake("a1", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The stub never sent the spawn's prompt, so the wake carries its file.
+	wantWake := append([]string{host, "acp-host", "a1", "--dir", dir, "--session", "S9"}, wantArgv[4:]...)
+	if got := startCommand(t, tc, w.PaneID); got != tools.ShellCommand(wantWake) {
+		t.Errorf("wake command %s\nwant %s", got, tools.ShellCommand(wantWake))
+	}
+	if e := envOf(2); !strings.HasPrefix(e, "exe="+claude+" ") {
+		t.Errorf("wake env %q", e)
+	}
+}
+
+// Without the installed claude on PATH a claude acp spawn is refused: the
+// adapter must never fall back to a claude of its own (ADR-76).
+func TestClaudeACPNeedsInstalledClaude(t *testing.T) {
+	home := t.TempDir()
+	noPlaybook(t, home)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	f, err := New(&tmux.Client{Socket: "fleet-test-unused"}, home, "/bin/fleet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wt := false
+	if _, err := f.SpawnWith(SpawnOpts{Driver: "acp", Worktree: &wt}, "c1", "claude", t.TempDir(), ""); err == nil || !strings.Contains(err.Error(), "not on PATH") {
+		t.Errorf("spawn without claude on PATH: %v", err)
+	}
+	if len(f.Store.Load().Agents) != 0 {
+		t.Error("a refused spawn left a board entry")
+	}
+	// A parked claude ACP agent whose claude went away stays parked.
+	f.Store.Update(func(b *board.Board) error {
+		b.Agents["c2"] = &board.Agent{Name: "c2", Profile: "claude", Dir: t.TempDir(), Status: string(status.Parked), SessionID: "s1", Driver: board.DriverACP}
+		return nil
+	})
+	if _, err := f.Wake("c2", true); err == nil || !strings.Contains(err.Error(), "not on PATH") {
+		t.Errorf("wake without claude on PATH: %v", err)
+	}
+	if got := f.Store.Load().Agents["c2"].Status; got != string(status.Parked) {
+		t.Errorf("after a failed wake status %q, want parked", got)
 	}
 }
 

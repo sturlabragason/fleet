@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/logx"
 )
 
-const acpHostUsage = "usage: fleet acp-host <name> [--dir D] [--session ID] [--prompt-file F] [--copilot-events] -- <argv...>"
+const acpHostUsage = "usage: fleet acp-host <name> [--dir D] [--session ID] [--prompt-file F] [--copilot-events] [--mode M] [--mcp JSON] [--unset-env A,B] -- <argv...>"
 
 // cmdACPHost runs one ACP agent in this terminal (its tmux window) until it
 // is stopped or its child exits (DESIGN §7d, ADR-74).
@@ -27,12 +28,25 @@ func cmdACPHost(args []string) error {
 	session := fs.String("session", "", "resume or load this session")
 	promptFile := fs.String("prompt-file", "", "send this file's text as the first prompt (the file is removed once sent)")
 	copilotEvents := fs.Bool("copilot-events", false, "opt in to Copilot's session events")
+	mode := fs.String("mode", "", "session mode to set (session/set_mode) after the session starts")
+	mcpJSON := fs.String("mcp", "", `MCP servers for the session, as {"mcpServers":{...}} with stdio servers`)
+	unset := fs.String("unset-env", "", "comma-separated variables the agent must not inherit")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
 	argv := fs.Args()
 	if len(argv) == 0 {
 		return fmt.Errorf("%s", acpHostUsage)
+	}
+	mcp, err := acphost.ParseMCP(*mcpJSON)
+	if err != nil {
+		return err
+	}
+	var drop []string
+	for _, k := range strings.Split(*unset, ",") {
+		if k = strings.TrimSpace(k); k != "" {
+			drop = append(drop, k)
+		}
 	}
 	// A second host for the same agent must fail before it eats the first
 	// prompt that belongs to the running one's spawn.
@@ -57,8 +71,9 @@ func cmdACPHost(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGHUP, syscall.SIGTERM, os.Interrupt)
 	defer stop()
 	return acphost.Run(ctx, acphost.Config{
-		Home: logx.Home(), Name: name, Dir: *dir, Argv: argv, Env: os.Environ(),
+		Home: logx.Home(), Name: name, Dir: *dir, Argv: argv, Env: acphost.FilterEnv(os.Environ(), drop),
 		SessionID: *session, Prompt: prompt, OnPromptSent: sent, CopilotEvents: *copilotEvents,
+		Mode: *mode, MCP: mcp,
 		Out: os.Stdout, In: os.Stdin,
 	})
 }

@@ -29,7 +29,13 @@ Each `[section]` is a profile. A section with a built-in name overrides only the
 | `context_args` | Extra arguments per effort level (`light`, `standard`, `pro`, and `leader` for a squad leader), as an inline table of space-separated flags. The built-in Copilot profiles use it to leave out built-in tools an agent at that level does not need (ADR-60). Setting it replaces the whole table, so `context_args = { light = "" }` turns it off for every level. |
 | `prompt_args` | Arguments that carry the first prompt, with `{prompt}`, so the tool submits it itself instead of fleet pasting it |
 | `patterns` | Status pattern set: `copilot`, `claude`, `agy`, `vibe`, `fake` or your own. Defaults to the profile name. |
-| `acp`, `acp_mode_args` | Arguments that start the tool's ACP server instead of its TUI, and its starting modes under ACP. Only a profile with `acp` can run over ACP (DESIGN §7d). |
+| `acp`, `acp_mode_args` | Arguments that start the tool's ACP server instead of its TUI, and its starting modes under ACP. Only a profile with `acp` or `acp_command` can run over ACP (DESIGN §7d). |
+| `acp_command` | The whole argv under ACP, replacing `command`, `args` and the peer, extra and context args. The built-in `claude` runs the pinned claude-agent-acp adapter here (DESIGN §7d, ADR-76). |
+| `acp_env` | Extra env under ACP only. `{command_path}` is the profile's `command` found in `~/.local/bin` or on PATH. |
+| `acp_modes` | Fleet mode → ACP session mode, set with `session/set_mode` before the first prompt; `default` is used when no mode is set. |
+| `acp_mcp` | `session`: pass the peer MCP server in the ACP session's `mcpServers` instead of `peer_args`. |
+| `acp_unset_env` | Env vars removed before the ACP server starts (the built-in `claude` drops API keys and OAuth tokens). |
+| `acp_from` | Take every unset `acp*` key from another profile, for example `acp_from = "claude"` on a per-account Claude profile. |
 | `driver` | `acp` or `tmux`: how agents of this profile run unless config.toml or `--driver` says otherwise. `acp` on the built-in `copilot` and `agy`; empty (tmux) on the rest. |
 
 Placeholders in `command` and `args`: `{fleet}` is the fleet binary, `{name}` the agent name, `{id}` the session ID.
@@ -70,6 +76,8 @@ launch_id = ["--session-id", "{id}"]
 resume = ["--resume", "{id}"]
 patterns = "claude"
 ```
+
+To run one of them over ACP (opt-in, ADR-76), add `acp_from = "claude"` to the profile, log in once by hand with `CLAUDE_CONFIG_DIR=$HOME/.claude-personal claude`, and put `driver = "acp"` under `[profile.claude-personal]` in config.toml, or spawn with `--driver acp`. It needs node 22+ and npx. The profile's `args` (`--model` included) are claude flags and don't reach the adapter: the model comes from `ANTHROPIC_MODEL`, `opus` from the built-in, so set `acp_env = { ANTHROPIC_MODEL = "sonnet" }` on the profile for another (an own `acp_env` replaces the inherited one, so keep `CLAUDE_CODE_EXECUTABLE = "{command_path}"` in it). Fleet runs the installed claude through the adapter version pinned in fleet, never reads or passes tokens, and drops `ANTHROPIC_API_KEY` from the agent's env, so a subscription stays a subscription. Agent SDK use may count against your plan's limits faster, and a Team or Enterprise account follows its employer's policy. Use one config dir per account and don't switch accounts to get around limits ([Anthropic's terms](https://code.claude.com/docs/en/legal-and-compliance)).
 
 Prefer the claude CLI's aliases (`opus`, `sonnet`) over full ids: they always resolve to the newest model. The Copilot CLI needs an exact id; the built-in `claude-copilot` uses `CopilotClaudeModel` in `internal/tools` (ADR-63).
 

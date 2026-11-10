@@ -83,9 +83,9 @@ func TestSpawnPassesDriver(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := New(f, nil)
-	_, err = s.call("fleet_spawn", json.RawMessage(`{"name":"c1","profile":"claude","dir":"`+home+`","driver":"acp"}`))
+	_, err = s.call("fleet_spawn", json.RawMessage(`{"name":"c1","profile":"vibe","dir":"`+home+`","driver":"acp"}`))
 	if err == nil || !strings.Contains(err.Error(), "no ACP server") {
-		t.Errorf("fleet_spawn claude driver=acp: %v", err)
+		t.Errorf("fleet_spawn vibe driver=acp: %v", err)
 	}
 	for _, def := range append(append([]tool{}, toolDefs...), squadToolDefs...) {
 		if def.Name == "fleet_spawn" || def.Name == "fleet_squad_spawn" {

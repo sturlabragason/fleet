@@ -159,6 +159,8 @@ driver = "tmux"        # every profile; or put it under [profile.copilot] / [pro
 
 or spawn with `--driver tmux`. Details: [DESIGN.md §7d](DESIGN.md#7d-acp-agents-fleet-drives-the-tool-over-the-agent-client-protocol-adr-74-the-default-for-copilot-and-agy-since-v100).
 
+Claude agents stay on tmux. From v1.1.0 a Claude profile can opt in to ACP through the pinned claude-agent-acp adapter: `--driver acp` or `driver = "acp"` under `[profile.<name>]` ([docs/profiles.md](docs/profiles.md), ADR-76).
+
 ## Tool profiles
 
 A profile says how to start one tool variant. Built-ins: `copilot`, `claude`, `agy`, `vibe` and `fake`. Add or override profiles in `~/.fleet/tools.toml`:
