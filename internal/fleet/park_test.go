@@ -274,6 +274,30 @@ func TestGuardParksLongestIdleFirstAndTellsTheAdmiral(t *testing.T) {
 	}
 }
 
+func TestParkIdleParksOnlyPastTheLimit(t *testing.T) {
+	f, path := parkFleet(t, "[memory]\npark_idle = \"10m\"\ncheck_every = \"1ms\"\n")
+	idle := true
+	fakeAdm(f, nil, &idle)
+	f.FreeMem = func() (uint64, error) { return 64 << 30, nil }
+	putAgent(t, f, "old", "idle", time.Hour, "s1")
+	putAgent(t, f, "new", "idle", time.Minute, "s2")
+	putAgent(t, f, "busy", "working", 2*time.Hour, "s3")
+	guard(t, f, time.Now())
+	time.Sleep(5 * time.Millisecond)
+	guard(t, f, time.Now())
+	as := f.Store.Load().Agents
+	if as["old"].Status != "parked" || as["new"].Status != "idle" || as["busy"].Status != "working" {
+		t.Fatalf("old=%s new=%s busy=%s", as["old"].Status, as["new"].Status, as["busy"].Status)
+	}
+	putAgent(t, f, "spare", "idle", time.Hour, "s4")
+	os.WriteFile(path, []byte("[memory]\ncheck_every = \"1ms\"\n"), 0o644)
+	time.Sleep(5 * time.Millisecond)
+	guard(t, f, time.Now())
+	if st := f.Store.Load().Agents["spare"].Status; st != "idle" {
+		t.Errorf("parked with park_idle unset: %s", st)
+	}
+}
+
 func TestGuardRateLimitsItself(t *testing.T) {
 	f, _ := parkFleet(t, "[memory]\nmin_free = \"4GB\"\ncheck_every = \"1h\"\n")
 	idle := true

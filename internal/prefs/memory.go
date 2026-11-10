@@ -20,6 +20,9 @@ type Memory struct {
 	// Every is the least time between two guard actions, so freed memory
 	// is seen before the next agent is parked.
 	Every time.Duration
+	// ParkIdle parks an agent once it has been idle this long, with memory
+	// to spare or not; 0 (the default) leaves idle agents running.
+	ParkIdle time.Duration
 }
 
 // Defaults for [memory] (DESIGN §7).
@@ -58,6 +61,12 @@ func applyMemory(m Memory, sec map[string]conf.Value, path string) (Memory, erro
 			return m, fmt.Errorf("%s: check_every: want a duration > 0", path)
 		}
 		m.Every = v
+	}
+	if v, ok := conf.Dur(sec, "park_idle"); ok {
+		if v < 0 {
+			return m, fmt.Errorf("%s: park_idle: want a duration >= 0", path)
+		}
+		m.ParkIdle = v
 	}
 	return m, nil
 }
