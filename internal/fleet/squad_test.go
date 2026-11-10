@@ -95,6 +95,7 @@ func TestSquadReportsGoToTheLeader(t *testing.T) {
 // into an idle, empty input box.
 func TestSquadReportWakesTheLeaderPane(t *testing.T) {
 	f := squadFleet(t)
+	settleWake(t, time.Hour, time.Hour) // ADR-93 holds admiral wakes only
 	if _, err := f.SpawnWith(SpawnOpts{Role: Role{Leader: true}}, "lead", "box", t.TempDir(), ""); err != nil {
 		t.Fatal(err)
 	}

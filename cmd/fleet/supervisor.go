@@ -221,7 +221,7 @@ func resetSupervisorOf(f *fleet.Fleet, adm string, handoff bool) (int, error) {
 	if gen < 2 {
 		gen = 2 // an admiral existed before this one
 	}
-	ns := supervisor.Session{SessionID: sl.ID, Profile: sl.Profile, PaneID: pane, Started: time.Now(), Generation: gen, Previous: old.SessionID}
+	ns := supervisor.Session{SessionID: sl.ID, Profile: sl.Profile, PaneID: pane, Started: time.Now(), Dir: sl.Dir, Generation: gen, Previous: old.SessionID}
 	if err := supervisor.SaveOf(f.Home, adm, ns); err != nil {
 		return 0, err
 	}

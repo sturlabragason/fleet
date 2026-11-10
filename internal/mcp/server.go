@@ -122,11 +122,10 @@ func (s *Server) contextWarning() string {
 	if !ok {
 		return ""
 	}
-	pct := supervisor.Pct(used, max)
-	if pct < supervisor.Threshold() {
+	if !supervisor.HandoffDue(used, max) {
 		return ""
 	}
-	return fmt.Sprintf("\n\n[admiral context %d%%: save anything pending with fleet_note, then call fleet_handoff]", pct)
+	return fmt.Sprintf("\n\n[admiral context %d%%, %dk tokens: save anything pending with fleet_note, then call fleet_handoff]", supervisor.Pct(used, max), used/1000)
 }
 
 type request struct {

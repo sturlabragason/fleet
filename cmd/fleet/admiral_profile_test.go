@@ -559,3 +559,76 @@ func TestClaudeAdmiralGetsWholeRules(t *testing.T) {
 		t.Errorf("copilot reads the rules from its MCP server: %s", sl.Cmd)
 	}
 }
+
+// The main admiral starts in its own dir under fleet home, not in the repo
+// checkout: Copilot puts the cwd's git state in its prompt, so every merge
+// there broke the admiral's prompt cache (ADR-93). FLEET_ADMIRAL_DIR still
+// wins.
+func TestMainAdmiralStartsOutsideTheCheckout(t *testing.T) {
+	f := testFleet(t)
+	t.Setenv("FLEET_ADMIRAL_DIR", "")
+	repo := t.TempDir()
+	os.MkdirAll(filepath.Join(repo, "supervisor"), 0o755)
+	f.Exe = filepath.Join(repo, "bin", "fleet")
+	want := supervisor.DirOf(f.Home, supervisor.Main)
+	for _, prof := range []string{"copilot", "claude"} {
+		sl, err := admiralLaunchOf(f, supervisor.Main, prof, "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sl.Dir != want {
+			t.Errorf("%s: main admiral dir %q, want %q", prof, sl.Dir, want)
+		}
+	}
+	b, err := os.ReadFile(filepath.Join(want, ".mcp.json"))
+	if err != nil || !strings.Contains(string(b), `"--admiral",`) || !strings.Contains(string(b), `"main"`) {
+		t.Errorf("main copilot admiral's .mcp.json: %v %s", err, b)
+	}
+	own := t.TempDir()
+	t.Setenv("FLEET_ADMIRAL_DIR", own)
+	if sl, _ := admiralLaunchOf(f, supervisor.Main, "copilot", "", ""); sl.Dir != own {
+		t.Errorf("FLEET_ADMIRAL_DIR ignored: %q", sl.Dir)
+	}
+}
+
+// Claude keeps its sessions per project dir, so a resume runs where the
+// session started: the dir saved with it, or for a session saved before
+// ADR-93 the old repo dir. Copilot resumes from anywhere.
+func TestClaudeResumeKeepsItsDir(t *testing.T) {
+	f := testFleet(t)
+	t.Setenv("FLEET_ADMIRAL_DIR", "")
+	repo := t.TempDir()
+	legacy := filepath.Join(repo, "supervisor")
+	os.MkdirAll(legacy, 0o755)
+	f.Exe = filepath.Join(repo, "bin", "fleet")
+	neutral := supervisor.DirOf(f.Home, supervisor.Main)
+
+	supervisor.Save(f.Home, supervisor.Session{SessionID: "old", Profile: "claude"})
+	if sl, _ := admiralLaunchOf(f, supervisor.Main, "claude", "old", ""); sl.Dir != legacy {
+		t.Errorf("pre-ADR-93 claude resume in %q, want %q", sl.Dir, legacy)
+	}
+	if sl, _ := admiralLaunchOf(f, supervisor.Main, "copilot", "old", ""); sl.Dir != neutral {
+		t.Errorf("copilot resume in %q, want %q", sl.Dir, neutral)
+	}
+	saved := t.TempDir()
+	supervisor.Save(f.Home, supervisor.Session{SessionID: "new", Profile: "claude", Dir: saved})
+	if sl, _ := admiralLaunchOf(f, supervisor.Main, "claude", "new", ""); sl.Dir != saved {
+		t.Errorf("claude resume in %q, want its saved dir %q", sl.Dir, saved)
+	}
+	if sl, _ := admiralLaunchOf(f, supervisor.Main, "claude", "", ""); sl.Dir != neutral {
+		t.Errorf("fresh claude admiral in %q, want %q", sl.Dir, neutral)
+	}
+}
+
+// A claude admiral asks for the one-hour prompt cache: its wakes are often
+// more than five minutes apart (ADR-93).
+func TestClaudeAdmiralAsksForHourCache(t *testing.T) {
+	f := testFleet(t)
+	sl, err := admiralLaunchOf(f, supervisor.Main, "claude", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(sl.Env, "ENABLE_PROMPT_CACHING_1H=1") {
+		t.Errorf("env %v lacks ENABLE_PROMPT_CACHING_1H=1", sl.Env)
+	}
+}

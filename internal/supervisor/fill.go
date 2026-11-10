@@ -134,8 +134,37 @@ func Threshold() int {
 	return 70
 }
 
+// HandoffTokens is the context size at which a handoff is due whatever the
+// percent: $FLEET_ADMIRAL_HANDOFF_TOKENS, else 80000; 0 turns it off. Past
+// about 80k every wake re-reads a long, mostly stale context, and on a big
+// window the percent threshold comes far too late (ADR-93).
+func HandoffTokens() int {
+	if v, err := strconv.Atoi(os.Getenv("FLEET_ADMIRAL_HANDOFF_TOKENS")); err == nil && v >= 0 {
+		return v
+	}
+	return 80000
+}
+
+// HandoffDue: the admiral should hand off, at Threshold percent or at
+// HandoffTokens, whichever comes first.
+func HandoffDue(used, max int) bool {
+	if n := HandoffTokens(); n > 0 && used >= n {
+		return true
+	}
+	return max > 0 && Pct(used, max) >= Threshold()
+}
+
+// BandFill is Band for a fill, red when HandoffDue, so a red border and the
+// MCP warning always coincide.
+func BandFill(used, max int) string {
+	if HandoffDue(used, max) {
+		return theme.Error
+	}
+	return Band(Pct(used, max))
+}
+
 // Band is the meter colour: green below 40, yellow below the threshold, red at
-// or above it (so a red border and the MCP warning always coincide).
+// or above it.
 func Band(pct int) string {
 	switch {
 	case pct >= Threshold():
