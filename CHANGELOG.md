@@ -8,7 +8,6 @@ The release notes are built from these lines (`scripts/release-notes.sh`), group
 
 ## 2026-11-10
 - Copilot agents, and Claude agents over ACP, now report status and subagents through hooks: fleet loads a per-agent plugin (`~/.fleet/plugins/<name>`) with `--plugin-dir` or the Claude adapter's session options, Claude's subagent dots work, and Claude over ACP gets the write fence (ADR-99).
-- Copilot agents, and Claude agents over ACP, now report status and subagents through hooks: fleet loads a per-agent plugin (`~/.fleet/plugins/<name>`) with `--plugin-dir` or the Claude adapter's session options, Claude's subagent dots work, and Claude over ACP gets the write fence (ADR-96).
 - Contributors: one publisher at a time: `scripts/release-lock.sh` holds a lock in the shared git dir with the agent's name, and the release workflow refuses a commit that already has a version tag (ADR-73).
 - With the watcher running, the overview no longer runs its own tmux commands every second: it reads one shared snapshot the watcher takes, which cuts its CPU from about 4.6 % to under 1 % of a core (ADR-98).
 - Release pages are easier to scan: a headline, then Changed defaults / action needed, New, Changed and Fixed, one change per bullet, contributor-only items on one Internal line, and the design decisions (ADRs) linked at the bottom; the v1.0.0 to v1.10.0 pages were rewritten this way (ADR-73).
