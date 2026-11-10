@@ -210,4 +210,22 @@ func TestSessionMethods(t *testing.T) {
 	if err := <-errc; err == nil {
 		t.Error("empty sessionId accepted")
 	}
+	if strings.Contains(string(m.Params), "_meta") {
+		t.Errorf("_meta sent unset: %s", m.Params)
+	}
+	// An adapter's options (Claude's plugin, ADR-96) ride on every session call.
+	cl.SetSessionMeta(json.RawMessage(`{"claudeCode":{"options":{}}}`))
+	for _, run := range []func() error{
+		func() error { _, err := cl.NewSession(context.Background(), "/", nil); return err },
+		func() error { return cl.LoadSession(context.Background(), "s1", "/", nil) },
+		func() error { return cl.ResumeSession(context.Background(), "s1", "/", nil) },
+	} {
+		go func() { errc <- run() }()
+		m := p.recv()
+		if !strings.Contains(string(m.Params), `"_meta":{"claudeCode":{"options":{}}}`) {
+			t.Errorf("%s without _meta: %s", m.Method, m.Params)
+		}
+		p.reply(m.ID, `{"sessionId":"s1"}`)
+		<-errc
+	}
 }

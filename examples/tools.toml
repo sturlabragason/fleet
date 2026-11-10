@@ -14,6 +14,8 @@
 #   user_mcp_config, user_mcp_off: the tool's file of global MCP servers and the
 #   args that switch them off for workers; inherited the same way, [] = keep
 #   them all (ADR-91).
+#   plugin_args, plugin_mcp: load fleet's per-agent plugin ({plugin}) with the
+#   status hooks and, for copilot, fleet-peer; inherited the same way (ADR-96).
 #   patterns   status pattern set: copilot, claude, agy, vibe or fake
 # Give every profile you define a mode_args "auto" key with that tool's
 # allow-all flag, or `mode = "auto"` in config.toml cannot reach it and the

@@ -3,6 +3,7 @@ package acphost
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/charmbracelet/colorprofile"
@@ -31,9 +32,12 @@ type Config struct {
 	OnPromptSent  func() // called once Prompt has been handed to the agent
 	CopilotEvents bool
 	MCP           []acp.MCPServer
-	Mode          string    // session mode set after new, resume or load; "" sets none
-	Out           io.Writer // the pane; nil draws nothing
-	In            io.Reader // typed lines; nil reads nothing
+	// Meta is the _meta sent with session/new, load and resume, for an
+	// adapter that takes options there (claude-agent-acp, ADR-96).
+	Meta json.RawMessage
+	Mode string    // session mode set after new, resume or load; "" sets none
+	Out  io.Writer // the pane; nil draws nothing
+	In   io.Reader // typed lines; nil reads nothing
 	// Keys reads In as raw key presses (a terminal in raw mode) and keeps
 	// an input line at the bottom of Out (ADR-82); off, In is read as lines.
 	Keys bool
@@ -213,6 +217,9 @@ func run(ctx context.Context, cfg Config, start starter, tr stateTracker) error 
 	if err != nil {
 		h.fail(err)
 		return fmt.Errorf("acp-host: start %s: %w", cfg.Argv[0], err)
+	}
+	if m, ok := conn.(interface{ SetSessionMeta(json.RawMessage) }); ok && len(cfg.Meta) > 0 {
+		m.SetSessionMeta(cfg.Meta)
 	}
 	h.mu.Lock()
 	h.conn = conn

@@ -29,7 +29,14 @@ type Handler interface {
 type Client struct {
 	c *conn
 	h Handler
+	// meta is the _meta sent with session/new, load and resume.
+	meta json.RawMessage
 }
+
+// SetSessionMeta sets the _meta object the client sends with session/new,
+// session/load and session/resume (ADR-96); nil sends none. Call it before
+// the first session call.
+func (cl *Client) SetSessionMeta(meta json.RawMessage) { cl.meta = meta }
 
 // NewClient starts reading agent frames from r; requests go to w.
 func NewClient(r io.Reader, w io.Writer, h Handler) *Client {
@@ -151,7 +158,7 @@ func (cl *Client) Initialize(ctx context.Context, copilotEvents bool) (Initializ
 // NewSession starts a session in cwd and returns its id.
 func (cl *Client) NewSession(ctx context.Context, cwd string, mcp []MCPServer) (string, error) {
 	var res NewSessionResult
-	if err := cl.c.call(ctx, MethodSessionNew, NewSessionParams{Cwd: cwd, MCPServers: nonNil(mcp)}, &res); err != nil {
+	if err := cl.c.call(ctx, MethodSessionNew, NewSessionParams{Cwd: cwd, MCPServers: nonNil(mcp), Meta: cl.meta}, &res); err != nil {
 		return "", err
 	}
 	if res.SessionID == "" {
@@ -162,12 +169,12 @@ func (cl *Client) NewSession(ctx context.Context, cwd string, mcp []MCPServer) (
 
 // LoadSession reopens a session; the agent replays its history as updates.
 func (cl *Client) LoadSession(ctx context.Context, id, cwd string, mcp []MCPServer) error {
-	return cl.c.call(ctx, MethodSessionLoad, SessionRefParams{SessionID: id, Cwd: cwd, MCPServers: nonNil(mcp)}, nil)
+	return cl.c.call(ctx, MethodSessionLoad, SessionRefParams{SessionID: id, Cwd: cwd, MCPServers: nonNil(mcp), Meta: cl.meta}, nil)
 }
 
 // ResumeSession reopens a session without replaying its history.
 func (cl *Client) ResumeSession(ctx context.Context, id, cwd string, mcp []MCPServer) error {
-	return cl.c.call(ctx, MethodSessionResume, SessionRefParams{SessionID: id, Cwd: cwd, MCPServers: nonNil(mcp)}, nil)
+	return cl.c.call(ctx, MethodSessionResume, SessionRefParams{SessionID: id, Cwd: cwd, MCPServers: nonNil(mcp), Meta: cl.meta}, nil)
 }
 
 // SetMode switches the session to one of the modes the agent offered.

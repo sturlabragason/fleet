@@ -25,25 +25,39 @@ type State struct {
 }
 
 // hookEvents maps a tool hook name to the status it implies. Claude Code's
-// names are the canonical set; the values are lower-cased before lookup so a
-// profile may spell them either way.
+// names are the canonical set, Copilot's (agentStop, userPromptSubmitted)
+// are aliases; names are lower-cased and stripped of - and _ before lookup
+// so a profile may spell them either way. The subagent events change no
+// status (a background subagent ending says nothing about its parent);
+// they keep the subagent list instead (RecordSubs, ADR-96).
 var hookEvents = map[string]Status{
-	"stop":              Idle,    // the turn finished: the agent is back at its prompt
-	"subagentstop":      Working, // one subagent finished, the agent itself has not
-	"notification":      Waiting, // permission prompt or idle nudge: it needs me
-	"pretooluse":        Working,
-	"posttooluse":       Working,
-	"userpromptsubmit":  Working,
-	"sessionstart":      Working,
-	"precompact":        Working,
-	"sessionend":        Idle,
-	"permissionrequest": Waiting,
+	"stop":                Idle, // the turn finished: the agent is back at its prompt
+	"agentstop":           Idle,
+	"notification":        Waiting, // permission prompt or idle nudge: it needs me
+	"pretooluse":          Working,
+	"posttooluse":         Working,
+	"posttoolusefailure":  Working,
+	"userpromptsubmit":    Working,
+	"userpromptsubmitted": Working,
+	"sessionstart":        Working,
+	"precompact":          Working,
+	"sessionend":          Idle,
+	// permissionrequest is left out: Copilot fires it before --allow-all
+	// approves the call (seen live, ADR-96), so it would show "waiting"
+	// for the length of every command. The screen, the ACP protocol and
+	// Claude's Notification catch real prompts.
 }
 
-// HookEvents are the event names EventState knows, for the CLI's usage text.
+// HookEvents are the event names `fleet hook` knows, for the CLI's usage text.
 func HookEvents() []string {
-	return []string{"notification", "permissionrequest", "posttooluse", "precompact", "pretooluse",
-		"sessionend", "sessionstart", "stop", "subagentstop", "userpromptsubmit"}
+	return []string{"agentstop", "notification", "posttooluse", "posttoolusefailure", "precompact", "pretooluse",
+		"sessionend", "sessionstart", "stop", "subagentstart", "subagentstop", "userpromptsubmit", "userpromptsubmitted"}
+}
+
+// SubagentEvent reports whether event starts or stops a subagent.
+func SubagentEvent(event string) bool {
+	e := normEvent(event)
+	return e == "subagentstart" || e == "subagentstop"
 }
 
 // EventState turns a hook event name into the state it implies.
