@@ -3,7 +3,10 @@ package acphost
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
+	"sync/atomic"
+	"syscall"
 	"testing"
 
 	"github.com/charmbracelet/colorprofile"
@@ -235,4 +238,22 @@ func TestViewCleansControlBytes(t *testing.T) {
 	if !strings.Contains(all, "a    b[2Jc") || !strings.Contains(all, "• d") || !strings.Contains(all, "run]0;x it") {
 		t.Fatalf("cleaned text:\n%s", all)
 	}
+}
+
+// A resize redraws the whole pane at once, at the new size, without waiting
+// for the agent to say something (a restored wall pane must not stay blank).
+func TestResizeRedrawsAtOnce(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	var h atomic.Int32
+	h.Store(14)
+	winch := make(chan os.Signal, 1)
+	r := startRig(t, Config{In: pr, Keys: true, Resized: winch, Size: func() (int, int) { return 50, int(h.Load()) }}, acp.AgentCapabilities{})
+	r.waitFor(func() bool { return strings.Contains(lastFrame(r.out.String()), "\x1b[14;1H") }, "first frame")
+	h.Store(9)
+	winch <- syscall.SIGWINCH
+	r.waitFor(func() bool {
+		f := lastFrame(r.out.String())
+		return strings.Contains(f, "\x1b[9;1H") && !strings.Contains(f, "\x1b[10;1H")
+	}, "frame at the new size")
 }
