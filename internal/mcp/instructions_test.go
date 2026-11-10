@@ -96,3 +96,26 @@ func TestSpawnPassesDriver(t *testing.T) {
 		}
 	}
 }
+
+// Every admiral tool has its own row in the prompt's Tools table, so the
+// admiral knows when to use it (ADR-86).
+func TestEveryToolInPromptTable(t *testing.T) {
+	for _, name := range ToolNames() {
+		if !strings.Contains(Instructions, "| `"+name+"`") {
+			t.Errorf("%s has no row in the Tools table of instructions.md", name)
+		}
+	}
+}
+
+// A claude admiral has the rules in its system prompt; its server sends a
+// pointer instead of cutting them at Claude's MCP instructions cap (ADR-86).
+func TestRulesInPromptSendsPointer(t *testing.T) {
+	s := &Server{}
+	if s.instructions() != Instructions {
+		t.Fatal("admiral without --rules-in-prompt lost the rules")
+	}
+	s.RulesInPrompt = true
+	if got := s.instructions(); got != RulesPointer || len(got) > 4000 {
+		t.Fatalf("%q", got)
+	}
+}

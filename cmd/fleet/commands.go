@@ -106,9 +106,11 @@ const usage = `usage:
   fleet team send <team> "text"             paste into every running member
   fleet team show|hide <team>               put running members on the wall / take them off
   fleet team close <team> [--yes]           close every member (asks y/N unless --yes)
-  fleet mcp [--agent NAME]                  stdio MCP server: admiral tools, or the agent peer tools
+  fleet mcp [--agent NAME] [--rules-in-prompt]
+                                            stdio MCP server: admiral tools, or the agent peer tools
                                             with --agent or when run inside an agent pane; re-execs itself
-                                            in place when the fleet binary changes (--probe: self-check)
+                                            in place when the fleet binary changes (--probe: self-check);
+                                            --rules-in-prompt: the admiral has the rules as a system prompt file (ADR-86)
   fleet mail [--as NAME] agents | inbox [--all] [-n N] | send <to|*> "text"
              | request <to> ["reason"] | grant <who> | deny <who> | revoke <who>
                                             message other agents (free within a team or repo, else on request); --as defaults to this pane's agent

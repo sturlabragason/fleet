@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/mcp"
 	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/tools"
 )
@@ -87,7 +89,7 @@ func TestTopLevelProfile(t *testing.T) {
 
 func TestAdmiralMCPArgs(t *testing.T) {
 	got := admiralMCPArgs(tools.Profile{Patterns: "claude"}, "/opt/fleet")
-	want := []string{"--mcp-config", `{"mcpServers":{"fleet":{"args":["mcp","--admiral","main"],"command":"/opt/fleet","type":"stdio"}}}`, "--allowedTools=mcp__fleet"}
+	want := []string{"--mcp-config", `{"mcpServers":{"fleet":{"args":["mcp","--admiral","main"],"command":"/opt/fleet","type":"stdio"}}}`, "--strict-mcp-config", "--allowedTools=mcp__fleet"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("claude: %v", got)
 	}
@@ -114,7 +116,7 @@ func TestAdmiralLaunchBootPrompt(t *testing.T) {
 		t.Errorf("-i must come after the lean flags: %s", sl.Cmd)
 	}
 	sl, _ = supervisorCmd(f, "claude", supervisor.BootPrompt)
-	if !strings.Contains(sl.Cmd, "--mcp-config") || !strings.Contains(sl.Cmd, "--allowedTools=mcp__fleet "+strings.ReplaceAll(tools.Quote(supervisor.BootPrompt), "'", `'\''`)) {
+	if !strings.Contains(sl.Cmd, "--mcp-config") || !strings.Contains(sl.Cmd, "rules.md "+strings.ReplaceAll(tools.Quote(supervisor.BootPrompt), "'", `'\''`)) {
 		t.Errorf("claude: %s", sl.Cmd)
 	}
 	sl, _ = supervisorCmd(f, "fake", supervisor.BootPrompt)
@@ -507,5 +509,42 @@ func TestCopilotAdmiralStartsInOwnDir(t *testing.T) {
 	}
 	if m.Dir == sl.Dir {
 		t.Errorf("main moved into print's dir %q", m.Dir)
+	}
+}
+
+// Every admiral gets the whole rules and the same fleet tools whatever its
+// profile (ADR-86): claude cuts MCP server instructions at about 4 KB, so a
+// claude admiral (main or one from fleet admiral add, e.g. personal) reads
+// them from a system prompt file, its server only points there, tool search
+// is off so the fleet tools load up front, and only fleet is connected.
+func TestClaudeAdmiralGetsWholeRules(t *testing.T) {
+	f := testFleet(t)
+	for _, adm := range []string{supervisor.Main, "personal"} {
+		sl, err := admiralLaunchOf(f, adm, "claude", "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := admiralRulesPath(f.Home, adm)
+		b, err := os.ReadFile(path)
+		if err != nil || string(b) != mcp.Instructions {
+			t.Fatalf("%s: rules file %s: %v", adm, path, err)
+		}
+		for _, want := range []string{"--append-system-prompt-file " + path, "--strict-mcp-config", `"--rules-in-prompt"`, `"--admiral","` + adm + `"`} {
+			if !strings.Contains(sl.Cmd, want) {
+				t.Errorf("%s: no %s in %s", adm, want, sl.Cmd)
+			}
+		}
+		for _, e := range claudeAdmiralEnv {
+			if !slices.Contains(sl.Env, e) {
+				t.Errorf("%s: env %v lacks %s", adm, sl.Env, e)
+			}
+		}
+	}
+	sl, err := admiralLaunchOf(f, supervisor.Main, "copilot", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(sl.Cmd, "rules-in-prompt") || !strings.Contains(sl.Cmd, "--allow-all-mcp-server-instructions") {
+		t.Errorf("copilot reads the rules from its MCP server: %s", sl.Cmd)
 	}
 }
