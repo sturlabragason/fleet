@@ -50,18 +50,20 @@ Session switchers make moving between agents faster, but you still do all the su
 - **Teams**: group agents (`fleet team create frontend teal`), then send to, show or close a whole team at once. Members are marked with a coloured `◆`.
 - **Agent mail**: agents message each other with `fleet mail` or peer MCP tools. Free inside a team or a repo, otherwise one agent asks and you decide.
 - **Squads**: `fleet spawn --leader <name> <profile>` makes an agent a leader, with its own tools to spawn, watch, message and close up to four agents of its own. Their reports wake the leader, which sends the admiral one summary; leaders are marked `▲` and never answer prompts, merge or push for you.
-- **CLI** for scripting: `spawn`, `adopt`, `sessions`, `ls`, `send`, `peek`, `close`, `team`, `mail`, `access`, `report`, `spend`, `admiral`, `note`, `playbook`, `touching`, `merge`, `profiles`, `keys`, `changes`, `snap`, `wall`.
+- **CLI** for scripting: `spawn`, `adopt`, `sessions`, `ls`, `send`, `peek`, `close`, `team`, `mail`, `access`, `report`, `spend`, `admiral`, `note`, `playbook`, `touching`, `merge`, `profiles`, `keys`, `changes`, `snap`, `wall`, `doctor`.
 - **Spend**: `fleet spend` shows what each agent has cost so far and the fleet total — AI credits for Copilot agents, tokens for Claude and agy — read from the agents' own session files or the usage agy reports over ACP, never from a model.
 - **Fake agents** that cycle through states and print scripted work (reads, edits, test runs), so you can try everything without spending tokens. `fleet send <name> "!wait"` (or `!work`, `!error`, `!done`) holds one in a chosen state, which is how the demo above is composed.
 
-Planned, not built yet: a spawn wizard and approve/reject keys in the TUI, desktop notifications, workflow files (`fleet run`) and `fleet doctor`. See [Roadmap](#roadmap).
+Planned, not built yet: a spawn wizard and approve/reject keys in the TUI, desktop notifications and workflow files (`fleet run`). See [Roadmap](#roadmap).
 
 ## Requirements
 
 - Linux (the only platform tested).
-- tmux. Developed and tested with tmux 3.8.
+- tmux 3.3 or newer. Developed and tested with tmux 3.8.
 - Go 1.26.10 or newer to build (see `go.mod`).
 - The agent CLIs you want to run (`copilot`, `claude`, `agy`, `vibe`) on your login `PATH`. Not needed for fake agents.
+
+`fleet doctor` checks these: the tmux version, a UTF-8 locale, `~/.local/bin` on `PATH`, your config files and each profile's command, one line each with the fix.
 
 ## Install
 
@@ -300,7 +302,6 @@ Planned:
 - A per-task spend cap
 - Auto-slotting the longest-waiting agent, saved walls, desktop notifications
 - tmux control-mode events instead of polling
-- `fleet doctor` ([#23](https://github.com/sturlabragason/fleet/issues/23))
 
 The long version, with reasoning, is [DESIGN.md §18](DESIGN.md#18-review-after-the-prototype-2026-11-04-what-would-make-it-a-real-agentic-fleet-manager).
 

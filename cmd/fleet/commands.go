@@ -185,6 +185,10 @@ const usage = `usage:
   fleet keys [--markdown]                   list every hotkey (Alt-? in tmux, ? in the overview)
   fleet changes [--json]                    what's new in fleet: its latest features, newest first (Alt-g)
   fleet version                             the release tag and commit this binary was built from
+  fleet doctor [--json]                     pre-flight check: tmux version, UTF-8 locale, ~/.local/bin on
+                                            PATH, config.toml and tools.toml parse, and the command of the
+                                            admiral's profile and of each profile you define is found.
+                                            One line per check (ok, warn, fail + fix); exit 1 on a fail
   fleet watch [--interval 1s] [--tick 200ms]
                                             run the status watcher in the foreground: it keeps the board,
                                             the pane border titles, fleet ls and the overview agreeing even
@@ -248,6 +252,8 @@ func run(args []string) error {
 		return cmdACPHost(rest)
 	case "version", "--version":
 		return cmdVersion(rest)
+	case "doctor":
+		return cmdDoctor(rest)
 	}
 	if cmd == "changes" {
 		return cmdChanges(rest)

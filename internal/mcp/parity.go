@@ -53,6 +53,7 @@ var CLIParity = map[string]string{
 	"keys":            "user: the hotkeys",
 	"changes":         "fleet_changes",
 	"version":         "fleet_changes",
+	"doctor":          "user: a pre-flight check of the user's machine before fleet up",
 	"watch":           "infra: the status watcher fleet up starts",
 	"web":             "user: a browser view the user starts",
 	"hook":            "infra: tool hooks call it",
