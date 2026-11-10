@@ -5,13 +5,16 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/acphost"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"golang.org/x/term"
 )
 
 const acpHostUsage = "usage: fleet acp-host <name> [--dir D] [--session ID] [--prompt-file F] [--copilot-events] [--mode M] [--mcp JSON] [--unset-env A,B] -- <argv...>"
@@ -70,10 +73,60 @@ func cmdACPHost(args []string) error {
 	logx.Init()
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGHUP, syscall.SIGTERM, os.Interrupt)
 	defer stop()
-	return acphost.Run(ctx, acphost.Config{
+	cfg := acphost.Config{
 		Home: logx.Home(), Name: name, Dir: *dir, Argv: argv, Env: acphost.FilterEnv(os.Environ(), drop),
 		SessionID: *session, Prompt: prompt, OnPromptSent: sent, CopilotEvents: *copilotEvents,
 		Mode: *mode, MCP: mcp,
 		Out: os.Stdout, In: os.Stdin,
-	})
+	}
+	// A terminal gets the input line: raw key presses, so Esc cancels and
+	// Ctrl-C never stops the agent (ADR-82).
+	if fd := int(os.Stdin.Fd()); term.IsTerminal(fd) {
+		if old, err := term.MakeRaw(fd); err == nil {
+			defer term.Restore(fd, old)
+			os.Stdout.WriteString(acphost.PasteOn)
+			defer os.Stdout.WriteString(acphost.PasteOff)
+			cfg.Keys = true
+			cfg.Width = func() int {
+				w, _, err := term.GetSize(int(os.Stdout.Fd()))
+				if err != nil {
+					return 0
+				}
+				return w
+			}
+			if exe, err := os.Executable(); err == nil {
+				cfg.Takeover = func(say func(string)) error { return paneTakeover(exe, logx.Home(), name, say) }
+			}
+		}
+	}
+	return acphost.Run(ctx, cfg)
+}
+
+// paneTakeover runs `fleet takeover <name>` for Ctrl-T in the pane. The
+// takeover kills this pane and every process under it, so it runs outside
+// the pane's process tree: a shell starts it in the background in a new
+// session and exits. Its output goes to a log; if the host is still alive
+// when that log fills, the takeover failed and the pane shows why.
+func paneTakeover(exe, home, name string, say func(string)) error {
+	log := filepath.Join(acphost.Dir(home), name+".takeover.log")
+	_ = os.Remove(log)
+	cmd := exec.Command("/bin/sh", "-c", `"$0" takeover "$1" >"$2" 2>&1 </dev/null &`, exe, name, log)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	// The user pressed the key, not the agent: without TMUX_PANE the CLI
+	// does not take the call for one from this agent's pane (leaderScope).
+	cmd.Env = acphost.FilterEnv(os.Environ(), []string{"TMUX_PANE"})
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	go func() {
+		for end := time.Now().Add(time.Minute); time.Now().Before(end); time.Sleep(250 * time.Millisecond) {
+			if b, err := os.ReadFile(log); err == nil && len(strings.TrimSpace(string(b))) > 0 {
+				time.Sleep(250 * time.Millisecond) // let it finish writing
+				b, _ = os.ReadFile(log)
+				say("! " + strings.TrimSpace(string(b)))
+				return
+			}
+		}
+	}()
+	return nil
 }

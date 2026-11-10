@@ -182,7 +182,7 @@ Mouse is on: click a pane to type in it, drag borders to resize, scroll for hist
 
 ## Upgrading to v1.0.0 (breaking)
 
-From v1.0.0, new `copilot` and `agy` agents run over ACP: the agent's pane shows fleet's transcript of the session (you can still type a prompt there, and a digit answers an open question), not the tool's own TUI. `fleet snap` and the screen patterns no longer apply to them. Agents that exist when you upgrade keep running, parking and waking on tmux. To keep the old behaviour for new agents, add to `~/.config/fleet/config.toml`:
+From v1.0.0, new `copilot` and `agy` agents run over ACP: the agent's pane shows fleet's transcript of the session, not the tool's own TUI. `fleet snap` and the screen patterns no longer apply to them. Agents that exist when you upgrade keep running, parking and waking on tmux. To keep the old behaviour for new agents, add to `~/.config/fleet/config.toml`:
 
 ```toml
 [defaults]
@@ -190,6 +190,20 @@ driver = "tmux"        # every profile; or put it under [profile.copilot] / [pro
 ```
 
 or spawn with `--driver tmux`. Details: [DESIGN.md §7d](DESIGN.md#7d-acp-agents-fleet-drives-the-tool-over-the-agent-client-protocol-adr-74-the-default-for-copilot-and-agy-since-v100).
+
+### Typing into an ACP agent
+
+Click the agent's pane and type at the `›` line at the bottom:
+
+| Key | Does |
+|---|---|
+| Enter | Sends the line as a prompt (a pasted block stays one prompt) |
+| a digit, Enter | Answers the open permission question with that option |
+| Esc, or Ctrl-C on an empty line | Cancels the running turn |
+| Ctrl-C, Ctrl-U, Ctrl-W | Clear the line, or the last word |
+| Ctrl-T | Takes the agent over in the tool's own screen |
+
+While you type there, the admiral won't send to the agent, the same as a tmux agent you type into. To work in the tool's own TUI instead, `fleet takeover <name>` (or Ctrl-T) parks the idle agent and resumes the same session on tmux in the same wall slot; `fleet takeover <name> --acp` hands it back to fleet's ACP host.
 
 Claude agents stay on tmux. From v1.1.0 a Claude profile can opt in to ACP through the pinned claude-agent-acp adapter: `--driver acp` or `driver = "acp"` under `[profile.<name>]` ([docs/profiles.md](docs/profiles.md), ADR-76).
 

@@ -85,7 +85,12 @@ const (
 	KindError      = "error"      // the child exited, a protocol error
 	KindSession    = "session"    // session started/loaded/resumed: SessionID
 	KindUsage      = "usage"      // a turn's token use, when the agent reports it: Usage
+	KindCancel     = "cancel"     // a cancel of the running turn, from the pane
 )
+
+// ByPane marks an entry the user made by typing in the agent's pane
+// (Entry.By): fleet reads it as the user's key press (ADR-82).
+const ByPane = "pane"
 
 // Entry is one transcript line.
 type Entry struct {
@@ -100,6 +105,9 @@ type Entry struct {
 	// Sub names the subagent a tool call starts (agy's invoke_subagent).
 	Sub   string     `json:"sub,omitempty"`
 	Usage *acp.Usage `json:"usage,omitempty"`
+	// By is ByPane for a prompt, answer or cancel typed in the pane;
+	// empty for fleet's own (control socket).
+	By string `json:"by,omitempty"`
 }
 
 // ErrNoHost means nothing listens on the agent's socket.

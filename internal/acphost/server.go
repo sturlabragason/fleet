@@ -91,12 +91,12 @@ func (h *host) handle(req Request) Response {
 		if req.Text == "" {
 			err = errors.New("empty prompt")
 		} else {
-			err = h.prompt(req.Text)
+			err = h.prompt(req.Text, "")
 		}
 	case OpAnswer:
-		err = h.answer(req.Option, req.OptionID)
+		err = h.answer(req.Option, req.OptionID, "")
 	case OpCancel:
-		err = h.cancel()
+		err = h.cancel("")
 	case OpState, OpStop:
 	default:
 		err = fmt.Errorf("unknown op %q", req.Op)
