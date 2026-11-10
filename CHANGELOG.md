@@ -7,6 +7,7 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
 ## 2026-11-10
+- `fleet merge` no longer leaves a renumbered ADR's old entry and CHANGELOG line beside the new one when the renumber commit conflicts (#43).
 - Release binaries and `SHA256SUMS` now carry GitHub build attestations: `gh attestation verify <file> -R sturlabragason/fleet` shows a download was built by fleet's release workflow, and `install.sh` runs that check itself when `gh` is installed and logged in (ADR-103).
 - `fleet admiral restart` resumes the conversation you have now, also after `/clear`, and when an admiral's pane exits the main admiral gets a report (the main admiral's own exit shows on the status line) (ADR-101).
 - Every fleet agent now runs Opus at every effort and as a leader, and plain `copilot` agents are pinned to `claude-opus-5.5` instead of the tool default. `fleet spawn --model` and `model` on `fleet_spawn`/`fleet_squad_spawn` pick another Opus model; a model that is not Opus is refused (ADR-100).
