@@ -31,6 +31,7 @@ type Config struct {
 	OnPromptSent  func() // called once Prompt has been handed to the agent
 	CopilotEvents bool
 	MCP           []acp.MCPServer
+	Mode          string    // session mode set after new, resume or load; "" sets none
 	Out           io.Writer // the pane; nil draws nothing
 	In            io.Reader // typed lines; nil reads nothing
 }
@@ -41,6 +42,7 @@ type agentConn interface {
 	NewSession(ctx context.Context, cwd string, mcp []acp.MCPServer) (string, error)
 	LoadSession(ctx context.Context, id, cwd string, mcp []acp.MCPServer) error
 	ResumeSession(ctx context.Context, id, cwd string, mcp []acp.MCPServer) error
+	SetMode(ctx context.Context, id, mode string) error
 	Prompt(ctx context.Context, id, text string) (acp.PromptResult, error)
 	Cancel(id string) error
 	CloseSession(ctx context.Context, id string) error
@@ -258,6 +260,13 @@ func (h *host) setup() error {
 	}
 	if err != nil {
 		return fmt.Errorf("session (%s): %w", how, err)
+	}
+	// Before any prompt: the agent must never run a turn in a mode it
+	// wasn't given (ADR-76), so a failure ends the host.
+	if h.cfg.Mode != "" {
+		if err := c.SetMode(h.bg, id, h.cfg.Mode); err != nil {
+			return fmt.Errorf("session mode %s: %w", h.cfg.Mode, err)
+		}
 	}
 	h.mu.Lock()
 	h.sid, h.caps, h.ready = id, caps, true

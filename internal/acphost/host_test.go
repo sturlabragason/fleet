@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -86,18 +87,20 @@ func (t *stubTracker) State() trackState { return t.s }
 // stubConn is a scripted agent: each prompt waits for a turn func the test
 // hands it on turns.
 type stubConn struct {
-	h      handler
-	caps   acp.AgentCapabilities
-	turns  chan func(h handler) acp.StopReason
-	done   chan struct{}
-	err    error
-	once   sync.Once
-	mu     sync.Mutex
-	calls  []string
-	cancel chan struct{}
-	gate   chan struct{} // NewSession waits for it when set
-	usage  *acp.Usage    // every prompt's usage, when set
-	newErr error         // NewSession fails with it, when set
+	h       handler
+	caps    acp.AgentCapabilities
+	turns   chan func(h handler) acp.StopReason
+	done    chan struct{}
+	err     error
+	once    sync.Once
+	mu      sync.Mutex
+	calls   []string
+	cancel  chan struct{}
+	gate    chan struct{}   // NewSession waits for it when set
+	usage   *acp.Usage      // every prompt's usage, when set
+	newErr  error           // NewSession fails with it, when set
+	modeErr error           // SetMode fails with it, when set
+	mcp     []acp.MCPServer // the last session call's servers
 }
 
 func newStubConn(caps acp.AgentCapabilities) *stubConn {
@@ -117,7 +120,10 @@ func (c *stubConn) Initialize(ctx context.Context, ev bool) (acp.InitializeResul
 	c.call(fmt.Sprintf("initialize %v", ev))
 	return acp.InitializeResult{ProtocolVersion: 1, AgentCapabilities: c.caps}, nil
 }
-func (c *stubConn) NewSession(ctx context.Context, cwd string, _ []acp.MCPServer) (string, error) {
+func (c *stubConn) NewSession(ctx context.Context, cwd string, mcp []acp.MCPServer) (string, error) {
+	c.mu.Lock()
+	c.mcp = mcp
+	c.mu.Unlock()
 	if c.gate != nil {
 		<-c.gate
 	}
@@ -127,13 +133,19 @@ func (c *stubConn) NewSession(ctx context.Context, cwd string, _ []acp.MCPServer
 	}
 	return "s1", nil
 }
-func (c *stubConn) LoadSession(ctx context.Context, id, cwd string, _ []acp.MCPServer) error {
+func (c *stubConn) LoadSession(ctx context.Context, id, cwd string, mcp []acp.MCPServer) error {
+	c.mu.Lock()
+	c.mcp = mcp
+	c.mu.Unlock()
 	c.call("load " + id)
 	c.h.SessionUpdate(acp.SessionNotification{SessionID: id, Update: chunk(acp.UpdateUserMessage, "old prompt")})
 	c.h.SessionUpdate(acp.SessionNotification{SessionID: id, Update: chunk(acp.UpdateAgentMessage, "old answer")})
 	return nil
 }
-func (c *stubConn) ResumeSession(ctx context.Context, id, cwd string, _ []acp.MCPServer) error {
+func (c *stubConn) ResumeSession(ctx context.Context, id, cwd string, mcp []acp.MCPServer) error {
+	c.mu.Lock()
+	c.mcp = mcp
+	c.mu.Unlock()
 	c.call("resume " + id)
 	return nil
 }
@@ -148,6 +160,10 @@ func (c *stubConn) Prompt(ctx context.Context, id, text string) (acp.PromptResul
 	case <-c.done:
 		return acp.PromptResult{}, errors.New("closed")
 	}
+}
+func (c *stubConn) SetMode(ctx context.Context, id, mode string) error {
+	c.call("mode " + id + " " + mode)
+	return c.modeErr
 }
 func (c *stubConn) Cancel(id string) error { c.call("cancel"); c.cancel <- struct{}{}; return nil }
 func (c *stubConn) CloseSession(ctx context.Context, id string) error {
@@ -702,5 +718,79 @@ func TestUnsentPromptsKeptWhenSetupFails(t *testing.T) {
 				t.Fatalf("transcript note %q", note)
 			}
 		})
+	}
+}
+
+// The host sets the configured session mode right after new and resume, and
+// hands every session call the configured MCP servers (ADR-76).
+func TestSessionModeAndMCP(t *testing.T) {
+	mcp := []acp.MCPServer{{Name: "fleet-peer", Command: "/bin/fleet", Args: []string{"mcp", "--agent", "a1"}, Env: []acp.EnvVariable{}}}
+	r := startRig(t, Config{Mode: "plan", MCP: mcp, Prompt: "go"}, acp.AgentCapabilities{})
+	r.waitFor(func() bool { return strings.Contains(strings.Join(r.conn.Calls(), "|"), "prompt go") }, "prompt")
+	if c := r.conn.Calls(); len(c) < 4 || !strings.HasPrefix(c[1], "new ") || c[2] != "mode s1 plan" || c[3] != "prompt go" {
+		t.Fatalf("calls = %v", c)
+	}
+	r.conn.mu.Lock()
+	got := r.conn.mcp
+	r.conn.mu.Unlock()
+	if len(got) != 1 || got[0].Name != "fleet-peer" {
+		t.Fatalf("mcp %+v", got)
+	}
+	res := startRig(t, Config{SessionID: "old", Mode: "bypassPermissions"}, acp.AgentCapabilities{SessionCapabilities: acp.SessionCapabilities{Resume: json.RawMessage(`{}`)}})
+	if c := res.conn.Calls(); len(c) < 3 || c[1] != "resume old" || c[2] != "mode old bypassPermissions" {
+		t.Fatalf("resume calls = %v", c)
+	}
+	// No mode configured (copilot, agy): no set_mode call.
+	n := startRig(t, Config{}, acp.AgentCapabilities{})
+	if strings.Contains(strings.Join(n.conn.Calls(), "|"), "mode ") {
+		t.Fatalf("set_mode without a mode: %v", n.conn.Calls())
+	}
+}
+
+// A mode that can't be set fails the setup: the agent must never run in a
+// mode it wasn't given, and the prompt waits for the next host.
+func TestSessionModeFailureFailsSetup(t *testing.T) {
+	gate := make(chan struct{})
+	r := startRigGated(t, Config{Mode: "plan", Prompt: "first goal"}, acp.AgentCapabilities{}, gate)
+	r.conn.modeErr = errors.New("no such mode")
+	close(gate)
+	select {
+	case err := <-r.errC:
+		if err == nil || !strings.Contains(err.Error(), "mode") {
+			t.Fatalf("run returned %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("host did not end")
+	}
+	if strings.Contains(strings.Join(r.conn.Calls(), "|"), "prompt ") {
+		t.Fatalf("prompt sent despite the mode failure: %v", r.conn.Calls())
+	}
+	if b, _ := os.ReadFile(PromptPath(r.home, "a1")); string(b) != "first goal" {
+		t.Fatalf("prompt file %q", b)
+	}
+}
+
+func TestParseMCP(t *testing.T) {
+	got, err := ParseMCP(`{"mcpServers":{"fleet-peer":{"type":"stdio","command":"/bin/fleet","args":["mcp","--agent","a1"],"env":{"B":"2","A":"1"}}}}`)
+	want := []acp.MCPServer{{Name: "fleet-peer", Command: "/bin/fleet", Args: []string{"mcp", "--agent", "a1"},
+		Env: []acp.EnvVariable{{Name: "A", Value: "1"}, {Name: "B", Value: "2"}}}}
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("%+v, %v\nwant %+v", got, err, want)
+	}
+	if got, err := ParseMCP(""); err != nil || got != nil {
+		t.Errorf("empty: %+v %v", got, err)
+	}
+	if _, err := ParseMCP(`{"mcpServers":{"x":{"type":"http","url":"u"}}}`); err == nil {
+		t.Error("a server with no command accepted")
+	}
+	if _, err := ParseMCP(`nope`); err == nil {
+		t.Error("bad json accepted")
+	}
+}
+
+func TestFilterEnv(t *testing.T) {
+	got := FilterEnv([]string{"PATH=/b", "ANTHROPIC_API_KEY=k", "CLAUDE_CODE_OAUTH_TOKEN=t", "ANTHROPIC_API_KEY_X=keep"}, []string{"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"})
+	if want := []string{"PATH=/b", "ANTHROPIC_API_KEY_X=keep"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("%q want %q", got, want)
 	}
 }

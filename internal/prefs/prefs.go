@@ -246,6 +246,16 @@ func (p *Prefs) For(profile string) Spawn {
 	return s
 }
 
+// ProfileDriver is the driver the [profile.<name>] section sets, "" when
+// it sets none: [defaults] left out, for opt-in profiles (ADR-76).
+func (p *Prefs) ProfileDriver(profile string) string {
+	if p == nil {
+		return ""
+	}
+	v, _ := p.profiles[profile]["driver"].(string)
+	return ParseDriver(v)
+}
+
 // ToolsDoc returns the [profile.<name>] sections re-keyed to profile names, so
 // tools.LoadWith can use them as a third profile override layer.
 func (p *Prefs) ToolsDoc() conf.Doc {

@@ -172,6 +172,8 @@ func TestSessionMethods(t *testing.T) {
 			}},
 		{MethodSessionResume, func() error { return cl.ResumeSession(context.Background(), "s2", "/w", nil) },
 			func(p json.RawMessage) bool { return strings.Contains(string(p), `"mcpServers":[]`) }},
+		{MethodSessionSetMode, func() error { return cl.SetMode(context.Background(), "s4", "plan") },
+			func(p json.RawMessage) bool { return string(p) == `{"sessionId":"s4","modeId":"plan"}` }},
 		{MethodSessionClose, func() error { return cl.CloseSession(context.Background(), "s3") },
 			func(p json.RawMessage) bool { return string(p) == `{"sessionId":"s3"}` }},
 	}

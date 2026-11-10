@@ -207,7 +207,11 @@ func (f *Fleet) Wake(name string, force bool) (*board.Agent, error) {
 	}
 	var argv []string
 	if old.ACP() {
-		argv, _ = f.wakeACPArgv(old, p, ctx) // the session id was checked above
+		var err error
+		if argv, p, err = f.wakeACPArgv(old, p, ctx); err != nil {
+			f.unclaimWake(name, old)
+			return nil, err
+		}
 		// The parked host's last state (idle) must not stand for the new
 		// host before it is up; the transcript and session id stay.
 		f.forgetHook(name)

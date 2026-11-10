@@ -170,6 +170,11 @@ func (cl *Client) ResumeSession(ctx context.Context, id, cwd string, mcp []MCPSe
 	return cl.c.call(ctx, MethodSessionResume, SessionRefParams{SessionID: id, Cwd: cwd, MCPServers: nonNil(mcp)}, nil)
 }
 
+// SetMode switches the session to one of the modes the agent offered.
+func (cl *Client) SetMode(ctx context.Context, id, mode string) error {
+	return cl.c.call(ctx, MethodSessionSetMode, SetModeParams{SessionID: id, ModeID: mode}, nil)
+}
+
 // Prompt sends text as the user's turn and blocks until the turn ends.
 func (cl *Client) Prompt(ctx context.Context, id, text string) (PromptResult, error) {
 	var res PromptResult

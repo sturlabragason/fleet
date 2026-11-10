@@ -34,9 +34,13 @@ var ACPCallTimeout = 5 * time.Second
 // driverFor resolves a spawn's driver: the spawn's own choice, else the
 // profile's and then the [defaults] driver in config.toml, else the tool
 // profile's default (acp for copilot and agy since v1.0.0, ADR-74), else
-// tmux. A profile without an ACP server refuses the acp driver.
+// tmux. A profile without an ACP server refuses the acp driver. An adapter
+// profile (claude, ADR-76) is opt-in: [defaults] never moves it.
 func (f *Fleet) driverFor(want, profile string) (string, error) {
 	d := f.Prefs.For(profile).Driver
+	if f.Profiles[profile].ACPOptIn() {
+		d = f.Prefs.ProfileDriver(profile)
+	}
 	if want != "" {
 		if d = prefs.ParseDriver(want); d == "" {
 			return "", fmt.Errorf("unknown driver %q (use tmux or acp)", want)
@@ -69,20 +73,85 @@ func (f *Fleet) isACP(name string) bool { return f.Store.Load().Agents[name].ACP
 // host (--prompt-file): too long for a command line, and kept out of logs.
 func ACPPromptPath(home, name string) string { return acphost.PromptPath(home, name) }
 
+// ACPHostOpts are the acp-host options beyond its name and dir.
+type ACPHostOpts struct {
+	Session       string // resume or load this session
+	PromptFile    string
+	CopilotEvents bool
+	Mode          string   // ACP session mode (ADR-76)
+	MCP           string   // peer MCP config for the session (ADR-76)
+	UnsetEnv      []string // variables the tool must not inherit (ADR-76)
+}
+
 // ACPHostArgv is the command an acp agent's window runs: the host, its
 // options, then the tool's ACP argv after "--".
-func ACPHostArgv(exe, name, dir, session, promptFile string, copilotEvents bool, tool []string) []string {
+func ACPHostArgv(exe, name, dir string, o ACPHostOpts, tool []string) []string {
 	argv := []string{exe, "acp-host", name, "--dir", dir}
-	if session != "" {
-		argv = append(argv, "--session", session)
+	if o.Session != "" {
+		argv = append(argv, "--session", o.Session)
 	}
-	if promptFile != "" {
-		argv = append(argv, "--prompt-file", promptFile)
+	if o.PromptFile != "" {
+		argv = append(argv, "--prompt-file", o.PromptFile)
 	}
-	if copilotEvents {
+	if o.CopilotEvents {
 		argv = append(argv, "--copilot-events")
 	}
+	if o.Mode != "" {
+		argv = append(argv, "--mode", o.Mode)
+	}
+	if o.MCP != "" {
+		argv = append(argv, "--mcp", o.MCP)
+	}
+	if len(o.UnsetEnv) > 0 {
+		argv = append(argv, "--unset-env", strings.Join(o.UnsetEnv, ","))
+	}
 	return append(append(argv, "--"), tool...)
+}
+
+// acpSetup is what an acp agent's host takes from its profile beyond the
+// tool argv: the profile with its acp env in Env (start puts Env in the
+// window), and the host options. For claude (ADR-76) that is the installed
+// claude in CLAUDE_CODE_EXECUTABLE, the session mode, peer MCP over the
+// session and the inherited secrets to drop.
+func (f *Fleet) acpSetup(name, profile string, p tools.Profile, mode string) (tools.Profile, ACPHostOpts, error) {
+	o := ACPHostOpts{CopilotEvents: copilotEvents(p), UnsetEnv: p.ACPUnsetEnv}
+	if len(p.ACPEnvVars) > 0 {
+		path := ""
+		if p.ACPNeedsCommandPath() {
+			var err error
+			if path, err = commandPath(p.Command); err != nil {
+				return p, o, fmt.Errorf("profile %s runs %s under the acp driver, but it is not on PATH: %w", profile, p.Command, err)
+			}
+		}
+		p.Env = p.ACPEnv(path)
+	}
+	o.Mode = p.ACPSessionMode(mode)
+	if p.ACPSessionMCP() {
+		_, o.MCP = tools.PeerMCP(f.Exe, name)
+	}
+	return p, o, nil
+}
+
+// commandPath finds cmd as the agent's window would: ~/.local/bin first,
+// then PATH (tools.Profile.EnvList).
+func commandPath(cmd string) (string, error) {
+	if strings.Contains(cmd, "/") {
+		if fi, err := os.Stat(cmd); err != nil || fi.IsDir() || fi.Mode()&0o111 == 0 {
+			return "", fmt.Errorf("%s is not an executable", cmd)
+		}
+		return cmd, nil
+	}
+	home, _ := os.UserHomeDir()
+	for _, d := range append([]string{filepath.Join(home, ".local/bin")}, filepath.SplitList(os.Getenv("PATH"))...) {
+		if d == "" {
+			continue
+		}
+		c := filepath.Join(d, cmd)
+		if fi, err := os.Stat(c); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
+			return c, nil
+		}
+	}
+	return "", fmt.Errorf("%s not found", cmd)
 }
 
 // copilotEvents: the Copilot CLI sends its own session events once asked
@@ -103,8 +172,13 @@ func acpMode(name, profile string, p tools.Profile, mode string) string {
 // sends the prompt over ACP once the session is up.
 func (f *Fleet) launchACP(name, profile string, p tools.Profile, dir, goal, full string, claimed bool, lvl playbook.Level, ex startExtra) (*board.Agent, error) {
 	pr := f.Prefs.For(profile)
+	mode := acpMode(name, profile, p, pr.Mode)
 	tool := p.ACPArgv(tools.AgentVars(f.Exe, name, ""), tools.Launch{
-		Mode: acpMode(name, profile, p, pr.Mode), Context: contextKey(p, lvl, ex.Role.Leader), Extra: pr.ExtraArgs})
+		Mode: mode, Context: contextKey(p, lvl, ex.Role.Leader), Extra: pr.ExtraArgs})
+	p, o, err := f.acpSetup(name, profile, p, mode)
+	if err != nil {
+		return nil, err
+	}
 	f.forgetACP(name)
 	pf := ""
 	if full != "" {
@@ -117,25 +191,32 @@ func (f *Fleet) launchACP(name, profile string, p tools.Profile, dir, goal, full
 		}
 	}
 	ex.Driver = board.DriverACP
-	argv := ACPHostArgv(f.Exe, name, dir, "", pf, copilotEvents(p), tool)
+	o.PromptFile = pf
+	argv := ACPHostArgv(f.Exe, name, dir, o, tool)
 	return f.start(name, profile, p, dir, goal, full, "", argv, claimed, ex)
 }
 
 // wakeACPArgv is the window command that resumes a parked acp agent: a new
-// host on the session the transcript recorded.
-func (f *Fleet) wakeACPArgv(old *board.Agent, p tools.Profile, ctx string) ([]string, error) {
+// host on the session the transcript recorded. It returns the profile to
+// start it with (its acp env, see acpSetup).
+func (f *Fleet) wakeACPArgv(old *board.Agent, p tools.Profile, ctx string) ([]string, tools.Profile, error) {
 	if old.SessionID == "" {
-		return nil, fmt.Errorf("agent %q has no ACP session id recorded; it can't be resumed", old.Name)
+		return nil, p, fmt.Errorf("agent %q has no ACP session id recorded; it can't be resumed", old.Name)
 	}
 	pr := f.Prefs.For(old.Profile)
+	mode := acpMode(old.Name, old.Profile, p, pr.Mode)
 	tool := p.ACPArgv(tools.AgentVars(f.Exe, old.Name, ""), tools.Launch{
-		Mode: acpMode(old.Name, old.Profile, p, pr.Mode), Context: ctx, Extra: pr.ExtraArgs})
-	// Prompts an earlier host queued but never sent wait in the prompt file.
-	pf := ACPPromptPath(f.Home, old.Name)
-	if _, err := os.Stat(pf); err != nil {
-		pf = ""
+		Mode: mode, Context: ctx, Extra: pr.ExtraArgs})
+	p, o, err := f.acpSetup(old.Name, old.Profile, p, mode)
+	if err != nil {
+		return nil, p, err
 	}
-	return ACPHostArgv(f.Exe, old.Name, old.Dir, old.SessionID, pf, copilotEvents(p), tool), nil
+	// Prompts an earlier host queued but never sent wait in the prompt file.
+	o.Session, o.PromptFile = old.SessionID, ACPPromptPath(f.Home, old.Name)
+	if _, err := os.Stat(o.PromptFile); err != nil {
+		o.PromptFile = ""
+	}
+	return ACPHostArgv(f.Exe, old.Name, old.Dir, o, tool), p, nil
 }
 
 // forgetACP drops what an earlier agent of this name left behind, so a new

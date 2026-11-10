@@ -62,11 +62,15 @@ ready_timeout = "15s"
 # Closing an agent never removes the worktree or the branch.
 # worktree = true
 # How fleet runs an agent: "tmux" (the tool's own screen) or "acp" (the tool's
-# ACP server under fleet acp-host; copilot, claude-copilot, agy and fake only).
+# ACP server under fleet acp-host; copilot, claude-copilot, agy, claude and fake).
 # Unset, copilot and agy use acp and the rest tmux (since v1.0.0). "tmux" here
 # restores the v0 behaviour for every profile; per profile under
-# [profile.<name>]. `fleet spawn --driver` wins (ADR-74).
+# [profile.<name>]. `fleet spawn --driver` wins (ADR-74). Claude is opt-in:
+# [defaults] never moves it to acp, only [profile.<name>] or --driver does
+# (ADR-76).
 # driver = "tmux"
+# [profile.claude-personal]
+# driver = "acp"
 # Before an agent starts, write its dir into the tool's own trust store so it
 # never stops on "Do you trust this folder?" (Claude's ~/.claude.json or the
 # profile's CLAUDE_CONFIG_DIR, Copilot's trustedFolders, vibe's
