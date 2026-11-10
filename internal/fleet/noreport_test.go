@@ -218,6 +218,36 @@ func TestNewTurn(t *testing.T) {
 	}
 }
 
+// An answer to a question or blocked report starts a turn however quickly it
+// comes: the idle began after the report and someone typed since (ADR-90).
+func TestNewTurnAfterAnAnswer(t *testing.T) {
+	now := time.Now()
+	turn := now.Add(-time.Hour)
+	asked := now.Add(-10 * time.Second)
+	for _, c := range []struct {
+		name  string
+		state string
+		mod   func(a *board.Agent)
+		want  bool
+	}{
+		{"question, then a fleet_send", "question", func(a *board.Agent) { a.PromptAt = now.Add(-time.Second) }, true},
+		{"blocked, then the user typed", "blocked", func(a *board.Agent) { a.UserAt = now.Add(-time.Second) }, true},
+		{"question, nobody typed", "question", func(a *board.Agent) {}, false},
+		{"progress, then a fleet_send", "progress", func(a *board.Agent) { a.PromptAt = now.Add(-time.Second) }, false},
+		{"idle began before the report", "question", func(a *board.Agent) {
+			a.PromptAt, a.StatusSince = now.Add(-time.Second), asked.Add(-time.Second)
+		}, false},
+		{"typed before the report", "question", func(a *board.Agent) { a.UserAt = asked.Add(-time.Second) }, false},
+	} {
+		a := &board.Agent{TurnAt: turn, StatusSince: now.Add(-5 * time.Second),
+			Report: &board.Report{State: c.state, At: asked}}
+		c.mod(a)
+		if got := newTurn(a, "idle", "working", now); got != c.want {
+			t.Errorf("%s: newTurn = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
 // A pane the patterns read as idle while its screen keeps changing is still
 // at work (agy editing files, fleet#12): no flag and no note.
 func TestRefreshNoReportWaitsForAStillScreen(t *testing.T) {

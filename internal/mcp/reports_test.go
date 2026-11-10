@@ -3,6 +3,7 @@ package mcp
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
@@ -30,7 +31,7 @@ func TestReportRoundTrip(t *testing.T) {
 		t.Fatalf("wake: %q", pasted)
 	}
 	st, _ := sup.tool("fleet_status", nil)
-	if !strings.Contains(st, "| report\n") || !strings.Contains(st, "| done: nav fixed on feat/nav\n") {
+	if !strings.Contains(st, "| report\n") || !strings.Contains(st, "| done, 0s ago: nav fixed on feat/nav\n") {
 		t.Fatalf("status report column: %q", st)
 	}
 	if !strings.HasSuffix(st, "\n\n(1 unread reports; fleet_reports reads them)\n- a done: nav fixed on feat/nav") {
@@ -103,5 +104,32 @@ func TestReportsByNameHeadlinesAndCards(t *testing.T) {
 	}
 	if msg, _ := sup.tool("fleet_reports", nil); msg != "no new reports" {
 		t.Fatalf("no new reports must carry no cards: %q", msg)
+	}
+}
+
+// The report column always says how old the report is, and marks a question
+// or blocked report answered once the agent's next turn started; the status
+// column reads a question still open as waiting (ADR-90, fleet#10, #14).
+func TestReportCellAgeAnsweredAndStatus(t *testing.T) {
+	now := time.Now()
+	asked := now.Add(-8 * time.Hour)
+	a := &board.Agent{Status: "idle", TurnAt: asked.Add(-time.Minute),
+		Report: &board.Report{State: "question", Summary: "which option?", At: asked}}
+	if got := reportCellAt(a, now); got != "question, 8h ago: which option?" {
+		t.Fatalf("open question cell %q", got)
+	}
+	if got := statusWord(a); got != "waiting (question)" {
+		t.Fatalf("open question status %q", got)
+	}
+	a.TurnAt, a.Status = asked.Add(time.Minute), "working"
+	if got := reportCellAt(a, now); got != "question (answered), 8h ago: which option?" {
+		t.Fatalf("answered cell %q", got)
+	}
+	if got := statusWord(a); got != "working" {
+		t.Fatalf("answered status %q", got)
+	}
+	a.Report = &board.Report{State: "done", Summary: "shipped", At: now.Add(-30 * time.Second)}
+	if got := reportCellAt(a, now); got != "done, 30s ago: shipped" {
+		t.Fatalf("done cell %q", got)
 	}
 }

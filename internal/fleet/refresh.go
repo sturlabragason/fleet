@@ -87,11 +87,12 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 				a.Status, a.StatusSince = next, now
 				logx.For("status").Info("transition", "agent", a.Name, "from", prev, "to", next, "line", a.LastLine)
 				f.Store.AppendEvent(board.Event{Time: now, Agent: a.Name, From: prev, To: next})
-				f.tagPane(ids[a.Name], next, now)
-			} else if id := ids[a.Name]; id != "" && tagged[a.Name] != next {
-				// The pane title lags the board (pane re-created, tag lost, or
-				// set by an older fleet): re-sync without resetting the age.
-				f.tagPane(id, next, a.StatusSince)
+				f.tagPane(ids[a.Name], a.Shown(), now)
+			} else if id := ids[a.Name]; id != "" && tagged[a.Name] != a.Shown() {
+				// The pane title lags the board (pane re-created, tag lost,
+				// set by an older fleet, or a question asked or answered
+				// while idle, ADR-90): re-sync without resetting the age.
+				f.tagPane(id, a.Shown(), a.StatusSince)
 			}
 			nr := a.NoReportTag(now)
 			if id := ids[a.Name]; id != "" && nr != taggedNR[a.Name] {
@@ -269,13 +270,25 @@ func (f *Fleet) classify(a *board.Agent, alive, dead bool, pane string, now time
 // newTurn reports whether a switch from prev to next starts a new turn: the
 // first work, work after starting, or work after an idle of at least
 // NoReportAfter. A shorter idle, a menu or a stuck spell is inside the turn
-// (ADR-68).
+// (ADR-68). An idle of any length starts one when it began after a question
+// or blocked report and fleet or the user typed since: that is the answer
+// (ADR-90).
 func newTurn(a *board.Agent, prev, next string, now time.Time) bool {
 	if next != string(status.Working) {
 		return false
 	}
 	return a.TurnAt.IsZero() || prev == string(status.Starting) ||
-		prev == string(status.Idle) && now.Sub(a.StatusSince) >= board.NoReportAfter
+		prev == string(status.Idle) && (now.Sub(a.StatusSince) >= board.NoReportAfter || answeredNow(a))
+}
+
+// answeredNow reports whether the idle that is ending began after the
+// agent's question or blocked report and someone typed to it since.
+func answeredNow(a *board.Agent) bool {
+	r := a.Report
+	if r == nil || r.State != "question" && r.State != "blocked" || a.StatusSince.Before(r.At) {
+		return false
+	}
+	return a.PromptAt.After(r.At) || a.UserAt.After(r.At)
 }
 
 // tagNoReport sets or clears @fleet_noreport, the border's "…" mark for an

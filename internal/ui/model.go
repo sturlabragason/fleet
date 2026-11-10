@@ -337,7 +337,7 @@ func (m *Model) key(k string) tea.Cmd {
 		// sort first, longest wait first.
 		var waiting []string
 		for _, a := range m.agents {
-			if a.Status == "waiting" {
+			if a.Shown() == "waiting" {
 				waiting = append(waiting, a.Name)
 			}
 		}

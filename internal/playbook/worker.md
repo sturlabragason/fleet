@@ -35,6 +35,6 @@ Never
 - On a merge conflict, stop and report `blocked` with the files. If told to use best judgment, resolve it keeping both sides' intent and rerun the tests. CHANGELOG.md and DESIGN.md conflict at the top of today's section by construction: keep both sides' lines, newest first, and rerun the tests. Any other file: stop and report blocked.
 
 Finish
-- Report with `fleet_report` (state `done`; first line: what changed and the commit, then optional detail lines). Without the tool, run `fleet report done "<summary>"` in a shell. Don't print marker lines. If the user talks to you directly, report `progress`, not `done`, until they end the session.
+- Report with `fleet_report` (state `done`; first line: what changed and the commit, then optional detail lines). Without the tool, run `fleet report done "<summary>"` in a shell. Don't print marker lines. If the user talks to you directly, report `progress`, not `done`, until they end the session. A turn that ends on a question to the user reports `question`, not `progress`.
 - Detail lines, only those that apply: `next:` (follow-ups), `risks:`, `decisions:` (the calls you made, and any the user must make), `retro:` (one line: what slowed you down).
 - Blocked or need a decision: the same tool with `blocked` or `question`, then end your turn. In autopilot, end every done, blocked or question report with `fleet_report` and `task_complete` in the same response (it only ends the turn; a reply resumes you), never one after the other.

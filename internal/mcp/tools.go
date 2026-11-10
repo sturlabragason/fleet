@@ -411,7 +411,7 @@ func (s *Server) status() (string, error) {
 			sp = x.Short()
 			total.Add(x)
 		}
-		st := a.Status
+		st := statusWord(a)
 		if a.WithUser(time.Now()) {
 			st += " (interactive)"
 		}

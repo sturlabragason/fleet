@@ -151,7 +151,7 @@ func (s *Server) squadStatus(me string) string {
 		if a.Status == "waiting" || a.Status == "error" || a.Status == "stuck" {
 			wf = s.waitingFor(a)
 		}
-		fmt.Fprintf(&b, "%s | %s | %s | %s | %s | %s\n", a.Name, a.Profile, a.Status,
+		fmt.Fprintf(&b, "%s | %s | %s | %s | %s | %s\n", a.Name, a.Profile, statusWord(a),
 			time.Since(a.StatusSince).Round(time.Second), wf, reportCell(a))
 	}
 	return b.String()

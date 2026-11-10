@@ -272,6 +272,31 @@ func (a *Agent) UserNoReport(now time.Time) bool {
 	return a.Report == nil || a.Report.At.Before(a.TurnAt)
 }
 
+// Answered reports whether the agent's newest report is a question or
+// blocked report and a turn started after it: someone answered and the agent
+// went back to work (ADR-90, fleet#14).
+func (a *Agent) Answered() bool {
+	r := a.Report
+	return r != nil && (r.State == "question" || r.State == "blocked") && a.TurnAt.After(r.At)
+}
+
+// Asking reports whether the agent sits idle on an open question: its newest
+// report is a question, no turn has started since and fleet has sent it
+// nothing since (a send queued mid-turn is the answer too) (ADR-90, fleet#10).
+func (a *Agent) Asking() bool {
+	r := a.Report
+	return a.Status == "idle" && r != nil && r.State == "question" && !a.TurnAt.After(r.At) && !a.PromptAt.After(r.At)
+}
+
+// Shown is the status to draw: "waiting" for an agent Asking, else Status.
+// The stored status stays idle, as for no report (ADR-68 rejected (c)).
+func (a *Agent) Shown() string {
+	if a.Asking() {
+		return "waiting"
+	}
+	return a.Status
+}
+
 // NoReportTag is the agent's @fleet_noreport pane value: "1" for NoReport,
 // "user" for UserNoReport, "" for neither.
 func (a *Agent) NoReportTag(now time.Time) string {

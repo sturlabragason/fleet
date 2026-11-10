@@ -2,7 +2,9 @@ package mcp
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
@@ -149,13 +151,24 @@ func (s *Server) reportsSuffix() string {
 const reportCellW = 60
 
 // reportCell is the fleet_status report column: the done-check verdict when
-// fleet has one (ADR-43), then the state and summary, ~80 chars.
-func reportCell(a *board.Agent) string {
+// fleet has one (ADR-43), then the state, "(answered)" once the agent works
+// again after a question or blocked report, the report's age (ADR-90) and
+// the summary, ~80 chars.
+func reportCell(a *board.Agent) string { return reportCellAt(a, time.Now()) }
+
+func reportCellAt(a *board.Agent, now time.Time) string {
 	r := a.Report
 	if r == nil {
 		return ""
 	}
-	cell := r.State + ": " + r.Summary
+	head := r.State
+	if a.Answered() {
+		head += " (answered)"
+	}
+	if !r.At.IsZero() {
+		head += ", " + ago(now.Sub(r.At)) + " ago"
+	}
+	cell := head + ": " + r.Summary
 	c := a.Card
 	if c == nil || c.Checked == nil {
 		// Without a verdict the column is what it always was.
@@ -163,6 +176,28 @@ func reportCell(a *board.Agent) string {
 	}
 	cell = "[done-check " + map[bool]string{true: "pass", false: "fail"}[c.Checked.Pass] + "] " + cell
 	return ansi.Truncate(cell, reportCellW+20, "…")
+}
+
+// ago is a report's age in its largest whole unit: 30s, 5m, 8h, 2d.
+func ago(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return strconv.Itoa(max(int(d/time.Second), 0)) + "s"
+	case d < time.Hour:
+		return strconv.Itoa(int(d/time.Minute)) + "m"
+	case d < 48*time.Hour:
+		return strconv.Itoa(int(d/time.Hour)) + "h"
+	}
+	return strconv.Itoa(int(d/(24*time.Hour))) + "d"
+}
+
+// statusWord is the status column of fleet_status and fleet_squad_status:
+// an agent idle on an open question reads "waiting (question)" (ADR-90).
+func statusWord(a *board.Agent) string {
+	if a.Asking() {
+		return "waiting (question)"
+	}
+	return a.Status
 }
 
 // unreadReports is the fleet_brief section; it does not mark anything read.
