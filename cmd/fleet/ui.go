@@ -169,8 +169,7 @@ func (b *backend) SupCtx() (string, string) {
 	if !ok {
 		return "", ""
 	}
-	pct := supervisor.Pct(used, max)
-	return fmt.Sprintf("%d%%", pct), supervisor.Band(pct)
+	return fmt.Sprintf("%d%%", supervisor.Pct(used, max)), supervisor.BandFill(used, max)
 }
 
 func (b *backend) SetSupCtx(label, color string) error {
@@ -286,8 +285,7 @@ func (b *backend) syncOtherCtx() {
 		}
 		var ctx, color string
 		if used, max, ok := supervisor.CurrentFillOf(b.f.Home, b.f.T, mainTarget(), a.Name); ok {
-			pct := supervisor.Pct(used, max)
-			ctx, color = fmt.Sprintf("%d%%", pct), supervisor.Band(pct)
+			ctx, color = fmt.Sprintf("%d%%", supervisor.Pct(used, max)), supervisor.BandFill(used, max)
 		}
 		want := prof + "|" + ctx + "|" + color
 		if b.otherCtx[pane] == want {

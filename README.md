@@ -96,7 +96,7 @@ make build      # bin/fleet and bin/fakeagent
 make install    # symlink bin/fleet to ~/.local/bin/fleet
 ```
 
-The admiral needs no setup: `fleet up` passes the MCP server (`fleet mcp`) to it on the command line, and its rules travel as the server's instructions. Its working directory is `supervisor/` next to the binary when you build from a checkout, `~/.fleet/scratch/admiral` otherwise; `FLEET_ADMIRAL_DIR` overrides it.
+The admiral needs no setup: `fleet up` passes the MCP server (`fleet mcp`) to it on the command line, and its rules travel as the server's instructions. Its working directory is `~/.fleet/admiral`, outside any git checkout so repo churn doesn't reset its prompt cache (ADR-93); `FLEET_ADMIRAL_DIR` overrides it.
 
 A binary install is all of fleet. What it lacks is the checkout's extras: `supervisor/`, and the skills in `.claude/skills` and agents in `.claude/agents`, which are for working on fleet itself. Example config is in [examples/](examples): [`tools.toml`](examples/tools.toml) and [`config.toml.example`](examples/config.toml.example).
 

@@ -26,6 +26,9 @@ type Session struct {
 	Started    time.Time `json:"started"`
 	Generation int       `json:"generation"`
 	Previous   string    `json:"previous,omitempty"`
+	// Dir is the dir the session started in. Claude finds a session to
+	// resume by its project dir, so a resume runs there (ADR-93).
+	Dir string `json:"dir,omitempty"`
 
 	// extra keeps keys this build does not know (ADR-62).
 	extra jsonx.Extra

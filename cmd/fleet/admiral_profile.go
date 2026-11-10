@@ -147,8 +147,9 @@ func writeAdmiralRules(home, adm string) error {
 
 // claudeAdmiralEnv loads every fleet tool up front (no ToolSearch deferral,
 // which hid the fleet tools' schemas) and keeps the user's claude.ai
-// connectors out of the admiral (ADR-86).
-var claudeAdmiralEnv = []string{"ENABLE_TOOL_SEARCH=false", "ENABLE_CLAUDEAI_MCP_SERVERS=false"}
+// connectors out of the admiral (ADR-86). It asks for the one-hour prompt
+// cache: admiral wakes are often more than five minutes apart (ADR-93).
+var claudeAdmiralEnv = []string{"ENABLE_TOOL_SEARCH=false", "ENABLE_CLAUDEAI_MCP_SERVERS=false", "ENABLE_PROMPT_CACHING_1H=1"}
 
 // writeAdmiralMCP writes <admiral dir>/.mcp.json for a copilot admiral and
 // returns its path.
@@ -360,7 +361,7 @@ func swapAdmiralOf(f *fleet.Fleet, adm, name string) (string, error) {
 	if gen < 2 {
 		gen = 2
 	}
-	ns := supervisor.Session{SessionID: sl.ID, Profile: name, PaneID: pane, Started: time.Now(), Generation: gen, Previous: old.SessionID}
+	ns := supervisor.Session{SessionID: sl.ID, Profile: name, PaneID: pane, Started: time.Now(), Dir: sl.Dir, Generation: gen, Previous: old.SessionID}
 	if err := supervisor.SaveOf(f.Home, adm, ns); err != nil {
 		return "", err
 	}
@@ -469,7 +470,7 @@ func restoreAdmiralOf(f *fleet.Fleet, adm, pane string, old supervisor.Session, 
 	if gen < 2 {
 		gen = 2
 	}
-	ns := supervisor.Session{SessionID: sl.ID, Profile: oldName, PaneID: pane, Started: time.Now(), Generation: gen, Previous: old.SessionID}
+	ns := supervisor.Session{SessionID: sl.ID, Profile: oldName, PaneID: pane, Started: time.Now(), Dir: sl.Dir, Generation: gen, Previous: old.SessionID}
 	if err := supervisor.SaveOf(f.Home, adm, ns); err != nil {
 		return err
 	}

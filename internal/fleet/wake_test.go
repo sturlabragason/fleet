@@ -411,3 +411,59 @@ func TestWakeEnterFailureClearsBox(t *testing.T) {
 		t.Fatalf("not retried: submitted %q, want %q", a.submitted, want)
 	}
 }
+
+// settleWake sets the coalescing window and a clock offset for one test.
+func settleWake(t *testing.T, settle, maxHold time.Duration) *time.Duration {
+	t.Helper()
+	off := new(time.Duration)
+	s, m, n := WakeSettle, WakeMaxHold, wakeNow
+	WakeSettle, WakeMaxHold = settle, maxHold
+	wakeNow = func() time.Time { return time.Now().Add(*off) }
+	t.Cleanup(func() { WakeSettle, WakeMaxHold, wakeNow = s, m, n })
+	return off
+}
+
+// Reports that land close together wake the admiral once (ADR-93): a fresh
+// wake waits until no report has come for WakeSettle, and the poll then
+// types one line for all of them.
+func TestWakeSettlesBeforeTyping(t *testing.T) {
+	f, pasted := mailFleet(t)
+	off := settleWake(t, 30*time.Second, time.Hour)
+	a := fakeAdm(f, pasted, ptr(true))
+	f.Report("a", "done", "x")
+	f.DeliverWake()
+	if len(a.submitted) != 0 {
+		t.Fatalf("typed before the settle window: %q", a.submitted)
+	}
+	f.Report("b", "blocked", "y")
+	*off = 29 * time.Second
+	f.DeliverWake()
+	if len(a.submitted) != 0 {
+		t.Fatalf("typed inside the settle window: %q", a.submitted)
+	}
+	*off = 31 * time.Second
+	f.DeliverWake()
+	want := "[fleet] 2 new reports: a (done), b (blocked). Full text: call fleet_reports."
+	if len(a.submitted) != 1 || a.submitted[0] != want {
+		t.Fatalf("submitted %q, want %q", a.submitted, want)
+	}
+}
+
+// A steady trickle of reports can't hold the wake back for longer than
+// WakeMaxHold, counted from the oldest unannounced one.
+func TestWakeMaxHold(t *testing.T) {
+	f, pasted := mailFleet(t)
+	off := settleWake(t, time.Hour, 2*time.Minute)
+	a := fakeAdm(f, pasted, ptr(true))
+	f.Report("a", "done", "x")
+	*off = time.Minute
+	f.DeliverWake()
+	if len(a.submitted) != 0 {
+		t.Fatalf("typed before the max hold: %q", a.submitted)
+	}
+	*off = 2*time.Minute + time.Second
+	f.DeliverWake()
+	if want := ReportLine("a", "done", "x"); len(a.submitted) != 1 || a.submitted[0] != want {
+		t.Fatalf("submitted %q, want %q", a.submitted, want)
+	}
+}

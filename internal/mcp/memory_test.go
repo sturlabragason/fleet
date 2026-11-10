@@ -19,6 +19,7 @@ func memServer(t *testing.T) (*Server, *int, *int) {
 	t.Helper()
 	t.Setenv("FLEET_ADMIRAL_HANDOFF_PCT", "")
 	t.Setenv("FLEET_SUP_HANDOFF_PCT", "")
+	t.Setenv("FLEET_ADMIRAL_HANDOFF_TOKENS", "0")
 	home := t.TempDir()
 	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
 	t.Cleanup(func() { tc.KillServer() })
@@ -66,7 +67,7 @@ func TestContextWarning(t *testing.T) {
 	}
 	*pct = 74
 	out, _ := callText(t, s, "fleet_peek", map[string]any{"name": "nobody"})
-	if !strings.HasSuffix(out, "\n\n[admiral context 74%: "+warnTail) {
+	if !strings.HasSuffix(out, "\n\n[admiral context 74%, 148k tokens: "+warnTail) {
 		t.Errorf("error result needs the warning too: %q", out)
 	}
 	out, _ = callText(t, s, "fleet_handoff", map[string]any{"summary": "x"})
@@ -77,6 +78,28 @@ func TestContextWarning(t *testing.T) {
 	out, _ = callText(t, s, "fleet_admiral_profile", map[string]any{"profile": "copilot"})
 	if strings.Contains(out, warnTail) {
 		t.Errorf("fleet_admiral_profile must not carry the warning: %q", out)
+	}
+}
+
+// On a big window the warning comes at a fixed size, well below the
+// percent threshold (ADR-93).
+func TestContextWarningByTokens(t *testing.T) {
+	s, _, _ := memServer(t)
+	t.Setenv("FLEET_ADMIRAL_HANDOFF_TOKENS", "")
+	used := 0
+	s.Fill = func() (int, int, bool) { return used, 1_000_000, true }
+	for _, c := range []struct {
+		used int
+		want bool
+	}{{79_000, false}, {80_000, true}} {
+		used = c.used
+		out, _ := callText(t, s, "fleet_profiles", nil)
+		if strings.Contains(out, warnTail) != c.want {
+			t.Errorf("%d tokens: warning %v in %q", c.used, !c.want, out)
+		}
+	}
+	if out, _ := callText(t, s, "fleet_profiles", nil); !strings.Contains(out, "[admiral context 8%, 80k tokens: ") {
+		t.Errorf("warning must name the size: %q", out)
 	}
 }
 

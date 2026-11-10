@@ -37,6 +37,18 @@ var Quiet = 3 * time.Second
 // GuardWait is how long the Enter guard waits for the pasted line to show.
 var GuardWait = 1500 * time.Millisecond
 
+// WakeSettle is how long a new wake waits for the next report before it is
+// typed: reports that land close together wake the admiral once, in one
+// line, and so cost one turn instead of one each (ADR-93). 0 types at once.
+var WakeSettle = 30 * time.Second
+
+// WakeMaxHold caps the wait, counted from the oldest report not yet
+// announced, so a steady trickle of reports can't hold a wake back.
+var WakeMaxHold = 90 * time.Second
+
+// wakeNow is the clock the settle window reads; tests move it.
+var wakeNow = time.Now
+
 // BadgeOption is the tmux user option the status line shows (`fleet up`).
 const BadgeOption = "@fleet_reports"
 
@@ -304,7 +316,13 @@ func (f *Fleet) deliverWakeTo(box string, badge bool) {
 	// Already announced: the admiral was told about every queued report and
 	// has not read them yet. Leave the queue alone -- no rename, no log --
 	// so the next new report coalesces these into its line.
-	if newestID(es) <= f.Mail().WakeMark(box) {
+	mark := f.Mail().WakeMark(box)
+	if newestID(es) <= mark {
+		return
+	}
+	// Still settling: the watcher's next poll looks again. Admirals only;
+	// leaders are agents and keep their own wake policy.
+	if f.isAdmiralBox(box) && settling(es, unread, mark, wakeNow()) {
 		return
 	}
 	if !f.canType(f.boxView(box)) {
@@ -354,6 +372,34 @@ func (f *Fleet) deliverWakeTo(box string, badge bool) {
 		return
 	}
 	f.writeTries(box, nil) // delivered: the counters go with the entries
+}
+
+// settling reports whether the entries not yet announced (id after mark)
+// should wait for more: the newest arrived less than WakeSettle ago and the
+// oldest less than WakeMaxHold ago (ADR-93). The times are the reports' own,
+// from the mailbox, so every process that delivers wakes agrees on them.
+func settling(es []wakeEntry, unread []mail.Msg, mark string, now time.Time) bool {
+	if WakeSettle <= 0 {
+		return false
+	}
+	at := map[string]time.Time{}
+	for _, m := range unread {
+		at[m.ID] = m.T
+	}
+	var oldest, newest time.Time
+	for _, e := range es {
+		t := at[e.id]
+		if e.id <= mark || t.IsZero() {
+			continue
+		}
+		if oldest.IsZero() || t.Before(oldest) {
+			oldest = t
+		}
+		if t.After(newest) {
+			newest = t
+		}
+	}
+	return !newest.IsZero() && now.Sub(newest) < WakeSettle && now.Sub(oldest) < WakeMaxHold
 }
 
 // canType reports whether the admiral pane may be typed into right now.

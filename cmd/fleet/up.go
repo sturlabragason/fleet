@@ -63,22 +63,31 @@ func admiralLaunchOf(f *fleet.Fleet, adm, prof, resumeID, boot string) (supLaunc
 	if err := f.CheckCommand(prof, p, ""); err != nil {
 		return supLaunch{}, err
 	}
+	// Every admiral starts in its own dir under fleet home, outside any git
+	// checkout: Copilot puts the cwd's git state in its prompt, so each
+	// merge in the repo cost a cold prompt-cache rewrite (ADR-93).
 	dir := admiralEnv("DIR")
-	if p.Patterns == "copilot" && adm != supervisor.Main {
+	if p.Patterns == "copilot" {
 		// Its own .mcp.json is its only fleet server; without it the
 		// admiral would start with no fleet tools at all, so fail instead.
 		if _, err := writeAdmiralMCP(f.Home, f.Exe, adm); err != nil {
 			return supLaunch{}, fmt.Errorf("admiral %s: write its MCP config: %w", adm, err)
 		}
-		dir = supervisor.DirOf(f.Home, adm)
+		if adm != supervisor.Main {
+			dir = supervisor.DirOf(f.Home, adm)
+		}
 	}
 	if p.Patterns == "claude" {
 		if err := writeAdmiralRules(f.Home, adm); err != nil {
 			return supLaunch{}, fmt.Errorf("admiral %s: write its rules: %w", adm, err)
 		}
+		if resumeID != "" {
+			dir = claudeResumeDir(f, adm, resumeID, dir)
+		}
 	}
 	if dir == "" {
-		dir = filepath.Join(filepath.Dir(filepath.Dir(f.Exe)), "supervisor")
+		dir = supervisor.DirOf(f.Home, adm)
+		os.MkdirAll(dir, 0o700)
 	}
 	if _, err := os.Stat(dir); err != nil {
 		// No checkout next to the binary (go install): the admiral works
@@ -117,6 +126,32 @@ func admiralLaunchOf(f *fleet.Fleet, adm, prof, resumeID, boot string) (supLaunc
 		sl.Paste = boot
 	}
 	return sl, nil
+}
+
+// claudeResumeDir is where a claude admiral resumes resumeID: Claude finds a
+// session by its project dir, so the dir the session was saved with, or for a
+// session saved before ADR-93 the old repo dir (FLEET_ADMIRAL_DIR if set).
+func claudeResumeDir(f *fleet.Fleet, adm, resumeID, dir string) string {
+	s, ok := supervisor.LoadOf(f.Home, adm)
+	if !ok || s.SessionID != resumeID {
+		return dir
+	}
+	if s.Dir != "" {
+		if _, err := os.Stat(s.Dir); err == nil {
+			return s.Dir
+		}
+		return dir
+	}
+	if dir != "" {
+		return dir
+	}
+	return legacyAdmiralDir(f)
+}
+
+// legacyAdmiralDir is the admiral dir before ADR-93: supervisor/ in the
+// checkout the binary was built in.
+func legacyAdmiralDir(f *fleet.Fleet) string {
+	return filepath.Join(filepath.Dir(filepath.Dir(f.Exe)), "supervisor")
 }
 
 // admiralMode starts the admiral in its tool's interactive mode when the
@@ -201,7 +236,7 @@ func cmdUp(f *fleet.Fleet, args []string) error {
 		if explicit != "" {
 			saveChoice(f, explicit)
 		}
-		if err := supervisor.Save(f.Home, supervisor.Session{SessionID: sl.ID, Profile: sl.Profile, PaneID: sup, Started: time.Now(), Generation: 1}); err != nil {
+		if err := supervisor.Save(f.Home, supervisor.Session{SessionID: sl.ID, Profile: sl.Profile, PaneID: sup, Started: time.Now(), Dir: sl.Dir, Generation: 1}); err != nil {
 			log.Error("save admiral session", "err", err)
 		}
 		log.Info("created main window", "sup", sup)

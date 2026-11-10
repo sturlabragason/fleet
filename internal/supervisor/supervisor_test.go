@@ -337,3 +337,31 @@ func TestNotesTaggedByAdmiral(t *testing.T) {
 		}
 	}
 }
+
+// A handoff is due at the percent threshold or, on a big window, at a fixed
+// size: past about 80k tokens every wake re-reads a long, mostly stale
+// context (ADR-93). 0 turns the size limit off.
+func TestHandoffDue(t *testing.T) {
+	t.Setenv("FLEET_ADMIRAL_HANDOFF_PCT", "")
+	t.Setenv("FLEET_SUP_HANDOFF_PCT", "")
+	t.Setenv("FLEET_ADMIRAL_HANDOFF_TOKENS", "")
+	for _, c := range []struct {
+		used, max int
+		want      bool
+	}{{79_999, 1_000_000, false}, {80_000, 1_000_000, true}, {69_000, 100_000, false}, {70_000, 100_000, true}} {
+		if got := HandoffDue(c.used, c.max); got != c.want {
+			t.Errorf("HandoffDue(%d, %d) = %v", c.used, c.max, got)
+		}
+	}
+	if BandFill(80_000, 1_000_000) != theme.Error || BandFill(10_000, 1_000_000) != theme.Working {
+		t.Error("the red band must match the handoff warning")
+	}
+	t.Setenv("FLEET_ADMIRAL_HANDOFF_TOKENS", "120000")
+	if HandoffDue(100_000, 1_000_000) || !HandoffDue(120_000, 1_000_000) {
+		t.Error("token limit from env")
+	}
+	t.Setenv("FLEET_ADMIRAL_HANDOFF_TOKENS", "0")
+	if HandoffDue(500_000, 1_000_000) {
+		t.Error("0 turns the token limit off")
+	}
+}

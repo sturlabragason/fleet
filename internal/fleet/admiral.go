@@ -33,6 +33,15 @@ func (f *Fleet) AdmiralBoxes() []string {
 	return out
 }
 
+func (f *Fleet) isAdmiralBox(box string) bool {
+	for _, b := range f.AdmiralBoxes() {
+		if b == box {
+			return true
+		}
+	}
+	return false
+}
+
 // OwnerOf is the admiral that owns an agent: "main" when the agent has no
 // owner, is unknown, or its admiral has been closed.
 func (f *Fleet) OwnerOf(agent string) string {

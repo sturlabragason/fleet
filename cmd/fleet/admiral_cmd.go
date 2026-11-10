@@ -71,7 +71,7 @@ func newAdmiralPane(f *fleet.Fleet, adm, prof string) (string, error) {
 		return "", err
 	}
 	setAdmiralPaneOptsOf(f, adm, pane, sl.Profile)
-	if err := supervisor.SaveOf(f.Home, adm, supervisor.Session{SessionID: sl.ID, Profile: sl.Profile, PaneID: pane, Started: time.Now(), Generation: 1}); err != nil {
+	if err := supervisor.SaveOf(f.Home, adm, supervisor.Session{SessionID: sl.ID, Profile: sl.Profile, PaneID: pane, Started: time.Now(), Dir: sl.Dir, Generation: 1}); err != nil {
 		logx.For("admiral").Error("save admiral session", "admiral", adm, "err", err)
 	}
 	logx.For("admiral").Info("admiral pane", "admiral", adm, "profile", sl.Profile, "pane", pane)

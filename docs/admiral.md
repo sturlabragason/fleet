@@ -2,12 +2,12 @@
 
 The admiral is an ordinary agent in the left pane of `fleet up`. It steers the fleet through MCP tools served by `fleet mcp`. It is not special inside fleet: it runs from a profile like any other agent, and you can throw it away and start it again without losing anything, because fleet's state is in tmux and `~/.fleet/`.
 
-It was called the supervisor until ADR-26. The old names still work (`fleet supervisor`, `FLEET_SUPERVISOR_PROFILE`), and its working directory is still `supervisor/`, because a tool's folder trust is keyed by path.
+It was called the supervisor until ADR-26. The old names still work (`fleet supervisor`, `FLEET_SUPERVISOR_PROFILE`). Its working directory moved from the repo's `supervisor/` to `~/.fleet/admiral` (ADR-93).
 
 ## How it starts
 
 - Profile: `copilot`, unless you pass `fleet up --admiral-profile NAME`, set `FLEET_ADMIRAL_PROFILE`, pick one with `Alt-P`, or put an `[admiral]` entry in your config (see [examples/config.toml.example](../examples/config.toml.example)). Any profile works, including `fake`.
-- Directory: `supervisor/` next to the directory holding the `fleet` binary (so `make build` finds it), or `FLEET_ADMIRAL_DIR`, or `~/.fleet/scratch/admiral` when neither exists (a release binary or `go install`; never your home directory, ADR-47).
+- Directory: `~/.fleet/admiral` (`~/.fleet/admirals/<name>` for another admiral), or `FLEET_ADMIRAL_DIR`. It is outside any git checkout on purpose: Copilot puts the cwd's git state in its prompt, so a merge in the repo would reset the admiral's prompt cache (ADR-93). A Claude admiral resumed from before that change resumes in the old `supervisor/` dir, where Claude keeps its session.
 - No config file is needed. `fleet up` passes the MCP server on the command line: `--mcp-config` with an inline JSON for claude profiles, `--available-tools fleet --allow-tool fleet` for copilot ones.
 - Its rules (tools only, short replies, the confirmation rule) live in `internal/mcp/instructions.md`, built into the binary and sent as the MCP server's instructions; a Claude admiral gets them as a system prompt file instead, since Claude cuts MCP instructions at about 4 KB (ADR-86). Every fleet command maps to an admiral tool or a reason it has none in `internal/mcp/parity.go`.
 - With a `copilot` profile, `fleet up` starts it lean: `--no-custom-instructions --allow-all-mcp-server-instructions --disable-builtin-mcps`, plus `--disable-mcp-server` for each server in `~/.copilot/mcp-config.json`. It sees only the fleet tools: no shell, no file reading, and about 8k input tokens per turn instead of ~160k.
@@ -90,7 +90,7 @@ Fleet doesn't compact the admiral's chat; it replaces it ([DESIGN.md §6.5, ADR-
 
 - The admiral records decisions, your preferences and promises with `fleet_note`, and pins your standing rules so they stay in every brief.
 - Its context fill is read from the tool's own session log and shown on the pane border (`admiral · ctx 34%`, green/yellow/red) and by `fleet admiral`.
-- At 70% (`FLEET_ADMIRAL_HANDOFF_PCT`) every fleet tool result ends with a warning. The admiral then calls `fleet_handoff` with open questions, promises and plans in flight. Fleet respawns the pane with a new session whose first prompt is to call `fleet_brief`.
+- At 70% (`FLEET_ADMIRAL_HANDOFF_PCT`) or 80k tokens (`FLEET_ADMIRAL_HANDOFF_TOKENS`, 0 = off), whichever comes first, every fleet tool result ends with a warning; past about 80k every wake re-reads a long, mostly stale context (ADR-93). The admiral then calls `fleet_handoff` with open questions, promises and plans in flight. Fleet respawns the pane with a new session whose first prompt is to call `fleet_brief`.
 - `Alt-R` (tmux), `R` (overview) or `fleet admiral reset` does the same by hand, after a y/n prompt. The old session isn't deleted: `copilot --resume <id>` still opens it.
 
 Agents are not affected: they live on the board and in tmux, not in the admiral's chat.
