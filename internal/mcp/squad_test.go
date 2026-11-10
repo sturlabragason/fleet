@@ -3,10 +3,12 @@ package mcp
 import (
 	"fmt"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
@@ -15,13 +17,15 @@ import (
 )
 
 // squadHome is a board with a leader, one of its agents and an outsider;
-// board entries only, so no tmux pane is needed.
+// board entries only, so no tmux pane is needed. Its tools.toml has a
+// "cat" profile for tests that do spawn one.
 func squadHome(t *testing.T) *fleet.Fleet {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("FLEET_CONFIG", filepath.Join(home, "no-config.toml"))
 	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
 	t.Cleanup(func() { tc.KillServer() })
+	os.WriteFile(filepath.Join(home, "tools.toml"), []byte("[cat]\ncommand = \"sh\"\nargs = [\"-c\", \"cat\"]\npatterns = \"fake\"\n"), 0o644)
 	f, err := fleet.New(tc, home, "/nonexistent")
 	if err != nil {
 		t.Fatal(err)
@@ -133,5 +137,31 @@ func TestSquadSendRefusesAPrompt(t *testing.T) {
 	msg, isErr := callText(t, s, "fleet_squad_send", map[string]any{"name": "m1", "text": "y"})
 	if isErr || !strings.Contains(msg, "may not answer prompts") {
 		t.Fatalf("send to a prompted agent: %q (isErr=%v)", msg, isErr)
+	}
+}
+
+// fleet#20: a leader can force a send past the typing check into its own
+// agent's pane, as the admiral can with fleet_send.
+func TestSquadSendForce(t *testing.T) {
+	f := squadHome(t)
+	a, err := f.Spawn("m2", "cat", f.Home, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Store.Update(func(b *board.Board) error { b.Agents["m2"].LeadBy = "lead"; return nil })
+	f.Clients = func() []fleet.ClientSeen { return []fleet.ClientSeen{{Pane: a.PaneID, Active: time.Now()}} }
+	s := NewAgent(f, "lead")
+	msg, isErr := callText(t, s, "fleet_squad_send", map[string]any{"name": "m2", "text": "hello"})
+	if isErr || !strings.Contains(msg, "force=true") {
+		t.Fatalf("unforced send while typing: %q (isErr=%v)", msg, isErr)
+	}
+	msg, isErr = callText(t, s, "fleet_squad_send", map[string]any{"name": "m2", "text": "hello", "force": true})
+	if isErr || strings.Contains(msg, "not sent") {
+		t.Fatalf("forced send: %q (isErr=%v)", msg, isErr)
+	}
+	// force still never answers a prompt.
+	f.Store.Update(func(b *board.Board) error { b.Agents["m2"].Status = "waiting"; return nil })
+	if msg, _ := callText(t, s, "fleet_squad_send", map[string]any{"name": "m2", "text": "y", "force": true}); !strings.Contains(msg, "may not answer prompts") {
+		t.Fatalf("forced send to a prompt: %q", msg)
 	}
 }

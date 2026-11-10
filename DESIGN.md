@@ -948,7 +948,7 @@ One admiral cannot hold ten agents' detail at once. A **leader** is an ordinary 
 
 **Caps.** `[squad] max_members` (4) and `max_depth` (1, so a squad agent may not itself lead), read live, `0` meaning unlimited. Squad spawns go through the normal spawn path, so `max_working` queues them like any other agent and spend and memory count them like any other agent.
 
-**Safety.** A leader escalates rather than acts: it may not answer a permission prompt (`fleet_squad_send` refuses an agent whose status is `waiting`), and merging, pushing and applying infra are the user's, as they are for any agent. The chain is squad → leader → admiral → user.
+**Safety.** A leader escalates rather than acts: it may not answer a permission prompt (`fleet_squad_send` refuses an agent whose status is `waiting`); `force=true` gets past the user-typing and unsubmitted-input check, as on `fleet_send`, never past a prompt (fleet#20), and merging, pushing and applying infra are the user's, as they are for any agent. The chain is squad → leader → admiral → user.
 
 **Shown.** `fleet_status` has a `squad` column (`leads m1,m2` / `→ lead`), the overview tile and row carry a `▲` for a leader, and `fleet info` prints a `squad:` line. `fleet close <leader>` warns about live squad agents; `--squad` (MCP `squad: true`) closes them too.
 
