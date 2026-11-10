@@ -130,6 +130,7 @@ type Prefs struct {
 	memory     Memory
 	squad      Squad
 	recycle    Recycle
+	usage      map[string]conf.Value
 }
 
 // AdmiralProfile is [admiral] profile: the admiral's tool profile when no
@@ -233,6 +234,7 @@ func Load() (*Prefs, error) {
 			p.admiralMax = min(n, MaxAdmirals)
 		}
 	}
+	p.usage = d["usage"]
 	for name, sec := range d {
 		if n, ok := strings.CutPrefix(name, "profile."); ok && n != "" {
 			p.profiles[n] = sec
