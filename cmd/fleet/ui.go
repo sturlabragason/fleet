@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -339,9 +340,22 @@ func cmdUI(f *fleet.Fleet) error {
 	be := &backend{f: f, w: w, enabled: insideFleet(f)}
 	logx.For("ui").Info("start", "wall", be.enabled)
 	p := tea.NewProgram(ui.New(be, f.Home), tea.WithAltScreen(), tea.WithMouseCellMotion())
+	// A rebuilt bin/fleet takes over this pane (ADR-62).
+	re := newUIReexec(f.Exe, "", probeBinary, p.Quit)
+	ctx, stop := context.WithCancel(context.Background())
+	go re.run(ctx, watch.StopEvery)
 	_, err := p.Run()
+	stop()
+	handOver := re.halt()
 	if err != nil {
 		logx.For("ui").Error("exit", "err", err)
+		return err
 	}
-	return err
+	if handOver {
+		if err := re.exec(f.Exe); err != nil {
+			logx.For("ui").Error("re-exec", "err", err)
+			return fmt.Errorf("restart the overview on the rebuilt binary: %w (run fleet up)", err)
+		}
+	}
+	return nil
 }

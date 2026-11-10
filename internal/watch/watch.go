@@ -56,8 +56,8 @@ type Watcher struct {
 	pending          bool
 	refreshes, ticks int
 	// selfExe is where the running binary is stat'ed ("" = /proc/self/exe).
-	selfExe           string
-	exeInfo, failInfo os.FileInfo
+	selfExe string
+	bin     *Binary
 }
 
 func (w *Watcher) tick() time.Duration {
@@ -225,47 +225,22 @@ func (w *Watcher) lifecycle(now time.Time) bool {
 	return w.exeChanged()
 }
 
-// initExe records the running binary's identity: the inode it was started
-// from, not whatever sits at Exe now.
-func (w *Watcher) initExe() {
-	if w.Exe == "" || w.exeInfo != nil {
-		return
-	}
-	self := w.selfExe
-	if self == "" {
-		self = "/proc/self/exe"
-	}
-	if fi, err := os.Stat(self); err == nil {
-		w.exeInfo = fi
-	}
-}
-
 // exeChanged re-execs into a replaced binary (ADR-62, as `fleet mcp` does
 // under ADR-25). A resident watcher otherwise runs the build it started with
 // for days and rewrites every store through its old structs. It reports true
 // only when the watcher should stop because there is no Reexec.
 func (w *Watcher) exeChanged() bool {
-	w.initExe()
-	if w.exeInfo == nil {
+	if w.Exe == "" {
 		return false
 	}
-	fi, err := os.Stat(w.Exe)
-	if err != nil || sameFile(fi, w.exeInfo) || sameFile(fi, w.failInfo) {
-		return false
+	return w.binary().Changed()
+}
+
+func (w *Watcher) binary() *Binary {
+	if w.bin == nil {
+		w.bin = &Binary{Exe: w.Exe, Self: w.selfExe, Reexec: w.Reexec, Component: "watch"}
 	}
-	log := logx.For("watch")
-	if w.Reexec == nil {
-		log.Info("stop", "reason", "binary changed", "exe", w.Exe)
-		return true
-	}
-	log.Info("re-exec", "exe", w.Exe, "new_mtime", fi.ModTime(), "pid", os.Getpid())
-	if err := w.Reexec(); err != nil {
-		log.Warn("re-exec failed; keeping the old code", "exe", w.Exe, "err", err)
-		w.failInfo = fi
-		return false
-	}
-	w.exeInfo = fi
-	return false
+	return w.bin
 }
 
 // sameFile reports whether a and b are the same file with the same content
@@ -283,7 +258,9 @@ func (w *Watcher) Run(ctx context.Context) error {
 		return err
 	}
 	defer Release(w.Home)
-	w.initExe()
+	if w.Exe != "" {
+		w.binary().Init()
+	}
 	log.Info("start", "tick", w.tick(), "interval", w.interval(), "exe", w.Exe)
 	t := time.NewTicker(w.tick())
 	defer t.Stop()
