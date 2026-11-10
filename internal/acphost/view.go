@@ -3,6 +3,7 @@ package acphost
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -55,8 +56,10 @@ type view struct {
 	tools                 map[string]*block // tool call id → its line
 	asks                  map[string]*block // tool call id → its open question
 	buf                   []rune
-	scroll                int // lines scrolled back from the bottom
-	page                  int // body height at the last draw, for PgUp
+	pastes                []string // collapsed pastes; buf holds pasteRune(i) for pastes[i]
+	dirty                 bool     // buf changed since the last draw
+	scroll                int      // lines scrolled back from the bottom
+	page                  int      // body height at the last draw, for PgUp
 }
 
 func newView(out io.Writer, size func() (int, int), p colorprofile.Profile, name, profile string) *view {
@@ -177,19 +180,80 @@ func (v *view) push(b *block) {
 	}
 }
 
-// edit changes the input line and draws the screen.
+// edit changes the input line; flush draws it.
 func (v *view) edit(fn func(buf []rune) []rune) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	v.buf = fn(v.buf)
-	v.draw()
+	if len(v.buf) == 0 {
+		v.pastes = nil
+	}
+	v.dirty = true
 }
 
-// take empties the input line and returns what it held.
+// flush draws the screen if the input line changed since the last draw.
+func (v *view) flush() {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.dirty {
+		v.draw()
+	}
+}
+
+// A paste of more than one line, or longer than pasteMax runes, shows in
+// the input line as one "[Paste #N +L lines]" token, a rune from Unicode's
+// supplementary private use area that take expands again.
+const (
+	pasteMax  = 200
+	pasteBase = 0xF0000
+)
+
+func isPasteRune(r rune) bool { return r >= pasteBase && r <= 0xFFFFD }
+
+// paste puts pasted text into the input line, collapsed if it is long.
+func (v *view) paste(s string) {
+	if s == "" {
+		return
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.dirty = true
+	if !strings.Contains(s, "\n") && utf8.RuneCountInString(s) <= pasteMax {
+		v.buf = append(v.buf, []rune(s)...)
+		return
+	}
+	v.buf = append(v.buf, rune(pasteBase+len(v.pastes)))
+	v.pastes = append(v.pastes, s)
+}
+
+// pasteLabel is how collapsed paste i shows in the input line.
+func (v *view) pasteLabel(r rune) string {
+	i := int(r - pasteBase)
+	if i >= len(v.pastes) {
+		return ""
+	}
+	if n := strings.Count(strings.TrimRight(v.pastes[i], "\n"), "\n") + 1; n > 1 {
+		return fmt.Sprintf("[Paste #%d +%d lines]", i+1, n)
+	}
+	return fmt.Sprintf("[Paste #%d %d chars]", i+1, utf8.RuneCountInString(v.pastes[i]))
+}
+
+// take empties the input line and returns what it held, pastes expanded.
 func (v *view) take() string {
-	var s string
-	v.edit(func(buf []rune) []rune { s = string(buf); return buf[:0] })
-	return s
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	var b strings.Builder
+	for _, r := range v.buf {
+		if isPasteRune(r) {
+			if i := int(r - pasteBase); i < len(v.pastes) {
+				b.WriteString(v.pastes[i])
+			}
+			continue
+		}
+		b.WriteRune(r)
+	}
+	v.buf, v.pastes, v.dirty = v.buf[:0], nil, true
+	return b.String()
 }
 
 func (v *view) empty() bool {
@@ -233,6 +297,7 @@ func (v *view) dims() (int, int) {
 // draw writes the whole frame, inside one synchronized update so the
 // terminal shows it at once. Caller holds mu.
 func (v *view) draw() {
+	v.dirty = false
 	w, h := v.dims()
 	rows, cx, cy := v.frame(w, h)
 	var b strings.Builder
@@ -520,11 +585,29 @@ func (v *view) input(w int) (string, int) {
 	if room < 1 {
 		room = 1
 	}
-	shown := strings.ReplaceAll(string(v.buf), "\n", "↵")
-	for ansi.StringWidth(shown) > room {
-		_, n := utf8.DecodeRuneInString(shown)
-		shown = shown[n:]
+	// The tail that fits, measured from the end in one pass: a long line
+	// is clipped on every draw.
+	var parts []string
+	used := 0
+	for i := len(v.buf) - 1; i >= 0; i-- {
+		var p string
+		switch r := v.buf[i]; {
+		case r == '\n':
+			p = "↵"
+		case isPasteRune(r):
+			p = v.pasteLabel(r)
+		default:
+			p = string(r)
+		}
+		pw := ansi.StringWidth(p)
+		if used+pw > room {
+			break
+		}
+		used += pw
+		parts = append(parts, p)
 	}
+	slices.Reverse(parts)
+	shown := strings.Join(parts, "")
 	s := v.pt.paint(sty{fg: v.pal.you, bold: true}, inputPrompt) + v.pt.paint(sty{fg: v.pal.text}, shown)
 	return s, pw + ansi.StringWidth(shown) + 1
 }

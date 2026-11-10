@@ -4,6 +4,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 )
@@ -26,14 +27,19 @@ const (
 	PasteOff = "\x1b[?2004l"
 )
 
-// keys reads key presses from r until it closes.
+// keys reads key presses from r until it closes. The screen is drawn once
+// the bytes of a read are handled, not per byte, and a bracketed paste is
+// collected and lands as one edit (issue #42): drawing per byte made a
+// large paste take minutes.
 func (h *host) keys(r io.Reader) {
 	ch := make(chan byte, 4096)
+	var queued atomic.Int64 // bytes read but not handled yet
 	go func() {
 		defer close(ch)
-		b := make([]byte, 1024)
+		b := make([]byte, 4096)
 		for {
 			n, err := r.Read(b)
+			queued.Add(int64(n))
 			for _, c := range b[:n] {
 				ch <- c
 			}
@@ -43,51 +49,63 @@ func (h *host) keys(r io.Reader) {
 		}
 	}()
 	con := h.con
-	pasting := false
-	for {
+	var paste []byte // a bracketed paste being read; nil outside one
+	next := func() (byte, bool) {
 		b, ok := <-ch
+		if ok {
+			queued.Add(-1)
+		}
+		return b, ok
+	}
+	for {
+		if queued.Load() == 0 {
+			con.flush()
+		}
+		b, ok := next()
 		if !ok {
 			return
 		}
 		switch {
 		case b == 0x1b:
+			if paste != nil {
+				// Inside a paste only its end counts; other sequences are dropped.
+				if nb, ok := next(); !ok {
+					return
+				} else if nb == '[' && csi(next) == "201~" {
+					con.paste(pasteText(paste))
+					paste = nil
+				}
+				continue
+			}
 			select {
 			case nb, ok := <-ch:
 				if !ok {
 					return
 				}
+				queued.Add(-1)
 				switch nb {
 				case '[':
-					switch csi(ch) {
+					switch csi(next) {
 					case "200~":
-						pasting = true
-					case "201~":
-						pasting = false
+						paste = []byte{}
 					case "5~":
 						con.scrollBy(1)
 					case "6~":
 						con.scrollBy(-1)
 					}
 				case 'O':
-					<-ch // SS3: F1-F4, keypad arrows
+					next() // SS3: F1-F4, keypad arrows
 				}
 				// Alt+key and other sequences are ignored.
 			case <-time.After(escWait):
 				h.paneCancel()
 			}
+		case paste != nil:
+			paste = append(paste, b)
 		case b == '\r' || b == '\n':
-			if pasting {
-				con.edit(func(buf []rune) []rune { return append(buf, '\n') })
-			} else {
-				h.submit(con.take())
-			}
+			h.submit(con.take())
 		case b == 0x7f || b == 0x08: // Backspace
-			con.edit(func(buf []rune) []rune {
-				if len(buf) > 0 {
-					buf = buf[:len(buf)-1]
-				}
-				return buf
-			})
+			con.edit(backspace)
 		case b == 0x15: // Ctrl-U
 			con.edit(func(buf []rune) []rune { return buf[:0] })
 		case b == 0x17: // Ctrl-W
@@ -108,25 +126,45 @@ func (h *host) keys(r io.Reader) {
 		default:
 			p := []byte{b}
 			for !utf8.FullRune(p) && len(p) < utf8.UTFMax {
-				nb, ok := <-ch
+				nb, ok := next()
 				if !ok {
 					return
 				}
 				p = append(p, nb)
 			}
-			if r, _ := utf8.DecodeRune(p); r != utf8.RuneError {
+			if r, _ := utf8.DecodeRune(p); r != utf8.RuneError && !isPasteRune(r) {
 				con.edit(func(buf []rune) []rune { return append(buf, r) })
 			}
 		}
 	}
 }
 
+// pasteText is a pasted block as prompt text: CRLF and CR become newlines,
+// tabs stay, other control bytes and invalid UTF-8 are dropped.
+func pasteText(p []byte) string {
+	s := strings.ReplaceAll(string(p), "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	return strings.Map(func(r rune) rune {
+		if (r < 0x20 && r != '\n' && r != '\t') || r == 0x7f || r == utf8.RuneError || isPasteRune(r) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+func backspace(buf []rune) []rune {
+	if len(buf) > 0 {
+		buf = buf[:len(buf)-1]
+	}
+	return buf
+}
+
 // csi reads the rest of a CSI sequence (after ESC [) and returns its
 // parameters and final byte.
-func csi(ch <-chan byte) string {
+func csi(next func() (byte, bool)) string {
 	var s []byte
 	for {
-		b, ok := <-ch
+		b, ok := next()
 		if !ok {
 			return string(s)
 		}

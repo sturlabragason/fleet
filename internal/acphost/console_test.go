@@ -1,6 +1,7 @@
 package acphost
 
 import (
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -107,8 +108,62 @@ func TestConsoleClipsInputToWidth(t *testing.T) {
 	var b syncBuf
 	v := newView(&b, func() (int, int) { return 10, 3 }, 0, "a1", "")
 	v.edit(func([]rune) []rune { return []rune("abcdefghijklmnop") })
+	v.flush()
 	if got := lastFrame(b.String()); !strings.Contains(got, "› jklmnop") {
 		t.Fatalf("frame = %q", got)
+	}
+}
+
+// A large bracketed paste lands at once as one collapsed block, is drawn a
+// handful of times rather than once per byte, and is sent whole on Enter.
+func TestKeysLargePasteLandsCollapsed(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	r := startRig(t, Config{In: pr, Keys: true, Size: func() (int, int) { return 160, 40 }}, acp.AgentCapabilities{})
+	r.waitStatus("idle")
+	var text strings.Builder
+	for i := range 3000 {
+		fmt.Fprintf(&text, "line %04d the quick brown fox jumps over the lazy dog\r\n", i)
+	}
+	before := strings.Count(r.out.String(), "\x1b[?2026h")
+	start := time.Now()
+	go io.WriteString(pw, "\x1b[200~"+text.String()+"\x1b[201~ ok")
+	r.waitFor(func() bool { return strings.Contains(lastFrame(r.out.String()), "› [Paste #1 +3000 lines] ok") }, "collapsed paste")
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("paste took %v", d)
+	}
+	if n := strings.Count(r.out.String(), "\x1b[?2026h") - before; n > 50 {
+		t.Fatalf("paste drew %d frames", n)
+	}
+	if strings.Contains(strings.Join(r.conn.Calls(), "|"), "prompt line") {
+		t.Fatalf("paste submitted before Enter: %v", r.conn.Calls())
+	}
+	io.WriteString(pw, "\r")
+	want := "prompt " + strings.ReplaceAll(text.String(), "\r\n", "\n") + " ok"
+	r.waitFor(func() bool { c := r.conn.Calls(); return len(c) > 0 && c[len(c)-1] == want }, "pasted prompt")
+}
+
+// Backspace removes a collapsed paste whole; a short one-line paste is
+// typed in as it is.
+func TestConsolePasteBackspace(t *testing.T) {
+	var b syncBuf
+	v := newView(&b, func() (int, int) { return 60, 3 }, 0, "a1", "")
+	v.paste("a\nb")
+	v.paste("short")
+	v.redraw()
+	if got := lastFrame(b.String()); !strings.Contains(got, "› [Paste #1 +2 lines]short") {
+		t.Fatalf("frame = %q", got)
+	}
+	for range 5 {
+		v.edit(backspace)
+	}
+	v.edit(backspace)
+	if !v.empty() {
+		t.Fatalf("buf = %q", string(v.buf))
+	}
+	v.paste("x\ny")
+	if got := v.take(); got != "x\ny" {
+		t.Fatalf("take = %q", got)
 	}
 }
 
