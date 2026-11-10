@@ -1,0 +1,23 @@
+ ▐▛███▛█   Claude Code v2.1.318
+▝▜██████▀  Sonnet 5 with medium effort · API Usage Billing
+ ▝▝   ▝▝   /tmp/snapwork
+
+⚠ Allow rule "Edit(*)" lets Edit run without asking only in the working directories. "Edit" alone
+  allows every path. Older versions of Claude Code treat "Edit(*)" as "Edit", and this version will
+  too if Anthropic turns this change off.
+⚠ Allow rule "Write(*)" lets Write run without asking only in the working directories. "Write" alone
+  allows every path. Older versions of Claude Code treat "Write(*)" as "Write", and this version
+  will too if Anthropic turns this change off.
+⚠ Allow rule "Read(*)" adds nothing to Read's default, which already runs without asking in the
+  working directories. "Read" alone allows every path. Older versions of Claude Code treat "Read(*)"
+  as "Read", and this version will too if Anthropic turns this change off.
+
+❯ summarise the acme rollout plan and check the dates
+
+* Choreographing…
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  usage n/a  ctx ░░░░░░ 0%  Sonnet 5
+  ⏵⏵ bypass permissions on (shift+tab to cycle)

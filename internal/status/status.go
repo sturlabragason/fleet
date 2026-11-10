@@ -61,6 +61,11 @@ const (
 // wins anywhere in the window, like waiting. Without it only the bottom-most
 // line decides, which for those tools is a mode footer that never changes.
 //
+// Claude's spinner cycles · ✢ * ✶ ✻ ✽ on Linux (✳ on macOS and ghostty);
+// a missing frame reads idle for that poll and the agent flips (#7). The
+// spinner sits at column 0, so · and * must too: an indented "* …" is a
+// bullet in the transcript.
+//
 // Claude's empty box is "❯" plus a non-breaking space, which `\s` does not
 // match, so its box patterns spell out \x{a0}.
 //
@@ -100,7 +105,7 @@ input = ['^[\s\x{a0}]*[>❯][\s\x{a0}](.*)$', '^[\s\x{a0}]*[>❯]()[\s\x{a0}]*$'
 placeholder = ['^Try "']
 waiting = ['Do you want to', 'Quick safety check', '(?i)this command requires approval', '❯ 1\. Yes', '\[y/n\]', '(?i)enter to confirm · esc to cancel']
 error = ['(?i)^\s*●?\s*API Error', '(?i)^\s*(fatal|panic):']
-working = ['(?i)esc to interrupt', '^\s*[✻✽✶✳✢] \w+…']
+working = ['(?i)esc to interrupt', '^\s*[✢✳✶✻✽] \w+…', '^[·*] \w+…']
 idle = ['^[\s\x{a0}]*[>❯][\s\x{a0}]*$', '\? for shortcuts', '^\s*[⏸⏵]+ \w+ mode on']
 
 [agy]
