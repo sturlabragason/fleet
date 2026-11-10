@@ -136,7 +136,7 @@ func (m *Model) helpOverlay() string {
 func (m *Model) header() string {
 	counts := map[string]int{}
 	for _, a := range m.agents {
-		counts[a.Status]++
+		counts[a.Shown()]++
 	}
 	h := fmt.Sprintf(" fleet · %d agents · %d working · %d waiting · %d error", len(m.agents), counts["working"], counts["waiting"], counts["error"]+counts["stuck"])
 	idle := lipgloss.NewStyle().Foreground(colIdle)
@@ -187,7 +187,11 @@ var badgeStyle = lipgloss.NewStyle().Foreground(colWaitA)
 func line3(a *board.Agent, w int) string {
 	if r := a.Report; r != nil && a.Status != "working" {
 		g, c := reportStyle(r.State)
-		return lipgloss.NewStyle().Foreground(c).Render(ansi.Truncate(g+" "+r.State+": "+r.Summary, w, "…"))
+		st := r.State
+		if a.Answered() {
+			st += " (answered)"
+		}
+		return lipgloss.NewStyle().Foreground(c).Render(ansi.Truncate(g+" "+st+": "+r.Summary, w, "…"))
 	}
 	return lipgloss.NewStyle().Foreground(colText).Render(shorten(a.LastLine, w))
 }
@@ -250,7 +254,8 @@ func (m *Model) grid() layout.TileGrid {
 }
 
 func (m *Model) tile(a *board.Agent, tw int) string {
-	col := statusColor(a.Status)
+	shown := a.Shown() // waiting for an agent idle on its question (ADR-90)
+	col := statusColor(shown)
 	w := tw - 2
 	border := lipgloss.RoundedBorder()
 	if a.Name == m.sel {
@@ -288,8 +293,11 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 	if a.Name == m.sel {
 		st1 = st1.Foreground(cursorColor(col))
 	}
-	l1 := st1.Render(glyph(a.Status)+" "+ansi.Truncate(a.Name, inner-4-tw2, "…")) + tgt + st1.Render(wall)
-	st := a.Status
+	l1 := st1.Render(glyph(shown)+" "+ansi.Truncate(a.Name, inner-4-tw2, "…")) + tgt + st1.Render(wall)
+	st := shown
+	if a.Asking() {
+		st += " · question"
+	}
 	if noReport != "" {
 		st += " · no report"
 	}
@@ -297,7 +305,7 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 	l2 := lipgloss.NewStyle().Foreground(colIdle).Render(metaLineMark(a.Profile, driverMark(a), state, inner))
 	if ti, ok := m.teams[a.Name]; ok && ti.Team != "" {
 		ts := lipgloss.NewStyle().Foreground(lipgloss.Color(ti.Color))
-		l1 = st1.Render(glyph(a.Status)+" "+ansi.Truncate(a.Name, inner-4-2-tw2, "…")) + tgt + " " + ts.Render(teamMark)
+		l1 = st1.Render(glyph(shown)+" "+ansi.Truncate(a.Name, inner-4-2-tw2, "…")) + tgt + " " + ts.Render(teamMark)
 		if wall != "" {
 			l1 += st1.Render(wall)
 		}
@@ -333,12 +341,12 @@ func (m *Model) chips(rest []*board.Agent, all bool) string {
 	}
 	for i, a := range rest {
 		cur := a.Name == m.sel
-		sc := statusColor(a.Status)
+		sc := statusColor(a.Shown())
 		if cur {
 			sc = cursorColor(sc)
 		}
 		st := cursorStyle(lipgloss.NewStyle().Foreground(sc), cur)
-		c := m.ownerChip(a) + st.Render(glyph(a.Status)+" "+a.Name+m.queueMark(a.Name))
+		c := m.ownerChip(a) + st.Render(glyph(a.Shown())+" "+a.Name+m.queueMark(a.Name))
 		if m.pinned[a.Name] {
 			c += pinStyle.Render(" " + pinMark)
 		}

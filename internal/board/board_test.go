@@ -210,6 +210,48 @@ func TestUserNoReport(t *testing.T) {
 	}
 }
 
+// A question or blocked report waits for an answer until the agent's next
+// turn starts, and counts as answered from then on (ADR-90, fleet#10, #14).
+func TestAskingAndAnswered(t *testing.T) {
+	now := time.Now()
+	asked := now.Add(-time.Hour)
+	agent := func(state string, turnAt time.Time, st string) *Agent {
+		return &Agent{Status: st, TurnAt: turnAt, Report: &Report{State: state, At: asked}}
+	}
+	for _, c := range []struct {
+		name            string
+		a               *Agent
+		asking, answers bool
+		shown           string
+	}{
+		{"question, idle since", agent("question", asked.Add(-time.Minute), "idle"), true, false, "waiting"},
+		{"question, no turn ever seen", agent("question", time.Time{}, "idle"), true, false, "waiting"},
+		{"question, answered by a send queued mid-turn", func() *Agent {
+			a := agent("question", asked.Add(-time.Minute), "idle")
+			a.PromptAt = asked.Add(time.Second)
+			return a
+		}(), false, false, "idle"},
+		{"question, still in its turn", agent("question", asked.Add(-time.Minute), "working"), false, false, "working"},
+		{"question, a menu on screen", agent("question", asked.Add(-time.Minute), "waiting"), false, false, "waiting"},
+		{"question, next turn started", agent("question", asked.Add(time.Minute), "working"), false, true, "working"},
+		{"question, next turn ended", agent("question", asked.Add(time.Minute), "idle"), false, true, "idle"},
+		{"blocked, next turn started", agent("blocked", asked.Add(time.Minute), "working"), false, true, "working"},
+		{"blocked, idle since", agent("blocked", asked.Add(-time.Minute), "idle"), false, false, "idle"},
+		{"progress is never answered", agent("progress", asked.Add(time.Minute), "idle"), false, false, "idle"},
+		{"no report", &Agent{Status: "idle", TurnAt: asked}, false, false, "idle"},
+	} {
+		if got := c.a.Asking(); got != c.asking {
+			t.Errorf("%s: Asking = %v, want %v", c.name, got, c.asking)
+		}
+		if got := c.a.Answered(); got != c.answers {
+			t.Errorf("%s: Answered = %v, want %v", c.name, got, c.answers)
+		}
+		if got := c.a.Shown(); got != c.shown {
+			t.Errorf("%s: Shown = %q, want %q", c.name, got, c.shown)
+		}
+	}
+}
+
 func TestDriverName(t *testing.T) {
 	if got := (&Agent{}).DriverName(); got != "tmux" {
 		t.Errorf("no driver field (pre-v1.0.0 agent): %q, want tmux", got)

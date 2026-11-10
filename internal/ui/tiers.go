@@ -37,7 +37,7 @@ const (
 )
 
 func tierOf(a *board.Agent, onWall bool, now time.Time) int {
-	switch a.Status {
+	switch a.Shown() {
 	case "waiting":
 		return tierWaiting
 	case "error":
@@ -59,11 +59,11 @@ func tierOf(a *board.Agent, onWall bool, now time.Time) int {
 // attention is the order for agents new to a tier: by status rank, the
 // longest wait first, then by name.
 func attention(a, b *board.Agent) bool {
-	ra, rb := rank(a.Status), rank(b.Status)
+	ra, rb := rank(a.Shown()), rank(b.Shown())
 	if ra != rb {
 		return ra < rb
 	}
-	if a.Status == "waiting" && !a.StatusSince.Equal(b.StatusSince) {
+	if a.Shown() == "waiting" && !a.StatusSince.Equal(b.StatusSince) {
 		return a.StatusSince.Before(b.StatusSince)
 	}
 	return a.Name < b.Name
@@ -405,7 +405,7 @@ func (m *Model) rowCell(tv tierView, name string, w int) string {
 		return zone.Mark("fold", st.Render(fit(label, w)))
 	}
 	a := m.agents[slices.IndexFunc(m.agents, func(a *board.Agent) bool { return a.Name == name })]
-	col := statusColor(a.Status)
+	col := statusColor(a.Shown())
 	cur := a.Name == m.sel
 	if cur {
 		col = cursorColor(col)
@@ -420,7 +420,7 @@ func (m *Model) rowCell(tv tierView, name string, w int) string {
 	}
 	age = fmt.Sprintf("%4s", age)
 	mw := 2 * m.markCount(a)
-	head := " " + glyph(a.Status) + " " + ansi.Truncate(a.Name, max(w-3-mw-ansi.StringWidth(age)-1, 1), "…")
+	head := " " + glyph(a.Shown()) + " " + ansi.Truncate(a.Name, max(w-3-mw-ansi.StringWidth(age)-1, 1), "…")
 	row = cursorStyle(lipgloss.NewStyle().Foreground(col), cur).Render(head)
 	if m.pinned[a.Name] {
 		mark(pinStyle, pinMark)

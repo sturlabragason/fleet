@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -324,5 +325,25 @@ func TestUserNoReportAgentDoesNotFold(t *testing.T) {
 	v := ansi.Strip(m.View())
 	if !strings.Contains(v, "+5 idle") || !strings.Contains(v, noReportMark) {
 		t.Fatalf("i0 should be a row with %s, the other 5 folded:\n%s", noReportMark, v)
+	}
+}
+
+// An idle agent whose newest report is an open question is waiting for an
+// answer: it sorts with the waiting ones in the waiting glyph, not folded
+// with the idle ones (ADR-90, fleet#10).
+func TestAskingAgentReadsAsWaiting(t *testing.T) {
+	m, _ := crowd(80)
+	for _, a := range m.agents {
+		if a.Name == "i0" {
+			a.Report = &board.Report{State: "question", Summary: "which?", At: a.StatusSince.Add(-time.Second)}
+		}
+	}
+	m.setAgents(m.agents)
+	v := ansi.Strip(m.View())
+	if !strings.Contains(v, "+5 idle") || !strings.Contains(v, glyph("waiting")+" i0") {
+		t.Fatalf("i0 should be a waiting row, the other 5 folded:\n%s", v)
+	}
+	if got := tierOf(m.agents[slices.IndexFunc(m.agents, func(a *board.Agent) bool { return a.Name == "i0" })], false, m.now()); got != tierWaiting {
+		t.Fatalf("tier %d, want waiting", got)
 	}
 }
