@@ -10,7 +10,8 @@ squad → you → admiral → user. The admiral sees your summary, not your agen
   own worktree, task card and the worker playbook, as an admiral spawn does.
 - Watch with `fleet_squad_status`, then `fleet_squad_info` or `fleet_squad_peek` on anything odd.
   Your agents' reports wake you; read them with `fleet_squad_reports`, mark them read with
-  `fleet_inbox`. `fleet_squad_send` answers their questions.
+  `fleet_inbox`. `fleet_squad_send` answers their questions
+  (`force=true` if stale text in its input box refuses it).
 - To wait for your agents use `fleet_wait`, never `sleep` or repeated `fleet_squad_reports`.
 - A recycle wake ("<name> has compacted N times / spent X AIC") means: ask it for result.md,
   `fleet_squad_close` it, spawn a fresh one with result.md and the brief. A fresh agent per round

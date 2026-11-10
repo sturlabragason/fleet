@@ -5,6 +5,7 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-10
+- A squad leader can pass `force=true` to `fleet_squad_send` to send past stale text in its own agent's input box, as the admiral can with `fleet_send`; an agent on a permission prompt is still refused (#20).
 - `fleet doctor` checks your machine before `fleet up`: tmux 3.3 or newer, a UTF-8 locale, `~/.local/bin` on PATH, that config.toml and tools.toml parse, and that the admiral's and your own profiles' commands are found; one line per check with the fix, exit 1 on a fail, `--json` too (#23).
 - Broadcasts and FYI agent mail no longer wake idle or done agents (a cold wake costs 20–26 AIC): they wait for the agent's next turn, `fleet_info` and `fleet_status` show the queued mail, and a direct ask still wakes its peer; mark a message with `needs_action` (`fleet mail send --act|--fyi`) to choose (ADR-92).
 - Worker agents no longer load your global MCP servers, which cut a Copilot worker's first call from about 53k to 24k tokens here; `keep_mcp = ["name"]` in config.toml keeps one (ADR-91).
