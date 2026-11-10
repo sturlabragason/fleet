@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"io"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/keys"
 	"github.com/sturlabragason/fleet/internal/layout"
+	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/team"
 	"github.com/sturlabragason/fleet/internal/wall"
 )
@@ -693,22 +695,56 @@ func TestTileACPMarker(t *testing.T) {
 	}
 }
 
-// Animation ticks must not change the frame when nothing on it animates:
-// bubbletea then writes nothing, and tmux has nothing to repaint (each
-// repaint moved the cursor out of the admiral pane and flickered it).
-func TestAnimTickLeavesStillFrameAlone(t *testing.T) {
+// Nothing on the overview blinks or animates (ADR-81): working, waiting and
+// subagent tiles keep exactly the same frame across ticks, so bubbletea writes
+// nothing and tmux never moves the cursor out of the admiral pane. No cell
+// carries the SGR blink attribute either.
+func TestOverviewNeverBlinks(t *testing.T) {
+	now := time.Now()
 	m := New(&fakeBE{}, "")
+	m.now = func() time.Time { return now }
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 20})
-	t0 := time.Now().Add(-time.Minute)
+	t0 := now.Add(-time.Minute)
 	m.Update(agentsMsg{agents: []*board.Agent{
-		{Name: "echo", Profile: "fake", Status: "idle", StatusSince: t0},
-		{Name: "foxtrot", Profile: "fake", Status: "error", StatusSince: t0},
+		{Name: "alpha", Profile: "fake", Status: "working", StatusSince: t0,
+			Subagents: subs(status.SubRunning, status.SubRunning, status.SubDone)},
+		{Name: "bravo", Profile: "fake", Status: "waiting", StatusSince: t0},
+		{Name: "charlie", Profile: "fake", Status: "idle", StatusSince: t0,
+			Report: &board.Report{State: "done", Summary: "shipped"}},
+		{Name: "delta", Profile: "fake", Status: "error", StatusSince: t0},
 	}})
 	first := m.View()
+	if !strings.Contains(ansi.Strip(first), "○ alpha") || !strings.Contains(ansi.Strip(first), "● bravo") {
+		t.Fatalf("static glyphs missing:\n%s", ansi.Strip(first))
+	}
+	if sgrBlinks(first) {
+		t.Error("view carries the SGR blink attribute")
+	}
 	for i := 0; i < 20; i++ {
 		m.Update(animMsg{})
 		if v := m.View(); v != first {
-			t.Fatalf("tick %d redrew a still frame:\n%s\nwas:\n%s", i, v, first)
+			t.Fatalf("tick %d changed the frame:\n%s\nwas:\n%s", i, v, first)
 		}
 	}
+}
+
+// sgrBlinks reports whether any SGR sequence in s sets blink (5 or 6),
+// skipping the colour arguments of 38/48/58 (5;n and 2;r;g;b).
+func sgrBlinks(s string) bool {
+	for _, m := range regexp.MustCompile(`\x1b\[([0-9;:]*)m`).FindAllStringSubmatch(s, -1) {
+		ps := strings.Split(m[1], ";")
+		for i := 0; i < len(ps); i++ {
+			switch ps[i] {
+			case "38", "48", "58":
+				if i+1 < len(ps) && ps[i+1] == "5" {
+					i += 2
+				} else if i+1 < len(ps) && ps[i+1] == "2" {
+					i += 4
+				}
+			case "5", "6":
+				return true
+			}
+		}
+	}
+	return false
 }

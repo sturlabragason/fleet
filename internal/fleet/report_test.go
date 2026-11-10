@@ -383,7 +383,7 @@ func TestSweepDoneClosesIdleDone(t *testing.T) {
 	}
 }
 
-// UnreadReports is what the overview header's ✉ badge counts (ADR-36): only
+// UnreadReports is what the overview header's ● badge counts (ADR-36): only
 // reports, and only while the admiral has not read them.
 func TestUnreadReportsCountsOnlyUnreadReports(t *testing.T) {
 	f, _ := mailFleet(t)

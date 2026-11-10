@@ -219,7 +219,7 @@ func (f *Fleet) lastReportID(name string) string {
 }
 
 // UnreadReports counts the admiral's unread reports (DESIGN §6.7). It is
-// what the overview header's ✉ badge and the tmux status line show; reading
+// what the overview header's ● badge and the tmux status line show; reading
 // them with fleet_reports marks them read and the count falls to 0 (ADR-36).
 func (f *Fleet) UnreadReports() int {
 	n := 0

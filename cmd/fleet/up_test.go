@@ -447,12 +447,12 @@ func TestSingleAdmiralChromeUnchanged(t *testing.T) {
 			left = a[3]
 		}
 	}
-	// The badge is a steady highlight: no blink attribute (ADR-75).
-	if strings.Contains(left, "blink") {
+	// The badge is a steady dot: no blink attribute, no background block (ADR-75, ADR-81).
+	if strings.Contains(left, "blink") || strings.Contains(left, "bg="+theme.Waiting) {
 		t.Errorf("status-left badge blinks: %q", left)
 	}
 	oldBorder := " #{?#{==:#{@role},sup},#[fg=" + theme.Supervisor + "]#[bold]admiral#[default]#{?@fleet_admiral_profile,#[fg=" + theme.Muted + "] · #{@fleet_admiral_profile}#[default],}#{?@fleet_ctx,#[fg=#{@fleet_ctx_color}] · ctx #{@fleet_ctx}#[default],},#{?#{==:#{@role},ov},#[fg=" + theme.Text + "]#[bold]overview#[default]," + targetMark + "#[fg=#{?@fleet_color,#{@fleet_color},default}]#{@fleet_glyph} #{@fleet_agent}" + pinMark + "#{?@fleet_team, #[fg=#{@fleet_team_color}]◆,} #[fg=" + theme.Muted + "]#{@fleet_status}#[default]" + nextOutMark + "}} "
-	oldLeft := "#[fg=" + theme.Crust + ",bg=" + theme.Supervisor + ",bold] fleet #[default] #{?" + fleet.BadgeOption + ",#[fg=" + theme.Crust + "#,bg=" + theme.Waiting + "#,bold] ✉ #{" + fleet.BadgeOption + "} #[default] ,}"
+	oldLeft := "#[fg=" + theme.Crust + ",bg=" + theme.Supervisor + ",bold] fleet #[default] #{?" + fleet.BadgeOption + ",#[fg=" + theme.Waiting + "] ● #{" + fleet.BadgeOption + "} #[default] ,}"
 	pane, _ := c.Run("display-message", "-p", "-t", "f:main", "#{pane_id}")
 	expand := func(f string) string {
 		out, err := c.Run("display-message", "-p", "-t", pane, f)

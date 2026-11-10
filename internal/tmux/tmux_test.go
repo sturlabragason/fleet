@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -168,5 +169,18 @@ func TestSendKeysWithReadOnlyClient(t *testing.T) {
 		if err := c.SendKeys(p, "C-c"); err == nil {
 			t.Fatal("a key with no byte form must still fail")
 		}
+	}
+}
+
+// A TMUX_TMPDIR that was removed must not let tmux fall back to the user's
+// default socket dir, where -L fleet is the real fleet server (ADR-81).
+func TestRunRefusesGoneTmpdir(t *testing.T) {
+	t.Setenv("TMUX_TMPDIR", filepath.Join(t.TempDir(), "gone"))
+	c := New("fleet-test-gone")
+	if _, err := c.Run("set-option", "-gu", "@fleet_reports"); err != ErrTmpdirGone {
+		t.Fatalf("err = %v, want ErrTmpdirGone", err)
+	}
+	if c.HasSession("fleet") {
+		t.Error("HasSession through a gone TMUX_TMPDIR")
 	}
 }

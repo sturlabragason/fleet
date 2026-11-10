@@ -81,7 +81,7 @@ func TestTiersCardsAndRows(t *testing.T) {
 			t.Errorf("%s missing:\n%s", a.Name, v)
 		}
 	}
-	if !strings.Contains(lines[7], "⠋ r00") || !strings.Contains(lines[7], " 1m") {
+	if !strings.Contains(lines[7], "○ r00") || !strings.Contains(lines[7], " 1m") {
 		t.Errorf("first row line: %q", lines[7])
 	}
 	if !strings.HasPrefix(names(m), "w0,w1,w2,wall,r00") {

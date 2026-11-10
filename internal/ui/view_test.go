@@ -58,7 +58,7 @@ func TestOverviewFitsEveryPane(t *testing.T) {
 				if got := cards(v); got != tv.g.Cards {
 					t.Errorf("%dx%d n=%d: %d cards, tiers say %d:\n%s", w, h, n, got, tv.g.Cards, v)
 				}
-				if !strings.Contains(v, "⠋ "+m.sel) || strings.Contains(v, "hidden") {
+				if !strings.Contains(v, "○ "+m.sel) || strings.Contains(v, "hidden") {
 					t.Errorf("%dx%d n=%d: selected %s not shown as a row, or a chips line:\n%s", w, h, n, m.sel, v)
 				}
 				if strings.Count(v, "agent-") < n && !strings.Contains(v, "more") {
@@ -79,7 +79,7 @@ func TestOverviewFitsEveryPane(t *testing.T) {
 				if !strings.Contains(v, fmt.Sprintf("+%d hidden:", hidden)) {
 					t.Errorf("%dx%d n=%d: want +%d hidden:\n%s", w, h, n, hidden, v)
 				}
-				if !strings.Contains(v, "┃ ⠋ "+m.sel) {
+				if !strings.Contains(v, "┃ ○ "+m.sel) {
 					t.Errorf("%dx%d n=%d: selected %s has no card:\n%s", w, h, n, m.sel, v)
 				}
 			}
@@ -311,7 +311,7 @@ func TestCursorCardBorderShape(t *testing.T) {
 }
 
 // The header carries the unread-report badge (ADR-36): nothing while the
-// admiral is up to date, "✉ N reports" while reports wait, and it clears
+// admiral is up to date, "● N reports" while reports wait, and it clears
 // again once they are read. Narrow panes still get no over-wide line.
 func TestHeaderReportBadge(t *testing.T) {
 	zone.NewGlobal()
@@ -326,11 +326,11 @@ func TestHeaderReportBadge(t *testing.T) {
 		t.Errorf("badge with nothing unread: %q", h)
 	}
 	be.reports = 3
-	if h := head(); !strings.Contains(h, "✉ 3 reports") {
+	if h := head(); !strings.Contains(h, "● 3 reports") {
 		t.Errorf("3 unread: %q", h)
 	}
 	be.reports = 1
-	if h := head(); !strings.Contains(h, "✉ 1 report") || strings.Contains(h, "reports") {
+	if h := head(); !strings.Contains(h, "● 1 report") || strings.Contains(h, "reports") {
 		t.Errorf("1 unread: %q", h)
 	}
 	be.reports = 0

@@ -33,8 +33,6 @@ type Model struct {
 	teams     map[string]team.Info
 	sel       string
 	w, h      int
-	frame     int
-	animate   bool
 	msg       string
 	msgAt     time.Time // when msg was set; it clears after msgTTL
 	target    string    // agent in the ▶ target slot, "" if none (DESIGN.md §5e)
@@ -46,7 +44,7 @@ type Model struct {
 	now       func() time.Time
 	supCtx    [2]string // last label/colour set on the admiral border
 	ctxSet    bool
-	reports   int // unread admiral reports behind the header's ✉ badge (ADR-36)
+	reports   int // unread admiral reports behind the header's ● badge (ADR-36)
 	adms      []AdmiralInfo
 	badgeBy   string
 }
@@ -117,12 +115,11 @@ func (m *Model) poll() tea.Cmd {
 // Init starts polling.
 func (m *Model) Init() tea.Cmd { return tea.Batch(m.poll(), anim()) }
 
-// animEvery is one animation frame. Each frame that changes the view makes
-// bubbletea rewrite whole tile rows (1-2 KB through tmux), and tmux moves the
-// cursor out of the active pane and back for each one: at 100 ms that
-// flickered the admiral's bottom lines on VTE. Three frames a second keeps the
-// spinner alive at a third of the writes.
-const animEvery = 300 * time.Millisecond
+// animEvery is the housekeeping tick (it expires header messages). Nothing on
+// the overview animates or blinks (ADR-81): a tick that changes nothing leaves
+// the view identical, bubbletea writes nothing, and tmux never has to move the
+// cursor out of the admiral pane to repaint the overview.
+const animEvery = time.Second
 
 func anim() tea.Cmd {
 	return tea.Tick(animEvery, func(time.Time) tea.Msg { return animMsg{} })
@@ -166,7 +163,6 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 	case pollMsg:
 		return m, m.poll()
 	case animMsg:
-		m.frame++
 		if m.msg != "" && m.now().Sub(m.msgAt) >= msgTTL {
 			m.msg = ""
 		}

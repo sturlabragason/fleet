@@ -289,7 +289,7 @@ func (f *Fleet) tagNoReport(pane, tag string) {
 	f.T.UnsetPaneOption(pane, "@fleet_noreport")
 }
 
-var paneGlyphs = map[string]string{"working": "⠹", "waiting": "●", "error": "✖", "stuck": "⧗", "idle": "○"}
+var paneGlyphs = map[string]string{"working": "○", "waiting": "●", "error": "✖", "stuck": "⧗", "idle": "○"}
 
 // tagPane stores the status on the pane so tmux border formats can show it and
 // the wall can evict and emphasise by status. since is the time the agent
