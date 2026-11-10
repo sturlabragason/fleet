@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/status"
+	"github.com/sturlabragason/fleet/internal/testenv"
 )
 
 var fakeBin string
@@ -30,7 +31,7 @@ func TestMain(m *testing.M) {
 		os.RemoveAll(dir)
 		os.Exit(1)
 	}
-	code := m.Run()
+	code := testenv.Main(m)
 	os.RemoveAll(dir)
 	os.Exit(code)
 }

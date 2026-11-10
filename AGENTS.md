@@ -22,6 +22,7 @@ README, a screenshot or anything in internal/theme.
 # Conventions
 - One package per component (DESIGN.md §15), each with a _test.go. Small files.
 - A user-facing feature or fix adds one line to CHANGELOG.md (newest first, under today's date) in the same commit. It is embedded in the binary and is what `Alt-g` shows (DESIGN.md §5d).
+- A package whose tests start tmux servers or processes has `func TestMain(m *testing.M) { os.Exit(testenv.Main(m)) }`; it fails the run if anything is left running (ADR-83).
 - Pane geometry lives only in internal/layout.
 - Tool profiles and status patterns are data (~/.fleet/tools.toml, patterns), not code.
 - Log with slog and a "component" attribute. Recover and log panics in the TUI loop.

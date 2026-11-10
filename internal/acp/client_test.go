@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sturlabragason/fleet/internal/testenv"
 )
 
 // TestMain lets the test binary act as a tiny ACP agent for Start tests.
@@ -20,7 +22,7 @@ func TestMain(m *testing.M) {
 		helperAgent(mode)
 		return
 	}
-	os.Exit(m.Run())
+	os.Exit(testenv.Main(m))
 }
 
 // helperAgent answers initialize, prints its cwd to stderr, then exits:
