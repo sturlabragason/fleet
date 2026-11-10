@@ -37,10 +37,12 @@ type backend struct {
 // titles, the board and these cards from disagreeing (ADR-49), and it halves
 // the tmux calls while the overview is open. The admiral wake is not a
 // refresh and runs either way: skipping it here is what let reports sit
-// unseen while a watcher ran.
+// unseen while a watcher ran. The status-line badge is the watcher's alone
+// then: an overview left on an older binary set it differently every poll
+// and it blinked (ADR-75).
 func (b *backend) Refresh() ([]*board.Agent, error) {
 	if watch.Live(b.f.Home, time.Now()) {
-		b.f.DeliverWake()
+		b.f.RetryWake()
 		return b.f.Store.Load().Sorted(), nil
 	}
 	return b.f.Refresh()
