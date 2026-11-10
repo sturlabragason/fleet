@@ -66,7 +66,10 @@ silently skipped. Wait for CI green before tagging — a tag on a red commit is 
 The release workflow (`.github/workflows/release.yml`, ADR-73) does the rest: it picks the next
 version from the conventional commits since the last tag (`scripts/next-version.sh`), tags main's
 head, builds linux and darwin × amd64 and arm64 with goreleaser, writes `SHA256SUMS`, and takes the
-notes from the `CHANGELOG.md` lines added since the last tag (`scripts/release-notes.sh`). It
+notes from the `CHANGELOG.md` lines added since the last tag (`scripts/release-notes.sh`): a
+headline, then Changed defaults / action needed, New, Changed and Fixed by commit type, one Internal
+line, and the ADRs as a footer linked to DESIGN.md §14. It fails on a profile name that is not built in
+or a match of the private deny list (`PUBLIC_DENY`). It
 refuses a ref other than main, a commit without green CI, or a tag that exists.
 
 Dry-run first; it is the default and publishes nothing:
@@ -78,7 +81,10 @@ gh run watch -R sturlabragason/fleet "$run" --exit-status
 gh run view -R sturlabragason/fleet "$run"          # the summary shows the version and notes
 ```
 
-Check that the version and the notes are what the user approved, then release:
+Check that the version and the notes are what the user approved: a default that changed sits under
+"Changed defaults / action needed" with how to keep the old behaviour (if not, fix its CHANGELOG line with
+`**Changed default:**`), and no own profile, account, client or employer name appears. Run
+`scripts/release-notes.sh HEAD vX.Y.Z` locally too: it reads the private deny list in `.git/info/`. Then release:
 
 ```sh
 gh workflow run release.yml -R sturlabragason/fleet -f dry_run=false          # next version
