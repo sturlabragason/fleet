@@ -118,4 +118,5 @@ func applyHook(a *board.Agent, s status.State) status.Status {
 func (f *Fleet) forgetHook(name string) {
 	status.DropState(status.StateDir(f.Home), name)
 	status.DropHookSubs(f.Home, name)
+	status.DropStopBlock(f.Home, name)
 }
