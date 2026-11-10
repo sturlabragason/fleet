@@ -106,14 +106,17 @@ func TestAgentMode(t *testing.T) {
 	if msg, isErr := ra.tool("fleet_msg_send", map[string]any{"to": "b", "text": "schema is v2"}); isErr || !strings.HasPrefix(msg, "sent to b") {
 		t.Fatalf("send: %q", msg)
 	}
+	if msg, isErr := ra.tool("fleet_msg_send", map[string]any{"to": "b", "text": "merged, nothing to do", "needs_action": false}); isErr || !strings.HasPrefix(msg, "sent to b (FYI: ") {
+		t.Fatalf("FYI send: %q", msg)
+	}
 	msg, isErr := rb.tool("fleet_inbox", nil)
-	if isErr || !strings.HasPrefix(msg, InboxHeader) || !strings.Contains(msg, "a→b msg] schema is v2") || strings.Contains(msg, "unread)") {
+	if isErr || !strings.HasPrefix(msg, InboxHeader) || !strings.Contains(msg, "a→b msg] schema is v2") || !strings.Contains(msg, "a→b msg fyi] merged, nothing to do") || strings.Contains(msg, "unread)") {
 		t.Fatalf("inbox: %q", msg)
 	}
 	if msg, _ := rb.tool("fleet_inbox", nil); !strings.HasPrefix(msg, "no new messages") {
 		t.Fatalf("second inbox: %q", msg)
 	}
-	if msg, _ := rb.tool("fleet_inbox", map[string]any{"all": true, "limit": 1}); !strings.Contains(msg, "schema is v2") {
+	if msg, _ := rb.tool("fleet_inbox", map[string]any{"all": true, "limit": 2}); !strings.Contains(msg, "schema is v2") {
 		t.Fatalf("inbox all: %q", msg)
 	}
 	ghost := startRPC(t, NewAgent(f, "ghost"))

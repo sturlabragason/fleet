@@ -111,7 +111,7 @@ const usage = `usage:
                                             with --agent or when run inside an agent pane; re-execs itself
                                             in place when the fleet binary changes (--probe: self-check);
                                             --rules-in-prompt: the admiral has the rules as a system prompt file (ADR-86)
-  fleet mail [--as NAME] agents | inbox [--all] [-n N] | send <to|*> "text"
+  fleet mail [--as NAME] agents | inbox [--all] [-n N] | send [--fyi|--act] <to|*> "text"
              | request <to> ["reason"] | grant <who> | deny <who> | revoke <who>
                                             message other agents (free within a team or repo, else on request); --as defaults to this pane's agent
   fleet access [ls] | log [-n N] | grant A B | deny A B | revoke A B

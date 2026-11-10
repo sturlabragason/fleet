@@ -76,6 +76,9 @@ type Msg struct {
 	Kind string    `json:"kind"`
 	Text string    `json:"text"`
 	T    time.Time `json:"t"`
+	// FYI marks a message that needs no action: it waits for the
+	// recipient's next turn instead of waking it (ADR-92).
+	FYI bool `json:"fyi,omitempty"`
 }
 
 // Store is the mailbox rooted at Dir (<fleet home>/mail).
@@ -228,7 +231,10 @@ func (st *state) nextID() string {
 
 // deliver appends one message to inbox's file (O_APPEND, under the lock).
 func (st *state) deliver(inbox, id, from, to, kind, text string) error {
-	m := Msg{ID: id, From: from, To: to, Kind: kind, Text: text, T: time.Now()}
+	return st.deliverMsg(inbox, Msg{ID: id, From: from, To: to, Kind: kind, Text: text, T: time.Now()})
+}
+
+func (st *state) deliverMsg(inbox string, m Msg) error {
 	if err := st.s.mkAgentDir(inbox); err != nil {
 		return err
 	}

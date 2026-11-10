@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/sturlabragason/fleet/internal/board"
@@ -207,5 +208,47 @@ func TestMailPolicy(t *testing.T) {
 	f.Prefs, _ = prefs.Load()
 	if _, err := f.MailSend("a", "c", "x"); err == nil {
 		t.Fatal("ask policy let teammates through")
+	}
+}
+
+// Mail that needs no action never wakes an idle agent: a broadcast by
+// default, or needs_action=false. It waits for the agent's next turn and
+// shows in fleet_info; an ask wakes it with the whole unread count (ADR-92).
+func TestMailFYIQueuedNotWoken(t *testing.T) {
+	f, pasted := mailFleet(t)
+	if err := f.Mail().Decide("a", "b", "grant"); err != nil {
+		t.Fatal(err)
+	}
+	f.Mail().Inbox("b", false, 0)
+	setStatus(t, f, "b", "idle")
+	if _, err := f.MailSend("a", "*", "restore-lag merged"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.MailSendAs("a", "b", "done, FYI", false); err != nil {
+		t.Fatal(err)
+	}
+	if len(*pasted) != 0 {
+		t.Fatalf("woke an idle agent for FYI mail: %q", *pasted)
+	}
+	info, err := f.Info("b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(info, "mail: 2 unread (2 FYI, queued for its next turn)") {
+		t.Fatalf("info does not show queued mail:\n%s", info)
+	}
+	if _, err := f.MailSend("a", "b", "can you review?"); err != nil {
+		t.Fatal(err)
+	}
+	pb, _ := f.Pane("b")
+	if len(*pasted) != 1 || (*pasted)[0] != pb+" "+NudgeLine(3, "a") {
+		t.Fatalf("an ask must wake: %q", *pasted)
+	}
+	f.Mail().Inbox("b", false, 0)
+	if _, err := f.MailSendAs("a", "*", "everyone: rebase now", true); err != nil {
+		t.Fatal(err)
+	}
+	if len(*pasted) != 2 {
+		t.Fatalf("a broadcast that needs action must wake: %q", *pasted)
 	}
 }

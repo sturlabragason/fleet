@@ -182,6 +182,7 @@ func (f *Fleet) Info(name string) (string, error) {
 	if a.FleetVersion != "" {
 		kv("fleet version", a.FleetVersion+" (started the agent)")
 	}
+	kv("mail", f.mailLine(name))
 	kv("last activity", now.Sub(a.LastChange).Round(time.Second).String()+" ago")
 	kv("dir", a.Dir)
 	if c := a.Card; c != nil {
@@ -323,4 +324,18 @@ func capMessage(msg string) string {
 		return "…" + string(r[len(r)-LastMessageMax+1:])
 	}
 	return msg
+}
+
+// mailLine is fleet_info's mail value: the unread count, and how much of it
+// is FYI mail that waits for the agent's next turn (ADR-92).
+func (f *Fleet) mailLine(name string) string {
+	m := f.Mail()
+	n := m.Unread(name)
+	if n == 0 {
+		return "none unread"
+	}
+	if q := m.UnreadFYI(name); q > 0 {
+		return fmt.Sprintf("%d unread (%d FYI, queued for its next turn)", n, q)
+	}
+	return fmt.Sprintf("%d unread", n)
 }

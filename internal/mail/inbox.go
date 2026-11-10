@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/sturlabragason/fleet/internal/logx"
 )
@@ -14,6 +15,11 @@ import (
 // Send writes text from -> to ("*" = every peer from may message) and returns
 // the recipients. Sending needs a granted pair or implicit access (ADR-34).
 func (s *Store) Send(from, to, text string) ([]string, error) {
+	return s.SendAs(from, to, text, false)
+}
+
+// SendAs is Send with the FYI flag: fyi mail needs no action (ADR-92).
+func (s *Store) SendAs(from, to, text string, fyi bool) ([]string, error) {
 	if err := checkPair(from, to); err != nil {
 		return nil, err
 	}
@@ -52,7 +58,8 @@ func (s *Store) Send(from, to, text string) ([]string, error) {
 		}
 		id := st.nextID() // one id per message, shared by a broadcast
 		for _, r := range rcpt {
-			if err := st.deliver(r, id, from, to, KindMsg, text); err != nil {
+			m := Msg{ID: id, From: from, To: to, Kind: KindMsg, Text: text, T: time.Now(), FYI: fyi}
+			if err := st.deliverMsg(r, m); err != nil {
 				return err
 			}
 		}
@@ -61,7 +68,7 @@ func (s *Store) Send(from, to, text string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	logx.For("mail").Info("send", "from", from, "to", to, "recipients", len(rcpt), "bytes", len(text))
+	logx.For("mail").Info("send", "from", from, "to", to, "recipients", len(rcpt), "bytes", len(text), "fyi", fyi)
 	return rcpt, nil
 }
 
@@ -283,6 +290,17 @@ func onlyFrom(ms []Msg, from string) []Msg {
 
 // Unread counts agent's unread messages (an admiral's: unread reports).
 func (s *Store) Unread(agent string) int { return len(s.Peek(agent)) }
+
+// UnreadFYI counts agent's unread messages that need no action (ADR-92).
+func (s *Store) UnreadFYI(agent string) int {
+	n := 0
+	for _, m := range s.Peek(agent) {
+		if m.FYI {
+			n++
+		}
+	}
+	return n
+}
 
 // UnreadMsgs counts the unread messages of an admiral's box that are not
 // reports.

@@ -17,7 +17,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/wall"
 )
 
-const mailUsage = `usage: fleet mail [--as NAME] agents | inbox [--all] [-n N] | send <to|*> "text" | request <to> ["reason"] | grant <who> | deny <who> | revoke <who>`
+const mailUsage = `usage: fleet mail [--as NAME] agents | inbox [--all] [-n N] | send [--fyi|--act] <to|*> "text" | request <to> ["reason"] | grant <who> | deny <who> | revoke <who>`
 
 // cmdMail is the agent side of DESIGN §6.6 for tools without MCP.
 func cmdMail(f *fleet.Fleet, args []string) error {
@@ -63,10 +63,21 @@ func cmdMail(f *fleet.Fleet, args []string) error {
 		fmt.Println(mcp.RenderInbox(ms, *all))
 		return nil
 	case "send":
-		if len(rest) < 2 {
-			return fmt.Errorf("usage: fleet mail send <to|*> \"text\"")
+		sfs := flag.NewFlagSet("send", flag.ContinueOnError)
+		fyi := sfs.Bool("fyi", false, "needs no action: don't wake an idle recipient (the default for *)")
+		act := sfs.Bool("act", false, "needs action: wake an idle recipient (the default for one agent)")
+		if err := sfs.Parse(rest); err != nil {
+			return err
 		}
-		rcpt, err := f.MailSend(me, rest[0], strings.Join(rest[1:], " "))
+		rest = sfs.Args()
+		if len(rest) < 2 || (*fyi && *act) {
+			return fmt.Errorf("usage: fleet mail send [--fyi|--act] <to|*> \"text\"")
+		}
+		needs := fleet.NeedsAction(rest[0])
+		if *fyi || *act {
+			needs = *act
+		}
+		rcpt, err := f.MailSendAs(me, rest[0], strings.Join(rest[1:], " "), needs)
 		if err != nil {
 			return err
 		}
