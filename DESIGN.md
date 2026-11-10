@@ -1144,7 +1144,7 @@ Goal: the TUI stays open in one pane while I talk to a coding agent in another, 
 
 ## 15. Tests per component (R16)
 
-Each component lives in its own Go package with its own `_test.go` file. `make test` runs all of them in under about 10 seconds. Tests that need tmux use a throwaway server (`tmux -L fleet-test-<random>`) that is removed afterwards, so they never touch real agents. Every package whose tests start a tmux server or a process runs them through `testenv.Main` (ADR-83): a marked process still alive after the tests fails the run and is killed, and marked processes left by a run that died are reaped when the next one starts.
+Each component lives in its own Go package with its own `_test.go` file. `make test` runs all of them in under about 10 seconds. Tests that need tmux use a throwaway server (`tmux -L fleet-test-<random>`) that is removed afterwards, so they never touch real agents. Every package whose tests start a tmux server or a process runs them through `testenv.Main` (ADR-83): a marked process still alive after the tests fails the run and is killed, and marked processes left by a run that died are reaped when the next one starts. On Linux `testenv.Main` also sets `no_new_privs` on the test binary (with cgo linked in, it re-executes itself to do so). Its tmux servers inherit the flag, so the setgid utempter helper cannot write a utmp/wtmp login record per pane. Such records used to number hundreds per run, and accounts-daemon re-reads wtmp after every write. The real `fleet` server keeps its records, one per pane: the flag would stop `sudo` working in agent panes.
 
 | Component | Package | Test |
 |---|---|---|

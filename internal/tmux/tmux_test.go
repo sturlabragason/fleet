@@ -184,3 +184,27 @@ func TestRunRefusesGoneTmpdir(t *testing.T) {
 		t.Error("HasSession through a gone TMUX_TMPDIR")
 	}
 }
+
+// A test's tmux server must not write a utmp/wtmp login record per pane:
+// thousands of them a run made accounts-daemon re-read wtmp nonstop. With
+// no_new_privs the setgid utempter helper cannot open wtmp (testenv.Main).
+func TestTestServerHasNoNewPrivs(t *testing.T) {
+	if _, err := os.Stat("/proc/self/status"); err != nil {
+		t.Skip("no /proc")
+	}
+	c := testClient(t)
+	if _, err := c.Spawn("s", "w1", "", nil, "cat"); err != nil {
+		t.Fatal(err)
+	}
+	pid, err := c.Run("display-message", "-p", "#{pid}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile("/proc/" + strings.TrimSpace(pid) + "/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "NoNewPrivs:\t1") {
+		t.Fatalf("tmux server %s runs without no_new_privs, so each pane writes wtmp", strings.TrimSpace(pid))
+	}
+}
