@@ -4,6 +4,9 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
+## 2026-11-10
+- A Claude agent started in a repo subdir or a worktree no longer stops on "Allow external CLAUDE.md file imports?" or the folder-trust question: fleet pre-answers them under the repo root Claude actually reads (ADR-47).
+
 ## 2026-11-09
 - `fleet version` says which release you are running, and releases now ship macOS binaries (amd64, arm64) next to linux ones, with `SHA256SUMS` (ADR-73).
 - Give an agent standing permissions on its task card: `may` on `fleet_spawn` and `fleet_squad_spawn` (for example merge-local, push-main, deploy) tells it what it may do without asking, and `fleet_info` shows them (#32).
