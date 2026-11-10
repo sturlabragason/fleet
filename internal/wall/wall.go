@@ -37,6 +37,9 @@ func New(t *tmux.Client, session string) *Wall {
 type State struct {
 	W, H      int
 	Sups      []string // admiral panes, main first
+	SupNames  []string // admiral names, parallel to Sups ("main" for the main one)
+	SupRows   []int    // admiral heights now, parallel to Sups
+	Panes     []string // every pane id in the window
 	Ov        string
 	Wall      []tmux.PaneInfo // in window order
 	Preset    string
@@ -73,12 +76,17 @@ func (w *Wall) Read() (*State, error) {
 		return nil, err
 	}
 	for _, p := range panes {
+		s.Panes = append(s.Panes, p.ID)
 		switch p.Role {
 		case "sup":
 			if p.Admiral == "" || p.Admiral == "main" {
 				s.Sups = append([]string{p.ID}, s.Sups...)
+				s.SupNames = append([]string{"main"}, s.SupNames...)
+				s.SupRows = append([]int{p.Height}, s.SupRows...)
 			} else {
 				s.Sups = append(s.Sups, p.ID)
+				s.SupNames = append(s.SupNames, p.Admiral)
+				s.SupRows = append(s.SupRows, p.Height)
 			}
 		case "ov":
 			s.Ov = p.ID
@@ -136,12 +144,28 @@ func (w *Wall) apply(force bool) error {
 		for _, id := range s.Sups[len(fit):] {
 			w.T.Run("break-pane", "-d", "-s", id, "-t", session+":", "-n", "sup-hidden")
 		}
-		s.Sups = fit
+		s.Sups, s.SupNames, s.SupRows = fit, s.SupNames[:len(fit)], s.SupRows[:len(fit)]
+		s.Panes = nil // the pane set changed: no drag to adopt
 	}
 	w.syncNextOut(s)
-	lay, leaves := s.Cfg.Render(layout.Input{W: s.W, H: s.H, Sups: s.Sups, Ov: s.Ov, Wall: ids, Preset: s.Preset, Focus: w.emphasis(s)})
+	want, adopted := w.supRows(s)
+	rows := s.Cfg.SupRowsFor(want, len(s.Sups), s.H)
+	lay, leaves := s.Cfg.Render(layout.Input{W: s.W, H: s.H, Sups: s.Sups, SupRows: rows, Ov: s.Ov, Wall: ids, Preset: s.Preset, Focus: w.emphasis(s)})
+	remember := func() {
+		w.setOpt("@fleet_layout", lay)
+		if rows != nil {
+			w.storeSupRows(s.Sups, rows)
+		}
+		w.setOpt(supSeenOption, seenKey(s.H, leaves))
+	}
 	// An unchanged layout is never re-applied: agent TUIs reflow on every resize.
 	if !force && lay == w.opt("@fleet_layout") {
+		return nil
+	}
+	// The refresh loop adopting a drag the window already shows has nothing
+	// to apply.
+	if !force && adopted && lay == w.windowLayout() {
+		remember()
 		return nil
 	}
 	// The TUI poll loop, the tmux hooks and `fleet wall ...` are separate
@@ -156,7 +180,7 @@ func (w *Wall) apply(force bool) error {
 		logx.For("wall").Error("select-layout", "layout", lay, "err", err)
 		return err
 	}
-	w.setOpt("@fleet_layout", lay)
+	remember()
 	if len(s.Sups) > 0 {
 		w.T.Run("resize-pane", "-t", s.Sups[0], "-x", strconv.Itoa(s.Cfg.SupCols(s.W)))
 	}
@@ -178,6 +202,12 @@ func (w *Wall) lock() bool {
 }
 
 func (w *Wall) unlock() { w.setOpt("@fleet_applying", "") }
+
+// windowLayout is the window's current tmux layout string.
+func (w *Wall) windowLayout() string {
+	s, _ := w.T.Run("display-message", "-p", "-t", w.Target, "#{window_layout}")
+	return strings.TrimSpace(s)
+}
 
 // applyLockTTL bounds how long a crashed apply can block the next one.
 const applyLockTTL = 5 * time.Second

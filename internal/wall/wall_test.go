@@ -760,3 +760,115 @@ func TestApplyHidesAdmiralsThatDoNotFit(t *testing.T) {
 		t.Fatalf("windows: main admiral %q, second %q", win(sup1), win(sup2))
 	}
 }
+
+// setupTwoAdmirals is setupWall with a second admiral ("personal") stacked
+// under the main one.
+func setupTwoAdmirals(t *testing.T, n int) (*tmux.Client, *Wall, []string, string) {
+	t.Helper()
+	c, w, agents := setupWall(t, n)
+	s, err := w.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sup2, err := c.Run("split-window", "-d", "-v", "-t", s.Sups[0], "-P", "-F", "#{pane_id}", "cat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.SetPaneOption(sup2, "@role", "sup")
+	c.SetPaneOption(sup2, "@fleet_admiral", "personal")
+	if err := w.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	return c, w, agents, sup2
+}
+
+func paneHeight(t *testing.T, c *tmux.Client, id string) int {
+	t.Helper()
+	out, _ := c.Run("display-message", "-p", "-t", id, "#{pane_height}")
+	h, _ := strconv.Atoi(strings.TrimSpace(out))
+	return h
+}
+
+// A second admiral the user shrank stays that size through every relayout:
+// tile clicks, shows, presets and admiral hide/show (the "snaps back to 50%"
+// bug).
+func TestShrunkAdmiralKeepsItsSize(t *testing.T) {
+	c, w, agents, sup2 := setupTwoAdmirals(t, 3)
+	if h := paneHeight(t, c, sup2); h < 30 {
+		t.Fatalf("second admiral starts at %d rows, want an even split", h)
+	}
+	c.Run("resize-pane", "-t", sup2, "-y", "3")
+	if h := paneHeight(t, c, sup2); h != 3 {
+		t.Skipf("tmux did not resize the pane (%d rows)", h)
+	}
+	steps := []struct {
+		name string
+		do   func() error
+	}{
+		{"cached apply", w.ApplyCached},
+		{"apply", w.Apply},
+		{"show", func() error { noTarget(t, w); _, err := w.Show(agents[0]); return err }},
+		{"show 2", func() error { noTarget(t, w); _, err := w.Show(agents[1]); return err }},
+		{"focus click", func() error { focusHook(t, c, w, agents[0]); return nil }},
+		{"preset", func() error { return w.SetPreset("1") }},
+		{"preset back", func() error { return w.SetPreset("4") }},
+		{"hide admirals", w.ToggleSup},
+		{"show admirals", w.ToggleSup},
+		{"apply again", w.Apply},
+	}
+	for _, st := range steps {
+		if err := st.do(); err != nil {
+			t.Fatalf("%s: %v", st.name, err)
+		}
+		if s, _ := w.Read(); len(s.Sups) == 2 {
+			if h := paneHeight(t, c, sup2); h != 3 {
+				t.Fatalf("after %s the second admiral is %d rows, want 3", st.name, h)
+			}
+		}
+	}
+}
+
+// A drag after the shrink is adopted too: the user can grow it back.
+func TestAdmiralDragIsAdopted(t *testing.T) {
+	c, w, _, sup2 := setupTwoAdmirals(t, 2)
+	c.Run("resize-pane", "-t", sup2, "-y", "3")
+	if err := w.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	c.Run("resize-pane", "-t", sup2, "-y", "20")
+	if err := w.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	if h := paneHeight(t, c, sup2); h != 20 {
+		t.Fatalf("second admiral %d rows after a drag to 20", h)
+	}
+}
+
+// MinimizeAdmiral toggles an admiral between its minimized height and an even
+// share of the column, and the state survives relayouts.
+func TestMinimizeAdmiral(t *testing.T) {
+	c, w, _, sup2 := setupTwoAdmirals(t, 2)
+	even := paneHeight(t, c, sup2)
+	min, err := w.MinimizeAdmiral("personal")
+	if err != nil || !min {
+		t.Fatalf("minimize: %v %v", min, err)
+	}
+	if h := paneHeight(t, c, sup2); h != MinimizedRows {
+		t.Fatalf("minimized admiral is %d rows, want %d", h, MinimizedRows)
+	}
+	if err := w.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	if h := paneHeight(t, c, sup2); h != MinimizedRows {
+		t.Fatalf("relayout restored the minimized admiral to %d rows", h)
+	}
+	if min, err = w.MinimizeAdmiral("personal"); err != nil || min {
+		t.Fatalf("restore: %v %v", min, err)
+	}
+	if h := paneHeight(t, c, sup2); h != even {
+		t.Fatalf("restored admiral is %d rows, want %d", h, even)
+	}
+	if _, err := w.MinimizeAdmiral("nope"); err == nil {
+		t.Error("minimizing an unknown admiral did not fail")
+	}
+}

@@ -152,3 +152,31 @@ func TestSupsStack(t *testing.T) {
 		t.Errorf("SupFit(60,3)=%d, want 3", got)
 	}
 }
+
+func TestSupRowsFor(t *testing.T) {
+	cases := []struct {
+		want    []int
+		n, h    int
+		expects []int
+	}{
+		{[]int{76, 3}, 2, 80, []int{76, 3}},   // fits: kept as is
+		{[]int{76, 3}, 2, 60, []int{56, 3}},   // shorter window: a minimized pane keeps its rows
+		{[]int{38, 41}, 2, 40, []int{18, 21}}, // proportional, remainder to the largest
+		{nil, 2, 80, []int{40, 39}},           // nothing stored: equal rows
+		{[]int{40}, 2, 80, []int{40, 39}},     // stale: another admiral count
+		{[]int{1, 1, 1}, 3, 4, nil},           // no room
+	}
+	for _, tc := range cases {
+		got := Default.SupRowsFor(tc.want, tc.n, tc.h)
+		if fmt.Sprint(got) != fmt.Sprint(tc.expects) {
+			t.Errorf("SupRowsFor(%v, %d, %d) = %v, want %v", tc.want, tc.n, tc.h, got, tc.expects)
+		}
+	}
+}
+
+func TestRenderKeepsAdmiralRows(t *testing.T) {
+	lay, _ := Default.Render(Input{W: 300, H: 80, Sups: []string{"%1", "%2"}, SupRows: []int{76, 3}, Ov: "%3"})
+	if !strings.Contains(lay, "90x76,0,0,1,90x3,0,77,2") {
+		t.Errorf("layout %s does not keep the admiral rows 76/3", lay)
+	}
+}

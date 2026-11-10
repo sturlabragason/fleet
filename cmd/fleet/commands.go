@@ -129,6 +129,7 @@ const usage = `usage:
   fleet admiral add NAME [--profile P]      start another admiral beside main (DESIGN §6.12)
   fleet admiral ls                          admirals with their agents and unread reports
   fleet admiral close NAME                  close one; its agents and unread reports go back to main
+  fleet admiral min NAME                    minimize an admiral pane (main or another), or restore it
   fleet admiral give AGENT [--to NAME]      hand an agent (and its unread reports) to another admiral (overview O)
   fleet admiral reset [--name N] [--handoff]         replace the admiral with a fresh session (M-R)
   fleet admiral profile [--name N] [NAME | --pick]   show the admiral's profile, or swap it (hands off; Alt-P picks)

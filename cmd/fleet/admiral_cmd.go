@@ -191,6 +191,25 @@ func cmdAdmiralClose(f *fleet.Fleet, args []string) error {
 	return nil
 }
 
+// cmdAdmiralMin: `fleet admiral min NAME` minimizes an admiral pane in the
+// admiral column, or gives a minimized one an even share back (ADR-84).
+func cmdAdmiralMin(f *fleet.Fleet, args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: fleet admiral min NAME")
+	}
+	min, err := wall.New(f.T, fleet.Session).MinimizeAdmiral(args[0])
+	if err != nil {
+		return err
+	}
+	msg := "admiral " + args[0] + " restored"
+	if min {
+		msg = "admiral " + args[0] + " minimized · fleet admiral min " + args[0] + " restores"
+	}
+	display(f, msg)
+	fmt.Println(msg)
+	return nil
+}
+
 // cmdAdmiralGive: `fleet admiral give AGENT --to NAME` (the user's hand-over).
 func cmdAdmiralGive(f *fleet.Fleet, args []string) error {
 	fs := flag.NewFlagSet("admiral give", flag.ContinueOnError)
