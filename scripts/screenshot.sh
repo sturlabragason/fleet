@@ -30,6 +30,13 @@ SOCK=$D/tmux/tmux-$(id -u)
 T="tmux -S $SOCK/fleet"
 S="tmux -S $SOCK/fleet-test-shot"
 cleanup() {
+  # `fleet up` started a detached watcher; it is not in either tmux server,
+  # so stop it by name and wait, or it outlives the temp dir (ADR-83).
+  W=$("$B" watch --stop 2>/dev/null | sed -n 's/.*(pid \([0-9]*\)).*/\1/p')
+  if [ -n "$W" ]; then
+    for _ in $(seq 50); do [ -d "/proc/$W" ] || break; sleep 0.1; done
+    if [ -d "/proc/$W" ]; then kill -9 "$W" 2>/dev/null || true; fi
+  fi
   $S kill-server 2>/dev/null || true
   $T kill-server 2>/dev/null || true
   rm -r "$D"
