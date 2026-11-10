@@ -129,6 +129,7 @@ type Prefs struct {
 	summary    Summary
 	memory     Memory
 	squad      Squad
+	exec       Exec
 	recycle    Recycle
 	usage      map[string]conf.Value
 }
@@ -218,6 +219,9 @@ func Load() (*Prefs, error) {
 		if p.memory, err = applyMemory(p.memory, sec, path); err != nil {
 			return nil, err
 		}
+	}
+	if sec, ok := d["exec"]; ok {
+		p.exec = applyExec(sec)
 	}
 	if sec, ok := d["squad"]; ok {
 		if p.squad, err = applySquad(p.squad, sec, path); err != nil {
