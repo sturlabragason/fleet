@@ -27,6 +27,7 @@ jobs:
         with:
           fetch-depth: 0
       - run: scripts/check-public_test.sh
+      - run: scripts/release-notes_test.sh
       - name: check-public on the new commits
         env:
           PUBLIC_DENY: ${{ secrets.PUBLIC_DENY }}

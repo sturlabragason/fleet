@@ -63,6 +63,8 @@ jobs:
 
       - name: Pick the version
         id: ver
+        env:
+          PUBLIC_DENY: ${{ secrets.PUBLIC_DENY }}
         run: |
           v='${{ inputs.version }}'
           [[ -n $v ]] || v=$(scripts/next-version.sh)
@@ -73,7 +75,7 @@ jobs:
             echo "::error::tag $v already exists"; exit 1
           fi
           echo "version=$v" >>"$GITHUB_OUTPUT"
-          scripts/release-notes.sh >"$RUNNER_TEMP/notes.md"
+          scripts/release-notes.sh HEAD "$v" >"$RUNNER_TEMP/notes.md"
           {
             echo "# fleet $v $( [[ $DRY_RUN == true ]] && echo '(dry run)')"
             echo
