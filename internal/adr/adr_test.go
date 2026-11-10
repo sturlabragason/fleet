@@ -284,3 +284,51 @@ func TestClaimsKeepUnknownKeys(t *testing.T) {
 		}
 	}
 }
+
+// fleet#40: a renumber onto "the next free one in DESIGN.md" can land on a
+// number another agent has claimed but not merged.
+func TestTakenNamesMainAndOtherAgentsClaims(t *testing.T) {
+	claims := []Claim{{N: 86, For: "admiral-tools"}, {N: 87, For: "me"}, {N: 88}}
+	got := Taken([]int{85, 86, 87, 88, 89}, map[int]bool{85: true}, claims, "me")
+	want := []Collision{{85, "main"}, {86, "admiral-tools"}}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("Taken = %v, want %v", got, want)
+	}
+	if s := got[1].String(); !strings.Contains(s, "ADR-86") || !strings.Contains(s, "admiral-tools") {
+		t.Errorf("String() = %q", s)
+	}
+}
+
+func TestBranchAddsCountsNewEntriesNotAmendments(t *testing.T) {
+	dir := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd.Env = append(cmd.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	commit := func(body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, "DESIGN.md"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		git("add", "DESIGN.md")
+		git("commit", "-qm", "d")
+	}
+	git("init", "-q", "-b", "main")
+	commit(design)
+	git("switch", "-qc", "fleet/x")
+	commit(design + "Amendment to ADR-41.\n\n**ADR-43: mine**\n")
+	git("switch", "-q", "main")
+	commit(design + "\n**ADR-44: theirs**\n") // main moved; not ours
+	git("switch", "-q", "fleet/x")
+	got, err := BranchAdds(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != 43 {
+		t.Fatalf("BranchAdds = %v, want [43]", got)
+	}
+}

@@ -86,7 +86,10 @@ that judgment, keeping both sides' intent and rerunning the tests:
   other entries.
 - **`DESIGN.md` §14**: keep both ADR entries (they are bold `**ADR-NN: …**` paragraphs, not
   headings), ascending by number. If both sides used the same number, renumber *yours* (you are the
-  one merging) and fix its CHANGELOG bracket.
+  one merging) to the number `fleet adr claim` prints — never to "the next free one in DESIGN.md",
+  which can be another agent's unmerged claim (85 → 86 → 87 on 2026-11-10, fleet#40) — and fix the
+  §14 entry, its CHANGELOG bracket and the commit. `fleet merge` checks this before it rebases and
+  stops with the same instruction when your number is taken.
 - **`DESIGN.md` §18 / roadmap table**: keep both rows. Only the row for your own item is yours to
   change.
 
