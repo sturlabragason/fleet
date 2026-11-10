@@ -3,11 +3,27 @@
   <img src="docs/img/lockup.svg" height="64" alt="fleet">
 </picture>
 
-See and steer many coding-agent sessions (Copilot CLI, Claude Code, agy, vibe) from one tmux window, with an LLM admiral that can act on them for you.
+fleet is a terminal UI for when you run several coding agents at once: every Copilot CLI, Claude Code, agy or vibe session in one tmux window, a status tile for each, and an admiral agent that can answer and act on them for you.
 
-![fleet: the admiral on the left, overview tiles top right, a 2×2 wall of live agent panes below](docs/img/hero.png)
+[![release](https://img.shields.io/github/v/release/sturlabragason/fleet)](https://github.com/sturlabragason/fleet/releases)
+[![ci](https://github.com/sturlabragason/fleet/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sturlabragason/fleet/actions/workflows/ci.yml)
+[![license](https://img.shields.io/github/license/sturlabragason/fleet)](LICENSE)
 
-<sub>Screenshot made with fake agents (`scripts/screenshot.sh`); the admiral pane here is also a fake agent. Animated version: [docs/img/demo.gif](docs/img/demo.gif).</sub>
+![fleet: the admiral on the left, a tile per agent top right, a 2×2 wall of live agent panes below. Two agents ask for approval, they are answered, and work resumes](docs/img/demo.gif)
+
+<sub>Recorded with fake agents and a fake admiral, so no tokens were spent (`scripts/screenshot.sh`). Still frame: [docs/img/hero.png](docs/img/hero.png).</sub>
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/sturlabragason/fleet/main/install.sh | sh
+```
+
+Linux (tested) and macOS (built, not tested). Other ways to install, and what you need: [Install](#install). To try it without spending tokens: [Quickstart](#quickstart-fake-agents-no-tokens).
+
+- **A tile per agent**, coloured by status (working, waiting on you, error, stuck, idle) and sorted so the agents waiting on you come first.
+- **A live wall** of the real panes you are working with. Click into one and type to answer it.
+- **An admiral**: one agent with MCP tools to report on the fleet, answer prompts and message agents. Risky actions need your confirmation.
+- **A git worktree per agent**, so parallel agents never share an index.
+- **Spend per agent** in credits or tokens, read from the tools' own records, and a CLI for scripting.
 
 ## Why
 
@@ -36,7 +52,7 @@ Session switchers make moving between agents faster, but you still do all the su
 - **Squads**: `fleet spawn --leader <name> <profile>` makes an agent a leader, with its own tools to spawn, watch, message and close up to four agents of its own. Their reports wake the leader, which sends the admiral one summary; leaders are marked `▲` and never answer prompts, merge or push for you.
 - **CLI** for scripting: `spawn`, `adopt`, `sessions`, `ls`, `send`, `peek`, `close`, `team`, `mail`, `access`, `report`, `spend`, `admiral`, `note`, `playbook`, `touching`, `merge`, `profiles`, `keys`, `changes`, `snap`, `wall`.
 - **Spend**: `fleet spend` shows what each agent has cost so far and the fleet total — AI credits for Copilot agents, tokens for Claude and agy — read from the agents' own session files or the usage agy reports over ACP, never from a model.
-- **Fake agents** that cycle through states and print scripted work (reads, edits, test runs), so you can try everything without spending tokens. `fleet send <name> "!wait"` (or `!work`, `!error`, `!done`) holds one in a chosen state, which is how the screenshot above is composed.
+- **Fake agents** that cycle through states and print scripted work (reads, edits, test runs), so you can try everything without spending tokens. `fleet send <name> "!wait"` (or `!work`, `!error`, `!done`) holds one in a chosen state, which is how the demo above is composed.
 
 Planned, not built yet: park/wake to save RAM, tool hooks instead of screen scraping, a spawn wizard, approve/reject keys in the TUI, notifications. See [Roadmap](#roadmap).
 

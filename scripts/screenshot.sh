@@ -52,19 +52,19 @@ sleep 3
 
 # One of each state on the wall: working, waiting on you, done, failed. Every
 # directive names its task, so no two panes tell the same story.
-"$B" send web-nav '!work add search endpoint' >/dev/null
-"$B" send api-auth '!wait refactor auth middleware' >/dev/null
-"$B" send db-migrate '!done write migration' >/dev/null
-"$B" send infra-dns '!error bump dependencies' >/dev/null
+"$B" send --force web-nav '!work add search endpoint' >/dev/null
+"$B" send --force api-auth '!wait refactor auth middleware' >/dev/null
+"$B" send --force db-migrate '!done write migration' >/dev/null
+"$B" send --force infra-dns '!error bump dependencies' >/dev/null
 # The admiral is a pane, not a board agent, so it is driven through tmux.
 SUP=$($T list-panes -a -F '#{pane_id} #{@role}' | awk '$2=="sup"{print $1; exit}')
 if [ -z "$SUP" ]; then echo "no admiral pane: the shot would show a random state" >&2; exit 1; fi
 $T send-keys -t "$SUP" '!work watch the fleet' Enter
 # Tiles: a second agent waiting on you, the rest working.
-"$B" send search-idx '!wait fix flaky e2e' >/dev/null
-"$B" send ci-cache '!work update deploy config' >/dev/null
-"$B" send docs '!work tidy README' >/dev/null
-"$B" send billing-fix '!work add tests for board store' >/dev/null
+"$B" send --force search-idx '!wait fix flaky e2e' >/dev/null
+"$B" send --force ci-cache '!work update deploy config' >/dev/null
+"$B" send --force docs '!work tidy README' >/dev/null
+"$B" send --force billing-fix '!work add tests for board store' >/dev/null
 sleep 17
 
 mkdir -p "$OUT" "$D/frames"
@@ -77,11 +77,11 @@ echo "wrote $OUT/$NAME.png"
 for i in $(seq -w 1 24); do
   $S capture-pane -e -p -t shot > "$D/frames/$i.ans"
   case $i in
-    06) "$B" send api-auth y >/dev/null ;;
-    10) "$B" send infra-dns '!work fix flaky e2e' >/dev/null ;;
-    14) "$B" send search-idx y >/dev/null ;;
-    18) "$B" send db-migrate '!work write migration' >/dev/null ;;
-    22) "$B" send web-nav '!done' >/dev/null ;;
+    06) "$B" send --force api-auth y >/dev/null ;;
+    10) "$B" send --force infra-dns '!work fix flaky e2e' >/dev/null ;;
+    14) "$B" send --force search-idx y >/dev/null ;;
+    18) "$B" send --force db-migrate '!work write migration' >/dev/null ;;
+    22) "$B" send --force web-nav '!done' >/dev/null ;;
   esac
   sleep 0.5
 done
