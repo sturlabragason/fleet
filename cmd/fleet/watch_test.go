@@ -351,3 +351,78 @@ func TestCmdWatchAfterReexecOwnBeat(t *testing.T) {
 		t.Fatalf("watcher never claimed watch.lock: %q %v", b, err)
 	}
 }
+
+// A Stop/agentStop of an agent that owes a report is blocked once per
+// prompt, in the shape both tools read, and under --no-status too (ADR-105).
+func TestCmdHookStopBlock(t *testing.T) {
+	f := hookTestFleet(t)
+	var out strings.Builder
+	old := hookOut
+	hookOut = &out
+	t.Cleanup(func() { hookOut = old })
+	put := func(a *board.Agent) {
+		f.Store.Update(func(b *board.Board) error { b.Agents[a.Name] = a; return nil })
+	}
+	stop := func(event, payload string, args ...string) string {
+		out.Reset()
+		withStdin(t, payload, func() {
+			if err := cmdHook(f, append([]string{event}, args...)); err != nil {
+				t.Fatal(err)
+			}
+		})
+		return out.String()
+	}
+	const block = `{"decision":"block","reason":"Call fleet_report (done, blocked or question) before stopping."}` + "\n"
+	dir := status.StateDir(f.Home)
+
+	put(&board.Agent{Name: "claude1", PromptAt: time.Now().Add(-time.Minute)})
+	if got := stop("Stop", `{"stop_hook_active":false}`, "--agent", "claude1"); got != block {
+		t.Fatalf("Claude Stop: %q", got)
+	}
+	if _, ok := status.ReadState(dir, "claude1"); ok {
+		t.Error("a blocked stop recorded idle")
+	}
+	if got := stop("Stop", `{"stop_hook_active":true}`, "--agent", "claude1"); got != "" {
+		t.Errorf("second Stop blocked: %q", got)
+	}
+	if s, ok := status.ReadState(dir, "claude1"); !ok || s.Status != status.Idle {
+		t.Errorf("allowed stop: %+v %v", s, ok)
+	}
+
+	// Copilot under the acp driver: --no-status, no stop_hook_active on the
+	// retry, so fleet's own marker lets the second stop through.
+	put(&board.Agent{Name: "cop1", Card: &board.Card{Goal: "g"}, PromptAt: time.Now().Add(-time.Minute), Driver: board.DriverACP})
+	if got := stop("agentStop", `{"stopReason":"end_turn"}`, "--agent", "cop1", "--no-status"); got != block {
+		t.Fatalf("Copilot agentStop: %q", got)
+	}
+	if got := stop("agentStop", `{"stopReason":"end_turn"}`, "--agent", "cop1", "--no-status"); got != "" {
+		t.Errorf("Copilot blocked twice: %q", got)
+	}
+	// A new prompt re-arms it; a done report since then lets it stop.
+	put(&board.Agent{Name: "cop1", PromptAt: time.Now().Add(time.Second)})
+	if got := stop("agentStop", `{}`, "--agent", "cop1"); got != block {
+		t.Errorf("new prompt not re-armed: %q", got)
+	}
+	put(&board.Agent{Name: "cop2", PromptAt: time.Now().Add(-time.Minute), Report: &board.Report{State: "done", At: time.Now()}})
+	if got := stop("agentStop", `{}`, "--agent", "cop2"); got != "" {
+		t.Errorf("reported agent blocked: %q", got)
+	}
+
+	// Never: a subagent's stop, the user's agent, an agent not on the board,
+	// or a marker fleet can't read.
+	put(&board.Agent{Name: "c3", PromptAt: time.Now().Add(-time.Minute)})
+	if got := stop("Stop", `{"agent_id":"s1"}`, "--agent", "c3"); got != "" {
+		t.Errorf("subagent stop blocked: %q", got)
+	}
+	put(&board.Agent{Name: "c4", PromptAt: time.Now().Add(-time.Minute), Interactive: true})
+	if got := stop("Stop", `{}`, "--agent", "c4"); got != "" {
+		t.Errorf("interactive blocked: %q", got)
+	}
+	if got := stop("Stop", `{}`, "--agent", "ghost"); got != "" {
+		t.Errorf("unknown agent blocked: %q", got)
+	}
+	os.MkdirAll(filepath.Join(status.StopBlockDir(f.Home), "c3"), 0o755)
+	if got := stop("Stop", `{}`, "--agent", "c3"); got != "" {
+		t.Errorf("unreadable marker blocked: %q", got)
+	}
+}

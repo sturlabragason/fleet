@@ -31,6 +31,9 @@ type Payload struct {
 	// AgentType names the subagent (Claude's agent_type, Copilot's
 	// agentType or agentName).
 	AgentType string
+	// StopHookActive is set on a Stop that follows a blocked one (Claude's
+	// stop_hook_active, Copilot's stopHookActive).
+	StopHookActive bool
 }
 
 // ParsePayload reads a hook's JSON; anything it can't read is empty.
@@ -46,6 +49,8 @@ func ParsePayload(b []byte) Payload {
 		AgentTyS  string `json:"agent_type"`
 		AgentTyC  string `json:"agentType"`
 		AgentName string `json:"agentName"`
+		ActiveS   bool   `json:"stop_hook_active"`
+		ActiveC   bool   `json:"stopHookActive"`
 	}
 	if json.Unmarshal(b, &r) != nil {
 		return Payload{}
@@ -62,6 +67,7 @@ func ParsePayload(b []byte) Payload {
 		ToolName:         or(r.ToolS, r.ToolC),
 		AgentID:          or(r.AgentIDS, r.AgentIDC),
 		AgentType:        or(r.AgentTyS, or(r.AgentTyC, r.AgentName)),
+		StopHookActive:   r.ActiveS || r.ActiveC,
 	}
 }
 

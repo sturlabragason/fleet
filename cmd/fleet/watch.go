@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/status"
@@ -211,7 +212,8 @@ const hookStdinMax = 64 << 10
 // plugin dir fleet writes at spawn (ADR-99), so the user's own settings are
 // never touched. --no-status keeps the subagents only: an ACP agent's host
 // owns its status file. A hook fired inside a subagent (its payload names
-// one) changes no status. It never fails loudly: a broken hook must not
+// one) changes no status. A Stop/agentStop of an agent that holds a task and
+// has not reported is blocked once per prompt (ADR-105). It never fails loudly: a broken hook must not
 // break the agent.
 func cmdHook(f *fleet.Fleet, args []string) error {
 	fs := flag.NewFlagSet("hook", flag.ContinueOnError)
@@ -241,6 +243,10 @@ func cmdHook(f *fleet.Fleet, args []string) error {
 	if err := status.RecordSubs(f.Home, *agent, ev, p, now); err != nil {
 		logx.For("status").Warn("hook subagents", "agent", *agent, "err", err)
 	}
+	if status.StopEvent(ev) && p.AgentID == "" && hookBlockStop(f, *agent, p, now) {
+		_, _ = hookOut.Write(status.StopBlockJSON(board.StopReason))
+		return nil // the turn goes on: no idle to record
+	}
 	if sub || *noStatus || p.AgentID != "" {
 		return nil
 	}
@@ -252,6 +258,35 @@ func cmdHook(f *fleet.Fleet, args []string) error {
 		return nil
 	}
 	return nil
+}
+
+// hookOut is where a hook's decision goes: the tool reads its stdout.
+var hookOut io.Writer = os.Stdout
+
+// hookBlockStop decides whether a Stop/agentStop hook blocks the stop because
+// the agent owes a report (ADR-105), and records the block so the next stop
+// for the same prompt is let through. Anything it can't read or write means
+// allow: a hook must never trap an agent in a loop. It runs under
+// --no-status too, since only the status write belongs to the ACP host.
+func hookBlockStop(f *fleet.Fleet, agent string, p status.Payload, now time.Time) bool {
+	a, ok := f.Store.Load().Agents[agent]
+	if !ok || p.StopHookActive {
+		return false
+	}
+	at, err := status.StopBlockedAt(f.Home, agent)
+	if err != nil {
+		logx.For("status").Warn("stop block marker", "agent", agent, "err", err)
+		return false
+	}
+	if !a.BlockStop(now, p.StopHookActive, at) {
+		return false
+	}
+	if err := status.MarkStopBlocked(f.Home, agent, now); err != nil {
+		logx.For("status").Warn("stop block marker", "agent", agent, "err", err)
+		return false
+	}
+	logx.For("status").Info("stop blocked: no report", "agent", agent)
+	return true
 }
 
 // hookPayload reads a tool's hook JSON from r. A terminal stdin is left
