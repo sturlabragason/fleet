@@ -431,6 +431,9 @@ func (f *Fleet) guardEnter(box, pane, line string) bool {
 		got = squash(raw)
 		if v.Pane == pane && v.Box && got == want {
 			if err := f.pressKeys(pane, "Enter"); err != nil {
+				// The line is in the box: take it back, or the box never
+				// reads empty again and every retry waits on it.
+				f.pressKeys(pane, backspaces(len([]rune(line)))...)
 				log.Warn("wake failed", "box", box, "err", err)
 				return false
 			}

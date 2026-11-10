@@ -828,3 +828,42 @@ func TestClaudeCopilotACPArgv(t *testing.T) {
 		}
 	}
 }
+
+// A user profile that runs claude or copilot and sets no peer_args or
+// hook_args takes the built-in's: without them its agents have no
+// fleet_report tool and no status hooks. An explicit [] still opts out.
+func TestUserProfileInheritsPeerAndHookArgs(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(Path(dir), []byte(`[claude-personal]
+command = "claude"
+env = { CLAUDE_CONFIG_DIR = "/x" }
+[copilot-work]
+command = "copilot"
+[claude-bare]
+command = "/usr/local/bin/claude"
+peer_args = []
+hook_args = []
+[other]
+command = "foo"
+`), 0o644)
+	ps, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(ps["claude-personal"].PeerArgs, ps["claude"].PeerArgs) || !reflect.DeepEqual(ps["claude-personal"].HookArgs, ps["claude"].HookArgs) {
+		t.Errorf("claude-personal: peer %v hook %v", ps["claude-personal"].PeerArgs, ps["claude-personal"].HookArgs)
+	}
+	argv, _ := ps["claude-personal"].Argv(AgentVars("/bin/fleet", "a1", ""), Launch{})
+	if len(argv) < 2 || argv[1] != "--mcp-config" || indexOf(argv, "--settings") < 0 {
+		t.Errorf("claude-personal argv: %v", argv)
+	}
+	if !reflect.DeepEqual(ps["copilot-work"].PeerArgs, ps["copilot"].PeerArgs) || ps["copilot-work"].HookArgs != nil {
+		t.Errorf("copilot-work: peer %v hook %v", ps["copilot-work"].PeerArgs, ps["copilot-work"].HookArgs)
+	}
+	if len(ps["claude-bare"].PeerArgs) != 0 || len(ps["claude-bare"].HookArgs) != 0 {
+		t.Errorf("explicit [] not kept: %+v", ps["claude-bare"])
+	}
+	if ps["other"].PeerArgs != nil || ps["other"].HookArgs != nil {
+		t.Errorf("other: %+v", ps["other"])
+	}
+}

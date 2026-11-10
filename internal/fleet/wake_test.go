@@ -387,3 +387,27 @@ func TestWakeTriesPersistAcrossProcesses(t *testing.T) {
 		t.Fatalf("counter file outlived the queue: %v", err)
 	}
 }
+
+// Enter fails after the line is typed (tmux 3.8 refuses send-keys while a
+// read-only client is attached): the line must be taken back, or the box
+// never reads empty again and every retry waits on it forever.
+func TestWakeEnterFailureClearsBox(t *testing.T) {
+	f, pasted := mailFleet(t)
+	a := fakeAdm(f, pasted, ptr(true))
+	ok := f.PressKeys
+	f.PressKeys = func(pane string, keys ...string) error {
+		if len(keys) == 1 && keys[0] == "Enter" {
+			return os.ErrPermission
+		}
+		return ok(pane, keys...)
+	}
+	f.Report("a", "done", "x")
+	if a.box != "" || len(a.submitted) != 0 {
+		t.Fatalf("after failed Enter: box %q submitted %q", a.box, a.submitted)
+	}
+	f.PressKeys = ok
+	f.DeliverWake()
+	if want := ReportLine("a", "done", "x"); len(a.submitted) != 1 || a.submitted[0] != want {
+		t.Fatalf("not retried: submitted %q, want %q", a.submitted, want)
+	}
+}
