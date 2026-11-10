@@ -79,4 +79,17 @@ PUBLIC_EMAILS=t@example.org expect pass "emails from \$PUBLIC_EMAILS" "$d" main~
 repo; commit "$d" a.txt "mail $other"
 expect fail "unexpected email address added" "$d" main~1..main
 
+repo; commit "$d" a.txt "++ zebracorp"; commit "$d" a.txt "gone"
+expect fail "added line that starts with ++" "$d" main~2..main
+
+placeholder="/ho"; placeholder+="me/user/x"
+repo; commit "$d" a.txt "$placeholder"
+expect pass "placeholder home path" "$d" main~1..main
+commit "$d" a.txt "$placeholder and $home"
+expect fail "leak on the same line as an allowed placeholder" "$d" main~1..main
+
+repo; commit "$d" a.txt "zebracorp"
+GITHUB_ACTIONS=true expect fail "CI mode still fails" "$d" main~1..main
+if grep -q -i zebracorp "$tmp/out"; then echo "FAIL CI mode printed the matched text"; failed=1; else echo "ok   CI mode prints locations only"; fi
+
 exit $failed

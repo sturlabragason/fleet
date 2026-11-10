@@ -40,6 +40,7 @@ jobs:
           [[ -n $PUBLIC_DENY ]] || echo "::warning::secret PUBLIC_DENY is not set: only built-in patterns are checked"
           [[ -n $PUBLIC_EMAILS ]] || { echo "::warning::secret PUBLIC_EMAILS is not set: commit emails not checked"; args+=(--no-emails); }
           if [[ $EVENT == pull_request ]]; then
+            args=(--no-emails) # contributors' own emails are theirs to publish
             range=("$BASE..$HEAD_SHA")
           elif [[ -n $BEFORE && ! $BEFORE =~ ^0+$ ]] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
             range=("$BEFORE..$HEAD_SHA")
