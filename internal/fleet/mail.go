@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/sturlabragason/fleet/internal/acphost"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/mail"
 	"github.com/sturlabragason/fleet/internal/prefs"
@@ -287,7 +288,12 @@ func (f *Fleet) nudge(from string, to ...string) {
 		if err != nil || !ok {
 			continue
 		}
-		if err := f.paste(pane, NudgeLine(n, from)); err != nil {
+		if a.ACP() {
+			_, err = f.acpCall(r, acphost.Request{Op: acphost.OpPrompt, Text: NudgeLine(n, from)})
+		} else {
+			err = f.paste(pane, NudgeLine(n, from))
+		}
+		if err != nil {
 			log.Warn("nudge failed", "agent", r, "err", err)
 			continue
 		}

@@ -3,6 +3,7 @@ package fleet
 import (
 	"strings"
 
+	"github.com/sturlabragason/fleet/internal/acphost"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/prefs"
 )
@@ -95,6 +96,12 @@ func (f *Fleet) interruptStuck(n stuckNote) {
 	}
 	if !f.quiet() {
 		log.Info("stuck interrupt skipped: the user is typing", "agent", n.name)
+		return
+	}
+	if f.isACP(n.name) {
+		if _, err := f.acpCall(n.name, acphost.Request{Op: acphost.OpCancel}); err != nil {
+			log.Warn("stuck interrupt failed", "agent", n.name, "err", err)
+		}
 		return
 	}
 	if err := f.pressKeys(n.pane, "Escape"); err != nil {

@@ -1,8 +1,13 @@
 package mcp
 
 import (
+	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/tmux"
 )
 
 func TestInstructionsCarryTimeRule(t *testing.T) {
@@ -67,4 +72,27 @@ func TestSpawnOffersEffortLevels(t *testing.T) {
 		return
 	}
 	t.Fatal("no fleet_spawn tool")
+}
+
+// ADR-74: fleet_spawn and fleet_squad_spawn pass driver through to the spawn.
+func TestSpawnPassesDriver(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FLEET_CONFIG", filepath.Join(home, "no-config.toml"))
+	f, err := fleet.New(&tmux.Client{Socket: "fleet-test-unused", Config: "/dev/null"}, home, "/nonexistent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := New(f, nil)
+	_, err = s.call("fleet_spawn", json.RawMessage(`{"name":"c1","profile":"claude","dir":"`+home+`","driver":"acp"}`))
+	if err == nil || !strings.Contains(err.Error(), "no ACP server") {
+		t.Errorf("fleet_spawn claude driver=acp: %v", err)
+	}
+	for _, def := range append(append([]tool{}, toolDefs...), squadToolDefs...) {
+		if def.Name == "fleet_spawn" || def.Name == "fleet_squad_spawn" {
+			props, _ := def.InputSchema["properties"].(map[string]any)
+			if _, ok := props["driver"]; !ok {
+				t.Errorf("%s has no driver argument", def.Name)
+			}
+		}
+	}
 }

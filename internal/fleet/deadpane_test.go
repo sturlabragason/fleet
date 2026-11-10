@@ -180,3 +180,44 @@ func deadReportLine(e *board.Exit, grace time.Duration) string {
 	_, _, l := deadReport("x", e, "z", "", grace)
 	return l
 }
+
+// The parked skip is for acp hosts only, and so is the closing one: a tmux
+// agent's dead pane is reported as before.
+func TestReapDeadSkipsACPParkAndClose(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FLEET_CONFIG", filepath.Join(home, "none.toml"))
+	f, err := New(&tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}, home, "/nonexistent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.CloseLater = func(string) error { return nil }
+	now := time.Now()
+	as := []*board.Agent{
+		{Name: "tmuxparked", Profile: "fake", Status: "parked"},
+		{Name: "acpparked", Profile: "fake", Status: "parked", Driver: board.DriverACP},
+		{Name: "acpclosing", Profile: "fake", Status: "idle", Driver: board.DriverACP, Closing: now},
+		{Name: "acpdied", Profile: "fake", Status: "idle", Driver: board.DriverACP},
+	}
+	panes := map[string]tmux.PaneInfo{}
+	f.Store.Update(func(b *board.Board) error {
+		for i, a := range as {
+			c := *a
+			b.Agents[a.Name] = &c
+			panes[a.Name] = tmux.PaneInfo{ID: fmt.Sprintf("%%%d", i), Agent: a.Name, Dead: true, DeadStatus: "0"}
+		}
+		return nil
+	})
+	f.reapDead(as, panes, now)
+	f.dead.run.Lock()
+	f.dead.run.Unlock()
+	got := map[string]bool{}
+	for n, a := range f.Store.Load().Agents {
+		got[n] = a.Exit != nil
+	}
+	want := map[string]bool{"tmuxparked": true, "acpparked": false, "acpclosing": false, "acpdied": true}
+	for n, w := range want {
+		if got[n] != w {
+			t.Errorf("%s reaped %v, want %v", n, got[n], w)
+		}
+	}
+}

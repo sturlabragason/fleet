@@ -31,6 +31,13 @@ func CheckKeys(keys []string) error {
 // ("" = not waiting, or only on its own unsubmitted input, which keys can
 // submit without answering anything). A numbered menu on screen counts.
 func (f *Fleet) Prompting(name string) (string, error) {
+	if f.isACP(name) {
+		q, err := f.acpQuestion(name)
+		if err != nil || q == nil {
+			return "", err
+		}
+		return strings.TrimSpace(q.Title + " " + strings.Join(acpMenu(q).Options, " | ")), nil
+	}
 	p, err := f.Pane(name)
 	if err != nil {
 		return "", err
@@ -73,6 +80,9 @@ func (f *Fleet) SendKeys(name, text string, keys []string) error {
 	if err := CheckKeys(keys); err != nil {
 		return err
 	}
+	if f.isACP(name) {
+		return f.acpKeys(name, text, keys)
+	}
 	p, err := f.Pane(name)
 	if err != nil {
 		return err
@@ -97,6 +107,13 @@ func (f *Fleet) SendKeys(name, text string, keys []string) error {
 
 // Menu returns the numbered prompt on the agent's screen, if any.
 func (f *Fleet) Menu(name string) (status.Menu, bool, error) {
+	if f.isACP(name) {
+		q, err := f.acpQuestion(name)
+		if err != nil || q == nil {
+			return status.Menu{}, false, err
+		}
+		return acpMenu(q), true, nil
+	}
 	p, err := f.Pane(name)
 	if err != nil {
 		return status.Menu{}, false, err
@@ -153,6 +170,9 @@ func (f *Fleet) ChooseLabel(name, label, expect string) (Choice, error) {
 // choose re-reads the menu right before pressing keys; gone is the error
 // when there is none.
 func (f *Fleet) choose(name string, option int, expect, gone string) (Choice, error) {
+	if f.isACP(name) {
+		return f.acpChoose(name, option, expect, gone)
+	}
 	p, err := f.Pane(name)
 	if err != nil {
 		return Choice{}, err
@@ -218,6 +238,9 @@ func MenuKeys(selected, option int) []string {
 func (f *Fleet) Answer(name, yn, expect string) (Choice, error) {
 	if yn != "y" && yn != "n" {
 		return Choice{}, fmt.Errorf(`answer must be "y" or "n"`)
+	}
+	if f.isACP(name) {
+		return f.acpAnswer(name, yn, expect)
 	}
 	m, ok, err := f.Menu(name)
 	if err != nil {

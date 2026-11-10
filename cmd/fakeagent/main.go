@@ -1,4 +1,5 @@
-// Command fakeagent prints agent-like output and cycles through states.
+// Command fakeagent prints agent-like output and cycles through states, or
+// with --acp serves a scripted Agent Client Protocol session (DESIGN §7d).
 package main
 
 import (
@@ -8,9 +9,5 @@ import (
 )
 
 func main() {
-	name := "fake"
-	if len(os.Args) > 1 {
-		name = os.Args[1]
-	}
-	fake.Run(name, os.Stdin, os.Stdout)
+	os.Exit(fake.Main(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }

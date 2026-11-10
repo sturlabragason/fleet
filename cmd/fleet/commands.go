@@ -41,7 +41,7 @@ const usage = `usage:
                                             $FLEET_ADMIRAL_PROFILE, last choice, [admiral] profile, copilot
   fleet ui                                  run the overview TUI in this terminal
   fleet spawn [--worktree|--no-worktree] [--leader] [--interactive] [--effort LEVEL] [--admiral NAME] <name> <profile> [dir] ["prompt"]
-             [--goal "one line"] [--check "cmd"] [--check-exit N] [--result FILE]
+             [--driver tmux|acp] [--goal "one line"] [--check "cmd"] [--check-exit N] [--result FILE]
                                             in a git repo the agent gets its own worktree,
                                             <repo>.wt/<name> on branch fleet/<name> (worktree in
                                             config.toml turns it off; --no-worktree for one spawn);
@@ -52,6 +52,9 @@ const usage = `usage:
                                             when the agent has no worktree of its own);
                                             --effort light|standard|pro sizes the worker playbook
                                             (default: pro with a worktree, light without one);
+                                            --driver acp runs the tool's ACP server under fleet acp-host
+                                            instead of its screen (copilot, claude-copilot, agy, fake;
+                                            default: driver in config.toml, else tmux);
                                             --leader makes it a leader: it gets squad tools, spawns a
                                             squad of its own and its agents report to it, not to the
                                             admiral ([squad] max_members, max_depth in config.toml);
@@ -59,7 +62,8 @@ const usage = `usage:
                                             never auto-closed and reports progress, not done;
                                             queued instead when max_working agents are busy;
                                             the overview TUI starts it when a slot frees
-  fleet spawn --fake <name> [dir]           shorthand for profile "fake"
+  fleet spawn --fake [--driver acp] <name> [dir]
+                                            shorthand for profile "fake"
   fleet adopt [--name N] [--dir D] [--force] [profile] <id | words...>
                                             resume an existing session (started outside fleet) as an agent;
                                             by ID, unique ID prefix (8+ chars) or words from fleet sessions
@@ -202,11 +206,9 @@ func run(args []string) error {
 	}
 	cmd, rest := args[0], args[1:]
 	if cmd == "fakeagent" {
-		name := "fake"
-		if len(rest) > 0 {
-			name = rest[0]
+		if code := fake.Main(rest, os.Stdin, os.Stdout, os.Stderr); code != 0 {
+			os.Exit(code)
 		}
-		fake.Run(name, os.Stdin, os.Stdout)
 		return nil
 	}
 	switch cmd { // need no fleet state or tmux
@@ -220,6 +222,8 @@ func run(args []string) error {
 		return cmdADR(rest)
 	case "merge":
 		return cmdMerge(rest)
+	case "acp-host":
+		return cmdACPHost(rest)
 	case "version", "--version":
 		return cmdVersion(rest)
 	}
@@ -369,6 +373,7 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 	leader := fs.Bool("leader", false, "make it a leader: it may spawn a squad of its own and its agents report to it")
 	interactive := fs.Bool("interactive", false, "the user talks to it directly: never auto-closed, reports progress until the user ends the session")
 	effort := fs.String("effort", "", "worker playbook level: light, standard or pro (default: pro with a worktree, light without)")
+	driver := fs.String("driver", "", "tmux or acp: how fleet runs the agent (default: driver in config.toml, else tmux)")
 	owner := fs.String("admiral", "", "admiral that owns the agent and gets its reports (default main)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -379,6 +384,7 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 	var o fleet.SpawnOpts
 	o.Role = fleet.Role{Leader: *leader, Interactive: *interactive, Admiral: *owner}
 	o.Effort = *effort
+	o.Driver = *driver
 	o.Card = fleet.NormalizeCard(&board.Card{Goal: *goal, Check: *check, Want: *checkExit, Result: *result})
 	var set []string
 	// Read which flag was passed, not just its value, so --worktree=false and

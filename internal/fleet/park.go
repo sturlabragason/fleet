@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/acphost"
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/park"
@@ -52,6 +53,18 @@ func (f *Fleet) Park(name, reason string) error {
 			pane = p.ID
 		}
 	}
+	if a.ACP() && a.SessionID == "" {
+		// Parked before a refresh read it: the transcript has it.
+		if sid := acphost.LastSession(acphost.TranscriptPath(f.Home, name)); sid != "" {
+			a.SessionID = sid
+			f.Store.Update(func(b *board.Board) error {
+				if cur, ok := b.Agents[name]; ok && cur.SessionID == "" {
+					cur.SessionID = sid
+				}
+				return nil
+			})
+		}
+	}
 	if why := park.Blocker(a, pinned); why != "" {
 		return fmt.Errorf("can't park %s: %s", name, why)
 	}
@@ -88,6 +101,9 @@ func (f *Fleet) Park(name, reason string) error {
 		return err
 	}
 	if pane != "" {
+		if a.ACP() {
+			f.acpStop(name)
+		}
 		if err := f.KillPane(pane); err != nil {
 			f.Store.Update(func(b *board.Board) error {
 				if cur, ok := b.Agents[name]; ok && cur.Status == string(status.Parked) {
@@ -147,8 +163,11 @@ func (f *Fleet) Wake(name string, force bool) (*board.Agent, error) {
 	if !ok {
 		return nil, fmt.Errorf("unknown profile %q (have %v)", old.Profile, tools.Names(f.Profiles))
 	}
-	if len(p.Resume) == 0 {
+	if len(p.Resume) == 0 && !old.ACP() {
 		return nil, fmt.Errorf("profile %s can't resume", old.Profile)
+	}
+	if old.ACP() && old.SessionID == "" {
+		return nil, fmt.Errorf("agent %q has no ACP session id recorded; it can't be resumed", name)
 	}
 	// A parked entry with a live pane is a park that did not take; waking
 	// it would put a second process on the same session.
@@ -186,10 +205,18 @@ func (f *Fleet) Wake(name string, force bool) (*board.Agent, error) {
 	if old.Effort != "" {
 		ctx = contextKey(p, playbook.Level(old.Effort), role.Leader)
 	}
-	argv, _ := p.Argv(tools.AgentVars(f.Exe, name, old.SessionID),
-		tools.Launch{Resume: true, Mode: f.modeFor(name, old.Profile, p, wpr.Mode), Extra: wpr.ExtraArgs, Context: ctx})
+	var argv []string
+	if old.ACP() {
+		argv, _ = f.wakeACPArgv(old, p, ctx) // the session id was checked above
+		// The parked host's last state (idle) must not stand for the new
+		// host before it is up; the transcript and session id stay.
+		f.forgetHook(name)
+	} else {
+		argv, _ = p.Argv(tools.AgentVars(f.Exe, name, old.SessionID),
+			tools.Launch{Resume: true, Mode: f.modeFor(name, old.Profile, p, wpr.Mode), Extra: wpr.ExtraArgs, Context: ctx})
+	}
 	a, err := f.start(name, old.Profile, p, old.Dir, old.Goal, "", old.SessionID, argv, true,
-		startExtra{Base: old.Baseline, Worktree: old.Worktree, NoWorktree: old.NoWorktree, Effort: old.Effort, Role: role})
+		startExtra{Base: old.Baseline, Worktree: old.Worktree, NoWorktree: old.NoWorktree, Effort: old.Effort, Role: role, Driver: old.Driver})
 	if err != nil {
 		f.unclaimWake(name, old)
 		return nil, err

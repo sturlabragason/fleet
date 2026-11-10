@@ -83,6 +83,9 @@ func snapText(f *fleet.Fleet, name string, socket, set *string) (string, error) 
 		}
 		return t.Capture(name, 0)
 	}
+	if ag, ok := f.Store.Load().Agents[name]; ok && ag.ACP() {
+		return "", fmt.Errorf("agent %q runs over ACP: it has no screen to snap (fleet peek shows its transcript)", name)
+	}
 	if *set == "" {
 		ag, ok := f.Store.Load().Agents[name]
 		if !ok {

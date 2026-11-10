@@ -46,6 +46,9 @@ func (f *Fleet) reapDead(as []*board.Agent, panes map[string]tmux.PaneInfo, now 
 		p, ok := panes[a.Name]
 		switch {
 		case !ok:
+		case a.ACP() && (a.Status == string(status.Parked) || (!a.Closing.IsZero() && now.Sub(a.Closing) < acpClosingFor)):
+			// A park or close in progress: an acp host exits on its stop
+			// request just before fleet kills its window.
 		case a.Exit == nil:
 			jobs = append(jobs, deadJob{a: a, pane: p, fresh: true})
 		case closeDue(a.Exit, f.Prefs.For(a.Profile).DeadPaneGrace, now) && now.Sub(f.dead.tried[a.Name]) >= sweepEvery:
@@ -87,7 +90,12 @@ func (f *Fleet) reportDead(a *board.Agent, p tmux.PaneInfo) {
 	if !claimed {
 		return
 	}
-	screen, _ := f.T.Capture(p.ID, 50) // some history too: the last lines may have scrolled off
+	var screen string
+	if a.ACP() {
+		screen = f.acpScreen(a.Name, 50)
+	} else {
+		screen, _ = f.T.Capture(p.ID, 50) // some history too: the last lines may have scrolled off
+	}
 	grace := f.Prefs.For(a.Profile).DeadPaneGrace
 	state, text, line := deadReport(a.Name, e, screen, AgentBlocker(a), grace)
 	log.Info("dead pane", "agent", a.Name, "state", state, "exit", exitHow(e))

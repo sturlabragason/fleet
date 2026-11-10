@@ -109,7 +109,7 @@ func (f *Fleet) SendBlocker(name string, submit bool) string {
 	case open && a.Interactive:
 		return fmt.Sprintf("%s is interactive and the user has its pane open", name)
 	}
-	if submit {
+	if submit && !a.ACP() {
 		set := f.setOf(name)
 		if screen, err := f.T.Capture(pane, 0); err == nil {
 			// A pending-paste marker is fleet's own unsubmitted send, which

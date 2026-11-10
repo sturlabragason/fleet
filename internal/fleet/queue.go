@@ -6,6 +6,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/prefs"
 	"github.com/sturlabragason/fleet/internal/status"
 )
 
@@ -86,7 +87,7 @@ func QueueOrder(as []*board.Agent) []*board.Agent {
 // worktree choice the spawn asked for, whatever config.toml says by then;
 // card is kept for the same reason (ADR-43), and so is the effort level
 // (ADR-57).
-func (f *Fleet) enqueue(name, profile, dir, prompt string, wantWT bool, card *board.Card, role Role, effort string) (*board.Agent, error) {
+func (f *Fleet) enqueue(name, profile, dir, prompt string, wantWT bool, card *board.Card, role Role, effort, driver string) (*board.Agent, error) {
 	limit := f.MaxWorking()
 	low, free, mem := f.LowMemory()
 	note := ""
@@ -105,7 +106,7 @@ func (f *Fleet) enqueue(name, profile, dir, prompt string, wantWT bool, card *bo
 		}
 		a = &board.Agent{Name: name, Profile: profile, Patterns: f.Profiles[profile].Patterns, Dir: dir, Goal: prompt,
 			Status: string(status.Queued), Created: now, StatusSince: now, NoWorktree: !wantWT, LastLine: note, Card: card,
-			Leader: role.Leader, LeadBy: role.LeadBy, Interactive: role.Interactive, Effort: effort}
+			Leader: role.Leader, LeadBy: role.LeadBy, Interactive: role.Interactive, Effort: effort, Driver: boardDriver(driver)}
 		a.SetOwner(role.Admiral)
 		b.Agents[name] = a
 		f.Store.AppendEvent(board.Event{Time: now, Agent: name, From: "", To: a.Status})
@@ -148,7 +149,7 @@ func (f *Fleet) claimQueued(b *board.Board, now time.Time, low bool, limit int) 
 // startQueued launches a claimed agent; Refresh runs it in a goroutine so the
 // poll never waits on tmux or the tool's ready check.
 func (f *Fleet) startQueued(a *board.Agent) {
-	if _, err := f.launch(a.Name, a.Profile, a.Dir, a.Goal, true, !a.NoWorktree, a.Card, Role{Leader: a.Leader, LeadBy: a.LeadBy, Interactive: a.Interactive, Admiral: a.Admiral}, a.Effort); err != nil {
+	if _, err := f.launch(a.Name, a.Profile, a.Dir, a.Goal, true, !a.NoWorktree, a.Card, Role{Leader: a.Leader, LeadBy: a.LeadBy, Interactive: a.Interactive, Admiral: a.Admiral}, a.Effort, queuedDriver(a)); err != nil {
 		logx.For("fleet").Error("queue start failed", "agent", a.Name, "err", err)
 		f.Store.Update(func(b *board.Board) error {
 			// Only our claim turns into an error; a closed or re-spawned
@@ -171,4 +172,12 @@ func keepPending(a *board.Agent, now time.Time) string {
 		return string(status.Error)
 	}
 	return a.Status
+}
+
+// queuedDriver is the driver a queued entry was spawned with.
+func queuedDriver(a *board.Agent) string {
+	if a.ACP() {
+		return prefs.DriverACP
+	}
+	return prefs.DriverTmux
 }
