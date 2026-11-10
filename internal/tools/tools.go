@@ -63,6 +63,10 @@ type Profile struct {
 	// PluginMCP puts the peer MCP server in the plugin's .mcp.json, and
 	// drops PeerArgs while the plugin is loaded (ADR-99).
 	PluginMCP bool
+	// NativeBinary starts the Copilot CLI's native binary instead of the
+	// Node launcher on PATH (see NativeBinary). It skips the launcher's
+	// version pick and auto-update. Default off.
+	NativeBinary bool
 	// UserMCPConfig is the file where the tool keeps the user's global MCP
 	// servers ({"mcpServers":{name:...}}), ~ expanded. Empty = none.
 	UserMCPConfig string
@@ -318,7 +322,7 @@ acp_mode_args = { auto = "--allow-all", autopilot = "--allow-all" }
 
 [claude]
 command = "claude"
-args = ["--model", "` + ClaudeModel + `"]
+args = ["--model", "` + ClaudeModel + `", "--exclude-dynamic-system-prompt-sections"]
 env = { CLAUDE_CODE_SUBAGENT_MODEL = "` + ClaudeSubagentModel + `" }
 prompt_args = ["{prompt}"]
 mode_args = { auto = "--permission-mode bypassPermissions", accept-edits = "--permission-mode acceptEdits", plan = "--permission-mode plan", bypass = "--permission-mode bypassPermissions" }
@@ -553,6 +557,9 @@ func apply(p *Profile, sec map[string]conf.Value) {
 			p.PluginArgs = []string{}
 		}
 	}
+	if v, ok := conf.Bool(sec, "native_binary"); ok {
+		p.NativeBinary = v
+	}
 	if v, ok := conf.Bool(sec, "plugin_mcp"); ok {
 		p.PluginMCP = v
 	}
@@ -753,21 +760,26 @@ type Launch struct {
 // Argv builds the launch argv. embedded reports whether the prompt was placed
 // in the argv (PromptArgs); when false the caller must paste it after the pane
 // is ready. An unknown mode is ignored (see Profile.HasMode).
+//
+// The order is fixed and shared with ACPArgv (peer MCP, plugin, user MCP
+// off, then the rest), and every list in it is sorted or constant, so two
+// agents of one profile differ only in per-agent values (name, id, paths,
+// prompt) and share the tool's cached prompt prefix.
 func (p Profile) Argv(v Vars, l Launch) (argv []string, embedded bool) {
-	argv = []string{v.expand(p.Command)}
+	argv = []string{p.command(v)}
 	if v.PeerMCP != "" || v.PeerMCPClaude != "" {
 		for _, a := range p.PeerArgs {
+			argv = append(argv, v.expand(a))
+		}
+	}
+	if v.Plugin != "" {
+		for _, a := range p.PluginArgs {
 			argv = append(argv, v.expand(a))
 		}
 	}
 	argv = append(argv, p.userMCPOffArgs(v.MCPOff)...)
 	if v.Hooks != "" {
 		for _, a := range p.HookArgs {
-			argv = append(argv, v.expand(a))
-		}
-	}
-	if v.Plugin != "" {
-		for _, a := range p.PluginArgs {
 			argv = append(argv, v.expand(a))
 		}
 	}
@@ -822,7 +834,7 @@ func (p Profile) ACPArgv(v Vars, l Launch) []string {
 		add(p.ACPModeArgs[l.Mode])
 		return argv
 	}
-	argv = []string{v.expand(p.Command)}
+	argv = []string{p.command(v)}
 	if (v.PeerMCP != "" || v.PeerMCPClaude != "") && !p.ACPSessionMCP() {
 		add(p.PeerArgs)
 	}
