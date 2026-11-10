@@ -71,6 +71,11 @@ func admiralLaunchOf(f *fleet.Fleet, adm, prof, resumeID, boot string) (supLaunc
 		}
 		dir = supervisor.DirOf(f.Home, adm)
 	}
+	if p.Patterns == "claude" {
+		if err := writeAdmiralRules(f.Home, adm); err != nil {
+			return supLaunch{}, fmt.Errorf("admiral %s: write its rules: %w", adm, err)
+		}
+	}
 	if dir == "" {
 		dir = filepath.Join(filepath.Dir(filepath.Dir(f.Exe)), "supervisor")
 	}
@@ -101,6 +106,9 @@ func admiralLaunchOf(f *fleet.Fleet, adm, prof, resumeID, boot string) (supLaunc
 		tools.Launch{Resume: resumeID != "", Mode: admiralMode(p), Extra: admiralMCPArgsOf(p, f.Exe, f.Home, adm), Prompt: boot})
 	logx.For("up").Info("admiral", "profile", prof, "dir", dir, "argv", argv, "resume", resumeID != "")
 	sl := supLaunch{Cmd: tools.ShellCommand(argv), Dir: dir, Env: p.EnvList(), ID: id, Profile: prof}
+	if p.Patterns == "claude" {
+		sl.Env = append(sl.Env, claudeAdmiralEnv...)
+	}
 	if adm != supervisor.Main {
 		sl.Env = append(sl.Env, AdmiralEnv+"="+adm)
 	}

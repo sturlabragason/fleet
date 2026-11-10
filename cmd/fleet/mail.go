@@ -239,6 +239,7 @@ func cmdMCP(f *fleet.Fleet, args []string) error {
 	agent := fs.String("agent", "", "serve the agent-scoped peer tools as this agent")
 	adm := fs.String("admiral", "", "serve the admiral tools as this admiral (default: main)")
 	probe := fs.Bool("probe", false, "check this binary can serve, print ok and exit (used by hot reload)")
+	rulesInPrompt := fs.Bool("rules-in-prompt", false, "the admiral got the rules as a system prompt file: send a pointer as the server instructions (ADR-86)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -271,6 +272,7 @@ func cmdMCP(f *fleet.Fleet, args []string) error {
 		f.DrainQueue = true
 	}
 	s.Reloaded = reloaded
+	s.RulesInPrompt = *rulesInPrompt && me == ""
 	return s.Serve(in, os.Stdout)
 }
 

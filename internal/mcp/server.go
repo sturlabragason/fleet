@@ -41,6 +41,13 @@ type Server struct {
 	Reset func() error
 	// SwapProfile schedules `fleet admiral profile NAME` (tests stub it).
 	SwapProfile func(name string) error
+	// RunCLI runs a fleet subcommand for the CLI-backed tools (ADR-86):
+	// output, exit code (tests stub it; default: the fleet binary).
+	RunCLI func(dir string, args ...string) (string, int, error)
+	// RulesInPrompt: the client got the admiral rules as a system prompt
+	// file, so initialize sends a pointer instead (ADR-86; Claude Code cuts
+	// MCP server instructions at about 4 KB).
+	RulesInPrompt bool
 	// Agent, when set, is agent mode (DESIGN §6.6): only the peer tools,
 	// acting as this agent.
 	Agent string

@@ -9,7 +9,7 @@ It was called the supervisor until ADR-26. The old names still work (`fleet supe
 - Profile: `copilot`, unless you pass `fleet up --admiral-profile NAME`, set `FLEET_ADMIRAL_PROFILE`, pick one with `Alt-P`, or put an `[admiral]` entry in your config (see [examples/config.toml.example](../examples/config.toml.example)). Any profile works, including `fake`.
 - Directory: `supervisor/` next to the directory holding the `fleet` binary (so `make build` finds it), or `FLEET_ADMIRAL_DIR`, or your home directory when neither exists (`go install`).
 - No config file is needed. `fleet up` passes the MCP server on the command line: `--mcp-config` with an inline JSON for claude profiles, `--available-tools fleet --allow-tool fleet` for copilot ones.
-- Its rules (tools only, short replies, the confirmation rule) live in `internal/mcp/instructions.md`, built into the binary and sent as the MCP server's instructions.
+- Its rules (tools only, short replies, the confirmation rule) live in `internal/mcp/instructions.md`, built into the binary and sent as the MCP server's instructions; a Claude admiral gets them as a system prompt file instead, since Claude cuts MCP instructions at about 4 KB (ADR-86). Every fleet command maps to an admiral tool or a reason it has none in `internal/mcp/parity.go`.
 - With a `copilot` profile, `fleet up` starts it lean: `--no-custom-instructions --allow-all-mcp-server-instructions --disable-builtin-mcps`, plus `--disable-mcp-server` for each server in `~/.copilot/mcp-config.json`. It sees only the fleet tools: no shell, no file reading, and about 8k input tokens per turn instead of ~160k.
 
 `fleet admiral` prints its profile, session id and context fill; `fleet admiral reset` replaces it with a fresh chat, `fleet admiral profile NAME` swaps the tool.
@@ -41,6 +41,19 @@ To use a tool fleet doesn't start itself, register `fleet mcp --admiral main` (o
 | `fleet_brief` | none | Last handoff, recent notes, then the status table. A fresh admiral calls this first |
 | `fleet_handoff` | `summary` | Write a handoff and get replaced by a fresh admiral |
 | `fleet_admiral_profile` | `profile`, `summary` | Switch the admiral to another tool profile |
+| `fleet_park` | `name`, `action` (`wake`), `force` | Stop an idle agent to free RAM, kept on the board; `wake` resumes it |
+| `fleet_takeover` | `name`, `acp` | Move an idle ACP agent into the tool's own screen; `acp` hands it back (ADR-82) |
+| `fleet_wait` | `agents`, `timeout_s` | Block until a report or message arrives |
+| `fleet_adr` | `action`, `dir`, `agent` | Claim, list or release ADR numbers for a repo (ADR-50) |
+| `fleet_touching` | `dir`, `files` | Files other worktrees change: merge order |
+| `fleet_worktrees` | `dir`, `prune`, `confirmed` | Leftover agent worktrees; `prune` removes merged, clean ones |
+| `fleet_branches` | `dir`, `prune`, `confirmed` | `fleet/` branches on origin; `prune` deletes merged ones (ADR-87) |
+| `fleet_changes` | `limit` | Running version and latest changelog lines |
+| `fleet_admirals` | none | The admirals on this fleet |
+| `fleet_admiral_add` | `name`, `profile` | Start another admiral beside main |
+| `fleet_handover` | `name`, `to` | Give one of your agents to another admiral |
+| `fleet_msg_send`, `fleet_inbox` | `to`, `text` / `all`, `limit` | Message other admirals; read their messages |
+| `fleet_access_request`, `fleet_access_respond`, `fleet_access_revoke` | `to`/`from`/`name`, … | Access between admirals |
 
 ## Squads
 

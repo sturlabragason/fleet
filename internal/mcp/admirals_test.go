@@ -144,7 +144,7 @@ func TestUnknownAdmiralRefusesWrites(t *testing.T) {
 // the plain reads, so a write tool added later can't slip through.
 func TestIdentityBoundCoversEveryWrite(t *testing.T) {
 	reads := map[string]bool{"fleet_status": true, "fleet_peek": true, "fleet_info": true, "fleet_brief": true,
-		"fleet_profiles": true, "fleet_sessions": true, "fleet_access": true}
+		"fleet_profiles": true, "fleet_sessions": true, "fleet_access": true, "fleet_touching": true, "fleet_changes": true}
 	for _, d := range toolDefs {
 		if !reads[d.Name] && !identityBound[d.Name] {
 			t.Errorf("%s is neither a read nor identity-bound", d.Name)

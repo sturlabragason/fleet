@@ -144,6 +144,11 @@ type args struct {
 	May                 []string
 	// TimeoutS is fleet_wait's timeout in seconds (ADR-72).
 	TimeoutS int `json:"timeout_s"`
+	// CLI-backed tools (ADR-86): fleet_takeover's acp, fleet_touching's
+	// files, fleet_worktrees' and fleet_branches' prune.
+	ACP   bool `json:"acp"`
+	Files []string
+	Prune bool
 }
 
 // identityBound are the admiral tools that change something or read the
@@ -155,6 +160,7 @@ var identityBound = map[string]bool{
 	"fleet_admiral_profile": true, "fleet_access_decide": true, "fleet_handover": true,
 	"fleet_admirals": true, "fleet_msg_send": true, "fleet_inbox": true,
 	"fleet_access_request": true, "fleet_access_respond": true, "fleet_access_revoke": true,
+	"fleet_takeover": true, "fleet_worktrees": true, "fleet_branches": true, "fleet_admiral_add": true,
 }
 
 func (s *Server) call(name string, raw json.RawMessage) (string, error) {
@@ -266,6 +272,8 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		return "", fmt.Errorf("action must be park or wake")
 	case "fleet_handover", "fleet_admirals", "fleet_msg_send", "fleet_inbox", "fleet_access_request", "fleet_access_respond", "fleet_access_revoke":
 		return s.admiralCall(name, a)
+	case "fleet_takeover", "fleet_touching", "fleet_worktrees", "fleet_branches", "fleet_admiral_add", "fleet_changes":
+		return s.cliCall(name, a)
 	case "fleet_wall":
 		switch a.Action {
 		case "preset":

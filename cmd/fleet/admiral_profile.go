@@ -13,6 +13,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/mcp"
 	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/theme"
 	"github.com/sturlabragason/fleet/internal/tools"
@@ -111,12 +112,43 @@ func admiralMCPArgsOf(p tools.Profile, exe, home, adm string) []string {
 	case "copilot":
 		return supervisorMCPArgs(p)
 	case "claude":
+		// --strict-mcp-config: fleet is its only MCP server, as for copilot.
+		// The rules go in as a system prompt file: Claude Code cuts MCP
+		// server instructions at about 4 KB (ADR-86).
+		if home != "" {
+			mcpArgs = append(mcpArgs, "--rules-in-prompt")
+		}
 		cfg, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{"fleet": map[string]any{
 			"type": "stdio", "command": exe, "args": mcpArgs}}})
-		return []string{"--mcp-config", string(cfg), "--allowedTools=mcp__fleet"}
+		out := []string{"--mcp-config", string(cfg), "--strict-mcp-config", "--allowedTools=mcp__fleet"}
+		if home != "" {
+			out = append(out, "--append-system-prompt-file", admiralRulesPath(home, adm))
+		}
+		return out
 	}
 	return nil
 }
+
+// admiralRulesPath is the admiral rules file a claude admiral reads as its
+// system prompt (ADR-86).
+func admiralRulesPath(home, adm string) string {
+	return filepath.Join(supervisor.DirOf(home, adm), "rules.md")
+}
+
+// writeAdmiralRules writes the admiral rules for a claude admiral, fresh
+// from this binary on every launch.
+func writeAdmiralRules(home, adm string) error {
+	path := admiralRulesPath(home, adm)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(mcp.Instructions), 0o600)
+}
+
+// claudeAdmiralEnv loads every fleet tool up front (no ToolSearch deferral,
+// which hid the fleet tools' schemas) and keeps the user's claude.ai
+// connectors out of the admiral (ADR-86).
+var claudeAdmiralEnv = []string{"ENABLE_TOOL_SEARCH=false", "ENABLE_CLAUDEAI_MCP_SERVERS=false"}
 
 // writeAdmiralMCP writes <admiral dir>/.mcp.json for a copilot admiral and
 // returns its path.

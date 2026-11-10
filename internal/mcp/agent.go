@@ -28,8 +28,15 @@ func (s *Server) instructions() string {
 		}
 		return AgentInstructions
 	}
+	if s.RulesInPrompt {
+		return RulesPointer
+	}
 	return Instructions
 }
+
+// RulesPointer is the admiral's MCP server instructions when the full rules
+// arrived as a system prompt file (ADR-86).
+const RulesPointer = "The fleet admiral rules are in your system prompt (section \"# Fleet admiral\"). Use only these fleet tools."
 
 var agentToolDefs = []tool{
 	{"fleet_agents", "List the other fleet agents: name, profile, status, dir and your access with each (\"free (squad|team|repo|lead|open)\" = message without asking; a refusal names a lead you may reach instead).", obj(nil, map[string]any{})},
