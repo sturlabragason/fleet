@@ -5,3 +5,6 @@
 .env
 *.local.toml
 PUBLISHING.md
+
+# agent result files written in the checkout root
+/result*.md

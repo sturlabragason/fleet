@@ -1,0 +1,4 @@
+# Lines matching any of these EREs are ignored by scripts/check-public.sh.
+# Keep entries narrow: a placeholder or a known-safe string, never a whole word that a real leak could share.
+# Placeholder home directories used in tests and docs.
+/home/(user|me|u)\b

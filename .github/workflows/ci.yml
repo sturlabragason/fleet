@@ -17,6 +17,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The pre-push hook's check, run for pushes from any clone and for PRs.
+  # Private deny patterns and allowed emails come from repository secrets, never the tree.
+  public:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: scripts/check-public_test.sh
+      - name: check-public on the new commits
+        env:
+          PUBLIC_DENY: ${{ secrets.PUBLIC_DENY }}
+          PUBLIC_EMAILS: ${{ secrets.PUBLIC_EMAILS }}
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          args=()
+          [[ -n $PUBLIC_DENY ]] || echo "::warning::secret PUBLIC_DENY is not set: only built-in patterns are checked"
+          [[ -n $PUBLIC_EMAILS ]] || { echo "::warning::secret PUBLIC_EMAILS is not set: commit emails not checked"; args+=(--no-emails); }
+          if [[ $EVENT == pull_request ]]; then
+            range=("$BASE..$HEAD_SHA")
+          elif [[ -n $BEFORE && ! $BEFORE =~ ^0+$ ]] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            range=("$BEFORE..$HEAD_SHA")
+          else
+            range=("$HEAD_SHA" --not origin/main)
+          fi
+          scripts/check-public.sh "${args[@]}" "${range[@]}"
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
