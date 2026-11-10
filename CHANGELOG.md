@@ -5,6 +5,7 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-10
+- Install or upgrade fleet with one line: `curl -fsSL https://raw.githubusercontent.com/sturlabragason/fleet/main/install.sh | sh`. It checks the binary against the release's SHA-256 sums and installs to `~/.local/bin` without sudo (ADR-78).
 - Parking an ACP agent (copilot, claude-copilot, agy) no longer sometimes leaves it gone instead of parked, so `fleet wake` resumes it (ADR-74).
 - The overview (`fleet ui`) restarts itself on a rebuilt fleet binary, like the watcher, so it never keeps running old code (ADR-62).
 - New claude-copilot agents, and any profile of yours that runs copilot or agy, run over ACP by default like plain copilot. `driver = "tmux"` under `[profile.claude-copilot]` keeps them on tmux; running agents keep their driver (ADR-74).

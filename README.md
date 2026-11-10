@@ -50,10 +50,26 @@ Planned, not built yet: park/wake to save RAM, tool hooks instead of screen scra
 ## Install
 
 ```sh
+curl -fsSL https://raw.githubusercontent.com/sturlabragason/fleet/main/install.sh | sh
+```
+
+It downloads the latest release's binary for your OS and architecture (linux or macOS, amd64 or arm64), checks it against the release's `SHA256SUMS` and refuses on a mismatch, and puts it in `~/.local/bin`. No sudo, and it doesn't touch your shell's rc files; if the directory isn't on your `PATH` it says what to add. Run it again to upgrade. `FLEET_VERSION=v1.3.0` pins a release, `FLEET_INSTALL_DIR` picks another directory, `--dry-run` shows what it would do.
+
+To read it before you run it:
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/sturlabragason/fleet/main/install.sh
+less install.sh
+sh install.sh
+```
+
+or with Go:
+
+```sh
 go install github.com/sturlabragason/fleet/cmd/fleet@latest
 ```
 
-or download a binary for linux or macOS (amd64, arm64) from [Releases](https://github.com/sturlabragason/fleet/releases), check it against `SHA256SUMS` and put it on your `PATH`. `fleet version` says which release you have.
+or download a binary from [Releases](https://github.com/sturlabragason/fleet/releases), check it against `SHA256SUMS` and put it on your `PATH`. `fleet version` says which release you have.
 
 or from a checkout:
 

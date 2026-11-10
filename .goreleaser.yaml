@@ -38,3 +38,7 @@ release:
     owner: sturlabragason
     name: fleet
   name_template: "{{ .Tag }}"
+  # The one-line installer, attached so a release carries the script that
+  # installs it (ADR-78).
+  extra_files:
+    - glob: ./install.sh
