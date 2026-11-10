@@ -35,7 +35,9 @@ func TestCopilotFixture(t *testing.T) {
 }
 
 // The fixture has two applied compactions and one failed one, and a subagent
-// call whose small context must not count as the agent's.
+// call whose small context must not count as the agent's. Each compaction's
+// own call (11 AIC, 147k tokens) is billed and is never a usage_record, so it
+// is added, the failed attempt's too (ADR-79).
 func TestCopilotCompactions(t *testing.T) {
 	src, err := os.ReadFile("testdata/copilot-compaction.jsonl")
 	if err != nil {
@@ -46,7 +48,7 @@ func TestCopilotCompactions(t *testing.T) {
 	os.WriteFile(path, bytes.Join(lines[:6], nil), 0o600)
 	c := NewCache()
 	got, _ := c.File(path, Copilot)
-	if got.Compactions != 1 || got.Context != 20 || got.Calls != 3 {
+	if got.Compactions != 1 || got.Context != 20 || got.Calls != 3 || got.AIC != 14 {
 		t.Fatalf("after first compaction: %+v", got)
 	}
 	os.WriteFile(path, src, 0o600)
@@ -55,10 +57,13 @@ func TestCopilotCompactions(t *testing.T) {
 	if got.Compactions != 2 || got.Context != 9 || got.Calls != 3 || got.Model != "claude-opus-5" {
 		t.Fatalf("got %+v", got)
 	}
-	if s := got.Short(); s != "3.0 AIC ⟲2" {
+	if got.AIC != 36 || got.Input != 3*143000+1500 {
+		t.Fatalf("compaction calls not counted: %+v", got)
+	}
+	if s := got.Short(); s != "36.0 AIC ⟲2" {
 		t.Fatalf("short %q", s)
 	}
-	if l := got.Long(); l != "3.0 AIC ⟲2 (3 calls, 205k tokens, 202k cached, compacted 2×)" {
+	if l := got.Long(); l != "36.0 AIC ⟲2 (3 calls, 646k tokens, 202k cached, compacted 2×)" {
 		t.Fatalf("long %q", l)
 	}
 	var total Spend
@@ -66,6 +71,26 @@ func TestCopilotCompactions(t *testing.T) {
 	total.Add(got)
 	if total.Compactions != 4 || total.Context != 0 {
 		t.Fatalf("total %+v", total)
+	}
+}
+
+// Claude marks a compaction with a compact_boundary system line; an idle one
+// (run while the agent waits, before its prompt cache expires) is not the
+// full-context churn ADR-71 counts (ADR-79).
+func TestClaudeCompactions(t *testing.T) {
+	src, err := os.ReadFile("testdata/claude-transcript.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := func(uuid, trigger string) string {
+		return `{"type":"system","subtype":"compact_boundary","uuid":"` + uuid + `","content":"Conversation compacted","compactMetadata":{"trigger":"` + trigger + `","preTokens":221266}}` + "\n"
+	}
+	src = append(src, b("c1", "auto")+b("c2", "idle")+b("c3", "manual")...)
+	path := filepath.Join(t.TempDir(), "s.jsonl")
+	os.WriteFile(path, src, 0o600)
+	got, _ := NewCache().File(path, Claude)
+	if got.Compactions != 2 || got.Calls != 2 || got.Output != 340 {
+		t.Fatalf("got %+v", got)
 	}
 }
 

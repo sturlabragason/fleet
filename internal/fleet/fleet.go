@@ -367,7 +367,7 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 		ex.Base = Baseline(dir)
 		return f.launchACP(name, profile, p, dir, prompt, full, claimed, lvl, ex)
 	}
-	argv, embedded := launchArgv(name, p, tools.AgentVars(f.Exe, name, id),
+	argv, embedded := launchArgv(name, p, tools.AgentVars(f.Exe, name, id).Fenced(fenceDir(ex.Worktree, pr.FenceWrites)),
 		tools.Launch{Mode: pr.Mode, Context: contextKey(p, lvl, role.Leader), Extra: pr.ExtraArgs,
 			Prompt: full, NoPromptArgs: !pr.AutoSubmit})
 	ex.Base = Baseline(dir) // before the agent can touch anything
@@ -406,6 +406,16 @@ const MaxLaunchCmd = 12000
 // launchArgv builds the launch argv; when an embedded prompt would make the
 // command too long for tmux, it rebuilds without it so the prompt goes via
 // the paste path instead.
+// fenceDir is the dir a Claude agent's file tools may write in besides its
+// own: the <repo>.wt/ dir its fleet worktree sits in, or "" for no fence
+// (no worktree, or fence_writes = false) (ADR-79).
+func fenceDir(w *board.Worktree, on bool) string {
+	if w == nil || w.Path == "" || !on {
+		return ""
+	}
+	return filepath.Dir(w.Path)
+}
+
 func launchArgv(name string, p tools.Profile, v tools.Vars, l tools.Launch) ([]string, bool) {
 	argv, embedded := p.Argv(v, l)
 	if n := len(tools.ShellCommand(argv)); embedded && n > MaxLaunchCmd {

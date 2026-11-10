@@ -325,3 +325,15 @@ func noPlaybook(t *testing.T, home string) {
 	}
 	t.Setenv("FLEET_CONFIG", cfg)
 }
+
+// A Claude agent's file tools are fenced to its <repo>.wt/ dir only when it
+// has a fleet worktree and fence_writes is on (ADR-79).
+func TestFenceDir(t *testing.T) {
+	w := &board.Worktree{Path: "/src/repo.wt/a1"}
+	if got := fenceDir(w, true); got != "/src/repo.wt" {
+		t.Fatalf("got %q", got)
+	}
+	if fenceDir(w, false) != "" || fenceDir(nil, true) != "" {
+		t.Fatal("fenced without a worktree or with fence_writes off")
+	}
+}

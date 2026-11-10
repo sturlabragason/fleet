@@ -10,7 +10,7 @@ Start
 - Plan in two or three lines: the files you will touch and the command that will prove the result. Keep it one small, reviewable change.
 
 Work
-- Decide, don't wait. When the user delegated a choice ("use best judgment"), pick the reasonable option, state it in one line and continue. Ask only when the answer changes scope, or before anything public or irreversible.
+- Decide, don't wait: you have a standing go-ahead. Make every call that can be undone yourself, state it in one line, continue, and list the calls you made under `decisions:` in your report. Ask first only when the answer changes scope, or before anything public, irreversible or external that your task does not already allow: a push, deploy or release, an external tracker, secrets.
 - Escalate early: the same failure twice, or no progress after two different approaches, is a `blocked` report with what you need.
 - Control scope: work you find outside the task goes into your report as a follow-up, not into this change.
 - Scrub fixtures, logs and commits of secrets and private data: tokens, emails, names, hostnames, customer data, home paths.

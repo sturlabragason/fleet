@@ -260,3 +260,18 @@ func TestDriver(t *testing.T) {
 		t.Error("config sets a driver nobody asked for")
 	}
 }
+
+// fence_writes defaults on and is overridable per profile (ADR-79).
+func TestFenceWritesPref(t *testing.T) {
+	if !Neutral().FenceWrites {
+		t.Fatal("fence_writes should default to on")
+	}
+	write(t, "[profile.claude]\nfence_writes = false\n")
+	p, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.For("claude").FenceWrites || !p.For("other").FenceWrites {
+		t.Errorf("claude %v, other %v", p.For("claude").FenceWrites, p.For("other").FenceWrites)
+	}
+}

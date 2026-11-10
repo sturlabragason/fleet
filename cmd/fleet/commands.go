@@ -139,6 +139,11 @@ const usage = `usage:
                                             files other worktrees of this repo change; with files, only
                                             the overlaps (exit 0 none, 1 overlap, 2 error). Agents'
                                             uncommitted result files don't count
+  fleet worktrees [--repo DIR] [--json] [--prune]
+                                            the repo's leftover worktrees under <repo>.wt/: size, merged,
+                                            dirty, and which agent holds each. --prune removes the merged,
+                                            clean ones no live or parked agent holds (git's own refusal
+                                            guards uncommitted work; never --force)
   fleet adr claim [--for AGENT] [-C dir]    take the next free ADR number for DESIGN.md §14 and print it;
                                             atomic, so parallel agents never pick the same one
   fleet adr ls [--json] [-C dir]            ADR numbers claimed but not yet on main
@@ -253,6 +258,8 @@ func run(args []string) error {
 		return cmdLs(f, rest)
 	case "spend":
 		return cmdSpend(f, rest)
+	case "worktrees":
+		return cmdWorktrees(f, rest)
 	case "info":
 		if len(rest) != 1 {
 			return fmt.Errorf("usage: fleet info <name>")
