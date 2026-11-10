@@ -96,7 +96,7 @@ while IFS= read -r line; do
 	esac
 	while read -r a; do [[ -z $a || " ${adrs[*]} " == *" $a "* ]] || adrs+=("$a"); done < <(grep -oE 'ADR-[0-9]+' <<<"$line")
 	# Drop ADR-n from the trailing brackets, the marker words, and "fleet#n" -> "#n".
-	line=$(sed -E -e 's/\*\*(Changed default|BREAKING)[^*]*\*\* *(.)/\U\2/' -e 's/^- Contributors: */- /' \
+	line=$(sed -E -e 's/\*\*(Changed default|BREAKING)[^*]*\*\* *(.)/\U\2/' -e 's/^- Contributors: *(.)/- \U\1/' \
 		-e 's/(, )?ADR-[0-9]+//g' -e 's/\(, /(/g' -e 's/ \(\)//g' -e 's/\bfleet#([0-9]+)/#\1/g' <<<"$line")
 	group[$g]+="$line"$'\n'
 done <<<"$notes"

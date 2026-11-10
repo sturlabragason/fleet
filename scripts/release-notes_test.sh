@@ -26,7 +26,7 @@ add "feat: a thing" "You can do a new thing (ADR-5)."
 add "feat: path" "Paths like C:\\\\tmp work."
 add "fix: a bug" "The bug is gone (#7, ADR-6, fleet#8)."
 add "test: no leaks" "Tests leave nothing running."
-add "ci: guard" "Contributors: CI checks more."
+add "ci: guard" "Contributors: the CI checks more."
 add "feat: driver" "**Changed default:** agents use the new driver; set \`driver = \"old\"\` to keep the old one."
 sed -i 's/^- Old entry (ADR-1)\./- Old entry, reworded (ADR-1)./' "$d/CHANGELOG.md"
 git -C "$d" commit -q -am "docs: reword"
@@ -44,7 +44,7 @@ check "marker removed" 'Changed default:\*\*' absent
 check "feat is New, renumbered line keeps its feat type" '^### New$'
 check "renumbered line is listed once" '^- You can do a new thing\.$'
 check "fix is Fixed with issue refs kept" '^- The bug is gone \(#7, #8\)\.$'
-check "test and Contributors fold into one Internal line" '^- CI checks more; Tests leave nothing running\.$'
+check "test and Contributors fold into one Internal line" '^- The CI checks more; Tests leave nothing running\.$'
 check "edited old line is left out" 'reworded' absent
 check "ADRs are a linked footer" 'DESIGN.md#14-decisions-adrs\)\): ADR-9, ADR-6\.$'
 if awk '/^### /{sec=$0} /Paths like/{print sec}' <<<"$out" | grep -qx '### New'; then echo "ok   a line with a backslash keeps its feat type"
