@@ -148,6 +148,10 @@ const usage = `usage:
                                             dirty, and which agent holds each. --prune removes the merged,
                                             clean ones no live or parked agent holds (git's own refusal
                                             guards uncommitted work; never --force)
+  fleet branches [--repo DIR] [--json] [--prune]
+                                            the repo's fleet/ branches on origin, merged or not, and the
+                                            agent on each. --prune deletes the merged ones (by ancestry or
+                                            equal patch) no live or parked agent is on
   fleet adr claim [--for AGENT] [-C dir]    take the next free ADR number for DESIGN.md §14 and print it;
                                             atomic, so parallel agents never pick the same one
   fleet adr ls [--json] [-C dir]            ADR numbers claimed but not yet on main
@@ -264,6 +268,8 @@ func run(args []string) error {
 		return cmdSpend(f, rest)
 	case "worktrees":
 		return cmdWorktrees(f, rest)
+	case "branches":
+		return cmdBranches(f, rest)
 	case "info":
 		if len(rest) != 1 {
 			return fmt.Errorf("usage: fleet info <name>")

@@ -702,11 +702,41 @@ func (f *Fleet) Close(name string) error {
 			logx.For("fleet").Warn("drop team membership", "agent", name, "err", err)
 		}
 	}
-	return f.Store.Update(func(b *board.Board) error {
-		if _, ok := b.Agents[name]; !ok {
+	var wt *board.Worktree
+	err := f.Store.Update(func(b *board.Board) error {
+		a, ok := b.Agents[name]
+		if !ok {
 			return fmt.Errorf("no agent %q", name)
 		}
+		wt = a.Worktree
 		delete(b.Agents, name)
 		return nil
 	})
+	if err == nil {
+		dropMergedRemote(name, wt)
+	}
+	return err
+}
+
+// dropMergedRemote deletes a closed agent's pushed fleet/ branch from the
+// remote once it is merged into main, so CI branches don't pile up on the
+// remote (ADR-85). The local branch and worktree stay (§4).
+func dropMergedRemote(name string, wt *board.Worktree) {
+	if wt == nil || wt.Branch == "" {
+		return
+	}
+	dir := wt.Repo
+	if dir == "" {
+		dir = wt.Path
+	}
+	if dir == "" {
+		return
+	}
+	ok, err := worktree.DeleteMergedRemote(dir, wt.Branch)
+	switch {
+	case err != nil:
+		logx.For("fleet").Warn("remote branch not deleted", "agent", name, "branch", wt.Branch, "err", err)
+	case ok:
+		logx.For("fleet").Info("deleted merged remote branch", "agent", name, "branch", wt.Branch)
+	}
 }
