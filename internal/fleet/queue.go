@@ -1,6 +1,7 @@
 package fleet
 
 import (
+	"fmt"
 	"sort"
 	"time"
 
@@ -88,6 +89,17 @@ func QueueOrder(as []*board.Agent) []*board.Agent {
 // card is kept for the same reason (ADR-43), and so is the effort level
 // (ADR-57).
 func (f *Fleet) enqueue(name, profile, dir, prompt string, wantWT bool, card *board.Card, role Role, effort, driver string) (*board.Agent, error) {
+	return f.enqueueWith(func(now time.Time, note string) *board.Agent {
+		a := &board.Agent{Name: name, Profile: profile, Patterns: f.Profiles[profile].Patterns, Dir: dir, Goal: prompt,
+			Status: string(status.Queued), Created: now, StatusSince: now, NoWorktree: !wantWT, LastLine: note, Card: card,
+			Leader: role.Leader, LeadBy: role.LeadBy, Interactive: role.Interactive, Effort: effort, Driver: boardDriver(driver)}
+		a.SetOwner(role.Admiral)
+		return a
+	})
+}
+
+// enqueueWith is enqueue for the queued entry build makes.
+func (f *Fleet) enqueueWith(build func(now time.Time, note string) *board.Agent) (*board.Agent, error) {
 	limit := f.MaxWorking()
 	low, free, mem := f.LowMemory()
 	note := ""
@@ -104,19 +116,24 @@ func (f *Fleet) enqueue(name, profile, dir, prompt string, wantWT bool, card *bo
 		if n = countBusy(b, now); !low && n < limit && !hasPending(b) {
 			return nil
 		}
-		a = &board.Agent{Name: name, Profile: profile, Patterns: f.Profiles[profile].Patterns, Dir: dir, Goal: prompt,
-			Status: string(status.Queued), Created: now, StatusSince: now, NoWorktree: !wantWT, LastLine: note, Card: card,
-			Leader: role.Leader, LeadBy: role.LeadBy, Interactive: role.Interactive, Effort: effort, Driver: boardDriver(driver)}
-		a.SetOwner(role.Admiral)
-		b.Agents[name] = a
-		f.Store.AppendEvent(board.Event{Time: now, Agent: name, From: "", To: a.Status})
+		a = build(now, note)
+		if _, taken := b.Agents[a.Name]; taken {
+			name := a.Name
+			a = nil
+			return fmt.Errorf("agent %q already exists", name)
+		}
+		b.Agents[a.Name] = a
+		if a.SessionID == "" { // a queued resume keeps the record until it starts (ADR-95)
+			delete(b.Closed, a.Name)
+		}
+		f.Store.AppendEvent(board.Event{Time: now, Agent: a.Name, From: "", To: a.Status})
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
 	if a != nil {
-		logx.For("fleet").Info("queued", "agent", name, "profile", profile, "dir", dir, "busy", n, "max_working", limit, "low_memory", low)
+		logx.For("fleet").Info("queued", "agent", a.Name, "profile", a.Profile, "dir", a.Dir, "busy", n, "max_working", limit, "low_memory", low)
 	}
 	return a, nil
 }
@@ -149,7 +166,14 @@ func (f *Fleet) claimQueued(b *board.Board, now time.Time, low bool, limit int) 
 // startQueued launches a claimed agent; Refresh runs it in a goroutine so the
 // poll never waits on tmux or the tool's ready check.
 func (f *Fleet) startQueued(a *board.Agent) {
-	if _, err := f.launch(a.Name, a.Profile, a.Dir, a.Goal, true, !a.NoWorktree, a.Card, Role{Leader: a.Leader, LeadBy: a.LeadBy, Interactive: a.Interactive, Admiral: a.Admiral}, a.Effort, queuedDriver(a)); err != nil {
+	start := func() error {
+		_, err := f.launch(a.Name, a.Profile, a.Dir, a.Goal, true, !a.NoWorktree, a.Card, Role{Leader: a.Leader, LeadBy: a.LeadBy, Interactive: a.Interactive, Admiral: a.Admiral}, a.Effort, queuedDriver(a))
+		return err
+	}
+	if a.SessionID != "" { // a queued resume (ADR-95)
+		start = func() error { return f.resumeQueued(a) }
+	}
+	if err := start(); err != nil {
 		logx.For("fleet").Error("queue start failed", "agent", a.Name, "err", err)
 		f.Store.Update(func(b *board.Board) error {
 			// Only our claim turns into an error; a closed or re-spawned

@@ -19,6 +19,7 @@ type (
 	exitJSON     Exit
 	gitBaseJSON  GitBase
 	reportJSON   Report
+	closedJSON   Closed
 )
 
 func (a *Agent) UnmarshalJSON(b []byte) error {
@@ -92,3 +93,12 @@ func (x *Report) UnmarshalJSON(b []byte) error {
 }
 
 func (x Report) MarshalJSON() ([]byte, error) { return jsonx.Marshal(reportJSON(x), x.extra) }
+
+func (x *Closed) UnmarshalJSON(b []byte) error {
+	var v closedJSON
+	e, err := jsonx.Unmarshal(b, &v)
+	*x, x.extra = Closed(v), e
+	return err
+}
+
+func (x Closed) MarshalJSON() ([]byte, error) { return jsonx.Marshal(closedJSON(x), x.extra) }

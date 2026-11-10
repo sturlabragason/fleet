@@ -78,9 +78,11 @@ const usage = `usage:
   fleet spend [--json]                      what each agent has cost so far and the fleet total, read from
                                             the agents' own session files (AI credits for copilot, tokens
                                             for claude); no model is called
-  fleet send [--force] <name> "text"        refused while the user is typing in that pane (keys
+  fleet send [--force] [--resume] <name> "text"
+                                            refused while the user is typing in that pane (keys
                                             there in the last 30 s, unsubmitted text in its box);
-                                            --force types it anyway
+                                            --force types it anyway; --resume brings back an agent
+                                            closed in the last 24 h (its last session and card)
   fleet peek <name> [--raw] [-n 200]
   fleet peek --summary <name>               about 5 lines from a cheap model: what it is doing, what it
                                             waits for, any error (cached per screen; [summary] in config.toml)
@@ -291,17 +293,32 @@ func run(args []string) error {
 		fmt.Println(out)
 		return nil
 	case "send":
-		force := len(rest) > 0 && rest[0] == "--force"
-		if force {
+		force, resume := false, false
+		for len(rest) > 0 && (rest[0] == "--force" || rest[0] == "--resume") {
+			force, resume = force || rest[0] == "--force", resume || rest[0] == "--resume"
 			rest = rest[1:]
 		}
 		if len(rest) < 2 {
-			return fmt.Errorf("usage: fleet send [--force] <name> \"text\"")
+			return fmt.Errorf("usage: fleet send [--force] [--resume] <name> \"text\"")
+		}
+		text := strings.Join(rest[1:], " ")
+		if err := f.ClosedError(rest[0], "use fleet send --resume"); err != nil {
+			if !resume {
+				return err
+			}
+			_, held, err := f.Resume(rest[0], text)
+			if err != nil {
+				return err
+			}
+			if held {
+				fmt.Println("resumed " + rest[0] + ": " + fleet.HeldNote(rest[0]))
+			}
+			return nil
 		}
 		if r := f.SendBlocker(rest[0], true); r != "" && !force {
 			return fmt.Errorf("not sent: %s; fleet send --force types it anyway", r)
 		}
-		return f.Send(rest[0], strings.Join(rest[1:], " "))
+		return f.Send(rest[0], text)
 	case "peek":
 		return cmdPeek(f, rest)
 	case "close", "kill": // "kill" kept as a hidden alias
