@@ -731,3 +731,82 @@ func TestACPLabel(t *testing.T) {
 		}
 	}
 }
+
+// ADR-74 (i): the acp default follows the tool, not the profile name. Every
+// profile that runs copilot or agy defaults to acp, including claude-copilot
+// and one the user defines without acp keys; an explicit driver wins; the
+// claude adapter stays opt-in; tools without native ACP stay on tmux.
+func TestDefaultDriverFollowsTheTool(t *testing.T) {
+	home := t.TempDir()
+	os.WriteFile(filepath.Join(home, "tools.toml"), []byte(`[claude-copilot]
+command = "copilot"
+args = ["--model", "claude-opus-5.5"]
+
+[gpt-copilot]
+command = "/opt/bin/copilot"
+args = ["--model", "gpt-x"]
+
+[copilot-tui]
+command = "copilot"
+driver = "tmux"
+
+[agy-work]
+command = "agy"
+
+[claude-work]
+command = "claude"
+acp_from = "claude"
+
+[myvibe]
+command = "vibe"
+`), 0o644)
+	ps, err := Load(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{
+		"copilot": "acp", "claude-copilot": "acp", "gpt-copilot": "acp", "agy": "acp", "agy-work": "acp",
+		"copilot-tui": "tmux", "claude": "", "claude-work": "", "vibe": "", "myvibe": "", "fake": "",
+	} {
+		p := ps[name]
+		if got := p.DefaultDriver(); got != want {
+			t.Errorf("%s: DefaultDriver %q want %q", name, got, want)
+		}
+		if want == "acp" && !p.HasACP() {
+			t.Errorf("%s: defaults to acp but has no ACP server", name)
+		}
+	}
+	// The built-in claude-copilot, with no user file at all.
+	if ps, _ := Load(t.TempDir()); ps["claude-copilot"].DefaultDriver() != "acp" {
+		t.Errorf("built-in claude-copilot: DefaultDriver %q want acp", ps["claude-copilot"].DefaultDriver())
+	}
+}
+
+// claude-copilot under acp keeps its model and gets the peer MCP server on
+// argv, with the user's override of args (no --allow-all) and the built-in.
+func TestClaudeCopilotACPArgv(t *testing.T) {
+	home := t.TempDir()
+	os.WriteFile(filepath.Join(home, "tools.toml"), []byte("[my-cc]\ncommand = \"copilot\"\nargs = [\"--model\", \"claude-opus-5.5\"]\npeer_args = [\"--additional-mcp-config\", \"{peer_mcp}\"]\n"), 0o644)
+	ps, err := Load(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cp, _ := PeerMCP("/bin/fleet", "a1")
+	v := Vars{Fleet: "/bin/fleet", Name: "a1", PeerMCP: cp}
+	for _, c := range []struct {
+		profile, mode string
+		want          []string
+	}{
+		{"claude-copilot", "autopilot", []string{"copilot", "--additional-mcp-config", cp, "--model", CopilotClaudeModel, "--allow-all", "--acp", "--allow-all"}},
+		{"my-cc", "autopilot", []string{"copilot", "--additional-mcp-config", cp, "--model", "claude-opus-5.5", "--acp", "--allow-all"}},
+		{"my-cc", "", []string{"copilot", "--additional-mcp-config", cp, "--model", "claude-opus-5.5", "--acp"}},
+	} {
+		p := ps[c.profile]
+		if !p.HasACPMode(c.mode) {
+			t.Errorf("%s: no acp mode %q", c.profile, c.mode)
+		}
+		if got := p.ACPArgv(v, Launch{Mode: c.mode}); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s mode %q:\n%q\nwant %q", c.profile, c.mode, got, c.want)
+		}
+	}
+}
