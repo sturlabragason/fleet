@@ -98,6 +98,9 @@ func (m *Model) saveCursor() {
 func (m *Model) poll() tea.Cmd {
 	be := m.be
 	return func() tea.Msg {
+		if pb, ok := be.(PollBackend); ok {
+			be = pb.ForPoll()
+		}
 		as, err := be.Refresh()
 		// Re-tile on every poll: nothing else notices a status flip, so this
 		// is what makes emphasis move when a pane starts waiting (§5b.3).

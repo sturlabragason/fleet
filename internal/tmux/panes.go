@@ -165,40 +165,46 @@ func (c *Client) ListPanes(target string) ([]PaneInfo, error) {
 	}
 	var ps []PaneInfo
 	for _, line := range strings.Split(out, "\n") {
-		f := strings.Split(line, "\t")
-		if len(f) < 11 {
-			continue
+		if p, ok := parsePane(strings.Split(line, "\t")); ok {
+			ps = append(ps, p)
 		}
-		w, _ := strconv.Atoi(f[7])
-		h, _ := strconv.Atoi(f[8])
-		u, _ := strconv.ParseInt(f[9], 10, 64)
-		p := PaneInfo{ID: f[0], Session: f[1], WindowID: f[2], Window: f[3], Agent: f[4], Dead: f[5] == "1", Cmd: f[6], Width: w, Height: h, Used: u, Role: f[10]}
-		// Fields appended after @role stay optional so short lines still parse.
-		if len(f) > 11 {
-			p.Status = f[11]
-		}
-		if len(f) > 12 {
-			p.StatusSince, _ = strconv.ParseInt(f[12], 10, 64)
-		}
-		if len(f) > 13 {
-			p.Pin = f[13] == "1"
-		}
-		if len(f) > 14 {
-			p.Last = f[14] == "1"
-		}
-		if len(f) > 16 {
-			p.Team, p.TeamColor = f[15], f[16]
-		}
-		if len(f) > 18 {
-			p.DeadStatus, p.DeadSignal = f[17], f[18]
-		}
-		if len(f) > 19 {
-			p.Admiral = f[19]
-		}
-		if len(f) > 20 {
-			p.NoReport = f[20]
-		}
-		ps = append(ps, p)
 	}
 	return ps, nil
+}
+
+// parsePane reads one paneFmt row; extra fields after it are ignored.
+func parsePane(f []string) (PaneInfo, bool) {
+	if len(f) < 11 {
+		return PaneInfo{}, false
+	}
+	w, _ := strconv.Atoi(f[7])
+	h, _ := strconv.Atoi(f[8])
+	u, _ := strconv.ParseInt(f[9], 10, 64)
+	p := PaneInfo{ID: f[0], Session: f[1], WindowID: f[2], Window: f[3], Agent: f[4], Dead: f[5] == "1", Cmd: f[6], Width: w, Height: h, Used: u, Role: f[10]}
+	// Fields appended after @role stay optional so short lines still parse.
+	if len(f) > 11 {
+		p.Status = f[11]
+	}
+	if len(f) > 12 {
+		p.StatusSince, _ = strconv.ParseInt(f[12], 10, 64)
+	}
+	if len(f) > 13 {
+		p.Pin = f[13] == "1"
+	}
+	if len(f) > 14 {
+		p.Last = f[14] == "1"
+	}
+	if len(f) > 16 {
+		p.Team, p.TeamColor = f[15], f[16]
+	}
+	if len(f) > 18 {
+		p.DeadStatus, p.DeadSignal = f[17], f[18]
+	}
+	if len(f) > 19 {
+		p.Admiral = f[19]
+	}
+	if len(f) > 20 {
+		p.NoReport = f[20]
+	}
+	return p, true
 }

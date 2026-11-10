@@ -872,3 +872,50 @@ func TestMinimizeAdmiral(t *testing.T) {
 		t.Error("minimizing an unknown admiral did not fail")
 	}
 }
+
+// With a current snapshot the overview's per-poll reads (cached apply, on
+// wall, pins, target) run no tmux at all; a snapshot showing work to do
+// hands the apply to tmux (ADR-94).
+func TestSnapshotPollRunsNoTmux(t *testing.T) {
+	c, w, agents := setupWall(t, 3)
+	for _, p := range agents {
+		noTarget(t, w)
+		if _, err := w.Show(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := w.TogglePin(agents[1]); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.ApplyCached(); err != nil {
+		t.Fatal(err)
+	}
+	wantOn, wantPins, wantTarget := w.OnWall(), w.Pinned(), w.TargetAgent()
+	s, err := c.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	execs := 0
+	c.OnRun = func([]string) { execs++ }
+	defer func() { c.OnRun = nil }()
+	ws := w.WithSnapshot(s)
+	if err := ws.ApplyCached(); err != nil {
+		t.Fatal(err)
+	}
+	on, pins, target := ws.OnWall(), ws.Pinned(), ws.TargetAgent()
+	if execs != 0 {
+		t.Errorf("snapshot poll ran %d tmux commands, want 0", execs)
+	}
+	if fmt.Sprint(on) != fmt.Sprint(wantOn) || fmt.Sprint(pins) != fmt.Sprint(wantPins) || target != wantTarget {
+		t.Errorf("snapshot read on=%v pins=%v target=%q, live on=%v pins=%v target=%q", on, pins, target, wantOn, wantPins, wantTarget)
+	}
+
+	win, _ := s.Window(w.Target)
+	win["@fleet_layout"] = "stale"
+	if err := w.WithSnapshot(s).ApplyCached(); err != nil {
+		t.Fatal(err)
+	}
+	if execs == 0 {
+		t.Error("a snapshot with a different layout did not go to tmux")
+	}
+}

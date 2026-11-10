@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -17,6 +18,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/team"
 	"github.com/sturlabragason/fleet/internal/theme"
+	"github.com/sturlabragason/fleet/internal/tmux"
 	"github.com/sturlabragason/fleet/internal/tools"
 	"github.com/sturlabragason/fleet/internal/ui"
 	"github.com/sturlabragason/fleet/internal/wall"
@@ -31,6 +33,63 @@ type backend struct {
 	owners   map[string]string // pane -> owner chip last set on its border
 	supProf  string            // last @fleet_admiral_profile set on the admiral border
 	otherCtx map[string]string // other admirals' pane -> profile|ctx|color last set
+	// lastAct is when this overview last changed the wall (unix ns). A
+	// shared snapshot taken before it is stale for this process (ADR-94).
+	lastAct atomic.Int64
+	// supCtx is the admiral meter the last snapshot poll computed, and
+	// supAt when; polls only touch them, one at a time.
+	supCtx [2]string
+	supAt  time.Time
+}
+
+// supCtxEvery is how often a snapshot poll recomputes the admiral meter.
+const supCtxEvery = 5 * time.Second
+
+// acted records a wall change made by this overview.
+func (b *backend) acted() { b.lastAct.Store(time.Now().UnixNano()) }
+
+// ForPoll returns the backend for one overview poll. While the watcher is
+// live and its shared snapshot is newer than this overview's last wall
+// change, every tmux read of the poll comes from that snapshot, and the
+// admiral meter is recomputed at most every 5 s: the overview runs no tmux
+// of its own once a second (ADR-94). Otherwise it is b, as before.
+func (b *backend) ForPoll() ui.Backend {
+	if !b.enabled {
+		return b
+	}
+	now := time.Now()
+	if !watch.Live(b.f.Home, now) {
+		return b
+	}
+	s, ok := watch.ReadSnapshot(b.f.Home, time.Unix(0, b.lastAct.Load()), now)
+	if !ok {
+		return b
+	}
+	return &pollBackend{backend: b, w: b.w.WithSnapshot(s), snap: s}
+}
+
+// pollBackend is backend reading one shared tmux snapshot.
+type pollBackend struct {
+	*backend
+	w    *wall.Wall
+	snap *tmux.Snapshot
+}
+
+func (p *pollBackend) ApplyWall() error        { return p.w.ApplyCached() }
+func (p *pollBackend) OnWall() map[string]bool { return p.w.OnWall() }
+func (p *pollBackend) Pinned() map[string]bool { return p.w.Pinned() }
+func (p *pollBackend) Target() string          { return p.w.TargetAgent() }
+// Admirals lists main only: the live `-t fleet:` is the session's current
+// window, which is main, and a snapshot does not record the current window.
+func (p *pollBackend) Admirals() []ui.AdmiralInfo {
+	return p.admirals(func() ([]tmux.PaneInfo, error) { return p.snap.PanesOf(mainTarget()), nil })
+}
+func (p *pollBackend) SupCtx() (string, string) {
+	if now := time.Now(); p.supAt.IsZero() || now.Sub(p.supAt) >= supCtxEvery {
+		p.supCtx[0], p.supCtx[1] = p.backend.SupCtx()
+		p.supAt = now
+	}
+	return p.supCtx[0], p.supCtx[1]
 }
 
 // Refresh reads the board when the watcher is live, and captures the panes
@@ -72,6 +131,7 @@ func (b *backend) OnWall() map[string]bool {
 }
 func (b *backend) Teams() map[string]team.Info { return b.f.Teams.ByAgent() }
 func (b *backend) Show(name string) (bool, error) {
+	defer b.acted()
 	p, err := b.f.Pane(name)
 	if err != nil {
 		return false, err
@@ -79,6 +139,7 @@ func (b *backend) Show(name string) (bool, error) {
 	return b.w.Show(p)
 }
 func (b *backend) Add(name string) (bool, error) {
+	defer b.acted()
 	p, err := b.f.Pane(name)
 	if err != nil {
 		return false, err
@@ -86,6 +147,7 @@ func (b *backend) Add(name string) (bool, error) {
 	return b.w.Add(p)
 }
 func (b *backend) Next(dir int) (string, bool, error) {
+	defer b.acted()
 	if !b.enabled {
 		return "", true, nil
 	}
@@ -98,18 +160,21 @@ func (b *backend) Target() string {
 	return b.w.TargetAgent()
 }
 func (b *backend) Untarget() error {
+	defer b.acted()
 	if !b.enabled {
 		return nil
 	}
 	return b.w.Untarget()
 }
 func (b *backend) Undo() (string, string, error) {
+	defer b.acted()
 	if !b.enabled {
 		return wall.NothingToUndoMsg, "", nil
 	}
 	return b.w.Undo()
 }
 func (b *backend) TogglePin(name string) (bool, error) {
+	defer b.acted()
 	p, err := b.f.Pane(name)
 	if err != nil {
 		return false, err
@@ -146,6 +211,7 @@ func (b *backend) Menu(name string, x, y int) error {
 	return err
 }
 func (b *backend) Hide(name string) error {
+	defer b.acted()
 	p, err := b.f.Pane(name)
 	if err != nil {
 		return err
@@ -153,6 +219,7 @@ func (b *backend) Hide(name string) error {
 	return b.w.Hide(p)
 }
 func (b *backend) Preset(p string) error {
+	defer b.acted()
 	if !b.enabled {
 		return nil
 	}
@@ -196,6 +263,11 @@ func (b *backend) PickProfile() error { return cmdAdmiralAct(b.f, []string{"pick
 
 // Admirals lists the admirals with their colours (the overview's owner chips).
 func (b *backend) Admirals() []ui.AdmiralInfo {
+	return b.admirals(func() ([]tmux.PaneInfo, error) { return b.f.T.ListPanes(fleet.Session + ":") })
+}
+
+// admirals is Admirals with the pane list read by panes.
+func (b *backend) admirals(panes func() ([]tmux.PaneInfo, error)) []ui.AdmiralInfo {
 	var out []ui.AdmiralInfo
 	for _, n := range b.f.AdmiralNames() {
 		prof := b.f.Prefs.AdmiralProfile()
@@ -206,7 +278,7 @@ func (b *backend) Admirals() []ui.AdmiralInfo {
 		}
 		out = append(out, ui.AdmiralInfo{Name: n, Profile: prof, Color: theme.AdmiralColor(supervisor.Slot(b.f.Home, n))})
 	}
-	b.syncOwners(len(out) > 1)
+	b.syncOwners(len(out) > 1, panes)
 	return out
 }
 
@@ -218,11 +290,11 @@ func (b *backend) PickOwner(agent string) error { return ownerMenu(b.f, agent) }
 // syncOwners tags each agent pane with its owner's chip for the wall border
 // while several admirals exist, and clears the tags when only one is left.
 // Only changes reach tmux.
-func (b *backend) syncOwners(multi bool) {
+func (b *backend) syncOwners(multi bool, list func() ([]tmux.PaneInfo, error)) {
 	if !b.enabled {
 		return
 	}
-	panes, err := b.f.T.ListPanes(fleet.Session + ":")
+	panes, err := list()
 	if err != nil {
 		return
 	}
