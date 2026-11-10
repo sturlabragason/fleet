@@ -33,7 +33,7 @@ type Config struct {
 	CopilotEvents bool
 	MCP           []acp.MCPServer
 	// Meta is the _meta sent with session/new, load and resume, for an
-	// adapter that takes options there (claude-agent-acp, ADR-96).
+	// adapter that takes options there (claude-agent-acp, ADR-99).
 	Meta json.RawMessage
 	Mode string    // session mode set after new, resume or load; "" sets none
 	Out  io.Writer // the pane; nil draws nothing

@@ -16,7 +16,7 @@ import (
 //
 //   - ~/.fleet/status, the directory the tools' own hooks write into. One
 //     stat covers every hook-driven agent, whatever its name.
-//   - ~/.fleet/status/subs, where the hooks keep subagents (ADR-96).
+//   - ~/.fleet/status/subs, where the hooks keep subagents (ADR-99).
 //   - each agent's session event log (copilot's events.jsonl, Claude's
 //     session jsonl): the tool appends to it as it works, so its size moves
 //     on every turn, tool call and subagent.

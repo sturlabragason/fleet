@@ -207,8 +207,8 @@ const hookStdinMax = 64 << 10
 //
 // It writes ~/.fleet/status/<name>.json, which the watcher notices within a
 // tick (DESIGN §18 #3, ADR-49), and keeps the agent's subagents from
-// SubagentStart/SubagentStop (ADR-96). It is wired in through the per-agent
-// plugin dir fleet writes at spawn (ADR-96), so the user's own settings are
+// SubagentStart/SubagentStop (ADR-99). It is wired in through the per-agent
+// plugin dir fleet writes at spawn (ADR-99), so the user's own settings are
 // never touched. --no-status keeps the subagents only: an ACP agent's host
 // owns its status file. A hook fired inside a subagent (its payload names
 // one) changes no status. It never fails loudly: a broken hook must not

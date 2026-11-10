@@ -435,7 +435,7 @@ func fenceDir(w *board.Worktree, on bool) string {
 // Vars: the peer MCP server and hooks, with the user's global MCP servers
 // switched off except those pr keeps (ADR-91), and the write fence for
 // fence (ADR-79). When p loads the fleet plugin it writes the agent's
-// plugin dir and points the Vars at it (ADR-96); if that fails the agent
+// plugin dir and points the Vars at it (ADR-99); if that fails the agent
 // starts without it, on the hook settings and peer args as before. The
 // subagents an earlier process of this name left are dropped: they died
 // with it.
@@ -452,7 +452,7 @@ func (f *Fleet) launchVars(name, id string, p tools.Profile, pr prefs.Spawn, fen
 		}
 	}
 	if acp {
-		// The host writes the status; the settings only fence (ADR-96).
+		// The host writes the status; the settings only fence (ADR-99).
 		v.Hooks = tools.ClaudeFence(fence)
 		return v
 	}

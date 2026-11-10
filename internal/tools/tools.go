@@ -55,13 +55,13 @@ type Profile struct {
 	// line, so the user's own settings file is never written to. Left out
 	// when the vars carry no hook config.
 	HookArgs []string
-	// PluginArgs load the agent's fleet plugin dir (ADR-96), with
+	// PluginArgs load the agent's fleet plugin dir (ADR-99), with
 	// {plugin}: its hooks call `fleet hook`. Left out when the vars carry
 	// no plugin. Under the acp driver a tool's own server takes them; an
 	// adapter takes the plugin through ACPMeta instead.
 	PluginArgs []string
 	// PluginMCP puts the peer MCP server in the plugin's .mcp.json, and
-	// drops PeerArgs while the plugin is loaded (ADR-96).
+	// drops PeerArgs while the plugin is loaded (ADR-99).
 	PluginMCP bool
 	// UserMCPConfig is the file where the tool keeps the user's global MCP
 	// servers ({"mcpServers":{name:...}}), ~ expanded. Empty = none.
@@ -103,7 +103,7 @@ type Profile struct {
 	// none itself.
 	ACPFrom string
 	// ACPMeta is "claude" when the adapter takes the plugin dir and the
-	// settings in session/new _meta.claudeCode.options (ADR-96).
+	// settings in session/new _meta.claudeCode.options (ADR-99).
 	ACPMeta string
 }
 
@@ -607,7 +607,7 @@ func (v Vars) expand(s string) string {
 
 // WithPlugin returns v loading the plugin dir for profile p: its hooks
 // replace the hook settings, and with plugin_mcp its .mcp.json replaces the
-// peer args (ADR-96). Call Fenced after it.
+// peer args (ADR-99). Call Fenced after it.
 func (v Vars) WithPlugin(dir string, p Profile) Vars {
 	v.Plugin, v.Hooks = dir, ""
 	if p.PluginMCP {
@@ -649,7 +649,7 @@ func ClaudeSettings(exe, name, fence string) string {
 }
 
 // ClaudeFence is the Claude settings document with the write fence for
-// fence and no hooks, for an agent whose hooks are in its plugin (ADR-96);
+// fence and no hooks, for an agent whose hooks are in its plugin (ADR-99);
 // "" when fence is "".
 func ClaudeFence(fence string) string {
 	if fence == "" {
@@ -761,7 +761,7 @@ func (p Profile) Argv(v Vars, l Launch) (argv []string, embedded bool) {
 // the ACP mode args, the context args and the extra args. No launch id,
 // resume or prompt args: the host carries the session and the prompt over
 // ACP, and no hook args: the host writes the status itself. The plugin args
-// follow the peer args (ADR-96). With an acp_command (ADR-76) it is that
+// follow the peer args (ADR-99). With an acp_command (ADR-76) it is that
 // command, the ACP args and the ACP mode args only: the rest are the tool's
 // own flags, which an adapter doesn't take (it gets the plugin through
 // SessionMeta).

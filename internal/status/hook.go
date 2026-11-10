@@ -29,7 +29,7 @@ type State struct {
 // are aliases; names are lower-cased and stripped of - and _ before lookup
 // so a profile may spell them either way. The subagent events change no
 // status (a background subagent ending says nothing about its parent);
-// they keep the subagent list instead (RecordSubs, ADR-96).
+// they keep the subagent list instead (RecordSubs, ADR-99).
 var hookEvents = map[string]Status{
 	"stop":                Idle, // the turn finished: the agent is back at its prompt
 	"agentstop":           Idle,
@@ -43,7 +43,7 @@ var hookEvents = map[string]Status{
 	"precompact":          Working,
 	"sessionend":          Idle,
 	// permissionrequest is left out: Copilot fires it before --allow-all
-	// approves the call (seen live, ADR-96), so it would show "waiting"
+	// approves the call (seen live, ADR-99), so it would show "waiting"
 	// for the length of every command. The screen, the ACP protocol and
 	// Claude's Notification catch real prompts.
 }

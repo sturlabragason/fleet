@@ -34,7 +34,7 @@ type Client struct {
 }
 
 // SetSessionMeta sets the _meta object the client sends with session/new,
-// session/load and session/resume (ADR-96); nil sends none. Call it before
+// session/load and session/resume (ADR-99); nil sends none. Call it before
 // the first session call.
 func (cl *Client) SetSessionMeta(meta json.RawMessage) { cl.meta = meta }
 

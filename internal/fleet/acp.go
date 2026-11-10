@@ -81,7 +81,7 @@ type ACPHostOpts struct {
 	CopilotEvents bool
 	Mode          string   // ACP session mode (ADR-76)
 	MCP           string   // peer MCP config for the session (ADR-76)
-	Meta          string   // _meta for the session calls (ADR-96)
+	Meta          string   // _meta for the session calls (ADR-99)
 	UnsetEnv      []string // variables the tool must not inherit (ADR-76)
 	Profile       string   // shown in the pane's header (ADR-85)
 }

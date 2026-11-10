@@ -213,7 +213,7 @@ func TestSessionMethods(t *testing.T) {
 	if strings.Contains(string(m.Params), "_meta") {
 		t.Errorf("_meta sent unset: %s", m.Params)
 	}
-	// An adapter's options (Claude's plugin, ADR-96) ride on every session call.
+	// An adapter's options (Claude's plugin, ADR-99) ride on every session call.
 	cl.SetSessionMeta(json.RawMessage(`{"claudeCode":{"options":{}}}`))
 	for _, run := range []func() error{
 		func() error { _, err := cl.NewSession(context.Background(), "/", nil); return err },
