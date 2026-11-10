@@ -101,6 +101,23 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
+      - name: Check the release notes
+        env:
+          V: ${{ steps.ver.outputs.version }}
+        run: |
+          # changelog.disable skips goreleaser's changelog pipe, which is also what
+          # reads --release-notes: the release would publish with an empty body.
+          if awk '/^changelog:/{f=1;next} /^[^ ]/{f=0} f' dist/config.yaml | grep -Eq "disable: *['\"]?true"; then
+            echo "::error::.goreleaser.yaml disables the changelog, so the release body would be empty"; exit 1
+          fi
+          if [[ $DRY_RUN != true ]]; then
+            body=$(gh release view "$V" -R "$GITHUB_REPOSITORY" --json body -q .body)
+            if [[ $body != *"What's new"* ]]; then
+              echo "::warning::release body was empty; setting it from scripts/release-notes.sh"
+              gh release edit "$V" -R "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/notes.md"
+            fi
+          fi
+
       - name: Smoke test the linux/amd64 binary
         env:
           V: ${{ steps.ver.outputs.version }}
