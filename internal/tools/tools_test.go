@@ -867,3 +867,64 @@ command = "foo"
 		t.Errorf("other: %+v", ps["other"])
 	}
 }
+
+// Worker spawns switch off the user's global MCP servers, keeping the ones
+// named in keep (ADR-91): copilot on both drivers, claude by denying the
+// server's tools.
+func TestUserMCPOff(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cfg := `{"mcpServers":{"transformradar":{"command":"tr"},"kept":{"command":"k"},"fleet-peer":{"command":"x"}}}`
+	os.MkdirAll(filepath.Join(home, ".copilot"), 0o755)
+	os.WriteFile(filepath.Join(home, ".copilot", "mcp-config.json"), []byte(cfg), 0o644)
+	os.WriteFile(filepath.Join(home, ".claude.json"), []byte(cfg), 0o644)
+	ps, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	keep := []string{"kept"}
+	for _, prof := range []string{"copilot", "claude-copilot"} {
+		p := ps[prof]
+		v := AgentVars("/bin/fleet", "a1", "U").UserMCP(p, keep)
+		tm, _ := p.Argv(v, Launch{})
+		for name, argv := range map[string][]string{"tmux": tm, "acp": p.ACPArgv(v, Launch{})} {
+			if !containsSeq(argv, "--disable-mcp-server", "transformradar") || slices.Contains(argv, "kept") ||
+				strings.Count(strings.Join(argv, " "), "--disable-mcp-server") != 1 {
+				t.Errorf("%s %s: %q", prof, name, argv)
+			}
+		}
+	}
+	v := AgentVars("/bin/fleet", "a1", "U").UserMCP(ps["claude"], keep)
+	argv, _ := ps["claude"].Argv(v, Launch{})
+	if !slices.Contains(argv, "--disallowedTools=mcp__transformradar") || strings.Contains(strings.Join(argv, " "), "mcp__kept") {
+		t.Errorf("claude: %q", argv)
+	}
+	// An arg list without {server} is added once.
+	p := Profile{Command: "x", UserMCPOff: []string{"--strict"}, UserMCPConfig: "~/.claude.json"}
+	if argv, _ := p.Argv(AgentVars("/bin/fleet", "a1", "").UserMCP(p, nil), Launch{}); !reflect.DeepEqual(argv, []string{"x", "--strict"}) {
+		t.Errorf("once: %q", argv)
+	}
+	// No user servers: nothing added.
+	os.Remove(filepath.Join(home, ".copilot", "mcp-config.json"))
+	v = AgentVars("/bin/fleet", "a1", "U").UserMCP(ps["copilot"], nil)
+	if argv, _ := ps["copilot"].Argv(v, Launch{}); slices.Contains(argv, "--disable-mcp-server") {
+		t.Errorf("no config: %q", argv)
+	}
+	// user_mcp_off = [] in a profile turns it off.
+	dir := t.TempDir()
+	os.WriteFile(Path(dir), []byte("[claude-all]\ncommand = \"claude\"\nuser_mcp_off = []\n"), 0o644)
+	ps, _ = Load(dir)
+	v = AgentVars("/bin/fleet", "a1", "U").UserMCP(ps["claude-all"], nil)
+	if argv, _ := ps["claude-all"].Argv(v, Launch{}); strings.Contains(strings.Join(argv, " "), "disallowed") {
+		t.Errorf("user_mcp_off = [] still strips: %q", argv)
+	}
+}
+
+func containsSeq(s []string, a, b string) bool {
+	for i := 0; i+1 < len(s); i++ {
+		if s[i] == a && s[i+1] == b {
+			return true
+		}
+	}
+	return false
+}

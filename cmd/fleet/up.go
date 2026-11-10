@@ -1,12 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -157,26 +155,10 @@ func userMCPConfig() string {
 
 // disableUserMCPArgs disables the user's own MCP servers for the admiral so
 // their tools don't load (and don't flood the startup "Disabled tools" notice).
+// Workers get the same through the profile's user_mcp_off (ADR-91).
 func disableUserMCPArgs(path string) []string {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	var cfg struct {
-		MCPServers map[string]json.RawMessage `json:"mcpServers"`
-	}
-	if json.Unmarshal(b, &cfg) != nil {
-		return nil
-	}
-	names := make([]string, 0, len(cfg.MCPServers))
-	for n := range cfg.MCPServers {
-		if n != "fleet" {
-			names = append(names, n)
-		}
-	}
-	sort.Strings(names)
 	var args []string
-	for _, n := range names {
+	for _, n := range tools.UserMCPNames(tools.UserMCPServers(path), nil) {
 		args = append(args, "--disable-mcp-server", n)
 	}
 	return args

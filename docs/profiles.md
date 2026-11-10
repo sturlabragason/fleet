@@ -33,6 +33,8 @@ Each `[section]` is a profile. A section with a built-in name overrides only the
 | `acp_command` | The whole argv under ACP, replacing `command`, `args` and the peer, extra and context args. The built-in `claude` runs the pinned claude-agent-acp adapter here (DESIGN §7d, ADR-76). |
 | `acp_env` | Extra env under ACP only. `{command_path}` is the profile's `command` found in `~/.local/bin` or on PATH. |
 | `acp_modes` | Fleet mode → ACP session mode, set with `session/set_mode` before the first prompt; `default` is used when no mode is set. |
+| `user_mcp_config` | The tool's file of user-global MCP servers (`~/.copilot/mcp-config.json`, `~/.claude.json`). |
+| `user_mcp_off` | Arguments that switch those servers off for a worker, added after the peer args under both drivers. Holding `{server}`, they repeat per server (`["--disable-mcp-server", "{server}"]`); without it they are added once. Claude's is `["--disallowedTools=mcp__{server}"]`. `[]` keeps every server. `keep_mcp` in `config.toml` keeps named ones (ADR-91). |
 | `acp_mcp` | `session`: pass the peer MCP server in the ACP session's `mcpServers` instead of `peer_args`. |
 | `acp_unset_env` | Env vars removed before the ACP server starts (the built-in `claude` drops API keys and OAuth tokens). |
 | `acp_from` | Take every unset `acp*` key from another profile, for example `acp_from = "claude"` on a per-account Claude profile. |

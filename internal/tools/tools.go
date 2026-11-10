@@ -55,6 +55,14 @@ type Profile struct {
 	// line, so the user's own settings file is never written to. Left out
 	// when the vars carry no hook config.
 	HookArgs []string
+	// UserMCPConfig is the file where the tool keeps the user's global MCP
+	// servers ({"mcpServers":{name:...}}), ~ expanded. Empty = none.
+	UserMCPConfig string
+	// UserMCPOff are the args that switch those servers off for a worker
+	// (ADR-91). An arg list holding {server} is repeated once per server;
+	// one without it is added once. Either way only when there is a server
+	// to switch off. Added after the peer args on both drivers.
+	UserMCPOff []string
 	// ACP are the args after the profile's own args that start the tool's
 	// ACP server on stdio (DESIGN §7d, ADR-74). Empty = the profile can't
 	// run under the acp driver.
@@ -245,6 +253,8 @@ session_path = "~/.copilot/session-state/{id}"
 subagent_log = "~/.copilot/session-state/{id}/events.jsonl"
 patterns = "copilot"
 peer_args = ["--additional-mcp-config", "{peer_mcp}"]
+user_mcp_config = "~/.copilot/mcp-config.json"
+user_mcp_off = ["--disable-mcp-server", "{server}"]
 acp = ["--acp"]
 acp_mode_args = { auto = "--allow-all", autopilot = "--allow-all" }
 driver = "acp"
@@ -261,6 +271,8 @@ session_path = "~/.copilot/session-state/{id}"
 subagent_log = "~/.copilot/session-state/{id}/events.jsonl"
 patterns = "copilot"
 peer_args = ["--additional-mcp-config", "{peer_mcp}"]
+user_mcp_config = "~/.copilot/mcp-config.json"
+user_mcp_off = ["--disable-mcp-server", "{server}"]
 acp = ["--acp"]
 acp_mode_args = { auto = "--allow-all", autopilot = "--allow-all" }
 ` + copilotContext + `
@@ -275,6 +287,8 @@ launch_id = ["--session-id", "{id}"]
 resume = ["--resume", "{id}"]
 session_path = "~/.claude/projects/*/{id}.jsonl"
 peer_args = ["--mcp-config", "{peer_mcp_claude}"]
+user_mcp_config = "~/.claude.json"
+user_mcp_off = ["--disallowedTools=mcp__{server}"]
 hook_args = ["--settings", "{hooks}"]
 patterns = "claude"
 acp_command = ["npx", "-y", "@agentclientprotocol/claude-agent-acp@` + ClaudeACPVersion + `"]
@@ -379,7 +393,7 @@ func LoadWith(home string, local conf.Doc) (map[string]Profile, error) {
 	for name, p := range out {
 		t := filepath.Base(p.Command)
 		b, ok := out[t]
-		if t == name || !ok || (p.PeerArgs != nil && p.HookArgs != nil) {
+		if t == name || !ok {
 			continue
 		}
 		if p.PeerArgs == nil {
@@ -387,6 +401,12 @@ func LoadWith(home string, local conf.Doc) (map[string]Profile, error) {
 		}
 		if p.HookArgs == nil {
 			p.HookArgs = b.HookArgs
+		}
+		if p.UserMCPConfig == "" {
+			p.UserMCPConfig = b.UserMCPConfig
+		}
+		if p.UserMCPOff == nil {
+			p.UserMCPOff = b.UserMCPOff
 		}
 		out[name] = p
 	}
@@ -466,6 +486,15 @@ func apply(p *Profile, sec map[string]conf.Value) {
 	if v, ok := sec["hook_args"]; ok {
 		p.HookArgs, _ = v.([]string)
 	}
+	if v, ok := sec["user_mcp_config"]; ok {
+		p.UserMCPConfig, _ = v.(string)
+	}
+	if v, ok := sec["user_mcp_off"]; ok {
+		p.UserMCPOff, _ = v.([]string)
+		if p.UserMCPOff == nil {
+			p.UserMCPOff = []string{}
+		}
+	}
 	if v, ok := sec["acp"]; ok {
 		p.ACP, _ = v.([]string)
 	}
@@ -522,7 +551,13 @@ func Names(ps map[string]Profile) []string {
 // the peer MCP configs (see PeerMCP); when both are empty PeerArgs are left
 // out. Hooks is the status-hook settings (see ClaudeHooks); when empty
 // HookArgs are left out.
-type Vars struct{ Fleet, Name, ID, PeerMCP, PeerMCPClaude, Hooks string }
+//
+// MCPOff are the user's global MCP servers to switch off with UserMCPOff
+// (see UserMCP).
+type Vars struct {
+	Fleet, Name, ID, PeerMCP, PeerMCPClaude, Hooks string
+	MCPOff                                         []string
+}
 
 func (v Vars) expand(s string) string {
 	return strings.NewReplacer("{fleet}", v.Fleet, "{name}", v.Name, "{id}", v.ID,
@@ -614,6 +649,7 @@ func (p Profile) Argv(v Vars, l Launch) (argv []string, embedded bool) {
 			argv = append(argv, v.expand(a))
 		}
 	}
+	argv = append(argv, p.userMCPOffArgs(v.MCPOff)...)
 	if v.Hooks != "" {
 		for _, a := range p.HookArgs {
 			argv = append(argv, v.expand(a))
@@ -673,6 +709,7 @@ func (p Profile) ACPArgv(v Vars, l Launch) []string {
 	if (v.PeerMCP != "" || v.PeerMCPClaude != "") && !p.ACPSessionMCP() {
 		add(p.PeerArgs)
 	}
+	argv = append(argv, p.userMCPOffArgs(v.MCPOff)...)
 	add(p.Args)
 	add(p.ACP)
 	add(p.ACPModeArgs[l.Mode])

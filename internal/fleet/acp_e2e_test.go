@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -329,7 +330,7 @@ func TestClaudeCopilotACPEndToEnd(t *testing.T) {
 	tmuxLog(t)
 	home := t.TempDir()
 	cfg := filepath.Join(home, "config.toml")
-	os.WriteFile(cfg, []byte("[defaults]\nplaybook = false\nauto_trust = false\n[profile.claude-copilot]\nmode = \"autopilot\"\n"), 0o644)
+	os.WriteFile(cfg, []byte("[defaults]\nplaybook = false\nauto_trust = false\n[profile.claude-copilot]\nmode = \"autopilot\"\nkeep_mcp = [\"kept\"]\n"), 0o644)
 	t.Setenv("FLEET_CONFIG", cfg)
 	t.Setenv("FLEET_HOME", home)
 	t.Setenv("FAKE_ACP_STATE", filepath.Join(home, "fake-state"))
@@ -338,7 +339,10 @@ func TestClaudeCopilotACPEndToEnd(t *testing.T) {
 	argsFile := filepath.Join(home, "copilot.args")
 	os.WriteFile(filepath.Join(bin, "copilot"), []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" >> "+argsFile+"\necho --- >> "+argsFile+"\nexec "+exe+" fakeagent cc1 --acp\n"), 0o755)
 	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
-	t.Setenv("HOME", t.TempDir()) // no ~/.local/bin/copilot ahead of the shim
+	uh := t.TempDir() // no ~/.local/bin/copilot ahead of the shim
+	t.Setenv("HOME", uh)
+	os.MkdirAll(filepath.Join(uh, ".copilot"), 0o755)
+	os.WriteFile(filepath.Join(uh, ".copilot", "mcp-config.json"), []byte(`{"mcpServers":{"transformradar":{},"kept":{}}}`), 0o644)
 	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
 	t.Cleanup(func() { tc.KillServer() })
 	f, err := New(tc, home, exe)
@@ -371,6 +375,9 @@ func TestClaudeCopilotACPEndToEnd(t *testing.T) {
 			t.Errorf("copilot argv lacks %q:\n%q", want, argv)
 		}
 	}
+	if slices.Contains(argv, "kept") {
+		t.Errorf("kept MCP server switched off: %q", argv)
+	}
 
 	if err := f.Park("cc1", ""); err != nil {
 		t.Fatal(err)
@@ -380,6 +387,17 @@ func TestClaudeCopilotACPEndToEnd(t *testing.T) {
 	}
 	if got := waitStatus(t, f, "cc1", "idle", 15*time.Second); got.SessionID != sid || !got.ACP() {
 		t.Errorf("after wake: session %q driver %q, want %q acp", got.SessionID, got.Driver, sid)
+	}
+	// Spawn and wake both switch off the user's global MCP server (ADR-91).
+	b, _ = os.ReadFile(argsFile)
+	if runs := strings.Split(strings.TrimSuffix(string(b), "---\n"), "---\n"); len(runs) < 2 {
+		t.Errorf("want spawn and wake launches, got %d", len(runs))
+	} else {
+		for i, r := range runs {
+			if !containsRun(strings.Split(r, "\n"), []string{"--disable-mcp-server", "transformradar"}) {
+				t.Errorf("launch %d keeps transformradar:\n%s", i, r)
+			}
+		}
 	}
 	if err := f.Close("cc1"); err != nil {
 		t.Fatal(err)

@@ -5,6 +5,7 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-10
+- Worker agents no longer load your global MCP servers, which cut a Copilot worker's first call from about 53k to 24k tokens here; `keep_mcp = ["name"]` in config.toml keeps one (ADR-91).
 - `fleet report` prints its usage and files nothing when the text is empty or a flag such as `--help`, and `fleet_report` refuses an empty summary, so an agent probing flags no longer sends you a fake question (#5).
 - `fleet_peek last_message=true` now works for Claude agents (read from their session transcript) and ACP agents, and for agy, vibe and other tools gives the end of the screen marked "(from the screen)" instead of an error (#16).
 - `fleet spawn`, `fleet_spawn` and `fleet_squad_spawn` fail at once with a clear error when the dir does not exist or the profile's command is not on PATH, and `fleet up` does the same for the admiral's command, instead of reporting success and leaving a dead pane (#38, #23).

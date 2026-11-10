@@ -178,7 +178,7 @@ func acpMode(name, profile string, p tools.Profile, mode string) string {
 func (f *Fleet) launchACP(name, profile string, p tools.Profile, dir, goal, full string, claimed bool, lvl playbook.Level, ex startExtra) (*board.Agent, error) {
 	pr := f.Prefs.For(profile)
 	mode := acpMode(name, profile, p, pr.Mode)
-	tool := p.ACPArgv(tools.AgentVars(f.Exe, name, ""), tools.Launch{
+	tool := p.ACPArgv(agentVars(f.Exe, name, "", p, pr), tools.Launch{
 		Mode: mode, Context: contextKey(p, lvl, ex.Role.Leader), Extra: pr.ExtraArgs})
 	p, o, err := f.acpSetup(name, profile, p, mode)
 	if err != nil {
@@ -210,7 +210,7 @@ func (f *Fleet) wakeACPArgv(old *board.Agent, p tools.Profile, ctx string) ([]st
 	}
 	pr := f.Prefs.For(old.Profile)
 	mode := acpMode(old.Name, old.Profile, p, pr.Mode)
-	tool := p.ACPArgv(tools.AgentVars(f.Exe, old.Name, ""), tools.Launch{
+	tool := p.ACPArgv(agentVars(f.Exe, old.Name, "", p, pr), tools.Launch{
 		Mode: mode, Context: ctx, Extra: pr.ExtraArgs})
 	p, o, err := f.acpSetup(old.Name, old.Profile, p, mode)
 	if err != nil {

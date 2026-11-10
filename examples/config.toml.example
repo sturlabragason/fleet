@@ -83,6 +83,10 @@ ready_timeout = "15s"
 # cannot write the main checkout, home or other repos. Shell, MCP and hooks
 # are not covered. false: no fence (ADR-79).
 # fence_writes = true
+# Workers start without your global MCP servers (Copilot's
+# ~/.copilot/mcp-config.json, Claude's ~/.claude.json): their tools would be
+# sent with every call. Name the ones a worker should keep (ADR-91).
+# keep_mcp = ["github"]
 # Added to every agent pane's environment (spawn and adopt), over the profile's
 # own env. [profile.<name>] env keys override these one by one. Keeps parallel
 # builds and tests from each taking every core (DESIGN §7a, docs/perf.md).
