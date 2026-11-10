@@ -5,7 +5,7 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-10
-- Agent branches no longer pile up on GitHub: closing an agent deletes its pushed `fleet/<name>` once it is merged into main, and `fleet branches --prune` deletes the other merged ones no agent is on (ADR-85).
+- Agent branches no longer pile up on GitHub: closing an agent deletes its pushed `fleet/<name>` once it is merged into main, and `fleet branches --prune` deletes the other merged ones no agent is on (ADR-86).
 - ACP agent panes are easier to read: a header with the agent's name, profile and status, each tool call on one line whose ○/✓/✗ updates in place, thoughts dimmed and folded, markdown rendered, text wrapped to the pane and reflowed on resize, your prompts marked with a coloured `›`, and the keys shown under the input line; colours follow your fleet theme and `NO_COLOR` is honoured. PgUp/PgDn scroll. Park and wake a running ACP agent to get it (ADR-85).
 - A second admiral you shrink stays that size when you click tiles, change the wall or hide and show the admirals; `fleet admiral min <name>` minimizes one admiral pane or restores it (ADR-84).
 - fleet's own tests and the screenshot script no longer leave tmux servers or `fleet watch` processes running (ADR-83).

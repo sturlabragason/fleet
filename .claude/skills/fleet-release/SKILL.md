@@ -97,7 +97,7 @@ are `scripts/next-version.sh`, `git tag -a`, `git push origin <tag>` and
   leave out of this release.
 - Record it with `fleet note` so the next publisher knows where the line is.
 - Sweep the CI branches: `fleet branches` lists the `fleet/` branches on origin; `fleet branches --prune`
-  deletes the merged ones no live or parked agent is on (ADR-85). Unmerged ones stay: name them in
+  deletes the merged ones no live or parked agent is on (ADR-86). Unmerged ones stay: name them in
   the report.
 
 ## Stop and ask the user

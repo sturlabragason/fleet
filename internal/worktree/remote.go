@@ -13,7 +13,7 @@ const Remote = "origin"
 // remoteTimeout bounds one network git call (fetch, push) on a branch sweep.
 const remoteTimeout = 20 * time.Second
 
-// RemoteBranch is one fleet/ branch on the remote (`fleet branches`, ADR-85).
+// RemoteBranch is one fleet/ branch on the remote (`fleet branches`, ADR-86).
 type RemoteBranch struct {
 	Branch   string `json:"branch"` // fleet/<name>, without the remote
 	Sha      string `json:"sha"`
@@ -25,7 +25,7 @@ type RemoteBranch struct {
 // Merged reports whether every commit of rev is in the local main (or
 // master) or its remote-tracking copy, either as an ancestor or as an equal
 // patch: `fleet merge` rebases before it merges, so the pushed copy of a
-// merged branch is usually not an ancestor of main (ADR-85). Any git error
+// merged branch is usually not an ancestor of main (ADR-86). Any git error
 // reads as not merged.
 func Merged(dir, rev string) bool {
 	base := baseBranch(dir)
@@ -111,7 +111,7 @@ func PruneRemote(main string, bs []RemoteBranch) ([]string, error) {
 }
 
 // DeleteMergedRemote deletes branch from the remote when it is merged into
-// main (Merged) and was pushed: the closing agent's safety net (ADR-85). A
+// main (Merged) and was pushed: the closing agent's safety net (ADR-86). A
 // branch with no remote-tracking ref was never pushed from here and costs no
 // network call. It reports whether the branch was deleted.
 func DeleteMergedRemote(dir, branch string) (bool, error) {
