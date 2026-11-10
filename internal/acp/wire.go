@@ -149,7 +149,7 @@ type NewSessionParams struct {
 	Cwd        string      `json:"cwd"`
 	MCPServers []MCPServer `json:"mcpServers"`
 	// Meta is the agent-specific _meta object, e.g. claude-agent-acp's
-	// {"claudeCode":{"options":{...}}} (ADR-96).
+	// {"claudeCode":{"options":{...}}} (ADR-99).
 	Meta json.RawMessage `json:"_meta,omitempty"`
 }
 

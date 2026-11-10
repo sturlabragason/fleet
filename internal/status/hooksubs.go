@@ -13,7 +13,7 @@ import (
 )
 
 // SubsDir is where the tools' own SubagentStart/SubagentStop hooks keep each
-// agent's subagents: one <agent>.json (ADR-96). It is apart from the status
+// agent's subagents: one <agent>.json (ADR-99). It is apart from the status
 // file because an ACP agent's host owns that one and rewrites it whole.
 func SubsDir(home string) string { return filepath.Join(StateDir(home), "subs") }
 

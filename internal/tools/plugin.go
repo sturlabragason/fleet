@@ -28,7 +28,7 @@ var pluginEvents = []string{"SessionStart", "UserPromptSubmit", "PreToolUse", "P
 // PluginDir is agent name's fleet plugin dir under the fleet home.
 func PluginDir(home, name string) string { return filepath.Join(home, "plugins", name) }
 
-// Plugin describes one agent's fleet plugin (ADR-96).
+// Plugin describes one agent's fleet plugin (ADR-99).
 type Plugin struct {
 	Exe, Name string
 	// MCP adds .mcp.json with the agent's fleet-peer server (Copilot's
@@ -108,7 +108,7 @@ func (p Profile) UsesPlugin(acp bool) bool {
 	return !acp || len(p.ACPCommand) == 0 || p.ACPMeta == "claude"
 }
 
-// SessionMeta is the session/new _meta an ACP adapter takes for v (ADR-96):
+// SessionMeta is the session/new _meta an ACP adapter takes for v (ADR-99):
 // for acp_meta "claude", _meta.claudeCode.options with the plugin dir and
 // the settings document (the write fence). "" when there is nothing to send.
 func (p Profile) SessionMeta(v Vars) string {

@@ -863,7 +863,7 @@ command = "foo"
 	if len(ps["claude-bare"].PeerArgs) != 0 || len(ps["claude-bare"].HookArgs) != 0 || ps["claude-bare"].UsesPlugin(false) {
 		t.Errorf("explicit [] not kept: %+v", ps["claude-bare"])
 	}
-	// The plugin (ADR-96) comes along only with both: it carries the hooks
+	// The plugin (ADR-99) comes along only with both: it carries the hooks
 	// and, for copilot, fleet-peer.
 	if !reflect.DeepEqual(ps["copilot-work"].PluginArgs, ps["copilot"].PluginArgs) || !ps["copilot-work"].PluginMCP || !ps["claude-personal"].UsesPlugin(false) {
 		t.Errorf("plugin not inherited: %+v", ps["copilot-work"])

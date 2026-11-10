@@ -12,7 +12,7 @@ import (
 // session event log when the profile names one (Copilot's, which also
 // sees a finished subagent woken again), else from the tool's own
 // SubagentStart/SubagentStop hooks once they have reported one (Claude,
-// ADR-96), else from an ACP agent's transcript (agy). An agent whose pane
+// ADR-99), else from an ACP agent's transcript (agy). An agent whose pane
 // is gone or dead has nothing running.
 func (f *Fleet) subagents(a *board.Agent, alive bool, now time.Time) {
 	if !alive {
