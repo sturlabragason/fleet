@@ -5,7 +5,7 @@ User-facing changes, newest first. `fleet changes` and `Alt-g` show this file; i
 To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading if it is missing), at the top of that day, in the same commit as the change. Say what the user can do now, not how it was built. End with the ADR or commit in brackets when there is one: `(ADR-27)`, `(66a2ece, ADR-27)`.
 
 ## 2026-11-10
-- Run copilot or agy over the Agent Client Protocol with `fleet spawn --driver acp` (or `driver = "acp"` in config.toml, `driver` on `fleet_spawn`): status and permission questions come from the tool itself, not its screen, and park/wake resume the session. Opt-in; tmux stays the default (ADR-74).
+- Run copilot or agy over the Agent Client Protocol with `fleet spawn --driver acp` (or `driver = "acp"` in config.toml, `driver` on `fleet_spawn`): status and permission questions come from the tool itself, not its screen, and park/wake resume the session. Experimental and opt-in; tmux stays the default (ADR-74).
 - The ✉ unread-reports badge in the tmux status line stays steady instead of blinking on and off every second while a watcher runs (ADR-75).
 - A Claude agent started in a repo subdir or a worktree no longer stops on "Allow external CLAUDE.md file imports?" or the folder-trust question: fleet pre-answers them under the repo root Claude actually reads (ADR-47).
 
