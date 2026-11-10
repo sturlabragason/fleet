@@ -193,7 +193,7 @@ func TestDefaultCarriesStandingRules(t *testing.T) {
 		t.Error("worker playbook lost the leave-the-worktree rule")
 	}
 	if !strings.Contains(d, "git push origin --delete fleet/<name>") {
-		t.Error("worker playbook lost the delete-the-merged-remote-branch rule (ADR-86)")
+		t.Error("worker playbook lost the delete-the-merged-remote-branch rule (ADR-87)")
 	}
 	// Process review (docs/process-review.md): merge order is read, ADR numbers are given, and the two shared
 	// files conflict by construction.

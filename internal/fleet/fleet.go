@@ -720,7 +720,7 @@ func (f *Fleet) Close(name string) error {
 
 // dropMergedRemote deletes a closed agent's pushed fleet/ branch from the
 // remote once it is merged into main, so CI branches don't pile up on the
-// remote (ADR-86). The local branch and worktree stay (§4).
+// remote (ADR-87). The local branch and worktree stay (§4).
 func dropMergedRemote(name string, wt *board.Worktree) {
 	if wt == nil || wt.Branch == "" {
 		return

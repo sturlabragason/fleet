@@ -15,7 +15,7 @@ import (
 )
 
 // cmdBranches lists the repo's fleet/ branches on origin and, with --prune,
-// deletes the merged ones no live or parked agent is on (ADR-86).
+// deletes the merged ones no live or parked agent is on (ADR-87).
 func cmdBranches(f *fleet.Fleet, args []string) error {
 	return runBranches(f.Store.Load(), args, os.Stdout)
 }
