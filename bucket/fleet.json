@@ -6,11 +6,11 @@
     "architecture": {
         "64bit": {
             "url": "https://github.com/sturlabragason/fleet/releases/download/v1.21.0/fleet-windows-amd64.exe#/fleet.exe",
-            "hash": "0000000000000000000000000000000000000000000000000000000000000000"
+            "hash": "4728c18225211e66a67add186f1b0e7fac18658758e4f95189ad1691b4ff5fe1"
         },
         "arm64": {
             "url": "https://github.com/sturlabragason/fleet/releases/download/v1.21.0/fleet-windows-arm64.exe#/fleet.exe",
-            "hash": "0000000000000000000000000000000000000000000000000000000000000000"
+            "hash": "71375f2ce1d8fa4653c893fddf9c43b9f88e98c0eb737de1e86aeb89715de2fd"
         }
     },
     "bin": "fleet.exe",

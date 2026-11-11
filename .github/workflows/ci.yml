@@ -154,6 +154,20 @@ jobs:
             & "$env:USERPROFILE\scoop\shims\fleet.exe" version
             if ($LASTEXITCODE) { throw 'scoop shim did not run fleet' }
           } finally { Stop-Process -Id $srv.Id -Force }
+      # The published latest release, as a user gets it.
+      - name: install the latest release (install.ps1, bucket/fleet.json)
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:FLEET_INSTALL_DIR = "$env:RUNNER_TEMP\latest"
+          Get-Content -Raw install.ps1 | iex
+          & "$env:FLEET_INSTALL_DIR\fleet.exe" version
+          $env:Path = "$env:USERPROFILE\scoop\shims;$env:Path"
+          scoop uninstall fleet
+          scoop install bucket\fleet.json
+          if ($LASTEXITCODE) { throw "scoop install: $LASTEXITCODE" }
+          & "$env:USERPROFILE\scoop\shims\fleet.exe" version
+          if ($LASTEXITCODE) { throw 'scoop shim did not run fleet' }
       - name: Claude ACP adapter handshake
         env:
           FLEET_CONFIG: ${{ runner.temp }}/no-config.toml
