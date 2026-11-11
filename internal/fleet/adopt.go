@@ -106,7 +106,7 @@ func (f *Fleet) adopt(o AdoptOpts, rec *board.Agent, claimed bool, prompt string
 		fence, goal = fenceDir(rec.Worktree, apr.FenceWrites), rec.Goal
 		model = rec.Model
 	}
-	// Adopted and resumed agents run Opus too (ADR-100).
+	// Adopted and resumed agents keep their model (ADR-100, ADR-112).
 	p, model, err = f.withModel(o.Profile, p, model)
 	if err != nil {
 		return nil, err

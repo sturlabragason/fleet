@@ -244,8 +244,9 @@ const (
 )
 
 // copilotModels and claudeModels are the model keys of the built-in
-// profiles of each tool: every fleet agent runs Opus (ADR-100), so a
-// Copilot profile that names no model is pinned to CopilotClaudeModel.
+// profiles of each tool. Their default is Opus (ADR-100), so a Copilot
+// profile that names no model is pinned to CopilotClaudeModel; a spawn may
+// name any other model the tool offers (ADR-112).
 const copilotModels = `model_args = ["--model", "{model}"]
 default_model = "` + CopilotClaudeModel + `"`
 
@@ -346,6 +347,7 @@ command = "agy"
 mode_args = { auto = "--dangerously-skip-permissions", accept-edits = "--mode accept-edits", plan = "--mode plan" }
 resume = ["--conversation", "{id}"]
 patterns = "agy"
+model_args = ["--model", "{model}"]
 acp = ["acp"]
 acp_mode_args = { auto = "--dangerously-skip-permissions" }
 driver = "acp"

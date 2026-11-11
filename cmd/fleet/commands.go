@@ -55,8 +55,10 @@ const usage = `usage:
                                             when the agent has no worktree of its own);
                                             --effort light|standard|pro sizes the worker playbook
                                             (default: pro with a worktree, light without one);
-                                            --model picks another Opus model (default: the profile's
-                                            Opus model at every effort; anything not Opus is refused);
+                                            --model runs any model the profile's tool offers (fleet models
+                                            <profile> lists them; a model the tool doesn't list is refused,
+                                            a profile with no model flag refuses any; default: the profile's,
+                                            Opus for copilot and claude);
                                             --driver acp runs the tool's ACP server under fleet acp-host
                                             instead of its screen (copilot, claude-copilot, agy, fake),
                                             --driver tmux the tool's own screen; default: driver in
@@ -181,6 +183,8 @@ const usage = `usage:
                                             --dry-run prints the order it would take. Never pushes,
                                             never removes the worktree
   fleet profiles                            list tool profiles (~/.fleet/tools.toml)
+  fleet models [--json] [profile...]        which profiles can select a model and their defaults; with a
+                                            profile, the models its tool offers (asked over ACP, no tokens)
   fleet snap [-C dir] [--set NAME] [--socket S] <agent | pane-id> <state>
                                             save the agent's pane as a status fixture in
                                             internal/status/testdata/<tool>/<state>.txt, so the table test
@@ -401,6 +405,8 @@ func run(args []string) error {
 		return cmdReports(f, rest)
 	case "wait":
 		return cmdWait(f, rest)
+	case "models":
+		return cmdModels(f, rest)
 	case "profiles":
 		for _, n := range tools.Names(f.Profiles) {
 			p := f.Profiles[n]
@@ -447,7 +453,7 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 	interactive := fs.Bool("interactive", false, "the user talks to it directly: never auto-closed, reports progress until the user ends the session")
 	effort := fs.String("effort", "", "worker playbook level: light, standard or pro (default: pro with a worktree, light without)")
 	driver := fs.String("driver", "", "tmux or acp: how fleet runs the agent (default: driver in config.toml, else tmux)")
-	model := fs.String("model", "", "Opus model the agent runs (default: the profile's; a model that is not Opus is refused)")
+	model := fs.String("model", "", "model the agent runs: any id the profile's tool offers (fleet models <profile>; default: the profile's)")
 	owner := fs.String("admiral", "", "admiral that owns the agent and gets its reports (default main)")
 	if err := fs.Parse(args); err != nil {
 		return err

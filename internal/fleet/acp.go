@@ -84,6 +84,7 @@ type ACPHostOpts struct {
 	Meta          string   // _meta for the session calls (ADR-99)
 	UnsetEnv      []string // variables the tool must not inherit (ADR-76)
 	Profile       string   // shown in the pane's header (ADR-85)
+	Model         string   // the session's model, set over ACP (ADR-112)
 }
 
 // ACPHostArgv is the command an acp agent's window runs: the host, its
@@ -113,6 +114,9 @@ func ACPHostArgv(exe, name, dir string, o ACPHostOpts, tool []string) []string {
 	}
 	if o.Profile != "" {
 		argv = append(argv, "--profile", o.Profile)
+	}
+	if o.Model != "" {
+		argv = append(argv, "--model", o.Model)
 	}
 	return append(append(argv, "--"), tool...)
 }
@@ -201,7 +205,7 @@ func (f *Fleet) launchACP(name, profile string, p tools.Profile, dir, goal, full
 		}
 	}
 	ex.Driver = board.DriverACP
-	o.PromptFile = pf
+	o.PromptFile, o.Model = pf, ex.Model
 	argv := ACPHostArgv(f.Exe, name, dir, o, tool)
 	return f.start(name, profile, p, dir, goal, full, "", argv, claimed, ex)
 }
@@ -223,7 +227,7 @@ func (f *Fleet) wakeACPArgv(old *board.Agent, p tools.Profile, ctx string) ([]st
 		return nil, p, err
 	}
 	// Prompts an earlier host queued but never sent wait in the prompt file.
-	o.Session, o.PromptFile = old.SessionID, ACPPromptPath(f.Home, old.Name)
+	o.Session, o.PromptFile, o.Model = old.SessionID, ACPPromptPath(f.Home, old.Name), old.Model
 	if _, err := os.Stat(o.PromptFile); err != nil {
 		o.PromptFile = ""
 	}

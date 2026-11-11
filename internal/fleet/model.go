@@ -6,20 +6,18 @@ import (
 	"github.com/sturlabragason/fleet/internal/tools"
 )
 
-// pickModel is the model fleet launches an agent with (ADR-100), "" for a
-// tool with no model flag. Every
-// fleet agent runs Opus, at every effort and as a leader: a named model
-// must be Opus, a model the profile's args or extra_args name must be Opus
-// and is pinned again (so an ACP adapter's model variable follows it), and
-// a profile that names none is pinned to its default_model. A tool with no
-// model flag keeps its own default.
+// pickModel is the model fleet launches an agent with, "" for a tool with
+// no model flag (ADR-100, ADR-112). A named model is any id the profile's
+// tool takes, at every effort and as a leader; a profile with no model flag
+// refuses one. Without a named model, a model the profile's args or the
+// user's extra_args name is pinned again (so an ACP adapter's model
+// variable follows it), else the profile's default_model (Opus for the
+// built-in Copilot and Claude profiles); a tool with no model flag, or a
+// profile with no default_model, keeps the tool's own default.
 func (f *Fleet) pickModel(profile string, p tools.Profile, named string) (string, error) {
 	if named != "" {
 		if !p.HasModelFlag() {
-			return "", fmt.Errorf("profile %s has no model flag (model_args); can't run model %q", profile, named)
-		}
-		if !tools.IsOpus(named) {
-			return "", fmt.Errorf("model %q refused: fleet agents run Opus at every effort (ADR-100); subagents may use Sonnet for scoped, checkable subtasks", named)
+			return "", fmt.Errorf("profile %s can't select a model: its tool has no model flag (model_args), so it runs the tool's own default; can't run model %q", profile, named)
 		}
 		return named, nil
 	}
@@ -27,27 +25,21 @@ func (f *Fleet) pickModel(profile string, p tools.Profile, named string) (string
 		return "", nil
 	}
 	if own := tools.ModelArg(p.Args, f.Prefs.For(profile).ExtraArgs); own != "" {
-		if !tools.IsOpus(own) {
-			return "", fmt.Errorf("profile %s runs model %q: fleet agents run Opus at every effort (ADR-100); set an Opus model in its args or extra_args", profile, own)
-		}
 		return own, nil
 	}
 	return p.DefaultModel, nil
 }
 
-// AdmiralModel is p set up to run Opus as an admiral (ADR-100): a model its
-// args name must be Opus, else default_model is pinned. The admiral takes no
-// extra_args, so only args count. m is the model it runs, "" for a tool
-// with no model flag.
+// AdmiralModel is p set up to run its model as an admiral: the one its args
+// name, else default_model (Opus for the built-in profiles). The admiral
+// takes no extra_args, so only args count. m is the model it runs, "" for
+// a tool with no model flag.
 func AdmiralModel(profile string, p tools.Profile) (tools.Profile, string, error) {
 	if !p.HasModelFlag() {
 		return p, "", nil
 	}
 	m := p.DefaultModel
 	if own := tools.ModelArg(p.Args); own != "" {
-		if !tools.IsOpus(own) {
-			return p, "", fmt.Errorf("admiral profile %s runs model %q: fleet runs Opus (ADR-100); set an Opus model in its args", profile, own)
-		}
 		m = own
 	}
 	return p.WithModel(m), m, nil

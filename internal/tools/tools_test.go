@@ -963,8 +963,11 @@ func TestWithModel(t *testing.T) {
 	}
 }
 
-// Every built-in or inherited profile with a model flag pins Opus, so no
-// fleet agent starts on a tool's own default model (ADR-100).
+func isOpus(m string) bool { return strings.Contains(strings.ToLower(m), "opus") }
+
+// Every built-in or inherited Copilot and Claude profile pins Opus by
+// default (ADR-100); agy takes a named model but keeps its own default and
+// vibe can't select one (ADR-112).
 func TestModelFlagProfilesPinOpus(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(Path(dir), []byte("[cp-work]\ncommand = \"copilot\"\n[cl-work]\ncommand = \"claude\"\n"), 0o644)
@@ -974,15 +977,18 @@ func TestModelFlagProfilesPinOpus(t *testing.T) {
 	}
 	for _, name := range []string{"copilot", "claude-copilot", "claude", "cp-work", "cl-work"} {
 		p := ps[name]
-		if !p.HasModelFlag() || !IsOpus(p.DefaultModel) {
+		if !p.HasModelFlag() || !isOpus(p.DefaultModel) {
 			t.Errorf("%s: model_args %v default_model %q", name, p.ModelArgs, p.DefaultModel)
 		}
-		if m := ModelArg(p.Args); m != "" && !IsOpus(m) {
+		if m := ModelArg(p.Args); m != "" && !isOpus(m) {
 			t.Errorf("%s: args name %q", name, m)
 		}
 	}
-	if !IsOpus("claude-opus-5.5") || IsOpus("claude-sonnet-5.5") || IsOpus("haiku") {
-		t.Error("IsOpus")
+	if a := ps["agy"]; !a.HasModelFlag() || a.DefaultModel != "" {
+		t.Errorf("agy: model_args %v default_model %q", a.ModelArgs, a.DefaultModel)
+	}
+	if ps["vibe"].HasModelFlag() {
+		t.Error("vibe has a model flag")
 	}
 }
 

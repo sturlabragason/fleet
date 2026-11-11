@@ -19,12 +19,9 @@ func ModelArg(lists ...[]string) string {
 	return m
 }
 
-// IsOpus reports whether model names an Opus model ("opus",
-// "claude-opus-5.5"): the only family a fleet agent runs (ADR-100).
-func IsOpus(model string) bool { return strings.Contains(strings.ToLower(model), "opus") }
-
 // HasModelFlag reports whether the profile's tool takes a model on its
-// command line (model_args), so fleet can pin one (ADR-100).
+// command line (model_args), so fleet can pin one (ADR-100) or a spawn can
+// name one (ADR-112).
 func (p Profile) HasModelFlag() bool { return len(p.ModelArgs) > 0 }
 
 // modelFlag is the flag model_args selects a model with ("--model").

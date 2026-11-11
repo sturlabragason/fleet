@@ -4,12 +4,14 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 )
 
 // Main runs the fake agent with command-line args (after the program name)
 // and returns the exit code. Without --acp it is exactly the TUI fake:
 // `fakeagent [name]`. With --acp it serves ACP on in/out:
-// `fakeagent [name] --acp [--resume] [--no-load] [--state DIR]`, flags in
+// `fakeagent [name] --acp [--resume] [--no-load] [--state DIR] [--models a,b
+// [--model a]]`, flags in
 // any position.
 func Main(args []string, in io.Reader, out, errw io.Writer) int {
 	isACP := false
@@ -32,6 +34,8 @@ func Main(args []string, in io.Reader, out, errw io.Writer) int {
 	resume := fs.Bool("resume", false, "offer session/resume")
 	noLoad := fs.Bool("no-load", false, "do not offer session/load")
 	state := fs.String("state", DefaultStateDir(), "directory sessions persist in")
+	models := fs.String("models", "", "comma-separated models to offer (ADR-112)")
+	model := fs.String("model", "", "the model to start on; one not offered falls back to the first")
 	name, rest := "fake", args
 	var pos []string
 	for {
@@ -47,9 +51,19 @@ func Main(args []string, in io.Reader, out, errw io.Writer) int {
 	if len(pos) > 0 {
 		name = pos[0]
 	}
-	if err := ServeACP(in, out, ACPOptions{Name: name, Resume: *resume, NoLoad: *noLoad, StateDir: *state}); err != nil {
+	if err := ServeACP(in, out, ACPOptions{Name: name, Resume: *resume, NoLoad: *noLoad, StateDir: *state, Models: splitList(*models), Model: *model}); err != nil {
 		fmt.Fprintln(errw, "fakeagent:", err)
 		return 1
 	}
 	return 0
+}
+
+func splitList(s string) []string {
+	var out []string
+	for _, x := range strings.Split(s, ",") {
+		if x = strings.TrimSpace(x); x != "" {
+			out = append(out, x)
+		}
+	}
+	return out
 }

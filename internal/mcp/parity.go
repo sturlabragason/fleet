@@ -49,6 +49,7 @@ var CLIParity = map[string]string{
 	"adr":             "fleet_adr",
 	"merge":           "agent: runs in the agent's own worktree (playbook checklist step 8); the admiral asks the agent",
 	"profiles":        "fleet_profiles",
+	"models":          "fleet_profiles",
 	"snap":            "user: captures status fixtures for fleet's own tests",
 	"wall":            "fleet_wall",
 	"keys":            "user: the hotkeys",

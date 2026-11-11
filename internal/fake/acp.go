@@ -57,6 +57,11 @@ type ACPOptions struct {
 	StateDir string         // where sessions persist as <id>.json
 	Exit     func(code int) // how [crash] exits; os.Exit when nil
 	NewID    func() string  // session ids; random when nil
+	// Models, when set, are the models the fake offers in session results
+	// (ADR-112). Model is the one --model picked; like copilot, one the
+	// fake doesn't offer falls back to the first.
+	Models []string
+	Model  string
 }
 
 // ErrCrashed is returned by ServeACP when a [crash] turn called Exit and Exit
@@ -82,9 +87,11 @@ type sessionFile struct {
 	History []histEntry `json:"history"`
 	// What the last host gave it (ADR-76): the mode it set, the MCP servers
 	// and the env named in FAKE_ACP_ENV, for tests to check.
-	Mode string            `json:"mode,omitempty"`
-	MCP  []acp.MCPServer   `json:"mcp,omitempty"`
-	Env  map[string]string `json:"env,omitempty"`
+	Mode string `json:"mode,omitempty"`
+	// Model is the session's model: the launch's, or set_model's (ADR-112).
+	Model string            `json:"model,omitempty"`
+	MCP   []acp.MCPServer   `json:"mcp,omitempty"`
+	Env   map[string]string `json:"env,omitempty"`
 }
 
 // recordEnv is the env named in FAKE_ACP_ENV (comma-separated) that is set.
@@ -267,12 +274,12 @@ func (s *server) handle(b []byte) {
 		var p acp.NewSessionParams
 		_ = json.Unmarshal(m.Params, &p)
 		id := s.opt.NewID()
-		f := sessionFile{ID: id, Cwd: p.Cwd, History: []histEntry{}, MCP: p.MCPServers, Env: recordEnv()}
+		f := sessionFile{ID: id, Cwd: p.Cwd, History: []histEntry{}, MCP: p.MCPServers, Env: recordEnv(), Model: s.launchModel()}
 		s.mu.Lock()
 		s.sess[id] = &session{sessionFile: f}
 		s.mu.Unlock()
 		s.save(f)
-		s.reply(m.ID, acp.NewSessionResult{SessionID: id})
+		s.reply(m.ID, s.withModels(map[string]any{"sessionId": id}, f.Model))
 	case acp.MethodSessionLoad:
 		if s.opt.NoLoad {
 			s.fail(m.ID, acp.CodeMethodNotFound, "method not found: "+m.Method)
@@ -287,6 +294,12 @@ func (s *server) handle(b []byte) {
 		s.open(m, false)
 	case acp.MethodSessionPrompt:
 		s.prompt(m)
+	case acp.MethodSessionSetModel:
+		if len(s.opt.Models) == 0 {
+			s.fail(m.ID, acp.CodeMethodNotFound, "method not found: "+m.Method)
+			return
+		}
+		s.setModel(m)
 	case acp.MethodSessionSetMode:
 		var p acp.SetModeParams
 		_ = json.Unmarshal(m.Params, &p)
@@ -375,7 +388,7 @@ func (s *server) open(m acp.Message, replay bool) {
 	if p.Cwd != "" {
 		f.Cwd = p.Cwd
 	}
-	f.MCP, f.Env = p.MCPServers, recordEnv()
+	f.MCP, f.Env, f.Model = p.MCPServers, recordEnv(), s.launchModel()
 	s.save(f)
 	s.mu.Lock()
 	s.sess[f.ID] = &session{sessionFile: f}
@@ -389,6 +402,61 @@ func (s *server) open(m acp.Message, replay bool) {
 			s.update(f.ID, acp.SessionUpdate{Kind: kind, Content: raw(acp.TextBlock(h.Text))})
 		}
 	}
+	s.reply(m.ID, s.withModels(map[string]any{}, f.Model))
+}
+
+// launchModel is the model a new process starts on: --model when offered,
+// else the first offered, as copilot falls back without a word. With
+// FAKE_ACP_IGNORE_MODEL set it is always the first, as `agy acp` ignores
+// --model and only session/set_model switches.
+func (s *server) launchModel() string {
+	for _, m := range s.opt.Models {
+		if m == s.opt.Model && os.Getenv("FAKE_ACP_IGNORE_MODEL") == "" {
+			return m
+		}
+	}
+	if len(s.opt.Models) > 0 {
+		return s.opt.Models[0]
+	}
+	return ""
+}
+
+// withModels adds the "models" object to a session result when the fake
+// offers models.
+func (s *server) withModels(res map[string]any, current string) map[string]any {
+	if len(s.opt.Models) == 0 {
+		return res
+	}
+	var av []acp.ModelInfo
+	for _, m := range s.opt.Models {
+		av = append(av, acp.ModelInfo{ModelID: m, Name: m})
+	}
+	res["models"] = acp.ModelState{CurrentModelID: current, AvailableModels: av}
+	return res
+}
+
+// setModel is session/set_model: an offered model or an error, as copilot.
+func (s *server) setModel(m acp.Message) {
+	var p acp.SetModelParams
+	_ = json.Unmarshal(m.Params, &p)
+	ok := false
+	for _, x := range s.opt.Models {
+		ok = ok || x == p.ModelID
+	}
+	s.mu.Lock()
+	ss := s.sess[p.SessionID]
+	var f sessionFile
+	if ss != nil && ok {
+		ss.Model = p.ModelID
+		f = ss.sessionFile
+		f.History = append([]histEntry(nil), ss.History...)
+	}
+	s.mu.Unlock()
+	if ss == nil || !ok {
+		s.fail(m.ID, acp.CodeInvalidParams, fmt.Sprintf("Invalid modelId '%s': not one of this session's models.", p.ModelID))
+		return
+	}
+	s.save(f)
 	s.reply(m.ID, struct{}{})
 }
 

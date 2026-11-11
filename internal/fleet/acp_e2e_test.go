@@ -194,10 +194,11 @@ func TestACPEndToEnd(t *testing.T) {
 
 // fakeSession reads the fake ACP agent's record of session id.
 func fakeSession(t *testing.T, home, id string) (s struct {
-	Mode string              `json:"mode"`
-	MCP  []acp.MCPServer     `json:"mcp"`
-	Env  map[string]string   `json:"env"`
-	Hist []map[string]string `json:"history"`
+	Mode  string              `json:"mode"`
+	Model string              `json:"model"`
+	MCP   []acp.MCPServer     `json:"mcp"`
+	Env   map[string]string   `json:"env"`
+	Hist  []map[string]string `json:"history"`
 }) {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join(home, "fake-state", id+".json"))
@@ -423,4 +424,67 @@ func containsRun(s, run []string) bool {
 		}
 	}
 	return false
+}
+
+// ADR-112 end to end: a profile whose ACP server offers models and, like
+// `agy acp`, ignores --model. A typo is refused at spawn by the probe; a
+// listed model is switched to over session/set_model before the first
+// prompt and again after park and wake.
+func TestACPModelSelection(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds the fleet binary")
+	}
+	home := t.TempDir()
+	noPlaybook(t, home)
+	t.Setenv("FLEET_HOME", home)
+	t.Setenv("FAKE_ACP_STATE", filepath.Join(home, "fake-state"))
+	t.Setenv("FAKE_ACP_IGNORE_MODEL", "1")
+	os.WriteFile(filepath.Join(home, "tools.toml"), []byte(`[fm]
+command = "{fleet}"
+args = ["fakeagent", "{name}", "--models", "small,big"]
+patterns = "fake"
+acp = ["--acp"]
+model_args = ["--model", "{model}"]
+`), 0o644)
+	exe := buildFleet(t)
+	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
+	t.Cleanup(func() { tc.KillServer() })
+	f, err := New(tc, home, exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	wt := false
+	if _, err := f.SpawnWith(SpawnOpts{Driver: "acp", Worktree: &wt, Model: "bgi"}, "m0", "fm", dir, "hi"); err == nil || !strings.Contains(err.Error(), "small, big") {
+		t.Fatalf("typo: %v", err)
+	}
+	pm, err := f.ProfileModels("fm")
+	if err != nil || !pm.Listed || pm.Current != "small" || len(pm.Models) != 2 {
+		t.Fatalf("models %+v %v", pm, err)
+	}
+	a, err := f.SpawnWith(SpawnOpts{Driver: "acp", Worktree: &wt, Model: "big"}, "m1", "fm", dir, "hi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Model != "big" {
+		t.Fatalf("board model %q", a.Model)
+	}
+	sid := waitStatus(t, f, "m1", "idle", 20*time.Second).SessionID
+	if s := fakeSession(t, home, sid); s.Model != "big" {
+		t.Fatalf("session model %q, want big", s.Model)
+	}
+	if err := f.Park("m1", ""); err != nil {
+		t.Fatal(err)
+	}
+	// The fake's load records the model its new process starts on (small),
+	// so "big" after the wake means the host switched it again.
+	if _, err := f.Wake("m1", true); err != nil {
+		t.Fatal(err)
+	}
+	if got := waitStatus(t, f, "m1", "idle", 15*time.Second).SessionID; got != sid {
+		t.Fatalf("woke on %q, want %q", got, sid)
+	}
+	if s := fakeSession(t, home, sid); s.Model != "big" {
+		t.Errorf("after wake the session runs %q, want big", s.Model)
+	}
 }

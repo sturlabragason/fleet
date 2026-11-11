@@ -35,8 +35,8 @@ var squadToolDefs = []tool{
 		"may":        mayProp,
 		"driver":     map[string]any{"type": "string", "enum": []string{"tmux", "acp"}, "description": "how fleet runs the agent: tmux (the tool's own screen) or acp (the tool's ACP server under fleet acp-host: status, questions and sends over the protocol, no screen reading). Default: the user's config, else acp for every profile that runs copilot or agy (claude-copilot too) and tmux for the rest. Claude runs over acp only when asked (this field or the profile's config), never from [defaults]; vibe refuses acp."},
 		"effort":     map[string]any{"type": "string", "enum": []string{"light", "standard", "pro"}, "description": "how much process the agent is given: light (an errand or a quick read-only question), standard (a contained change: plan, build, test, commit), pro (the full playbook, including the pre-merge checklist). Default: pro with a worktree, light without one."},
-		"model":      map[string]any{"type": "string", "description": "an Opus model in the profile's own ids (opus or claude-opus-4-8 for claude, claude-opus-4.8 for copilot). Default: the profile's Opus model, at every effort. Anything not Opus is refused (ADR-100), and so is any model for a profile whose tool has no model flag."}})},
-	{"fleet_squad_profiles", "List the tool profiles fleet_squad_spawn accepts.", obj(nil, map[string]any{})},
+		"model":      map[string]any{"type": "string", "description": "a model id the profile's tool offers, in the tool's own ids (fleet_squad_profiles with profile lists them, e.g. claude-sonnet-5.5 or gemini-3.8-flash for copilot, sonnet for claude). Checked against the tool's own list when it has an ACP server; a model it doesn't list is refused, never swapped for another, and so is any model for a profile with no model flag (vibe). Default: the profile's (Opus for copilot and claude, the tool's own for agy), at every effort. The model is kept across park, wake and resume."}})},
+	{"fleet_squad_profiles", "List the tool profiles fleet_squad_spawn accepts, with their model support; with profile, the models that profile's tool offers.", obj(nil, map[string]any{"profile": str("optional profile: list the models its tool offers (fleet starts the tool's ACP server once, no prompt, no tokens; cached 10 minutes). Without it: every profile, whether it can select a model, and its default.")})},
 	{"fleet_squad_status", "List your squad: name, profile, status, age, what each agent waits for and its last report. Start here.", obj(nil, map[string]any{})},
 	{"fleet_squad_info", "Facts about one of your agents: profile, status, dir, task card and its done-check verdict, git state, spend.", obj([]string{"name"}, map[string]any{
 		"name": str("squad agent name")})},
@@ -96,7 +96,7 @@ func (s *Server) squadCall(me, name string, raw json.RawMessage) (string, error)
 	case "fleet_squad_spawn":
 		return s.squadSpawn(me, a)
 	case "fleet_squad_profiles":
-		return s.profiles(), nil
+		return s.profiles(a.Profile)
 	case "fleet_squad_status":
 		return s.squadStatus(me), nil
 	case "fleet_squad_reports":
