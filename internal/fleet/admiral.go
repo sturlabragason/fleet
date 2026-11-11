@@ -387,6 +387,10 @@ func (f *Fleet) syncAdmiralPanes() {
 		return
 	}
 	by := f.UnreadBy()
+	var extra map[string]string
+	if extAdmiralBadge != nil {
+		extra = extAdmiralBadge(f)
+	}
 	for _, p := range panes {
 		if p.Role != "sup" {
 			continue
@@ -399,6 +403,7 @@ func (f *Fleet) syncAdmiralPanes() {
 			"@fleet_admiral_name":   name,
 			"@fleet_admiral_color":  theme.AdmiralColor(supervisor.Slot(f.Home, name)),
 			"@fleet_admiral_unread": "",
+			"@fleet_admiral_ext":    extra[name],
 		}
 		if by[name] > 0 {
 			want["@fleet_admiral_unread"] = fmt.Sprint(by[name])

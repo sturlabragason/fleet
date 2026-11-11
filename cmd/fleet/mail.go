@@ -280,6 +280,11 @@ func cmdMCP(f *fleet.Fleet, args []string) error {
 	if err != nil {
 		return err
 	}
+	if extMCP != nil {
+		if err := extMCP(f, resolveAdmiralName(*adm, os.Getenv, nil), *agent); err != nil {
+			return err
+		}
+	}
 	// A done-check must never stall the MCP loop (ADR-43).
 	f.Async()
 	in, reloaded := mcp.ResumeInput(os.Stdin)
@@ -296,6 +301,7 @@ func cmdMCP(f *fleet.Fleet, args []string) error {
 		// The admiral's server drains the spawn queue and runs the memory
 		// guard, so neither needs the overview TUI to be running (§7, §7a).
 		f.DrainQueue = true
+		runExtOpen(f)
 	}
 	s.Reloaded = reloaded
 	s.RulesInPrompt = *rulesInPrompt && me == ""

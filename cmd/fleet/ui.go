@@ -413,6 +413,7 @@ func cmdUI(f *fleet.Fleet) error {
 	}
 	// It also runs done-checks nobody else picked up, off the UI loop (ADR-43).
 	f.Async()
+	runExtOpen(f)
 	w := wall.New(f.T, fleet.Session)
 	w.KeepFocus = true // keys typed after a click/Enter/Tab/a must still reach the overview
 	be := &backend{f: f, w: w, enabled: insideFleet(f)}
@@ -422,6 +423,9 @@ func cmdUI(f *fleet.Fleet) error {
 	re := newUIReexec(f.Exe, "", probeBinary, p.Quit)
 	ctx, stop := context.WithCancel(context.Background())
 	go re.run(ctx, watch.StopEvery)
+	if extUI != nil {
+		go extUI(ctx, f)
+	}
 	_, err := p.Run()
 	stop()
 	handOver := re.halt()

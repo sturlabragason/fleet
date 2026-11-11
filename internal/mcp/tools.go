@@ -159,6 +159,8 @@ type args struct {
 	// NeedsAction is agent fleet_msg_send's wake switch; nil is the default,
 	// fleet.NeedsAction (ADR-92).
 	NeedsAction *bool `json:"needs_action"`
+	// Fields of extra tools (ext.go).
+	Peer, Thread, Kind string
 }
 
 // identityBound are the admiral tools that change something or read the
@@ -189,6 +191,16 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 	}
 	if s.Admiral == Unknown && identityBound[name] {
 		return "", fmt.Errorf("admiral identity unknown: this MCP server could not tell which admiral it serves, so it refuses changes. Restart the admiral with fleet admiral restart --name <name>.")
+	}
+	if extGate != nil {
+		if err := extGate(s, name, a); err != nil {
+			return "", err
+		}
+	}
+	if extCall != nil {
+		if out, ok, err := extCall(s, name, a); ok {
+			return out, err
+		}
 	}
 	switch name {
 	case "fleet_status":
@@ -542,6 +554,7 @@ func (s *Server) brief() (string, error) {
 		b.WriteString("none\n\n")
 	}
 	b.WriteString(s.unreadReports())
+	b.WriteString(callExt(extBrief, s))
 	st, err := s.status()
 	if err != nil {
 		return "", err

@@ -34,7 +34,7 @@ func loadTheme() error {
 	return theme.Load(p.Theme())
 }
 
-const usage = `usage:
+var usage = `usage:
   fleet up                                  start/attach the fleet (admiral + overview + wall)
   fleet [--admiral-profile NAME] up [--no-attach]
                                             run the admiral under profile NAME (alone: fleet up); default
@@ -280,6 +280,9 @@ func run(args []string) error {
 	case "doctor":
 		return cmdDoctor(rest)
 	}
+	if h := extCmds[cmd]; h != nil {
+		return h(rest)
+	}
 	if cmd == "changes" {
 		return cmdChanges(rest)
 	}
@@ -289,6 +292,11 @@ func run(args []string) error {
 	}
 	if err := leaderScope(f, commandName(cmd), rest); err != nil {
 		return err
+	}
+	if extBefore != nil {
+		if err := extBefore(f.Home, commandName(cmd)); err != nil {
+			return err
+		}
 	}
 	switch commandName(cmd) {
 	case "spawn":

@@ -54,12 +54,23 @@ func TestEligible(t *testing.T) {
 // release serves /latest, SHA256SUMS and the asset for one tag.
 type release struct {
 	tag, body, sum string
+	sig            string // SHA256SUMS.sig; "" serves none
 	downloads      atomic.Int32
+	unauthorized   atomic.Int32 // requests without the Authorization header
 }
 
 func (r *release) serve(t *testing.T) *httptest.Server {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, q *http.Request) {
+		if q.Header.Get("Authorization") != "Bearer t0k" {
+			r.unauthorized.Add(1)
+		}
 		switch q.URL.Path {
+		case "/download/" + r.tag + "/SHA256SUMS.sig":
+			if r.sig == "" {
+				http.NotFound(w, q)
+				return
+			}
+			w.Write([]byte(r.sig))
 		case "/latest":
 			http.Redirect(w, q, "/tag/"+r.tag, http.StatusFound)
 		case "/download/" + r.tag + "/SHA256SUMS":
@@ -78,6 +89,10 @@ func (r *release) serve(t *testing.T) *httptest.Server {
 func sum(s string) string { h := sha256.Sum256([]byte(s)); return hex.EncodeToString(h[:]) }
 
 func setup(t *testing.T, r *release) (*Updater, string) {
+	// Tests set the channel hooks themselves; a build that fills them is restored after.
+	vs, au := VerifySums, Authorize
+	VerifySums, Authorize = nil, nil
+	t.Cleanup(func() { VerifySums, Authorize = vs, au })
 	dir := t.TempDir()
 	exe := filepath.Join(dir, "bin", "fleet")
 	os.MkdirAll(filepath.Dir(exe), 0o755)
@@ -174,6 +189,47 @@ func TestFailedVerifyKeepsOldBinary(t *testing.T) {
 	}
 	if ents, _ := os.ReadDir(Dir(u2.Home)); len(ents) != 1 {
 		t.Fatalf("left files behind: %v", ents)
+	}
+}
+
+// A build with its own channel checks signed sums instead of the
+// attestation and sends its credentials on every request.
+func TestSignedSumsAndAuthorize(t *testing.T) {
+	sign := func(sums, sig []byte) error {
+		if string(sig) != "good:"+sum(string(sums)) {
+			return errors.New("bad signature")
+		}
+		return nil
+	}
+	auth := func(r *http.Request) error { r.Header.Set("Authorization", "Bearer t0k"); return nil }
+	sums := func(body string) string {
+		return sum(body) + "  fleet-linux-amd64\n0000000000000000000000000000000000000000000000000000000000000000  fleet-darwin-arm64\n"
+	}
+
+	r := &release{tag: "v1.1.0", body: "new"}
+	r.sum = sum(r.body)
+	r.sig = "good:" + sum(sums(r.body))
+	u, exe := setup(t, r)
+	VerifySums, Authorize = sign, auth
+	u.Verify = nil // the signed sums replace the attestation
+	u.Quiet = func() bool { return true }
+	if !u.Step(context.Background()) || content(t, exe) != "new" {
+		t.Fatalf("signed release not applied: %+v", Load(u.Home))
+	}
+	if n := r.unauthorized.Load(); n != 0 {
+		t.Fatalf("%d requests without credentials", n)
+	}
+
+	for name, sig := range map[string]string{"bad": "good:" + sum("other"), "missing": ""} {
+		r := &release{tag: "v1.1.0", body: "new", sig: sig}
+		r.sum = sum(r.body)
+		u, exe := setup(t, r)
+		VerifySums, Authorize = sign, auth
+		u.Verify = nil
+		u.Quiet = func() bool { return true }
+		if u.Step(context.Background()) || content(t, exe) != "old" || r.downloads.Load() != 0 {
+			t.Fatalf("%s signature: applied or downloaded: %+v", name, Load(u.Home))
+		}
 	}
 }
 

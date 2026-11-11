@@ -46,6 +46,7 @@ type Binding struct {
 	Chord []string         // keys it binds in the ChordTable tmux key table
 	Desc  string           // one-line explanation
 	Hints map[Scope]string // optional short hint item per scope, e.g. "Alt-z zoom"
+	Ext   bool             // added by a build-tagged extension, which documents it itself
 }
 
 // Bindings is the ordered registry.
@@ -322,12 +323,16 @@ func wrap(s string, w int) []string {
 
 // Markdown returns the registry as a Markdown table plus the footer line:
 // the content of the DESIGN.md keys block.
-func Markdown() string {
+func Markdown() string { return markdown(false) }
+
+// markdown is Markdown, without the extensions' keys when noExt is set:
+// what the public docs hold.
+func markdown(noExt bool) string {
 	var b strings.Builder
 	b.WriteString("| Group | Key | Description |\n|---|---|---|\n")
 	for _, g := range Groups {
 		for _, r := range Bindings {
-			if r.Group == g {
+			if r.Group == g && !(noExt && r.Ext) {
 				b.WriteString("| " + string(g) + " | `" + r.Key + "` | " + r.Desc + " |\n")
 			}
 		}
@@ -335,3 +340,8 @@ func Markdown() string {
 	b.WriteString("\n`Alt-?` (tmux) · `?` (overview): show this list.\n")
 	return b.String()
 }
+
+// ExtOverviewHint is what build-tagged extensions add to the overview hint
+// before "? all keys", e.g. " · i inbox"; empty in a default build. Tests
+// use it to expect the exact hint either way.
+var ExtOverviewHint string

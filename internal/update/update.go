@@ -28,11 +28,27 @@ import (
 	"github.com/sturlabragason/fleet/internal/logx"
 )
 
-const (
-	// Repo is where releases come from.
+// Where releases come from. Both are variables so a build can point its
+// updates elsewhere with -ldflags -X (DESIGN §15, "Extensions").
+var (
+	// Repo is the GitHub repo whose releases and attestations are checked.
 	Repo = "sturlabragason/fleet"
-	// DefaultBaseURL is the releases page; FLEET_UPDATE_URL overrides it.
-	DefaultBaseURL = "https://github.com/" + Repo + "/releases"
+	// DefaultBaseURL is the releases page; empty is Repo's GitHub releases.
+	// FLEET_UPDATE_URL overrides it.
+	DefaultBaseURL = ""
+)
+
+// Hooks for a build with its own release channel; nil in a default build.
+var (
+	// VerifySums checks SHA256SUMS against the SHA256SUMS.sig next to it
+	// before any sum in it is trusted. When set, it replaces the
+	// attestation check.
+	VerifySums func(sums, sig []byte) error
+	// Authorize adds credentials to every update request.
+	Authorize func(r *http.Request) error
+)
+
+const (
 	// DefaultEvery is how often a release install checks for a new release.
 	DefaultEvery = 6 * time.Hour
 	// RetryFailed is how long a release that failed to download, verify or
@@ -162,7 +178,7 @@ type Updater struct {
 	Home    string // ~/.fleet
 	Exe     string // the binary to replace (symlinks resolved)
 	Current string // the running release tag
-	BaseURL string // FLEET_UPDATE_URL, else DefaultBaseURL, when empty
+	BaseURL string // FLEET_UPDATE_URL, else DefaultBaseURL, else Repo's releases, when empty
 	Target  string // Target() when empty
 	Every   time.Duration
 	Client  *http.Client
@@ -200,7 +216,18 @@ func (u *Updater) base() string {
 	if v := os.Getenv("FLEET_UPDATE_URL"); v != "" {
 		return strings.TrimRight(v, "/")
 	}
-	return DefaultBaseURL
+	if DefaultBaseURL != "" {
+		return strings.TrimRight(DefaultBaseURL, "/")
+	}
+	return "https://github.com/" + Repo + "/releases"
+}
+
+// authorize applies Authorize to req, if set.
+func authorize(req *http.Request) error {
+	if Authorize == nil {
+		return nil
+	}
+	return Authorize(req)
 }
 
 func (u *Updater) target() string {
@@ -326,6 +353,9 @@ func (u *Updater) Latest(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if err := authorize(req); err != nil {
+		return "", err
+	}
 	resp, err := c.Do(req)
 	if err != nil {
 		return "", err
@@ -356,6 +386,15 @@ func (u *Updater) Stage(ctx context.Context, version string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if VerifySums != nil {
+		sig, err := u.get(ctx, url+"SHA256SUMS.sig", maxSums)
+		if err != nil {
+			return "", err
+		}
+		if err := VerifySums(sums, sig); err != nil {
+			return "", fmt.Errorf("SHA256SUMS signature: %w", err)
+		}
+	}
 	want, err := sumFor(sums, asset)
 	if err != nil {
 		return "", err
@@ -379,6 +418,9 @@ func (u *Updater) Stage(ctx context.Context, version string) (string, error) {
 		return "", err
 	}
 	verify, probe := u.Verify, u.Probe
+	if verify == nil && VerifySums != nil {
+		verify = func(string) error { return nil } // the signed sums cover it
+	}
 	if verify == nil {
 		verify = Attest
 	}
@@ -403,6 +445,9 @@ func (u *Updater) Stage(ctx context.Context, version string) (string, error) {
 func (u *Updater) get(ctx context.Context, url string, limit int64) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
+		return nil, err
+	}
+	if err := authorize(req); err != nil {
 		return nil, err
 	}
 	resp, err := u.client().Do(req)
