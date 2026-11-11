@@ -2,6 +2,8 @@
 package ui
 
 import (
+	"time"
+
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/team"
 )
@@ -19,6 +21,12 @@ type AdmiralBackend interface {
 	Admirals() []AdmiralInfo // main first; more than one turns the owner chips on
 	BadgeBy() string         // " ● main 1 · print 2 ", "" for none
 	PickOwner(agent string) error
+}
+
+// OfflineBackend says since when fleet has found the network down, zero
+// while it is up (ADR-110).
+type OfflineBackend interface {
+	OfflineSince() time.Time
 }
 
 // PollBackend is a Backend that can answer one poll more cheaply: ForPoll

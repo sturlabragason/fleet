@@ -15,6 +15,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/netwatch"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/tmux"
 	"github.com/sturlabragason/fleet/internal/watch"
@@ -65,6 +66,9 @@ func cmdWatch(f *fleet.Fleet, args []string) error {
 	// agent, run somebody's done-check or claim a queued spawn it will
 	// exit before starting.
 	f.Housekeeping = true
+	if netwatch.Enabled() { // outages are held, then resumed (ADR-110)
+		f.NetProbe = netwatch.Probe
+	}
 	// Those done-checks may take minutes; off the loop they cannot stall it.
 	f.Async()
 	// Each refresh's one tmux read is shared, so the overview makes no

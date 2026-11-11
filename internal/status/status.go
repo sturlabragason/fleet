@@ -31,6 +31,10 @@ const (
 	// (DESIGN §7, ADR-44): on the board with no pane, keeping its session
 	// id, so `fleet wake` resumes the same conversation in place.
 	Parked Status = "parked"
+	// Offline is a live agent whose turn failed while fleet found the
+	// network down (DESIGN §7e, ADR-110): held, not an error, and sent a
+	// "continue" when the network is back.
+	Offline Status = "offline"
 )
 
 // DefaultPatterns, per tool. Detect reads the last Window non-empty lines:

@@ -49,6 +49,8 @@ tmux -L fleet list-panes -a -F '#{pane_id} #{@role} #{@fleet_agent} #{pane_dead}
 
 **The overview pane is gone or dead.** Run `fleet up` again. It recreates or respawns the overview pane and doesn't touch running agents.
 
+**The header says `⊘ offline since HH:MM`.** The network went away (ADR-110). While it is down, fleet probes a few public API hosts every 5 s (every 30 s when online). Agents whose turn fails show `offline` with ⊘ instead of `error`, an ACP host that dies is not reported as a crash or closed, new spawns wait in the queue ("waiting for the network"), and reports to the admiral wait too. After 20 s offline the admiral gets one "network down" report. When the network is back, fleet sends `continue` to the agents that failed, restarts dead hosts on their saved session, starts the queue and tells the admiral once which agents it resumed. An agent that fails again gets `continue` again after 30 s, 2 min and 8 min, then fleet leaves it alone. Behind a proxy fleet probes the `HTTPS_PROXY` host. `FLEET_NET_PROBE=host:port,...` picks other probe targets, `FLEET_NET_PROBE=off` turns the check off.
+
 **An agent is listed as `gone`.** Its pane no longer exists (closed outside fleet, or the server was restarted). `fleet close <name>` removes it from the board.
 
 **Start over.** `tmux -L fleet kill-server` stops every agent and the admiral. Then delete `~/.fleet/board.json` if you want an empty board.

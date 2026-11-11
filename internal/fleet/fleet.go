@@ -99,6 +99,12 @@ type Fleet struct {
 	// FreeMem reads free memory for the guard; nil = /proc/meminfo (tests
 	// replace it).
 	FreeMem func() (uint64, error)
+	// NetProbe reports whether the network is up; the resident poll calls
+	// it (ADR-110). nil switches outage handling off (tests, one-shots).
+	NetProbe func() bool
+	// NetSync runs the probe in the poll instead of the background (tests).
+	NetSync bool
+	net     netState
 	// SummaryModel replaces the model behind PeekSummary; nil builds the
 	// CLI backend from the [summary] section of config.toml. Tests set it.
 	SummaryModel summary.Model

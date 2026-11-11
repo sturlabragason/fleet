@@ -18,6 +18,10 @@ package fake
 //	[rich]     a thought, a tool call pending then completed after the [slow]
 //	           gap, and a markdown reply, for looking at the pane (ADR-85)
 //
+// While the file named by FAKE_ACP_NET exists, session/new, load, resume
+// and prompt fail with the error copilot gives without a network (the
+// fake failing transport of ADR-110's tests).
+//
 // Every prompt's response carries usage, as agy's does: 100 input and 10
 // output tokens.
 //
@@ -163,6 +167,18 @@ func ServeACP(in io.Reader, out io.Writer, opt ACPOptions) error {
 	}
 }
 
+// NetDownError is copilot's error with no network (captured 2026-11-11).
+const NetDownError = "error sending request for url (https://api.example.org/meta): client error (Connect): tcp connect error: Network is unreachable (os error 101)"
+
+func netDown() bool {
+	p := os.Getenv("FAKE_ACP_NET")
+	if p == "" {
+		return false
+	}
+	_, err := os.Stat(p)
+	return err == nil
+}
+
 func randomID() string {
 	var b [8]byte
 	_, _ = rand.Read(b[:])
@@ -237,6 +253,13 @@ func (s *server) handle(b []byte) {
 		return
 	}
 	isReq := len(m.ID) > 0
+	if isReq && netDown() {
+		switch m.Method {
+		case acp.MethodSessionNew, acp.MethodSessionLoad, acp.MethodSessionResume, acp.MethodSessionPrompt:
+			s.fail(m.ID, -32603, NetDownError)
+			return
+		}
+	}
 	switch m.Method {
 	case acp.MethodInitialize:
 		s.initialize(m)

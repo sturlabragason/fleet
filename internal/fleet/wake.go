@@ -295,6 +295,11 @@ func (f *Fleet) DeliverWakeTo(box string) {
 	if box == mail.Supervisor {
 		f.syncBadge()
 	}
+	if off, _ := f.Offline(); off {
+		// The admiral can't take a turn offline; the queue waits and its
+		// tries are not spent (ADR-110).
+		return
+	}
 	f.resubmitTyped(box)
 	b, err := os.ReadFile(f.wakePath(box))
 	if err != nil {

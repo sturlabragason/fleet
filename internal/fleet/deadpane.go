@@ -36,7 +36,8 @@ type deadJob struct {
 // closes at once, a crash after its profile's dead_pane_grace. A close is
 // retried at most once per sweepEvery. Git and capture run in the
 // background, one run at a time; a busy run leaves the rest for a later poll.
-func (f *Fleet) reapDead(as []*board.Agent, panes map[string]tmux.PaneInfo, now time.Time) {
+// off holds every dead pane for the outage (ADR-110): no report, no close.
+func (f *Fleet) reapDead(as []*board.Agent, panes map[string]tmux.PaneInfo, now time.Time, off bool) {
 	var jobs []deadJob
 	f.dead.mu.Lock()
 	if f.dead.tried == nil {
@@ -49,8 +50,10 @@ func (f *Fleet) reapDead(as []*board.Agent, panes map[string]tmux.PaneInfo, now 
 		case a.ACP() && (a.Status == string(status.Parked) || (!a.Closing.IsZero() && now.Sub(a.Closing) < acpClosingFor)):
 			// A park or close in progress: an acp host exits on its stop
 			// request just before fleet kills its window.
+		case a.Exit == nil && f.holdDead(a, p, off, now):
 		case a.Exit == nil:
 			jobs = append(jobs, deadJob{a: a, pane: p, fresh: true})
+		case off:
 		case closeDue(a.Exit, f.Prefs.For(a.Profile).DeadPaneGrace, now) && now.Sub(f.dead.tried[a.Name]) >= sweepEvery:
 			jobs = append(jobs, deadJob{a: a, pane: p})
 		}
