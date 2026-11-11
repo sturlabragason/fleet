@@ -61,3 +61,7 @@ func shortVersion(linked, module string) string {
 	}
 	return rev
 }
+
+// channel is "release" in a release build (-X main.channel=release in
+// .goreleaser.yaml): only those upgrade themselves (ADR-114).
+var channel string

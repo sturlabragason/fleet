@@ -57,6 +57,7 @@ var CLIParity = map[string]string{
 	"version":         "fleet_changes",
 	"config":          "user: explains the user's own config.toml layers",
 	"doctor":          "user: a pre-flight check of the user's machine before fleet up",
+	"update":          "user: the auto-upgrade state and a manual upgrade; the admiral is told of upgrades on its next tool result (ADR-114)",
 	"watch":           "infra: the status watcher fleet up starts",
 	"web":             "user: a browser view the user starts",
 	"hook":            "infra: tool hooks call it",

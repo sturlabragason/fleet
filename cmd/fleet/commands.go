@@ -206,6 +206,8 @@ const usage = `usage:
   fleet keys [--markdown]                   list every hotkey (Alt-? in tmux, ? in the overview)
   fleet changes [--json]                    what's new in fleet: its latest features, newest first (Alt-g)
   fleet version                             the release tag and commit this binary was built from
+  fleet update [--check | --now]            auto-upgrade state of a release install; --check asks GitHub for
+                                            the latest release, --now installs it at once (ADR-114)
   fleet doctor [--json]                     pre-flight check: tmux version, UTF-8 locale, ~/.local/bin on
                                             PATH, config.toml and tools.toml parse, and the command of the
                                             admiral's profile and of each profile you define is found.
@@ -436,6 +438,8 @@ func run(args []string) error {
 		return cmdSnap(f, rest)
 	case "watch":
 		return cmdWatch(f, rest)
+	case "update":
+		return cmdUpdate(f, rest)
 	case "hook":
 		return cmdHook(f, rest)
 	case "web":

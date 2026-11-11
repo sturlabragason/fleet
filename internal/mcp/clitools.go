@@ -36,7 +36,7 @@ var cliToolDefs = []tool{
 		"name": str("new admiral name"), "profile": str("tool profile (default: main's), see fleet_profiles")})},
 	{"fleet_admiral_close", "Close another admiral (main only, only when the user asks): its pane closes and its agents and unread reports come to main.", obj([]string{"name"}, map[string]any{
 		"name": str("admiral name, see fleet_admirals")})},
-	{"fleet_changes", "What's new in fleet: the running version and its latest changelog lines, newest first. Use when the user asks what changed, or after [fleet updated].", obj(nil, map[string]any{
+	{"fleet_changes", "What's new in fleet: the running version and its latest changelog lines, newest first. Use when the user asks what changed, or after [fleet updated] or [fleet upgraded itself].", obj(nil, map[string]any{
 		"limit": map[string]any{"type": "integer", "description": "lines to return (default 15)"}})},
 }
 
