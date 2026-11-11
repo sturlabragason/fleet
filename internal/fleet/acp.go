@@ -9,7 +9,9 @@ import (
 	"hash/fnv"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -182,6 +184,10 @@ func (f *Fleet) acpSetup(name, profile string, p tools.Profile, mode string, v t
 // commandPath finds cmd as the agent's window would: ~/.local/bin first,
 // then PATH (tools.Profile.EnvList).
 func commandPath(cmd string) (string, error) {
+	if runtime.GOOS == "windows" {
+		// No exec bits there; LookPath tries the PATHEXT extensions (.exe, .cmd).
+		return exec.LookPath(cmd)
+	}
 	if strings.Contains(cmd, "/") {
 		if fi, err := os.Stat(cmd); err != nil || fi.IsDir() || fi.Mode()&0o111 == 0 {
 			return "", fmt.Errorf("%s is not an executable", cmd)

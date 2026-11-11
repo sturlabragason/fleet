@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
@@ -77,8 +78,8 @@ func (f *Fleet) DefaultDriver(profile string) string {
 // (tools.ShellCommand), whose profile may add dirs this process lacks. A
 // login profile that hangs must not hang the spawn.
 func lookCmd(cmd string) error {
-	if _, err := commandPath(cmd); err == nil {
-		return nil
+	if _, err := commandPath(cmd); err == nil || runtime.GOOS == "windows" {
+		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
