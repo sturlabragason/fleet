@@ -32,5 +32,9 @@ require (
 	golang.org/x/text v0.28.0 // indirect
 )
 
-// Withdrawn: use v1.1.1 or later.
-retract v1.1.0
+retract (
+	// Withdrawn: use v1.1.1 or later.
+	v1.1.0
+	// Withdrawn: use v1.20.0 or later.
+	v1.19.0
+)
