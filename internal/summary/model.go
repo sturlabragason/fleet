@@ -8,8 +8,9 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"syscall"
 	"time"
+
+	"github.com/sturlabragason/fleet/internal/sysx"
 )
 
 // waitDelay is how long Run waits for a killed CLI's children to let go of
@@ -93,8 +94,7 @@ func (c *CLI) Summarize(ctx context.Context, prompt string) (string, error) {
 	ex := exec.CommandContext(ctx, cmd, out...)
 	// Its own process group, killed as a group: the CLI's children must not
 	// outlive the call or keep its pipes open.
-	ex.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	ex.Cancel = func() error { return syscall.Kill(-ex.Process.Pid, syscall.SIGKILL) }
+	sysx.KillGroupOnCancel(ex)
 	ex.WaitDelay = waitDelay
 	ex.Dir = c.Dir
 	if ex.Dir == "" {

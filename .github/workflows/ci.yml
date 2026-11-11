@@ -81,6 +81,42 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y tmux
       - run: go test -race ./...
 
+  # The portable Windows fleet.exe: build it like make build, smoke-test what
+  # runs without tmux, keep it as an artifact.
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build fleet.exe
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          v=$(git describe --tags --always --dirty)
+          mkdir -p bin
+          go build -trimpath -ldflags "-X main.version=$v" -o bin/fleet.exe ./cmd/fleet
+          go build -o bin/fakeagent.exe ./cmd/fakeagent
+          ls -l bin
+      - name: Unit tests of the OS layer
+        run: go test ./internal/sysx/
+      - name: Smoke test
+        env:
+          FLEET_CONFIG: ${{ runner.temp }}/no-config.toml
+        run: scripts/windows-smoke.sh bin/fleet.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fleet-windows-amd64
+          path: bin/fleet.exe
+
   # install.sh (ADR-78): lint it, then install the latest release with it, as
   # a user would: curl on ubuntu, busybox sh and wget in alpine.
   install:

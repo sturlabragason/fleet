@@ -11,6 +11,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/sturlabragason/fleet/internal/sysx"
 )
 
 // StaleAfter is how long a heartbeat counts as live. The watcher writes one
@@ -93,11 +95,11 @@ func Claim(home string, now time.Time) (Beat, error) {
 	if err != nil {
 		return Beat{}, err
 	}
-	err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	err = sysx.Flock(f, sysx.LockEx|sysx.LockNB)
 	if err != nil {
 		// Running probes with a brief shared lock; give such a probe time to let go.
 		time.Sleep(50 * time.Millisecond)
-		err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		err = sysx.Flock(f, sysx.LockEx|sysx.LockNB)
 	}
 	if err != nil {
 		f.Close()
@@ -178,8 +180,8 @@ func flockHolder(home string) (int, bool) {
 		return 0, false
 	}
 	defer f.Close()
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err == nil {
-		syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	if err := sysx.Flock(f, sysx.LockSh|sysx.LockNB); err == nil {
+		sysx.Flock(f, sysx.LockUn)
 		return 0, false
 	}
 	pid, _ := lockPID(home)

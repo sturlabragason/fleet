@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/sysx"
 )
 
 // lockDir holds one lock file per trust store, under fleet's own home so
@@ -82,12 +82,12 @@ func lock(path string) (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(fh.Fd()), syscall.LOCK_EX); err != nil {
+	if err := sysx.Flock(fh, sysx.LockEx); err != nil {
 		fh.Close()
 		return nil, fmt.Errorf("lock %s: %w", fh.Name(), err)
 	}
 	return func() {
-		syscall.Flock(int(fh.Fd()), syscall.LOCK_UN)
+		sysx.Flock(fh, sysx.LockUn)
 		fh.Close()
 	}, nil
 }

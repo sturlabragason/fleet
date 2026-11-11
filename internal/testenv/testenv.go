@@ -15,6 +15,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/sturlabragason/fleet/internal/sysx"
 )
 
 // Env is the variable that marks a process as started by a test run. Its
@@ -163,7 +165,7 @@ func Reap(ps []Proc) {
 		if s := testSocket(p.PID); s != "" {
 			socks = append(socks, s)
 		}
-		syscall.Kill(p.PID, syscall.SIGTERM)
+		sysx.Kill(p.PID, syscall.SIGTERM)
 	}
 	for end := time.Now().Add(2 * time.Second); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
 		alive := false
@@ -176,7 +178,7 @@ func Reap(ps []Proc) {
 	}
 	for _, p := range ps {
 		if running(p.PID) {
-			syscall.Kill(p.PID, syscall.SIGKILL)
+			sysx.Kill(p.PID, syscall.SIGKILL)
 		}
 	}
 	for _, s := range socks {

@@ -17,6 +17,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/keys"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/supervisor"
+	"github.com/sturlabragason/fleet/internal/sysx"
 	"github.com/sturlabragason/fleet/internal/theme"
 	"github.com/sturlabragason/fleet/internal/tools"
 	"github.com/sturlabragason/fleet/internal/wall"
@@ -331,7 +332,7 @@ func rethemeWith(f *fleet.Fleet, stopWatcher bool) {
 		}
 	}
 	if pid, ok := watch.Running(f.Home); stopWatcher && ok {
-		if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
+		if err := sysx.Kill(pid, syscall.SIGTERM); err != nil {
 			log.Error("stop watcher for the new palette", "pid", pid, "err", err)
 		} else {
 			waitWatcherGone(f.Home, pid, 5*time.Second)

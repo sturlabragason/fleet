@@ -18,10 +18,10 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/sysx"
 )
 
 const (
@@ -100,7 +100,7 @@ func (s *Server) initReload() {
 		s.Probe = probe
 	}
 	if s.Exec == nil {
-		s.Exec = syscall.Exec
+		s.Exec = sysx.Exec
 	}
 	if s.Now == nil {
 		s.Now = time.Now

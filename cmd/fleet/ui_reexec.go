@@ -6,10 +6,10 @@ import (
 	"os"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/sysx"
 	"github.com/sturlabragason/fleet/internal/watch"
 )
 
@@ -81,5 +81,5 @@ func (r *uiReexec) run(ctx context.Context, every time.Duration) {
 // and environment).
 func (r *uiReexec) exec(exe string) error {
 	logx.For("ui").Info("re-exec", "exe", exe, "pid", os.Getpid())
-	return syscall.Exec(exe, os.Args, os.Environ())
+	return sysx.Exec(exe, os.Args, os.Environ())
 }

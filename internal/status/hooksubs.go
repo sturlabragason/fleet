@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/sysx"
 )
 
 // SubsDir is where the tools' own SubagentStart/SubagentStop hooks keep each
@@ -165,10 +165,10 @@ func RecordSubs(home, agent, event string, p Payload, now time.Time) error {
 		return err
 	}
 	defer lf.Close()
-	if err := syscall.Flock(int(lf.Fd()), syscall.LOCK_EX); err != nil {
+	if err := sysx.Flock(lf, sysx.LockEx); err != nil {
 		return err
 	}
-	defer syscall.Flock(int(lf.Fd()), syscall.LOCK_UN)
+	defer sysx.Flock(lf, sysx.LockUn)
 	h, _ := readSubs(home, agent)
 	data, err := json.Marshal(applySub(h, event, p, now))
 	if err != nil {

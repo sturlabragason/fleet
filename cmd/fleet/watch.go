@@ -17,6 +17,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/netwatch"
 	"github.com/sturlabragason/fleet/internal/status"
+	"github.com/sturlabragason/fleet/internal/sysx"
 	"github.com/sturlabragason/fleet/internal/tmux"
 	"github.com/sturlabragason/fleet/internal/watch"
 )
@@ -111,7 +112,7 @@ func reexecWatcher(exe string) error {
 	if err := probeBinary(exe); err != nil {
 		return err
 	}
-	return syscall.Exec(exe, os.Args, os.Environ())
+	return sysx.Exec(exe, os.Args, os.Environ())
 }
 
 // probeBinary checks that the binary at exe runs (`exe watch --probe` says
@@ -177,7 +178,7 @@ func startWatcher(f *fleet.Fleet) {
 			return
 		}
 		log.Info("watcher runs an old binary; replacing it", "pid", pid, "exe", f.Exe)
-		if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
+		if err := sysx.Kill(pid, syscall.SIGTERM); err != nil {
 			log.Error("stop old watcher", "pid", pid, "err", err)
 			return
 		}
@@ -187,7 +188,7 @@ func startWatcher(f *fleet.Fleet) {
 		}
 	}
 	cmd := exec.Command(f.Exe, "watch")
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	sysx.Detach(cmd)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
 	if err := cmd.Start(); err != nil {
 		log.Error("start watcher", "err", err)
