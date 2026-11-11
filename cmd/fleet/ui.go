@@ -137,7 +137,7 @@ func (b *backend) OnWall() map[string]bool {
 func (b *backend) Teams() map[string]team.Info { return b.f.Teams.ByAgent() }
 func (b *backend) Show(name string) (bool, error) {
 	defer b.acted()
-	p, err := b.f.Pane(name)
+	p, _, err := b.f.PaneOrWake(name)
 	if err != nil {
 		return false, err
 	}
@@ -145,7 +145,7 @@ func (b *backend) Show(name string) (bool, error) {
 }
 func (b *backend) Add(name string) (bool, error) {
 	defer b.acted()
-	p, err := b.f.Pane(name)
+	p, _, err := b.f.PaneOrWake(name)
 	if err != nil {
 		return false, err
 	}

@@ -654,6 +654,18 @@ func wallVerb(f *fleet.Fleet, w *wall.Wall, args []string) (string, error) {
 		pane, err = f.Pane(args[1])
 		return args[1], pane, err
 	}
+	// show and add wake a parked agent first (#45); woken prefixes the result.
+	woken := ""
+	waking := func() (name, pane string, err error) {
+		if len(args) < 2 {
+			return "", "", fmt.Errorf("usage: fleet wall %s NAME", args[0])
+		}
+		pane, woke, err := f.PaneOrWake(args[1])
+		if woke {
+			woken = "woke " + args[1] + "; "
+		}
+		return args[1], pane, err
+	}
 	switch args[0] {
 	case "apply":
 		return "", w.Apply()
@@ -714,7 +726,7 @@ func wallVerb(f *fleet.Fleet, w *wall.Wall, args []string) (string, error) {
 		}
 		return "", nil
 	case "add":
-		name, p, err := named()
+		name, p, err := waking()
 		if err != nil {
 			return "", err
 		}
@@ -724,11 +736,11 @@ func wallVerb(f *fleet.Fleet, w *wall.Wall, args []string) (string, error) {
 		case err != nil:
 			return "", err
 		case !ok:
-			return wall.AddFullMsg, nil
+			return woken + wall.AddFullMsg, nil
 		case wasOn:
-			return name + " on wall", nil
+			return woken + name + " on wall", nil
 		}
-		return name + " added to wall", nil
+		return woken + name + " added to wall", nil
 	case "hide":
 		name, p, err := named()
 		if err != nil {
@@ -736,7 +748,7 @@ func wallVerb(f *fleet.Fleet, w *wall.Wall, args []string) (string, error) {
 		}
 		return name + " off wall", w.Hide(p)
 	case "show":
-		name, p, err := named()
+		name, p, err := waking()
 		if err != nil {
 			return "", err
 		}
@@ -747,9 +759,9 @@ func wallVerb(f *fleet.Fleet, w *wall.Wall, args []string) (string, error) {
 			return "", err
 		case !ok:
 			// display-message goes nowhere from a plain shell, so say it here too.
-			return wall.FullMsg, nil
+			return woken + wall.FullMsg, nil
 		}
-		return wall.ShownMsg(name, before, wasOn, before != "" && w.OnWall()[before]), nil
+		return woken + wall.ShownMsg(name, before, wasOn, before != "" && w.OnWall()[before]), nil
 	}
 	return "", fmt.Errorf("unknown wall command %q", args[0])
 }

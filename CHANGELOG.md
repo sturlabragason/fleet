@@ -7,6 +7,7 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
 ## 2026-11-11
+- "Add to wall", "Put in ▶ pane" and "Add as a new pane" on a parked agent (card menu, `Enter`, `a`, `fleet wall show/add`) wake it and show its pane, instead of doing nothing; when the memory guard refuses the wake, the message says so (#45).
 - A `grants.json` that no longer parses no longer gives back mail access you revoked: mail between agents is refused, naming the file, until you repair it or move it aside (a copy is kept in `grants.json.broken`) (ADR-113).
 - `fleet worktrees --prune` and `fleet branches --prune` keep the worktree and branch of an agent closed in the last 24 hours, so `fleet send --resume` can still bring it back (ADR-113).
 - `fleet config explain <profile>` shows every setting a spawn of that profile gets and where it came from (`--driver`, `[profile.<name>]`, `[defaults]`, the tool profile or fleet's default), plus the `FLEET_*` variables set in your shell (ADR-113).
