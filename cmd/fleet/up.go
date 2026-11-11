@@ -62,6 +62,10 @@ func admiralLaunchOf(f *fleet.Fleet, adm, prof, resumeID, boot string) (supLaunc
 	if err := f.CheckCommand(prof, p, ""); err != nil {
 		return supLaunch{}, err
 	}
+	p, _, err := fleet.AdmiralModel(prof, p)
+	if err != nil {
+		return supLaunch{}, err
+	}
 	// Every admiral starts in its own dir under fleet home, outside any git
 	// checkout: Copilot puts the cwd's git state in its prompt, so each
 	// merge in the repo cost a cold prompt-cache rewrite (ADR-93).

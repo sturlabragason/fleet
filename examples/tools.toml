@@ -36,7 +36,7 @@ command = "claude"
 args = ["--model", "opus"]
 prompt_args = ["{prompt}"]
 mode_args = { auto = "--permission-mode bypassPermissions", accept-edits = "--permission-mode acceptEdits", plan = "--permission-mode plan", bypass = "--permission-mode bypassPermissions" }
-env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-personal", CLAUDE_CODE_SUBAGENT_MODEL = "sonnet" }
+env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-personal" }
 launch_id = ["--session-id", "{id}"]
 resume = ["--resume", "{id}"]
 session_path = "~/.claude-personal/projects/*/{id}.jsonl"
@@ -49,7 +49,7 @@ command = "claude"
 args = ["--model", "opus"]
 prompt_args = ["{prompt}"]
 mode_args = { auto = "--permission-mode bypassPermissions", accept-edits = "--permission-mode acceptEdits", plan = "--permission-mode plan", bypass = "--permission-mode bypassPermissions" }
-env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-work", CLAUDE_CODE_SUBAGENT_MODEL = "sonnet" }
+env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-work" }
 launch_id = ["--session-id", "{id}"]
 resume = ["--resume", "{id}"]
 session_path = "~/.claude-work/projects/*/{id}.jsonl"

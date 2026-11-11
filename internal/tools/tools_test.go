@@ -491,8 +491,8 @@ func TestClaudeModelsAreNewest(t *testing.T) {
 			switch {
 			case p.Command == "claude" && model != ClaudeModel:
 				t.Errorf("%s %s: --model %q, want the alias %q", src, name, model, ClaudeModel)
-			case p.Command == "claude" && p.Env["CLAUDE_CODE_SUBAGENT_MODEL"] != ClaudeSubagentModel:
-				t.Errorf("%s %s: subagent model %q, want %q", src, name, p.Env["CLAUDE_CODE_SUBAGENT_MODEL"], ClaudeSubagentModel)
+			case p.Env["CLAUDE_CODE_SUBAGENT_MODEL"] != "":
+				t.Errorf("%s %s: subagent model %q, want none so subagents inherit Opus (ADR-100)", src, name, p.Env["CLAUDE_CODE_SUBAGENT_MODEL"])
 			case p.Command == "copilot" && strings.HasPrefix(model, "claude") && model != CopilotClaudeModel:
 				t.Errorf("%s %s: --model %q, want %q", src, name, model, CopilotClaudeModel)
 			}
@@ -655,7 +655,7 @@ func TestClaudeACPProfile(t *testing.T) {
 	}
 	env := p.ACPEnv("/usr/local/bin/claude")
 	if env["CLAUDE_CODE_EXECUTABLE"] != "/usr/local/bin/claude" || env["ANTHROPIC_MODEL"] != ClaudeModel ||
-		env["CLAUDE_CODE_SUBAGENT_MODEL"] != ClaudeSubagentModel {
+		env["CLAUDE_CODE_SUBAGENT_MODEL"] != "" {
 		t.Errorf("acp env %v", env)
 	}
 	// Terms (ADR-76): no API key or token is ever set, and one inherited is dropped.
@@ -691,7 +691,7 @@ func TestClaudeTmuxArgvUnchanged(t *testing.T) {
 	if !embedded || !reflect.DeepEqual(got, want) {
 		t.Errorf("%q\nwant %q", got, want)
 	}
-	if e := ps["claude"].Env; len(e) != 1 || e["CLAUDE_CODE_SUBAGENT_MODEL"] != ClaudeSubagentModel {
+	if e := ps["claude"].Env; len(e) != 0 {
 		t.Errorf("claude tmux env %v", e)
 	}
 }

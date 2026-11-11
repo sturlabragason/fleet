@@ -234,14 +234,13 @@ func (p Profile) HasMode(mode string) bool {
 const ClaudeACPVersion = "0.103.0"
 
 // Models for the built-in Claude profiles (ADR-63). The claude CLI takes the
-// aliases "opus" and "sonnet", which always resolve to the newest model, so
-// they never drift. The Copilot CLI needs an exact id, so CopilotClaudeModel
+// alias "opus", which always resolves to the newest model, so it never
+// drifts; its subagents inherit it (ADR-100). The Copilot CLI needs an exact id, so CopilotClaudeModel
 // is the one place to bump it; a test fails if a built-in or example profile
 // pins anything else.
 const (
-	CopilotClaudeModel  = "claude-opus-5.5"
-	ClaudeModel         = "opus"
-	ClaudeSubagentModel = "sonnet"
+	CopilotClaudeModel = "claude-opus-5.5"
+	ClaudeModel        = "opus"
 )
 
 // copilotModels and claudeModels are the model keys of the built-in
@@ -323,7 +322,6 @@ acp_mode_args = { auto = "--allow-all", autopilot = "--allow-all" }
 [claude]
 command = "claude"
 args = ["--model", "` + ClaudeModel + `", "--exclude-dynamic-system-prompt-sections"]
-env = { CLAUDE_CODE_SUBAGENT_MODEL = "` + ClaudeSubagentModel + `" }
 prompt_args = ["{prompt}"]
 mode_args = { auto = "--permission-mode bypassPermissions", accept-edits = "--permission-mode acceptEdits", plan = "--permission-mode plan", bypass = "--permission-mode bypassPermissions" }
 launch_id = ["--session-id", "{id}"]
