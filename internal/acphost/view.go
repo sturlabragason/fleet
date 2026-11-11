@@ -3,11 +3,9 @@ package acphost
 import (
 	"fmt"
 	"io"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
-	"unicode/utf8"
 
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
@@ -55,11 +53,13 @@ type view struct {
 	blocks                []*block
 	tools                 map[string]*block // tool call id → its line
 	asks                  map[string]*block // tool call id → its open question
-	buf                   []rune
-	pastes                []string // collapsed pastes; buf holds pasteRune(i) for pastes[i]
-	dirty                 bool     // buf changed since the last draw
-	scroll                int      // lines scrolled back from the bottom
-	page                  int      // body height at the last draw, for PgUp
+	ed                    editor
+	dirty                 bool  // the box changed since the last draw
+	inTop                 int   // first box row shown, when it is taller than its room
+	inRows                []row // box rows on screen at the last draw
+	inY, inX              int   // 1-based screen row and column of their first cell
+	scroll                int   // lines scrolled back from the bottom
+	page                  int   // body height at the last draw, for PgUp
 }
 
 func newView(out io.Writer, size func() (int, int), p colorprofile.Profile, name, profile string) *view {
@@ -180,14 +180,11 @@ func (v *view) push(b *block) {
 	}
 }
 
-// edit changes the input line; flush draws it.
-func (v *view) edit(fn func(buf []rune) []rune) {
+// edit changes the input box; flush draws it.
+func (v *view) edit(fn func(*editor)) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	v.buf = fn(v.buf)
-	if len(v.buf) == 0 {
-		v.pastes = nil
-	}
+	fn(&v.ed)
 	v.dirty = true
 }
 
@@ -210,56 +207,40 @@ const (
 
 func isPasteRune(r rune) bool { return r >= pasteBase && r <= 0xFFFFD }
 
-// paste puts pasted text into the input line, collapsed if it is long.
-func (v *view) paste(s string) {
-	if s == "" {
-		return
-	}
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	v.dirty = true
-	if !strings.Contains(s, "\n") && utf8.RuneCountInString(s) <= pasteMax {
-		v.buf = append(v.buf, []rune(s)...)
-		return
-	}
-	v.buf = append(v.buf, rune(pasteBase+len(v.pastes)))
-	v.pastes = append(v.pastes, s)
-}
+// paste puts pasted text into the input box at the cursor.
+func (v *view) paste(s string) { v.edit(func(e *editor) { e.paste(s) }) }
 
-// pasteLabel is how collapsed paste i shows in the input line.
-func (v *view) pasteLabel(r rune) string {
-	i := int(r - pasteBase)
-	if i >= len(v.pastes) {
-		return ""
-	}
-	if n := strings.Count(strings.TrimRight(v.pastes[i], "\n"), "\n") + 1; n > 1 {
-		return fmt.Sprintf("[Paste #%d +%d lines]", i+1, n)
-	}
-	return fmt.Sprintf("[Paste #%d %d chars]", i+1, utf8.RuneCountInString(v.pastes[i]))
-}
-
-// take empties the input line and returns what it held, pastes expanded.
-func (v *view) take() string {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	var b strings.Builder
-	for _, r := range v.buf {
-		if isPasteRune(r) {
-			if i := int(r - pasteBase); i < len(v.pastes) {
-				b.WriteString(v.pastes[i])
-			}
-			continue
-		}
-		b.WriteRune(r)
-	}
-	v.buf, v.pastes, v.dirty = v.buf[:0], nil, true
-	return b.String()
+// take empties the input box and returns what it held, pastes expanded.
+func (v *view) take() (s string) {
+	v.edit(func(e *editor) { s = e.take() })
+	return s
 }
 
 func (v *view) empty() bool {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	return len(v.buf) == 0
+	return v.ed.empty()
+}
+
+// click puts the cursor where the mouse clicked, if that is in the box
+// (x and y are 1-based screen cells).
+func (v *view) click(x, y int) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	k := y - v.inY
+	if k < 0 || k >= len(v.inRows) {
+		return
+	}
+	v.ed.click(v.inRows[k], max(x-v.inX, 0))
+	v.draw()
+}
+
+// scrollLines moves the conversation by n lines: positive is back in time.
+func (v *view) scrollLines(n int) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.scroll = max(v.scroll+n, 0)
+	v.draw()
 }
 
 // scrollBy moves the conversation by n pages: positive is back in time.
@@ -324,11 +305,11 @@ func (v *view) frame(w, h int) (rows []string, cx, cy int) {
 	if h >= 8 {
 		hint = v.hint(w)
 	}
-	input, cx := v.input(w)
+	input, cx, crow := v.input(w, inputRows(h))
 	if h >= 6 {
 		bottom = append(bottom, "") // the rule, drawn once the scroll is known
 	}
-	bottom = append(bottom, input)
+	bottom = append(bottom, input...)
 	if hint != "" {
 		bottom = append(bottom, hint)
 	}
@@ -350,11 +331,20 @@ func (v *view) frame(w, h int) (rows []string, cx, cy int) {
 	if len(rows) > h {
 		rows = rows[len(rows)-h:]
 	}
-	cy = len(rows)
+	v.inY = len(rows) - len(input) + 1
 	if hint != "" {
-		cy--
+		v.inY--
 	}
-	return rows, cx, cy
+	return rows, cx, v.inY + crow
+}
+
+// inputRows is how many rows the input box may grow to in a pane h rows
+// high: a third of it, at most 10.
+func inputRows(h int) int {
+	if h < 8 {
+		return 1
+	}
+	return min(h/3, 10)
 }
 
 // body is the conversation's last n lines, v.scroll lines back, and how
@@ -577,39 +567,36 @@ func (v *view) rule(w, more int) string {
 		v.pt.paint(sty{fg: pl.rule}, strings.Repeat("─", n))
 }
 
-// input is the input line, clipped from the left to the pane width, and
-// the cursor's column.
-func (v *view) input(w int) (string, int) {
+// input is the input box, wrapped to the pane width and at most n rows
+// high (scrolled to keep the cursor in view), with the cursor's 1-based
+// column and its row among the rows returned. It records the rows for
+// click. Caller holds mu.
+func (v *view) input(w, n int) ([]string, int, int) {
 	pw := ansi.StringWidth(inputPrompt)
-	room := w - pw - 1
-	if room < 1 {
-		room = 1
+	rows, crow, ccol := v.ed.layout(w - pw - 1)
+	n = max(n, 1)
+	if v.inTop > crow {
+		v.inTop = crow
 	}
-	// The tail that fits, measured from the end in one pass: a long line
-	// is clipped on every draw.
-	var parts []string
-	used := 0
-	for i := len(v.buf) - 1; i >= 0; i-- {
-		var p string
-		switch r := v.buf[i]; {
-		case r == '\n':
-			p = "↵"
-		case isPasteRune(r):
-			p = v.pasteLabel(r)
-		default:
-			p = string(r)
-		}
-		pw := ansi.StringWidth(p)
-		if used+pw > room {
-			break
-		}
-		used += pw
-		parts = append(parts, p)
+	if v.inTop < crow-n+1 {
+		v.inTop = crow - n + 1
 	}
-	slices.Reverse(parts)
-	shown := strings.Join(parts, "")
-	s := v.pt.paint(sty{fg: v.pal.you, bold: true}, inputPrompt) + v.pt.paint(sty{fg: v.pal.text}, shown)
-	return s, pw + ansi.StringWidth(shown) + 1
+	v.inTop = max(min(v.inTop, len(rows)-n), 0)
+	shown := rows[v.inTop:min(v.inTop+n, len(rows))]
+	v.inRows, v.inX = shown, pw+1
+	out := make([]string, len(shown))
+	for k, r := range shown {
+		var b strings.Builder
+		for _, c := range r.cells {
+			b.WriteString(c.s)
+		}
+		lead := v.pt.paint(sty{fg: v.pal.you, bold: true}, inputPrompt)
+		if k > 0 || v.inTop > 0 {
+			lead = strings.Repeat(" ", pw)
+		}
+		out[k] = lead + v.pt.paint(sty{fg: v.pal.text}, b.String())
+	}
+	return out, pw + ccol + 1, crow - v.inTop
 }
 
 // hint is the key line under the input; what Enter does follows the state.
@@ -619,7 +606,7 @@ func (v *view) hint(w int) string {
 	if v.status == "working" {
 		enter = "steer"
 	}
-	items := [][2]string{{"Enter", enter}, {"Esc", "cancel turn"}, {"Ctrl-T", "take over"}, {"PgUp/PgDn", "scroll"}}
+	items := [][2]string{{"Enter", enter}, {"Esc", "cancel turn"}, {"Ctrl-T", "take over"}, {"PgUp/PgDn", "scroll"}, {"Alt-Enter", "newline"}}
 	if len(v.asks) > 0 {
 		items = append([][2]string{{"1-9", "answer"}}, items...)
 	}

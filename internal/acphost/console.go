@@ -9,11 +9,11 @@ import (
 	"unicode/utf8"
 )
 
-// The pane as a small console (ADR-82, ADR-85): the conversation above one
-// input line that the user types into (drawn by view.go). The terminal is
-// in raw mode, so the host reads key presses, not lines: Enter sends, Esc
-// cancels the turn, Ctrl-T hands the session to the tool's own screen,
-// PgUp and PgDn scroll the conversation.
+// The pane as a small console (ADR-82, ADR-85): the conversation above an
+// input box that the user types into (editor.go, drawn by view.go). The
+// terminal is in raw mode, so the host reads key presses, not lines: Enter
+// sends, Esc cancels the turn, Ctrl-T hands the session to the tool's own
+// screen, PgUp and PgDn scroll the conversation, and the rest edit the box.
 
 // escWait is how long a lone Esc waits for the rest of an escape sequence
 // before it counts as the Esc key.
@@ -25,6 +25,11 @@ const (
 	// not Enter.
 	PasteOn  = "\x1b[?2004h"
 	PasteOff = "\x1b[?2004l"
+	// SGR mouse reports for button presses and the wheel: a click moves
+	// the cursor in the box. tmux keeps the left drag for its selection
+	// (ADR-38), so copying text still works.
+	MouseOn  = "\x1b[?1000h\x1b[?1006h"
+	MouseOff = "\x1b[?1006l\x1b[?1000l"
 )
 
 // keys reads key presses from r until it closes. The screen is drawn once
@@ -85,44 +90,43 @@ func (h *host) keys(r io.Reader) {
 				queued.Add(-1)
 				switch nb {
 				case '[':
-					switch csi(next) {
-					case "200~":
+					if seq := csi(next); seq == "200~" {
 						paste = []byte{}
-					case "5~":
-						con.scrollBy(1)
-					case "6~":
-						con.scrollBy(-1)
+					} else {
+						h.csiKey(seq)
 					}
-				case 'O':
-					next() // SS3: F1-F4, keypad arrows
+				case 'O': // SS3: arrows, Home and End on some terminals
+					if nb, ok := next(); ok {
+						h.csiKey(string(nb))
+					}
+				default:
+					h.altKey(nb)
 				}
-				// Alt+key and other sequences are ignored.
 			case <-time.After(escWait):
 				h.paneCancel()
 			}
 		case paste != nil:
 			paste = append(paste, b)
-		case b == '\r' || b == '\n':
+		case b == '\r':
 			h.submit(con.take())
-		case b == 0x7f || b == 0x08: // Backspace
-			con.edit(backspace)
-		case b == 0x15: // Ctrl-U
-			con.edit(func(buf []rune) []rune { return buf[:0] })
-		case b == 0x17: // Ctrl-W
-			con.edit(deleteWord)
-		case b == 0x03: // Ctrl-C clears the line, else cancels; never stops the agent
+		case b == '\n': // Ctrl-J
+			con.edit(func(e *editor) { e.insert('\n') })
+		case b == 0x03: // Ctrl-C clears the box, else cancels; never stops the agent
 			if con.empty() {
 				h.paneCancel()
 			} else {
-				con.edit(func(buf []rune) []rune { return buf[:0] })
+				con.edit((*editor).clear)
 			}
 		case b == 0x14: // Ctrl-T
 			h.paneTakeover()
 		case b == '\t':
-			con.edit(func(buf []rune) []rune { return append(buf, ' ') })
-		case b < 0x20:
+			con.edit(func(e *editor) { e.insert(' ') })
+		case b < 0x20 || b == 0x7f:
+			if fn := ctrlKeys[b]; fn != nil {
+				con.edit(fn)
+			}
 		case b < utf8.RuneSelf:
-			con.edit(func(buf []rune) []rune { return append(buf, rune(b)) })
+			con.edit(func(e *editor) { e.insert(rune(b)) })
 		default:
 			p := []byte{b}
 			for !utf8.FullRune(p) && len(p) < utf8.UTFMax {
@@ -133,9 +137,151 @@ func (h *host) keys(r io.Reader) {
 				p = append(p, nb)
 			}
 			if r, _ := utf8.DecodeRune(p); r != utf8.RuneError && !isPasteRune(r) {
-				con.edit(func(buf []rune) []rune { return append(buf, r) })
+				con.edit(func(e *editor) { e.insert(r) })
 			}
 		}
+	}
+}
+
+// ctrlKeys are the editing control keys, readline style.
+var ctrlKeys = map[byte]func(*editor){
+	0x7f: (*editor).backspace, // Backspace
+	0x08: (*editor).backspace, // Ctrl-H
+	0x01: (*editor).home,      // Ctrl-A
+	0x05: (*editor).end,       // Ctrl-E
+	0x02: (*editor).left,      // Ctrl-B
+	0x06: (*editor).right,     // Ctrl-F
+	0x04: (*editor).del,       // Ctrl-D
+	0x0b: (*editor).killFwd,   // Ctrl-K
+	0x15: (*editor).killBack,  // Ctrl-U
+	0x17: (*editor).rubout,    // Ctrl-W
+	0x10: (*editor).up,        // Ctrl-P
+	0x0e: (*editor).down,      // Ctrl-N
+}
+
+// altKey is ESC followed by b: Alt plus a key.
+func (h *host) altKey(b byte) {
+	var fn func(*editor)
+	switch b {
+	case '\r', '\n': // Alt-Enter
+		fn = func(e *editor) { e.insert('\n') }
+	case 'b':
+		fn = (*editor).wordLeft
+	case 'f':
+		fn = (*editor).wordRight
+	case 'd':
+		fn = (*editor).delWordFwd
+	case 0x7f, 0x08:
+		fn = (*editor).delWordBack
+	}
+	if fn != nil {
+		h.con.edit(fn)
+	}
+}
+
+// csiKey acts on a CSI sequence (after ESC [) or an SS3 final byte:
+// cursor keys with their xterm modifiers, Home, End, Delete, PgUp, PgDn,
+// SGR mouse reports, and the modified Enter and Backspace of xterm's
+// modifyOtherKeys and the kitty keyboard protocol.
+func (h *host) csiKey(seq string) {
+	con := h.con
+	if m, ok := strings.CutPrefix(seq, "<"); ok {
+		h.mouse(m)
+		return
+	}
+	if seq == "" {
+		return
+	}
+	final := seq[len(seq)-1]
+	params := strings.Split(seq[:len(seq)-1], ";")
+	num := func(i int) int {
+		if i >= len(params) {
+			return 0
+		}
+		n, _ := strconv.Atoi(params[i])
+		return n
+	}
+	// Modifier bits: 1 Shift, 2 Alt, 4 Ctrl.
+	mod := max(num(1)-1, 0)
+	var fn func(*editor)
+	switch final {
+	case 'A':
+		fn = (*editor).up
+	case 'B':
+		fn = (*editor).down
+	case 'C':
+		fn = (*editor).right
+		if mod&6 != 0 {
+			fn = (*editor).wordRight
+		}
+	case 'D':
+		fn = (*editor).left
+		if mod&6 != 0 {
+			fn = (*editor).wordLeft
+		}
+	case 'H':
+		fn = (*editor).home
+	case 'F':
+		fn = (*editor).end
+	case 'u': // kitty: CSI key ; mod u
+		fn = modKey(num(0), mod)
+	case '~':
+		switch num(0) {
+		case 1, 7:
+			fn = (*editor).home
+		case 4, 8:
+			fn = (*editor).end
+		case 3:
+			fn = (*editor).del
+			if mod&6 != 0 {
+				fn = (*editor).delWordFwd
+			}
+		case 5:
+			con.scrollBy(1)
+		case 6:
+			con.scrollBy(-1)
+		case 27: // modifyOtherKeys: CSI 27 ; mod ; key ~
+			fn = modKey(num(2), mod)
+		}
+	}
+	if fn != nil {
+		con.edit(fn)
+	}
+}
+
+// modKey is a modified key reported by its code: Enter with any modifier
+// is a newline, Backspace with Ctrl or Alt deletes a word.
+func modKey(code, mod int) func(*editor) {
+	switch {
+	case code == '\r' && mod != 0:
+		return func(e *editor) { e.insert('\n') }
+	case (code == 0x7f || code == 0x08) && mod&6 != 0:
+		return (*editor).delWordBack
+	}
+	return nil
+}
+
+// mouse acts on an SGR mouse report (after ESC [ <): "b;x;yM" is a press,
+// a final "m" a release. A left click in the box moves the cursor there;
+// the wheel scrolls the conversation.
+func (h *host) mouse(m string) {
+	if m == "" || m[len(m)-1] != 'M' {
+		return
+	}
+	f := strings.Split(m[:len(m)-1], ";")
+	if len(f) != 3 {
+		return
+	}
+	b, _ := strconv.Atoi(f[0])
+	x, _ := strconv.Atoi(f[1])
+	y, _ := strconv.Atoi(f[2])
+	switch b {
+	case 0:
+		h.con.click(x, y)
+	case 64:
+		h.con.scrollLines(3)
+	case 65:
+		h.con.scrollLines(-3)
 	}
 }
 
@@ -152,13 +298,6 @@ func pasteText(p []byte) string {
 	}, s)
 }
 
-func backspace(buf []rune) []rune {
-	if len(buf) > 0 {
-		buf = buf[:len(buf)-1]
-	}
-	return buf
-}
-
 // csi reads the rest of a CSI sequence (after ESC [) and returns its
 // parameters and final byte.
 func csi(next func() (byte, bool)) string {
@@ -173,17 +312,6 @@ func csi(next func() (byte, bool)) string {
 			return string(s)
 		}
 	}
-}
-
-func deleteWord(buf []rune) []rune {
-	i := len(buf)
-	for i > 0 && buf[i-1] == ' ' {
-		i--
-	}
-	for i > 0 && buf[i-1] != ' ' {
-		i--
-	}
-	return buf[:i]
 }
 
 // submit sends a typed line: a number answers the open question, anything
