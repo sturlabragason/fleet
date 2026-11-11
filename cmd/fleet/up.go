@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -310,7 +312,11 @@ func windowExists(f *fleet.Fleet, name string) bool {
 // change and would write the old hex back. So the stale status tags are
 // dropped — the next refresh re-tags every pane from the new palette — and the
 // watcher is stopped by its own pid, for startWatcher to start again.
-func retheme(f *fleet.Fleet) {
+func retheme(f *fleet.Fleet) { rethemeWith(f, true) }
+
+// rethemeWith is retheme; stopWatcher false is the watcher itself applying
+// the palette it just loaded, so there is no stale watcher to stop.
+func rethemeWith(f *fleet.Fleet, stopWatcher bool) {
 	name := theme.Active().Name
 	cur, _ := f.T.Run("show-options", "-qv", "-t", fleet.Session, "@fleet_theme")
 	if strings.TrimSpace(cur) == name {
@@ -324,7 +330,7 @@ func retheme(f *fleet.Fleet) {
 			f.T.UnsetPaneOption(p.ID, "@fleet_status")
 		}
 	}
-	if pid, ok := watch.Running(f.Home); ok {
+	if pid, ok := watch.Running(f.Home); stopWatcher && ok {
 		if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
 			log.Error("stop watcher for the new palette", "pid", pid, "err", err)
 		} else {
@@ -362,11 +368,51 @@ func ensureOverview(f *fleet.Fleet, target string) {
 	t.SetPaneOption(ov, "@fleet_theme", theme.Active().Name)
 }
 
-// configure sets server options, key bindings, hooks and border polish.
+// configure sets server options, key bindings, hooks and border polish, and
+// records which set it applied in chromeOption, for hotApply.
 func configure(f *fleet.Fleet) {
-	for _, a := range tmuxCommands(f) {
+	cmds := tmuxCommands(f)
+	for _, a := range cmds {
 		f.T.Run(a...)
 	}
+	f.T.Run("set-option", "-g", chromeOption, chromeStamp(cmds))
+}
+
+// chromeOption holds the stamp of the tmux commands configure last ran.
+const chromeOption = "@fleet_chrome"
+
+// chromeStamp identifies a set of tmux commands: a release that changes an
+// option, hook or binding changes it.
+func chromeStamp(cmds [][]string) string {
+	h := sha256.New()
+	for _, a := range cmds {
+		for _, s := range a {
+			h.Write([]byte(s))
+			h.Write([]byte{0})
+		}
+		h.Write([]byte{1})
+	}
+	return hex.EncodeToString(h.Sum(nil)[:8])
+}
+
+// hotApply brings a running fleet's tmux server up to this binary without
+// `fleet up` (ADR-111): the watcher runs it each time it starts, which
+// includes re-exec'ing into a new release (ADR-62). Every command configure
+// runs is idempotent, so it only runs when the stamp differs. It reports
+// whether it re-applied anything.
+func hotApply(f *fleet.Fleet) bool {
+	if !f.T.HasSession(fleet.Session) {
+		return false
+	}
+	rethemeWith(f, false)
+	cmds := tmuxCommands(f)
+	cur, _ := f.T.Run("show-options", "-gqv", chromeOption)
+	if strings.TrimSpace(cur) == chromeStamp(cmds) {
+		return false
+	}
+	configure(f)
+	logx.For("watch").Info("re-applied tmux options for this build", "commands", len(cmds))
+	return true
 }
 
 // tmuxCommands returns the tmux commands configure runs. Pure, so tests can

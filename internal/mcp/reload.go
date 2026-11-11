@@ -287,3 +287,18 @@ func buildID() string {
 	}
 	return rev + dirty + " " + at
 }
+
+// staleNote follows reloadedNote for the admiral: tmux options, the watcher
+// and the overview take a new build by themselves, ACP hosts do not
+// (ADR-111). An agent's own server says nothing; it can't restart its host.
+func (s *Server) staleNote() string {
+	if s.Agent != "" || s.F == nil {
+		return ""
+	}
+	names := s.F.StaleHosts()
+	if len(names) == 0 {
+		return ""
+	}
+	return "\n[still on the old build: ACP agents " + strings.Join(names, ", ") +
+		". Restart each when it is idle and the user is not typing in it: fleet_park, then fleet_park action=wake.]"
+}
