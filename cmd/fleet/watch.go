@@ -91,6 +91,9 @@ func cmdWatch(f *fleet.Fleet, args []string) error {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+	// A new release reaches the tmux server here, not only at `fleet up`:
+	// this runs again each time the watcher re-execs into a new binary.
+	hotApply(f)
 	err := w.Run(ctx)
 	if err == nil {
 		watch.DropSnapshot(f.Home)

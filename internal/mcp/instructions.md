@@ -181,5 +181,5 @@ While agents work, end your turn with no tool call: a report line wakes you. Nev
 
 ## Updates
 
-If a tool result says fleet was updated (`[fleet updated: tools reloaded]`), the tool list may have changed; call the new tools as listed.
+If a tool result says fleet was updated (`[fleet updated: tools reloaded]`), the tool list may have changed; call the new tools as listed. If it also names ACP agents still on the old build, restart each only when it is idle and the user is not typing in it: `fleet_park`, then `fleet_park action=wake`.
 If one says `[fleet] instructions changed since this session started`, call `fleet_instructions` and follow the new text.

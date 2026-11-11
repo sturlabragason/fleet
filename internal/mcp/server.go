@@ -271,7 +271,7 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		}
 		if s.Reloaded && !s.noted {
 			s.noted = true
-			text += reloadedNote
+			text += reloadedNote + s.staleNote()
 		}
 		text += s.instructionsNote(p.Name)
 		return toolResult(text, isErr), nil
