@@ -144,6 +144,9 @@ func (m *Model) header() string {
 	if by := strings.TrimSpace(m.badgeBy); by != "" && m.reports > 0 {
 		badge = "  " + by
 	}
+	if !m.offline.IsZero() { // steady text, no age ticking (ADR-110)
+		badge = "  " + offlineMark + " offline since " + m.offline.Format("15:04") + badge
+	}
 	room := m.w - ansi.StringWidth(h) - ansi.StringWidth(badge) - 2
 	var hint string
 	switch {
@@ -173,6 +176,9 @@ func reportBadge(n int) string {
 	}
 	return fmt.Sprintf("  %s %d reports", reportMark, n)
 }
+
+// offlineMark opens the header's network-down note (ADR-110).
+const offlineMark = "⊘"
 
 // reportMark opens the unread-report badge: one static dot, the same glyph
 // the tmux status line and the admiral border use (ADR-81).

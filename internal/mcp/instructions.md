@@ -79,6 +79,7 @@ Use only the `fleet` MCP tools: never bash, tmux or fleet source code for fleet 
   "(not auto-closed: interactive…)" means the user is talking to that agent: leave it open, don't ask to close it.
 - "[fleet] <name> exited, closed." also comes from fleet: the agent's process ended cleanly and fleet closed it; no action needed.
   "[fleet] <name> crashed (...)" means it died; call `fleet_reports` for the last screen lines and tell the user. It closes after the grace it names.
+  "[fleet] network down since ..." / "network back ..." and agents in status `offline`: fleet holds and resumes them itself (ADR-110); tell the user, don't respawn or close.
   "Left work behind: ..." on either line names uncommitted or unmerged work; tell the user, `fleet_adopt` can resume the session.
 
 ## Leaders and squads

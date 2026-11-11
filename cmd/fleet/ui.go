@@ -15,6 +15,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/netwatch"
 	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/team"
 	"github.com/sturlabragason/fleet/internal/theme"
@@ -121,6 +122,12 @@ func (b *backend) WallEnabled() bool { return b.enabled }
 
 // Reports is how many reports the admiral has not read: the header badge (ADR-36).
 func (b *backend) Reports() int { return b.f.UnreadReports() }
+func (b *backend) OfflineSince() time.Time {
+	if off, since := b.f.Offline(); off {
+		return since
+	}
+	return time.Time{}
+}
 func (b *backend) OnWall() map[string]bool {
 	if !b.enabled {
 		return map[string]bool{}
@@ -401,6 +408,9 @@ func cmdUI(f *fleet.Fleet) error {
 	// the once-a-poll housekeeping (§7, §7a).
 	f.DrainQueue = true
 	f.Housekeeping = true
+	if netwatch.Enabled() { // outages are held, then resumed (ADR-110)
+		f.NetProbe = netwatch.Probe
+	}
 	// It also runs done-checks nobody else picked up, off the UI loop (ADR-43).
 	f.Async()
 	w := wall.New(f.T, fleet.Session)

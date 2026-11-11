@@ -44,7 +44,8 @@ type Model struct {
 	now       func() time.Time
 	supCtx    [2]string // last label/colour set on the admiral border
 	ctxSet    bool
-	reports   int // unread admiral reports behind the header's ● badge (ADR-36)
+	reports   int       // unread admiral reports behind the header's ● badge (ADR-36)
+	offline   time.Time // network down since (ADR-110); zero = up
 	adms      []AdmiralInfo
 	badgeBy   string
 }
@@ -57,6 +58,7 @@ type agentsMsg struct {
 	target  string
 	supCtx  [2]string
 	reports int
+	offline time.Time
 	adms    []AdmiralInfo
 	badgeBy string
 	err     error
@@ -111,7 +113,11 @@ func (m *Model) poll() tea.Cmd {
 		if ab, ok := be.(AdmiralBackend); ok {
 			adms, by = ab.Admirals(), ab.BadgeBy()
 		}
-		return agentsMsg{adms: adms, badgeBy: by, agents: as, onWall: be.OnWall(), pinned: be.Pinned(), teams: be.Teams(), target: be.Target(), supCtx: [2]string{l, c}, reports: be.Reports(), err: err}
+		var off time.Time
+		if ob, ok := be.(OfflineBackend); ok {
+			off = ob.OfflineSince()
+		}
+		return agentsMsg{offline: off, adms: adms, badgeBy: by, agents: as, onWall: be.OnWall(), pinned: be.Pinned(), teams: be.Teams(), target: be.Target(), supCtx: [2]string{l, c}, reports: be.Reports(), err: err}
 	}
 }
 
@@ -160,6 +166,7 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 		m.teams = msg.teams
 		m.target = msg.target
 		m.reports = msg.reports
+		m.offline = msg.offline
 		m.adms, m.badgeBy = msg.adms, msg.badgeBy
 		m.setAgents(msg.agents) // tiers need the wall and teams
 		return m, tea.Batch(pollLater(), m.syncSupCtx(msg.supCtx))

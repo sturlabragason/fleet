@@ -8,6 +8,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/netwatch"
 	"github.com/sturlabragason/fleet/internal/prefs"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/team"
@@ -62,7 +63,10 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 	// `fleet ls` or the admiral's MCP server -- which now drain the queue
 	// too (ADR-44) -- neither wakes the admiral nor burns the one
 	// notification this episode gets.
-	tell := f.Housekeeping && perr == nil
+	// While offline (ADR-110) nothing is reported either: the admiral
+	// can't act on it, and the episode is still there afterwards.
+	off, _ := f.Offline()
+	tell := f.Housekeeping && perr == nil && !off
 	// One memory reading and one config read per poll, both taken before
 	// the board lock: the drain and the guard agree on them, and no
 	// process waits on the lock while another reads a file (§7, ADR-44).
@@ -85,6 +89,16 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 				next = a.Status
 			} else {
 				next = f.classify(a, byAgent[a.Name], dead[a.Name], ids[a.Name], now)
+			}
+			if byAgent[a.Name] && (next == string(status.Error) || next == string(status.Stuck)) {
+				switch {
+				case off:
+					// Failed in the outage, or its host died of it: held,
+					// resumed or restarted when it ends.
+					next = string(status.Offline)
+				case !dead[a.Name] && netwatch.NetError(a.LastLine) && f.Housekeeping:
+					f.netKick()
+				}
 			}
 			if perr == nil {
 				// A tmux hiccup must not end every running subagent.
@@ -121,7 +135,8 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 		}
 		// A failed pane listing makes every agent look gone (busy 0):
 		// never drain on that.
-		if f.DrainQueue && perr == nil {
+		// Offline, a new start would only fail: the queue holds.
+		if f.DrainQueue && perr == nil && !off {
 			claimed = f.claimQueued(b, now, low, limit)
 		}
 		out = b.Sorted()
@@ -144,16 +159,20 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 	if snap != nil {
 		f.shareSnapshot(snap, out, now)
 	}
-	if f.DrainQueue && perr == nil {
+	// Low memory still parks offline; the idle park waits (ADR-110).
+	if f.DrainQueue && perr == nil && (low || !off) {
 		f.guardMemory(out, now, low, free, mem)
 	}
 	if f.Housekeeping && perr == nil {
-		f.DeliverWake()
-		f.sweepDone(out, now)
+		if !off { // wakes, closes and hints wait for the network (ADR-110)
+			f.DeliverWake()
+			f.sweepDone(out, now)
+			f.checkRecycle(out, now)
+		}
 		f.sweepChecks(out)
-		f.reapDead(out, deadPanes, now)
+		f.reapDead(out, deadPanes, now, off)
 		f.watchAdmirals(panes, now)
-		f.checkRecycle(out, now)
+		f.checkNet(out, now, off)
 	}
 	return out, err
 }
@@ -346,7 +365,7 @@ func (f *Fleet) tagNoReport(pane, tag string) {
 	f.T.UnsetPaneOption(pane, "@fleet_noreport")
 }
 
-var paneGlyphs = map[string]string{"working": "○", "waiting": "●", "error": "✖", "stuck": "⧗", "idle": "○"}
+var paneGlyphs = map[string]string{"working": "○", "waiting": "●", "error": "✖", "stuck": "⧗", "idle": "○", "offline": "⊘"}
 
 // tagPane stores the status on the pane so tmux border formats can show it and
 // the wall can evict and emphasise by status. since is the time the agent

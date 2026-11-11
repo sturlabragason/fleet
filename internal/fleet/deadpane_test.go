@@ -207,7 +207,7 @@ func TestReapDeadSkipsACPParkAndClose(t *testing.T) {
 		}
 		return nil
 	})
-	f.reapDead(as, panes, now)
+	f.reapDead(as, panes, now, false)
 	f.dead.run.Lock()
 	f.dead.run.Unlock()
 	got := map[string]bool{}

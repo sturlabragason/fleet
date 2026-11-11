@@ -193,6 +193,9 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 	switch name {
 	case "fleet_status":
 		st, err := s.status()
+		if off, since := s.F.Offline(); off {
+			st = fleet.OfflineNote(since) + "\n" + st
+		}
 		return s.admiralHeader() + "\n" + st, err
 	case "fleet_peek":
 		return s.peek(a)

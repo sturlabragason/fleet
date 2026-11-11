@@ -102,18 +102,22 @@ func (f *Fleet) enqueue(name, profile, dir, prompt string, wantWT bool, card *bo
 func (f *Fleet) enqueueWith(build func(now time.Time, note string) *board.Agent) (*board.Agent, error) {
 	limit := f.MaxWorking()
 	low, free, mem := f.LowMemory()
-	note := ""
-	if low {
+	off, since := f.Offline()
+	hold, note := low || off, ""
+	switch {
+	case off: // a start would fail on the network (ADR-110)
+		note = "waiting for the network (offline since " + since.Format("15:04") + ")"
+	case low:
 		note = LowMemoryNote(free, mem)
 	}
-	if limit <= 0 && !low {
+	if limit <= 0 && !hold {
 		return nil, nil
 	}
 	var a *board.Agent
 	n := 0
 	err := f.Store.Update(func(b *board.Board) error {
 		now := time.Now()
-		if n = countBusy(b, now); !low && n < limit && !hasPending(b) {
+		if n = countBusy(b, now); !hold && n < limit && !hasPending(b) {
 			return nil
 		}
 		a = build(now, note)
@@ -133,7 +137,7 @@ func (f *Fleet) enqueueWith(build func(now time.Time, note string) *board.Agent)
 		return nil, err
 	}
 	if a != nil {
-		logx.For("fleet").Info("queued", "agent", a.Name, "profile", a.Profile, "dir", a.Dir, "busy", n, "max_working", limit, "low_memory", low)
+		logx.For("fleet").Info("queued", "agent", a.Name, "profile", a.Profile, "dir", a.Dir, "busy", n, "max_working", limit, "low_memory", low, "offline", off)
 	}
 	return a, nil
 }

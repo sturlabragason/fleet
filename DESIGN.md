@@ -374,6 +374,7 @@ Built in **Go with Bubble Tea and Lip Gloss** (see ADR-10). It's one binary, the
 | waiting for me | yellow | static ●, steady colour |
 | error / stuck | red | still border, ✖ icon; stuck also shows "no output 12m" |
 | idle / done | grey | dimmed, no motion |
+| offline | grey | ⊘, steady; the turn failed in a network outage and resumes when it ends (§7e) |
 | parked | dark grey | 💤, no process, no RAM shown |
 | queued | dark grey | ⏸ and queue position, no process; starts when fewer than `max_working` agents are busy (§7a) |
 | subagents | per dot: green running, grey done, red failed | bottom row of the tile, steady colours (§4 Subagents) |
@@ -1070,6 +1071,16 @@ An ACP agent runs the tool's ACP server (`copilot --acp`, `agy acp`) instead of 
 - **Adopt.** `fleet adopt` resolves the driver like spawn. Under `acp` it starts a host with `--session <id>` on the given session, as wake does; the in-use and session-exists checks are the same.
 - **Spend and subagent dots.** The host records each turn's `usage` from the `session/prompt` response as a `usage` entry, and tags tool calls that start a subagent (agy's `invoke_subagent`, named by its `Role`) with `sub`. Copilot keeps its `events.jsonl`, whose dir is the ACP session id, so its spend, dots and last message read as for a tmux agent. Claude's dots come from its plugin's subagent hooks (§4 Subagents, ADR-99). agy keeps no log fleet reads, so its spend comes from the transcript's usage entries (agy counts cached tokens apart from input) and its dots from the tagged tool calls: running from `in_progress` until `completed`/`failed`, or until the turn ends. The transcript is in the watcher's list of event logs.
 - **Tests** use `fleet fakeagent <name> --acp [--resume] [--no-load] [--state DIR]`, a scripted ACP server whose prompt keywords pick a scenario (`[ask]`, `[slow N]`, `[hang]`, `[crash]`, `[error]`, `[subagent]`, `[invoke]`; a prompt during a turn steers it; every response carries usage), so no test spends tokens. `internal/acp`'s live tests run `initialize`, `session/new` and `session/close` against `copilot --acp` and `agy acp` when installed (no tokens; skipped in CI); a prompt only with `FLEET_ACP_LIVE=1`.
+
+## 7e. Network outages (ADR-110)
+
+A wifi drop, office network move or VPN flap must not cost work. Offline, `copilot` fails with "tcp connect error: Network is unreachable", `claude` with "OAuth session expired and could not be refreshed", and an ACP `session/new` or `session/load` fails, so the host exits. Before this ADR, that meant error tiles, crash reports and closes after the dead-pane grace, plus wakes that used up their tries.
+
+- **Detect.** The resident poll (watcher, or the overview with housekeeping) dials `api.githubcopilot.com`, `api.anthropic.com` and `github.com` on port 443 in parallel (4 s timeout). One answer means online. It probes every 30 s, and every 5 s while offline. Behind `HTTPS_PROXY` it dials the proxy instead. An agent error that reads like a network error (`internal/netwatch.NetError`), or an agent that died of one, triggers an immediate probe. `FLEET_NET_PROBE=host:port,...` overrides the targets; `off` disables the check.
+- **State.** `~/.fleet/offline` (`{since, told}`) exists while offline, so every fleet process (MCP server, `fleet ls`, the overview) sees the same state without probing. The prober rewrites it on every offline probe; a file older than 2 min doesn't count, so a prober that stopped (process gone, `FLEET_NET_PROBE=off`) can't hold the fleet.
+- **Hold.** While offline: an agent whose status would be error or stuck shows `offline` (⊘, steady idle colour, never blinking). A dead pane is held: no crash report, no close; an agent that died of a network error while still online is held until a probe has answered. Spawns queue with "waiting for the network". Wake delivery, done-sweeps, recycles and the idle part of the memory guard pause, but the low-memory park still runs. The overview header shows `⊘ offline since HH:MM`, and `fleet_status` starts with the same line.
+- **Tell.** After 20 s offline, every admiral box gets one "network down" report from `fleet`. Wakes are held, so it reaches the admiral with the next wake. When the network is back, and only if the start was told, one "network back after X" report lists the agents resumed.
+- **Resume.** Back online, in this order: held dead agents are restarted (park plus wake on their saved session; an ACP agent with no session is requeued), agents showing `offline` get `continue`, then the state file goes. An agent that fails with an error again gets `continue` after 30 s, 2 min and 8 min, then fleet stops. The queue drains and held wakes go out on the next poll.
 
 ## 8. My additions
 
@@ -1889,3 +1900,13 @@ Rejected: cosign keyless signing (the same guarantee, plus a tool most users don
 Context: an admiral could not close another admiral without the user, and a write on another admiral's agent ended in "ask the user to hand it over" with no way to ask the owner.
 Decision: (a) `fleet_admiral_close name=X` runs `fleet admiral close X` (same refusals, same code), main only. (b) `fleet_handover_request name=<agent>` puts a `handover` notice in the owning admiral's inbox, without an access grant, like an access request; the owner approves with `fleet_handover`, or the user moves it. Nothing is auto-approved. (c) `fleet admiral ls` shows each admiral's pane. Restart stays `fleet_admiral_profile` with the same profile.
 Rejected: auto-approve after a timeout; killing and re-adopting another admiral's agent.
+
+**ADR-110: network outages hold agents and resume them** (§7e) — accepted 2026-11-11.
+
+**Context.** Probed offline in a network namespace: `copilot -p` fails "Failed to load models … Network is unreachable", `claude -p` "OAuth session expired and could not be refreshed", copilot ACP `session/new` fails with the same connect error, and agy answers "Authentication required". The ACP host exits on a failed setup, so an outage turned into error tiles, crash reports, closes after the dead-pane grace, wakes that used up their three tries, and a queue that kept starting agents that died at once.
+
+**Decision.** §7e. One TCP connect probe in the resident poll decides offline; the state is a file so every process agrees. While offline, failures show `offline`, dead panes are held, spawns and wakes queue, and the admiral is told once after 20 s. When the network is back, fleet restarts dead hosts on their saved session, sends `continue` to agents that failed (backoff 30 s, 2 min, 8 min), drains the queue and tells the admiral once.
+
+**Rejected.** Probing per agent or classifying every tool's error text as the trigger: the texts differ by tool and the agy text names no network at all; the error text only starts an early probe. Counting outage deaths as crashes and relying on the admiral to respawn: it loses the session and floods the inbox. Blinking or red offline tiles: an outage is not the agents' fault and needs no action.
+
+**Trade-offs.** A TCP connect can't see an outage at the API level (DNS works, the provider is down); such errors stay plain errors. A captive portal that accepts TCP looks online. A short blip under 20 s is never told, and its `continue`s happen silently. The probe adds three dials every 30 s.
