@@ -125,7 +125,7 @@ func TestMarkdownRendering(t *testing.T) {
 // A URL wider than the pane is cut over rows; every piece is an OSC 8 link
 // to the whole URL with one id, so a click on any row opens all of it.
 func TestWrappedURLIsOneHyperlink(t *testing.T) {
-	url := "https://artifacts.example.online/crew-redesign-2026-11-10/"
+	url := "https://example.org/a/long/path/2026-11-10/"
 	v := newView(io.Discard, nil, colorprofile.TrueColor, "a1", "")
 	v.add(Entry{Kind: KindAgent, Text: "open " + url + ". Or [docs](https://x.dev/a)"})
 	v.mu.Lock()
