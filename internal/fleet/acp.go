@@ -19,6 +19,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/playbook"
 	"github.com/sturlabragason/fleet/internal/prefs"
 	"github.com/sturlabragason/fleet/internal/status"
+	"github.com/sturlabragason/fleet/internal/tmux"
 	"github.com/sturlabragason/fleet/internal/tools"
 )
 
@@ -27,6 +28,10 @@ import (
 // socket. Fleet never reads such an agent's screen: status comes from the
 // state file the host writes, the last line and the session id from its
 // transcript, and send, answer, park and close go over the socket.
+
+// headless: no tmux (Windows), so every agent runs under acp, opt-in
+// profiles such as claude included, and --driver tmux is refused.
+var headless = tmux.Headless
 
 // ACPCallTimeout bounds one control call to an agent's host.
 var ACPCallTimeout = 5 * time.Second
@@ -64,6 +69,12 @@ func (f *Fleet) driverSource(want, profile string) (d, src string, err error) {
 	}
 	if d == "" {
 		d, src = prefs.DriverTmux, "built-in"
+	}
+	if headless && d != prefs.DriverACP {
+		if src == "--driver" {
+			return "", "", fmt.Errorf("the tmux driver needs tmux, which this system does not have; agents run under --driver acp here")
+		}
+		d, src = prefs.DriverACP, "no tmux (Windows): every agent runs under acp"
 	}
 	if d == prefs.DriverACP && !f.Profiles[profile].HasACP() {
 		return "", "", fmt.Errorf("profile %s has no ACP server (no acp args in its profile); use --driver tmux", profile)

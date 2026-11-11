@@ -79,6 +79,33 @@ func TestDriverResolution(t *testing.T) {
 	}
 }
 
+// With no tmux (Windows) every agent runs under acp, claude included and
+// over a config that says tmux; --driver tmux is refused (ADR-117).
+func TestDriverHeadless(t *testing.T) {
+	home := t.TempDir()
+	cfg := filepath.Join(home, "config.toml")
+	os.WriteFile(cfg, []byte("[profile.copilot]\ndriver = \"tmux\"\n"), 0o644)
+	t.Setenv("FLEET_CONFIG", cfg)
+	old := headless
+	headless = true
+	t.Cleanup(func() { headless = old })
+	f, err := New(&tmux.Client{Socket: "fleet-test-unused"}, home, "/bin/fleet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"claude", "copilot", "fake"} {
+		if got, err := f.driverFor("", p); err != nil || got != "acp" {
+			t.Errorf("%s: %q, %v want acp", p, got, err)
+		}
+	}
+	if _, err := f.driverFor("tmux", "claude"); err == nil || !strings.Contains(err.Error(), "needs tmux") {
+		t.Errorf("--driver tmux: %v", err)
+	}
+	if _, err := f.driverFor("", "vibe"); err == nil || !strings.Contains(err.Error(), "no ACP server") {
+		t.Errorf("vibe: %v", err)
+	}
+}
+
 // The migration note's two ways back to tmux, and the per-spawn override,
 // beat the v1.0.0 default (ADR-74 (f)).
 func TestDriverDefaultOverrides(t *testing.T) {

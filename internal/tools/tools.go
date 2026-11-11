@@ -913,7 +913,7 @@ func (p Profile) EnvList() []string {
 	for _, k := range keys {
 		out = append(out, k+"="+os.ExpandEnv(p.Env[k]))
 	}
-	return append(out, "PATH="+filepath.Join(home, ".local/bin")+":"+os.Getenv("PATH"))
+	return append(out, "PATH="+filepath.Join(home, ".local/bin")+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
 // Quote single-quotes s for sh.

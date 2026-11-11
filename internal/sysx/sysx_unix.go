@@ -47,3 +47,11 @@ func Exec(argv0 string, argv, env []string) error { return syscall.Exec(argv0, a
 
 // NotifyResize relays terminal resizes (SIGWINCH) to ch.
 func NotifyResize(ch chan<- os.Signal) { signal.Notify(ch, syscall.SIGWINCH) }
+
+// KillTree ends pid and its process group (Detach made it a group leader).
+func KillTree(pid int) error {
+	if err := syscall.Kill(-pid, syscall.SIGTERM); err != nil {
+		return syscall.Kill(pid, syscall.SIGTERM)
+	}
+	return nil
+}

@@ -132,7 +132,7 @@ jobs:
           # goreleaser keeps binaries at dist/<target>/fleet and names them on upload;
           # out/ holds them under their release names, as the release will.
           mkdir out
-          jq -r '.[] | select(.name | test("^fleet-(linux|darwin)-(amd64|arm64)$")) | "\(.path) \(.name)"' dist/artifacts.json |
+          jq -r '.[] | select(.name | test("^fleet-(linux|darwin)-(amd64|arm64)$|^fleet-windows-(amd64|arm64)\\.exe$")) | "\(.path) \(.name)"' dist/artifacts.json |
             while read -r path name; do cp "$path" "out/$name"; done
           cp dist/SHA256SUMS out/
           ls -l out

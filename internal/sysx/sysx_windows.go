@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"strconv"
 	"syscall"
 	"unsafe"
 )
@@ -110,3 +111,12 @@ func Exec(argv0 string, argv, env []string) error {
 // NotifyResize does nothing: Windows consoles send no resize signal. Callers
 // that poll the size still see it change.
 func NotifyResize(chan<- os.Signal) {}
+
+// KillTree ends pid and every process it started (taskkill /T), so a tool
+// an acp host runs does not outlive it.
+func KillTree(pid int) error {
+	if err := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(pid)).Run(); err != nil {
+		return Kill(pid, syscall.SIGKILL)
+	}
+	return nil
+}
