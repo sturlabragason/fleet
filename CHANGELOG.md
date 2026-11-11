@@ -7,6 +7,7 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
 ## 2026-11-11
+- A link that wraps onto a second row in a fleet pane now opens the whole URL when clicked, in the admiral and in agent panes: fleet tells tmux to pass OSC 8 hyperlinks through to the terminal, and the ACP agent pane draws URLs and markdown links as OSC 8 links. Detach and run `fleet up` again to pick it up.
 - **Changed default:** subagents of `claude` agents now run Opus like their agent, not Sonnet; an agent can still pick Sonnet for one scoped subtask, and `CLAUDE_CODE_SUBAGENT_MODEL = "sonnet"` in a profile's `env` brings back the old default. The admiral runs Opus too: `fleet up` refuses an admiral profile whose `args` name a model that is not Opus (ADR-100).
 
 ## 2026-11-10

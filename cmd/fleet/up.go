@@ -383,6 +383,10 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		// on every overview repaint. Terminals without it ignore the mode.
 		// A fixed index, not -a: `fleet up` runs again on every attach.
 		{"set-option", "-s", "terminal-features[90]", "xterm*:sync"},
+		// OSC 8 hyperlinks: without this tmux keeps the link in the pane
+		// but sends the outer terminal plain text, so a URL wrapped across
+		// rows is clickable only up to the line break.
+		{"set-option", "-s", "terminal-features[91]", "xterm*:hyperlinks"},
 		{"set-option", "-g", "pane-border-status", "top"},
 		{"set-option", "-g", "pane-border-lines", "heavy"},
 		{"set-option", "-g", "pane-border-style", "fg=" + theme.Surface1},

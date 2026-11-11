@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -118,6 +119,36 @@ func TestMarkdownRendering(t *testing.T) {
 	l := markdown("a snake_case_name * b and `x`", 80, 0, ms)
 	if s := l[0][0].text + l[0][1].text; s != "a snake_case_name * b and `x`" {
 		t.Fatalf("plain text changed: %q", s)
+	}
+}
+
+// A URL wider than the pane is cut over rows; every piece is an OSC 8 link
+// to the whole URL with one id, so a click on any row opens all of it.
+func TestWrappedURLIsOneHyperlink(t *testing.T) {
+	url := "https://artifacts.example.online/crew-redesign-2026-11-10/"
+	v := newView(io.Discard, nil, colorprofile.TrueColor, "a1", "")
+	v.add(Entry{Kind: KindAgent, Text: "open " + url + ". Or [docs](https://x.dev/a)"})
+	v.mu.Lock()
+	rows, _, _ := v.frame(30, 20)
+	v.mu.Unlock()
+	re := regexp.MustCompile("\x1b]8;id=([^;]*);([^\a\x1b]*)")
+	var ids, targets []string
+	for _, r := range rows {
+		for _, m := range re.FindAllStringSubmatch(r, -1) {
+			targets = append(targets, m[2])
+			if m[2] == url {
+				ids = append(ids, m[1])
+			}
+		}
+	}
+	if len(ids) < 2 || strings.Count(strings.Join(ids, " "), ids[0]) != len(ids) {
+		t.Fatalf("wrapped URL links: ids %q in\n%q", ids, rows)
+	}
+	if got := strings.Join(targets, " "); !strings.HasSuffix(got, url+" https://x.dev/a https://x.dev/a") {
+		t.Fatalf("link targets: %s", got)
+	}
+	if n := urlLen("see https://x.dev/\x1b]8;;evil now", 4); n != len("https://x.dev/") {
+		t.Fatalf("urlLen ran into a control character: %d", n)
 	}
 }
 
