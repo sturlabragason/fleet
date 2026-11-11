@@ -4,7 +4,7 @@
 
 | What | Where |
 |---|---|
-| Everything fleet does (spawns, sends, status changes, tmux errors, caught panics) | `~/.fleet/logs/fleet.log` |
+| Everything fleet does (spawns, sends, status changes, tmux errors, caught panics) | `~/.fleet/logs/fleet.log` (older lines in `fleet.log.1`, `.2`) |
 | `make test` output | `~/.fleet/logs/test.log` |
 | `make dev` build and test results | `~/.fleet/logs/dev.log` |
 | Agent state | `~/.fleet/board.json` |

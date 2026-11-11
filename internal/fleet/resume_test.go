@@ -52,8 +52,8 @@ func TestResumeClosedAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 	b := f.Store.Load()
-	if _, ok := b.Agents["w1"]; ok || b.Closed["w1"] == nil {
-		t.Fatalf("after close: agents %v closed %v", b.Agents, b.Closed)
+	if _, ok := b.Agents["w1"]; ok || !hasClosed(b, "w1") {
+		t.Fatalf("after close: agents %v closed %v", b.Agents, b.ClosedRecords())
 	}
 	err := f.ClosedError("w1", "pass resume=true")
 	if err == nil || !strings.Contains(err.Error(), "w1 closed at ") || !strings.HasSuffix(err.Error(), "pass resume=true to resume its last session") {
@@ -77,8 +77,8 @@ func TestResumeClosedAgent(t *testing.T) {
 		t.Errorf("team %q", team)
 	}
 	b = f.Store.Load()
-	if b.Closed["w1"] != nil || b.Agents["w1"] == nil || b.Agents["w1"].PromptAt.IsZero() {
-		t.Errorf("board after resume: closed %v agent %+v", b.Closed["w1"], b.Agents["w1"])
+	if hasClosed(b, "w1") || b.Agents["w1"] == nil || b.Agents["w1"].PromptAt.IsZero() {
+		t.Errorf("board after resume: closed %v agent %+v", hasClosed(b, "w1"), b.Agents["w1"])
 	}
 	if f.ClosedError("w1", "x") != nil {
 		t.Error("a running agent is refused as closed")
@@ -118,12 +118,12 @@ func TestResumeRefusals(t *testing.T) {
 	if _, err := f.Spawn("w1", "rs", t.TempDir(), ""); err != nil {
 		t.Fatal(err)
 	}
-	if f.Store.Load().Closed["w1"] != nil {
+	if hasClosed(f.Store.Load(), "w1") {
 		t.Error("record kept after a new spawn of the name")
 	}
 	// A record older than ClosedKeep is neither named nor resumed.
 	f.Store.Update(func(b *board.Board) error {
-		b.Closed = map[string]*board.Closed{"old": {Agent: board.Agent{Name: "old", SessionID: "SESSION1", Dir: t.TempDir()}, At: time.Now().Add(-board.ClosedKeep - time.Minute)}}
+		b.AddClosed(&board.Agent{Name: "old", SessionID: "SESSION1", Dir: t.TempDir()}, "", time.Now().Add(-board.ClosedKeep-time.Minute))
 		return nil
 	})
 	if err := f.ClosedError("old", "x"); err != nil {
@@ -166,4 +166,9 @@ func TestResumeQueuesOverCap(t *testing.T) {
 	if !strings.Contains(screen, "first") || !strings.Contains(screen, "second") {
 		t.Errorf("held text not delivered: %q", screen)
 	}
+}
+
+func hasClosed(b *board.Board, name string) bool {
+	_, ok := b.AnyClosed(name)
+	return ok
 }

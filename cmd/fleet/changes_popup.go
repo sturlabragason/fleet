@@ -36,7 +36,7 @@ type changesPopup struct {
 }
 
 func newChangesPopup(version string, es []whatsnew.Entry, isNew map[string]bool, markSeen func([]whatsnew.Entry) error) *changesPopup {
-	return &changesPopup{header: headerLine(version, es, isNew), entries: es, isNew: isNew, markSeen: markSeen}
+	return &changesPopup{header: whatsnew.Header(version, es, isNew), entries: es, isNew: isNew, markSeen: markSeen}
 }
 
 func (p *changesPopup) Init() tea.Cmd { return nil }
@@ -150,7 +150,7 @@ func (p *changesPopup) render() {
 		}
 		mark := " "
 		if p.isNew[e.ID()] {
-			mark = fg(theme.Text).Bold(true).Render(newMark)
+			mark = fg(theme.Text).Bold(true).Render(whatsnew.NewMark)
 		}
 		for j, l := range wrapEntry(e, tw) {
 			if j == 0 {

@@ -87,7 +87,7 @@ func (f *Fleet) resumeQueued(a *board.Agent) error {
 	}
 	b := f.Store.Load()
 	rec.Goal = ""
-	if c, ok := b.Closed[rec.Name]; ok {
+	if c, ok := b.AnyClosed(rec.Name); ok {
 		rec.Goal = c.Agent.Goal
 	}
 	liveLead(b, &rec)

@@ -156,8 +156,10 @@ func gitKeep(ctx context.Context, dir string, args ...string) (string, error) {
 }
 
 // TopLevel returns the root of the worktree that contains dir.
-func TopLevel(dir string) (string, error) {
-	out, err := git(dir, "rev-parse", "--show-toplevel")
+func TopLevel(dir string) (string, error) { return topLevel(context.Background(), dir) }
+
+func topLevel(ctx context.Context, dir string) (string, error) {
+	out, err := gitCtx(ctx, dir, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return "", fmt.Errorf("%s is not in a git repo", dir)
 	}
@@ -183,11 +185,15 @@ func CommonDir(dir string) (string, error) {
 // returns an error rather than a list that might wrongly look clear. ignore
 // is passed on to Changes.
 func Others(dir string, ignore ...string) ([]Worktree, error) {
-	top, err := TopLevel(dir)
+	return others(context.Background(), dir, ignore...)
+}
+
+func others(ctx context.Context, dir string, ignore ...string) ([]Worktree, error) {
+	top, err := topLevel(ctx, dir)
 	if err != nil {
 		return nil, err
 	}
-	out, err := git(dir, "worktree", "list", "--porcelain")
+	out, err := gitCtx(ctx, dir, "worktree", "list", "--porcelain")
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +202,7 @@ func Others(dir string, ignore ...string) ([]Worktree, error) {
 		if w.Bare || w.Prunable || realPath(w.Path) == top {
 			continue
 		}
-		if w.Files, err = Changes(w.Path, ignore...); err != nil {
+		if w.Files, err = changes(ctx, w.Path, ignore...); err != nil {
 			logx.For("worktree").Warn("changes unreadable", "worktree", w.Path, "err", err)
 			return nil, fmt.Errorf("worktree %s: %w", w.Path, err)
 		}
@@ -215,13 +221,17 @@ func Others(dir string, ignore ...string) ([]Worktree, error) {
 // left out of the uncommitted part; a committed change to one still counts,
 // since it would conflict on merge.
 func Changes(wt string, ignore ...string) ([]string, error) {
+	return changes(context.Background(), wt, ignore...)
+}
+
+func changes(ctx context.Context, wt string, ignore ...string) ([]string, error) {
 	set := map[string]bool{}
-	if base := baseBranch(wt); base != "" {
-		mb, err := git(wt, "merge-base", "HEAD", base)
+	if base := baseBranchCtx(ctx, wt); base != "" {
+		mb, err := gitCtx(ctx, wt, "merge-base", "HEAD", base)
 		if err != nil {
 			return nil, err
 		}
-		out, err := git(wt, "diff", "--name-only", "--no-renames", strings.TrimSpace(mb))
+		out, err := gitCtx(ctx, wt, "diff", "--name-only", "--no-renames", strings.TrimSpace(mb))
 		if err != nil {
 			return nil, err
 		}
@@ -231,7 +241,7 @@ func Changes(wt string, ignore ...string) ([]string, error) {
 			}
 		}
 	}
-	out, err := git(wt, "status", "--porcelain", "-z", "--untracked-files=all")
+	out, err := gitCtx(ctx, wt, "status", "--porcelain", "-z", "--untracked-files=all")
 	if err != nil {
 		return nil, err
 	}
@@ -274,9 +284,11 @@ func Ignored(dir string, ignore []string) map[string]bool {
 }
 
 // baseBranch returns "main", else "master", else "".
-func baseBranch(wt string) string {
+func baseBranch(wt string) string { return baseBranchCtx(context.Background(), wt) }
+
+func baseBranchCtx(ctx context.Context, wt string) string {
 	for _, b := range []string{"main", "master"} {
-		if _, err := git(wt, "rev-parse", "--verify", "--quiet", "refs/heads/"+b); err == nil {
+		if _, err := gitCtx(ctx, wt, "rev-parse", "--verify", "--quiet", "refs/heads/"+b); err == nil {
 			return b
 		}
 	}

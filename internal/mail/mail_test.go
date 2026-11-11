@@ -2,6 +2,7 @@ package mail
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -318,6 +319,36 @@ func TestImplicitAccess(t *testing.T) {
 	}
 	if s.Allowed("a", "b") {
 		t.Fatal("user revoke of teammates")
+	}
+}
+
+// A grants.json that does not parse must not read as "no pairs": that would
+// turn a revocation (a Denied pair) back into implicit access, and the next
+// write would overwrite the revocation for good.
+func TestBrokenGrantsFailClosed(t *testing.T) {
+	s := newStore(t)
+	s.Implicit = func(x, y string) bool { return true }
+	if err := s.Revoke("a", "b"); err != nil {
+		t.Fatal(err)
+	}
+	bad := []byte("{broken")
+	if err := os.WriteFile(s.grantsPath(), bad, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if s.Allowed("a", "b") {
+		t.Fatal("broken grants.json allowed a revoked pair")
+	}
+	if _, err := s.Send("a", "b", "hi"); err == nil {
+		t.Fatal("send succeeded with a broken grants.json")
+	}
+	if _, err := s.Request("a", "b", "x"); err == nil {
+		t.Fatal("request succeeded with a broken grants.json")
+	}
+	if got, _ := os.ReadFile(s.grantsPath()); string(got) != string(bad) {
+		t.Fatalf("grants.json was rewritten: %q", got)
+	}
+	if fi, err := os.Stat(s.grantsPath() + ".broken"); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("broken copy: %v %v", fi, err)
 	}
 }
 

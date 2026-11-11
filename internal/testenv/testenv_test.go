@@ -1,10 +1,13 @@
 package testenv
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"slices"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestMain(m *testing.M) { os.Exit(Main(m)) }
@@ -80,5 +83,20 @@ func TestMainFailsAndKillsALeak(t *testing.T) {
 	l.cmd.Wait()
 	if running(l.cmd.Process.Pid) {
 		t.Fatal("leaked process still running")
+	}
+}
+
+type fakeT struct{ failed string }
+
+func (*fakeT) Helper()                          {}
+func (f *fakeT) Fatalf(format string, a ...any) { f.failed = fmt.Sprintf(format, a...) }
+
+func TestEventually(t *testing.T) {
+	n := 0
+	Eventually(t, time.Second, "third call", func() bool { n++; return n == 3 })
+	ft := &fakeT{}
+	Eventually(ft, 50*time.Millisecond, "never", func() bool { return false })
+	if !strings.Contains(ft.failed, "waiting for never") {
+		t.Errorf("failure %q", ft.failed)
 	}
 }

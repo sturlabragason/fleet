@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"text/tabwriter"
+	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
@@ -17,10 +18,13 @@ import (
 // cmdWorktrees lists the repo's leftover worktrees under <repo>.wt/ and,
 // with --prune, removes the merged, clean ones nobody holds (ADR-79).
 func cmdWorktrees(f *fleet.Fleet, args []string) error {
-	return runWorktrees(f.Store.Load(), args, os.Stdout)
+	b, bad := loadBoard(f.Store)
+	return runWorktrees(b, bad, args, os.Stdout)
 }
 
-func runWorktrees(b *board.Board, args []string, out io.Writer) error {
+// bad is why the board or the closed records could not be read: listing
+// goes on, a prune is refused.
+func runWorktrees(b *board.Board, bad error, args []string, out io.Writer) error {
 	fs := flag.NewFlagSet("worktrees", flag.ContinueOnError)
 	repo := fs.String("repo", "", "repo dir (default: the current directory)")
 	asJSON := fs.Bool("json", false, "machine-readable output")
@@ -46,6 +50,13 @@ func runWorktrees(b *board.Board, args []string, out io.Writer) error {
 		if a.Status == string(status.Parked) {
 			held[a.Worktree.Path] = "parked"
 		}
+	}
+	if err := holdClosed(b, bad, *prune, func(a *board.Agent) {
+		if a.Worktree != nil && a.Worktree.Path != "" && held[a.Worktree.Path] == "" {
+			held[a.Worktree.Path] = "closed"
+		}
+	}); err != nil {
+		return err
 	}
 	es, err := worktree.Stale(main, cwd, held)
 	if err != nil {
@@ -113,7 +124,7 @@ func writeWorktrees(out io.Writer, es []worktree.Entry) error {
 	if err := w.Flush(); err != nil {
 		return err
 	}
-	_, err := fmt.Fprintf(out, "%d worktrees, %s; %d can be pruned (merged, clean, no live or parked agent): fleet worktrees --prune\n", len(es), worktree.HumanSize(total), pr)
+	_, err := fmt.Fprintf(out, "%d worktrees, %s; %d can be pruned (merged, clean, no live, parked or recently closed agent): fleet worktrees --prune\n", len(es), worktree.HumanSize(total), pr)
 	return err
 }
 
@@ -122,4 +133,37 @@ func yesNo(b bool) string {
 		return "yes"
 	}
 	return "no"
+}
+
+// loadBoard is the board and, when board.json or closed.json cannot be
+// read, why: a broken file reads as no agents, which a prune must not trust.
+func loadBoard(s *board.Store) (*board.Board, error) {
+	b, err := s.LoadChecked()
+	if err != nil {
+		return s.Load(), err
+	}
+	return b, nil
+}
+
+// holdClosed calls hold with each agent closed within board.ClosedKeep:
+// `fleet resume` can still bring it back into its worktree and branch, so a
+// prune must keep them (ADR-113). When the board or the records cannot be
+// read (bad), a prune is refused rather than run as if there were no agents.
+func holdClosed(b *board.Board, bad error, prune bool, hold func(*board.Agent)) error {
+	if bad == nil {
+		bad = b.ClosedErr()
+	}
+	if bad != nil {
+		if prune {
+			return fmt.Errorf("agents unknown, not pruning: %w", bad)
+		}
+		return nil
+	}
+	now := time.Now()
+	for _, c := range b.ClosedRecords() {
+		if now.Sub(c.At) <= board.ClosedKeep {
+			hold(&c.Agent)
+		}
+	}
+	return nil
 }

@@ -5,8 +5,10 @@ package mail
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/sturlabragason/fleet/internal/jsonx"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -271,17 +273,29 @@ func readTrim(path string) string {
 	return strings.TrimSpace(string(b))
 }
 
-func (s *Store) loadPairs() []Pair {
+// loadPairs reads grants.json. A file that cannot be read or parsed is an
+// error, never "no pairs": a revocation is a Denied pair, so reading a broken
+// file as empty would give back access the user took away (ADR-113).
+func (s *Store) loadPairs() ([]Pair, error) {
 	data, err := os.ReadFile(s.grantsPath())
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("read grants.json: %w", err)
 	}
 	var ps []Pair
 	if err := json.Unmarshal(data, &ps); err != nil {
-		logx.For("mail").Error("broken grants.json, starting empty", "err", err)
-		_ = os.WriteFile(s.grantsPath()+".broken", data, 0o644)
-		return nil
+		logx.For("mail").Error("broken grants.json: mail and access refused until it is repaired", "err", err, "copy", s.grantsPath()+".broken")
+		_ = os.WriteFile(s.grantsPath()+".broken", data, 0o600)
+		return nil, fmt.Errorf("grants.json does not parse (%v); fix or move it aside (a copy is in grants.json.broken), until then mail and access are refused", err)
 	}
+	return ps, nil
+}
+
+// pairsOrNone is loadPairs for the listings: a broken file lists nothing.
+func (s *Store) pairsOrNone() []Pair {
+	ps, _ := s.loadPairs()
 	return ps
 }
 
@@ -301,7 +315,11 @@ func (s *Store) update(fn func(*state) error) error {
 	}
 	defer syscall.Flock(int(lf.Fd()), syscall.LOCK_UN)
 	s.migrateAdmiral()
-	st := &state{s: s, pairs: s.loadPairs(), last: readTrim(s.lastPath())}
+	pairs, err := s.loadPairs()
+	if err != nil {
+		return err
+	}
+	st := &state{s: s, pairs: pairs, last: readTrim(s.lastPath())}
 	prev := st.last
 	ferr := fn(st)
 	// Lines may be appended even when fn fails later; keep ids monotonic.
@@ -324,12 +342,12 @@ func (s *Store) update(fn func(*state) error) error {
 }
 
 // All returns every pair, sorted.
-func (s *Store) All() []Pair { return s.loadPairs() }
+func (s *Store) All() []Pair { return s.pairsOrNone() }
 
 // Pairs returns the pairs that include agent.
 func (s *Store) Pairs(agent string) []Pair {
 	var out []Pair
-	for _, p := range s.loadPairs() {
+	for _, p := range s.pairsOrNone() {
 		if p.Has(agent) {
 			out = append(out, p)
 		}
@@ -339,14 +357,18 @@ func (s *Store) Pairs(agent string) []Pair {
 
 // Allowed reports whether from may message to now (grant or implicit access).
 func (s *Store) Allowed(from, to string) bool {
-	st := &state{s: s, pairs: s.loadPairs()}
+	pairs, err := s.loadPairs()
+	if err != nil {
+		return false
+	}
+	st := &state{s: s, pairs: pairs}
 	return from != to && st.allowed(from, to)
 }
 
 // PairOf returns the pair of a and b, if any.
 func (s *Store) PairOf(a, b string) (Pair, bool) {
 	a, b = key(a, b)
-	for _, p := range s.loadPairs() {
+	for _, p := range s.pairsOrNone() {
 		if p.A == a && p.B == b {
 			return p, true
 		}

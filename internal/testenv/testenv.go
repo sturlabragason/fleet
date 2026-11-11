@@ -209,3 +209,20 @@ func testSocket(pid int) string {
 	}
 	return filepath.Join(dir, fmt.Sprintf("tmux-%d", os.Getuid()), name)
 }
+
+// Eventually polls cond every 20ms until it holds, and fails the test with
+// what after timeout. Use it instead of a fixed sleep when a test waits for
+// a pane to draw or a process to act: a sleep long enough for a loaded CI
+// race job is wasted everywhere else, and one short enough is a flake.
+func Eventually(t interface {
+	Helper()
+	Fatalf(string, ...any)
+}, timeout time.Duration, what string, cond func() bool) {
+	t.Helper()
+	for end := time.Now().Add(timeout); !cond(); time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(end) {
+			t.Fatalf("timed out after %v waiting for %s", timeout, what)
+			return
+		}
+	}
+}

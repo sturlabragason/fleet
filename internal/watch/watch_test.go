@@ -337,3 +337,29 @@ func TestStaleExe(t *testing.T) {
 		t.Error("another binary not called stale")
 	}
 }
+
+// A refresh that panics is logged and the loop goes on; the heartbeat's OK
+// stays at the last good refresh, so the panic shows as a stale watcher
+// (ADR-113).
+func TestRefreshPanicKeepsLooping(t *testing.T) {
+	w, _ := newWatcher(t, t.TempDir())
+	now := time.Now()
+	w.Now = func() time.Time { return now }
+	w.Interval = time.Second
+	w.Step()
+	good := w.ok
+	w.Refresh = func() error { var m map[string]int; m["x"] = 1; return nil }
+	now = now.Add(2 * time.Second)
+	if !w.Step() {
+		t.Fatal("panicking pass did not count as a refresh")
+	}
+	if !w.ok.Equal(good) {
+		t.Errorf("OK moved to %v after a panic", w.ok)
+	}
+	n := 0
+	w.Refresh = func() error { n++; return nil }
+	now = now.Add(2 * time.Second)
+	if !w.Step() || n != 1 || !w.ok.Equal(now) {
+		t.Fatalf("loop did not recover: n=%d ok=%v", n, w.ok)
+	}
+}

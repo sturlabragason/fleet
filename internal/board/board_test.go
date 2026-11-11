@@ -46,6 +46,106 @@ func TestBrokenJSON(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "board.json.broken")); err != nil {
 		t.Fatal("no backup")
 	}
+	// A write must not replace the user's state with an empty board (ADR-113).
+	err := s.Update(func(b *Board) error { b.Agents["a"] = &Agent{Name: "a"}; return nil })
+	if err == nil || !strings.Contains(err.Error(), "does not parse") {
+		t.Fatalf("update over a broken board: %v", err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(dir, "board.json")); string(data) != "{nope" {
+		t.Fatalf("board.json overwritten: %q", data)
+	}
+	if s.Check() == nil {
+		t.Error("Check passed a broken board")
+	}
+}
+
+// Closed records live in closed.json; an update that never asks for them
+// neither reads nor writes that file, and a close moves an agent across in
+// one update (ADR-113).
+func TestClosedLivesInItsOwnFile(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+	now := time.Now()
+	s.Update(func(b *Board) error { b.Agents["w1"] = &Agent{Name: "w1", PaneID: "%1"}; return nil })
+	if err := s.Update(func(b *Board) error {
+		b.AddClosed(b.Agents["w1"], "t", now)
+		delete(b.Agents, "w1")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(dir, "board.json")); strings.Contains(string(data), "closed") {
+		t.Fatalf("board.json still carries closed records: %s", data)
+	}
+	if c, ok := s.Load().ClosedRecord("w1", now); !ok || c.Team != "t" || c.Agent.PaneID != "" {
+		t.Fatalf("record %+v %v", c, ok)
+	}
+	// A broken closed.json does not stop updates that don't use it, and
+	// stops (without writing) those that do.
+	cp := filepath.Join(dir, "closed.json")
+	os.WriteFile(cp, []byte("{nope"), 0o644)
+	if err := s.Update(func(b *Board) error { b.Agents["a"] = &Agent{Name: "a"}; return nil }); err != nil {
+		t.Fatalf("plain update: %v", err)
+	}
+	if err := s.Update(func(b *Board) error { b.DropClosed("w1"); return nil }); err == nil {
+		t.Fatal("update of a broken closed.json succeeded")
+	}
+	if data, _ := os.ReadFile(cp); string(data) != "{nope" {
+		t.Fatalf("closed.json overwritten: %q", data)
+	}
+}
+
+// The watcher's scrape-only writes are not fsynced; adding an agent and a
+// close (board.json and closed.json) are (ADR-113).
+func TestOnlyStructuralWritesSync(t *testing.T) {
+	syncs := 0
+	orig := fileSync
+	fileSync = func(f *os.File) error { syncs++; return orig(f) }
+	t.Cleanup(func() { fileSync = orig })
+	s := NewStore(t.TempDir())
+	step := func(name string, want int, fn func(*Board)) {
+		t.Helper()
+		syncs = 0
+		if err := s.Update(func(b *Board) error { fn(b); return nil }); err != nil {
+			t.Fatal(err)
+		}
+		if syncs != want {
+			t.Fatalf("%s: %d syncs, want %d", name, syncs, want)
+		}
+	}
+	step("add", 1, func(b *Board) { b.Agents["w1"] = &Agent{Name: "w1"} })
+	step("scrape", 0, func(b *Board) { b.Agents["w1"].PaneID = "%2" })
+	step("close", 2, func(b *Board) {
+		b.AddClosed(b.Agents["w1"], "", time.Now())
+		delete(b.Agents, "w1")
+	})
+}
+
+// A board.json from before ADR-113, or written by an older build still
+// running, has its closed records moved to closed.json on the next update,
+// the newer of two copies winning.
+func TestLegacyClosedMigrates(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now().UTC().Truncate(time.Second)
+	os.WriteFile(filepath.Join(dir, "closed.json"), []byte(`{"x":{"agent":{"name":"x","goal":"old"},"at":"`+now.Add(-time.Hour).Format(time.RFC3339)+`"}}`), 0o644)
+	os.WriteFile(filepath.Join(dir, "board.json"), []byte(`{"agents":{},"closed":{"x":{"agent":{"name":"x","goal":"new","peer":"p"},"team":"t","at":"`+now.Format(time.RFC3339)+`"},"y":{"agent":{"name":"y"},"at":"`+now.Format(time.RFC3339)+`"}}}`), 0o644)
+	s := NewStore(dir)
+	if c, ok := s.Load().ClosedRecord("x", now); !ok || c.Agent.Goal != "new" {
+		t.Fatalf("read before migration: %+v", c)
+	}
+	if err := s.Update(func(*Board) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(dir, "board.json")); strings.Contains(string(data), "closed") {
+		t.Fatalf("legacy key kept: %s", data)
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, "closed.json"))
+	if !strings.Contains(string(data), `"peer": "p"`) || !strings.Contains(string(data), `"y"`) {
+		t.Fatalf("closed.json lost records or keys: %s", data)
+	}
+	if c, _ := s.Load().ClosedRecord("x", now); c == nil || c.Agent.Goal != "new" || c.Team != "t" {
+		t.Fatalf("after migration: %+v", c)
+	}
 }
 
 // An older fleet still running (a resident `fleet watch`, say) must not erase
@@ -269,10 +369,11 @@ func TestPruneClosed(t *testing.T) {
 	for i := 0; i < ClosedMax+1; i++ {
 		b.AddClosed(&Agent{Name: fmt.Sprintf("a%02d", i), PaneID: "%1"}, "t", now.Add(time.Duration(i)*time.Second))
 	}
-	if len(b.Closed) != ClosedMax || b.Closed["old"] != nil || b.Closed["a00"] != nil || b.Closed["a50"] == nil {
-		t.Fatalf("kept %d: old=%v a00=%v", len(b.Closed), b.Closed["old"], b.Closed["a00"])
+	set := b.closedSet()
+	if len(set) != ClosedMax || set["old"] != nil || set["a00"] != nil || set["a50"] == nil {
+		t.Fatalf("kept %d: old=%v a00=%v", len(set), set["old"], set["a00"])
 	}
-	if b.Closed["a50"].Agent.PaneID != "" || b.Closed["a50"].Team != "t" {
-		t.Errorf("record %+v", b.Closed["a50"])
+	if set["a50"].Agent.PaneID != "" || set["a50"].Team != "t" {
+		t.Errorf("record %+v", set["a50"])
 	}
 }

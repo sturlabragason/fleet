@@ -142,6 +142,8 @@ auto_trust = false
 
 **Fleet never starts an agent in your home directory.** A spawn or adopt dir that is `$HOME` or `/` is moved to `~/.fleet/scratch/<name>`; the reply and `fleet.log` say so. Agents started in `$HOME` read every dotfile as project config, share one project identity, and trip each tool's own "dangerous directory" guard.
 
+**Which setting wins.** A spawn's settings come from several layers: `--driver` on the spawn, `[profile.<name>]` and `[defaults]` in config.toml, the tool profile, and fleet's built-in default. `fleet config explain <profile>` prints each setting a spawn of that profile gets, with the layer that set it, and the `FLEET_*` variables set in your shell (token values hidden); `--json` for scripts.
+
 ## Status patterns: `~/.fleet/patterns.toml`
 
 Status is read from the last six non-empty lines of the pane. The lowest line that matches any pattern decides; within one line the order is waiting, error, working, idle. If nothing matches but the pane changed, the agent counts as working. An agent is stuck when the same error banner shows twice in a row, or when it is working and its pane has not changed for `stuck_after` (default 10 minutes; see `config.toml`).

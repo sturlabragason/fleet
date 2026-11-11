@@ -200,7 +200,7 @@ func TestChangesPopupQuitAndEmpty(t *testing.T) {
 func TestChangesText(t *testing.T) {
 	isolate(t)
 	es := whatsnew.Parse(testMD)
-	got := changesText("fleet x", es, map[string]bool{es[1].ID(): true})
+	got := whatsnew.Text("fleet x", es, map[string]bool{es[1].ID(): true})
 	want := "fleet x · 1 new\n" +
 		"2026-11-05     Seen entry  (abc1234)\n" +
 		"            ✦  New entry with fleet up and enough words to wrap on a narrow popup for sure  (ADR-28)\n" +
@@ -208,7 +208,7 @@ func TestChangesText(t *testing.T) {
 	if got != want {
 		t.Errorf("got:\n%s\nwant:\n%s", got, want)
 	}
-	if got := changesText("fleet x", nil, nil); got != "fleet x\nno entries\n" {
+	if got := whatsnew.Text("fleet x", nil, nil); got != "fleet x\nno entries\n" {
 		t.Errorf("empty: %q", got)
 	}
 }

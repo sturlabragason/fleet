@@ -128,7 +128,7 @@ func (f *Fleet) enqueueWith(build func(now time.Time, note string) *board.Agent)
 		}
 		b.Agents[a.Name] = a
 		if a.SessionID == "" { // a queued resume keeps the record until it starts (ADR-95)
-			delete(b.Closed, a.Name)
+			b.DropClosed(a.Name)
 		}
 		f.Store.AppendEvent(board.Event{Time: now, Agent: a.Name, From: "", To: a.Status})
 		return nil

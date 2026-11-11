@@ -12,7 +12,6 @@ import (
 
 	aifleet "github.com/sturlabragason/fleet"
 	"github.com/sturlabragason/fleet/internal/keys"
-	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/whatsnew"
 )
 
@@ -63,21 +62,6 @@ func clickableChanges(hint string) string {
 		"#[range=user|"+changesStatusRange+"]"+keys.ChangesHint+"#[norange]", 1)
 }
 
-// newIDs is the set of ids of es that are not in the seen file.
-func newIDs(es []whatsnew.Entry) map[string]bool {
-	seen, err := whatsnew.LoadSeen()
-	if err != nil {
-		logx.For("whatsnew").Warn("load seen", "err", err)
-	}
-	isNew := map[string]bool{}
-	for _, e := range es {
-		if !seen[e.ID()] {
-			isNew[e.ID()] = true
-		}
-	}
-	return isNew
-}
-
 // cmdChanges shows what's new in fleet (DESIGN.md §5d).
 func cmdChanges(args []string) error {
 	fs := flag.NewFlagSet("changes", flag.ContinueOnError)
@@ -90,7 +74,7 @@ func cmdChanges(args []string) error {
 		return errors.New("usage: fleet changes [--json]")
 	}
 	es := whatsnew.List(aifleet.Changelog, whatsnew.Repo())
-	isNew := newIDs(es)
+	isNew := whatsnew.NewIDs(es)
 	version := whatsnew.Version()
 	if *popupMode {
 		p := newChangesPopup(version, es, isNew, whatsnew.MarkSeen)
@@ -122,50 +106,6 @@ func cmdChanges(args []string) error {
 		enc.SetIndent("", "  ")
 		return enc.Encode(out)
 	}
-	fmt.Print(changesText(version, es, isNew))
+	fmt.Print(whatsnew.Text(version, es, isNew))
 	return nil
-}
-
-// changesText is the terminal list: the version line, then
-// "date  ✦  text  (refs)" with the date on a day's first line only.
-func changesText(version string, es []whatsnew.Entry, isNew map[string]bool) string {
-	var b strings.Builder
-	b.WriteString(headerLine(version, es, isNew) + "\n")
-	if len(es) == 0 {
-		b.WriteString("no entries\n")
-	}
-	day := ""
-	for _, e := range es {
-		date := strings.Repeat(" ", len(whatsnew.DateLayout))
-		if e.Date != day {
-			date, day = e.Date, e.Date
-		}
-		mark := " "
-		if isNew[e.ID()] {
-			mark = newMark
-		}
-		line := date + "  " + mark + "  " + whatsnew.Plain(e.Text)
-		if len(e.Refs) > 0 {
-			line += "  (" + strings.Join(e.Refs, ", ") + ")"
-		}
-		b.WriteString(line + "\n")
-	}
-	return b.String()
-}
-
-// newMark flags an unseen entry. Not Peach ●, which means waiting.
-const newMark = "✦"
-
-// headerLine is the version line, with "· N new" when something is new.
-func headerLine(version string, es []whatsnew.Entry, isNew map[string]bool) string {
-	n := 0
-	for _, e := range es {
-		if isNew[e.ID()] {
-			n++
-		}
-	}
-	if n > 0 {
-		return fmt.Sprintf("%s · %d new", version, n)
-	}
-	return version
 }

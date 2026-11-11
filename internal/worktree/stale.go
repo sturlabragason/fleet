@@ -25,7 +25,7 @@ type Entry struct {
 	// ResultOnly: the only change is the agent's untracked result.md handoff.
 	// Still dirty, so never pruned: removing it would lose the result.
 	ResultOnly bool   `json:"result_only,omitempty"`
-	Agent      string `json:"agent"` // "live", "parked" or "": the board state of an agent in it
+	Agent      string `json:"agent"` // "live", "parked", "closed" (resumable) or "": the agent in it
 	Prunable   bool   `json:"prunable"`
 	Gone       bool   `json:"gone"` // the dir was deleted by hand; only the registration is left
 	Unknown    bool   `json:"-"`    // a git query failed; never prunable

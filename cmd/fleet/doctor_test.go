@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/sturlabragason/fleet/internal/watch"
 )
 
 // doctorTestEnv: a clean machine with tmux 3.8, a UTF-8 locale and
@@ -52,7 +55,7 @@ func write(t *testing.T, path, s string) {
 func TestDoctorCleanMachine(t *testing.T) {
 	env := doctorTestEnv(t, "copilot")
 	cs := doctor(env)
-	want := map[string]string{"tmux": "ok", "locale": "ok", "PATH": "ok", "config.toml": "ok", "tools.toml": "ok", "profile copilot": "ok"}
+	want := map[string]string{"tmux": "ok", "locale": "ok", "PATH": "ok", "board": "ok", "watcher": "ok", "config.toml": "ok", "tools.toml": "ok", "profile copilot": "ok"}
 	if got := levels(cs); len(got) != len(want) {
 		t.Fatalf("checks = %v, want %v", got, want)
 	} else {
@@ -95,8 +98,9 @@ func TestDoctorBrokenConfigFiles(t *testing.T) {
 	env := doctorTestEnv(t, "copilot")
 	write(t, os.Getenv("FLEET_CONFIG"), "[defaults\n")
 	write(t, filepath.Join(env.home, "tools.toml"), "[x\n")
+	write(t, filepath.Join(env.home, "board.json"), "{nope")
 	got := levels(doctor(env))
-	if got["config.toml"] != "fail" || got["tools.toml"] != "fail" || got["profiles"] != "warn" {
+	if got["config.toml"] != "fail" || got["tools.toml"] != "fail" || got["profiles"] != "warn" || got["board"] != "fail" {
 		t.Errorf("broken files: %v", got)
 	}
 }
@@ -123,5 +127,21 @@ func TestCheckTmux(t *testing.T) {
 	}
 	if got := checkTmux(func() (string, error) { return "", errors.New("no tmux") }); got.Level != "fail" || got.Fix == "" {
 		t.Errorf("no tmux = %+v", got)
+	}
+}
+
+// A watcher that left a heartbeat but stopped refreshing is a warning.
+func TestDoctorStaleWatcher(t *testing.T) {
+	home := t.TempDir()
+	now := time.Now()
+	if err := watch.WriteBeat(home, watch.Beat{PID: os.Getpid(), Started: now.Add(-time.Hour), At: now, OK: now.Add(-time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	if c := checkWatcher(home, now); c.Level != levelWarn {
+		t.Errorf("stale refresh: %+v", c)
+	}
+	watch.WriteBeat(home, watch.Beat{PID: os.Getpid(), Started: now.Add(-time.Hour), At: now, OK: now})
+	if c := checkWatcher(home, now); c.Level != levelOK {
+		t.Errorf("live watcher: %+v", c)
 	}
 }

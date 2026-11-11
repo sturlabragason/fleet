@@ -28,23 +28,7 @@ type doneSweep struct {
 // catches work merged after the report and closes that failed at report
 // time. Git runs in the background; one sweep at a time.
 func (f *Fleet) sweepDone(as []*board.Agent, now time.Time) {
-	var due []*board.Agent
-	f.sweep.mu.Lock()
-	if f.sweep.checked == nil {
-		f.sweep.checked = map[string]time.Time{}
-	}
-	for _, a := range as {
-		pr := f.Prefs.For(a.Profile)
-		if !pr.AutoCloseDone || pr.AutoCloseIdle <= 0 || !idleDone(a, pr.AutoCloseIdle, now) {
-			continue
-		}
-		if now.Sub(f.sweep.checked[a.Name]) < sweepEvery {
-			continue
-		}
-		f.sweep.checked[a.Name] = now
-		due = append(due, a)
-	}
-	f.sweep.mu.Unlock()
+	due := f.sweepDue(as, now)
 	if len(due) == 0 || !f.sweep.run.TryLock() {
 		return
 	}
@@ -67,6 +51,28 @@ func (f *Fleet) sweepDone(as []*board.Agent, now time.Time) {
 			log.Info("auto-closing idle done agent", "agent", a.Name)
 		}
 	}()
+}
+
+// sweepDue picks the agents to check, under a deferred unlock (see deadJobs).
+func (f *Fleet) sweepDue(as []*board.Agent, now time.Time) []*board.Agent {
+	var due []*board.Agent
+	f.sweep.mu.Lock()
+	defer f.sweep.mu.Unlock()
+	if f.sweep.checked == nil {
+		f.sweep.checked = map[string]time.Time{}
+	}
+	for _, a := range as {
+		pr := f.Prefs.For(a.Profile)
+		if !pr.AutoCloseDone || pr.AutoCloseIdle <= 0 || !idleDone(a, pr.AutoCloseIdle, now) {
+			continue
+		}
+		if now.Sub(f.sweep.checked[a.Name]) < sweepEvery {
+			continue
+		}
+		f.sweep.checked[a.Name] = now
+		due = append(due, a)
+	}
+	return due
 }
 
 // idleDone: a done report, idle for at least after, and the idle spell began

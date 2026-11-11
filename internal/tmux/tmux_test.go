@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -133,6 +134,10 @@ func TestSendKeysWithReadOnlyClient(t *testing.T) {
 	}
 	ro := exec.Command("tmux", append(c.base(), "-C", "attach", "-r", "-t", "s")...)
 	in, _ := ro.StdinPipe()
+	// A control client whose output nobody reads falls behind and tmux
+	// drops it; then send-keys is no longer refused and the end of this
+	// test flaked on a loaded CI runner.
+	ro.Stdout = io.Discard
 	if err := ro.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +172,8 @@ func TestSendKeysWithReadOnlyClient(t *testing.T) {
 	// Older tmux (before 3.8) does not refuse send-keys here at all.
 	if _, raw := c.Run("send-keys", "-t", p, "C-c"); raw != nil {
 		if err := c.SendKeys(p, "C-c"); err == nil {
-			t.Fatal("a key with no byte form must still fail")
+			ro, _ := c.Run("list-clients", "-F", "#{client_readonly}")
+			t.Fatalf("a key with no byte form must still fail (refused before: %v; read-only clients now: %q)", raw, ro)
 		}
 	}
 }
@@ -206,5 +212,28 @@ func TestTestServerHasNoNewPrivs(t *testing.T) {
 	}
 	if !strings.Contains(string(b), "NoNewPrivs:\t1") {
 		t.Fatalf("tmux server %s runs without no_new_privs, so each pane writes wtmp", strings.TrimSpace(pid))
+	}
+}
+
+// A hung tmux call ends with an error instead of stalling its caller for
+// good; a popup or menu, which waits on the user, is never cut short
+// (ADR-113).
+func TestHungCommandTimesOut(t *testing.T) {
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "tmux"), []byte("#!/bin/sh\nexec sleep 0.6\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	c := &Client{Socket: "fleet-test-hang", Timeout: 100 * time.Millisecond}
+	start := time.Now()
+	_, err := c.Run("capture-pane", "-p")
+	if err == nil || !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("hung capture-pane: %v", err)
+	}
+	if d := time.Since(start); d > 500*time.Millisecond {
+		t.Errorf("timeout took %v", d)
+	}
+	if _, err := c.Run("display-popup", "-E", "true"); err != nil {
+		t.Errorf("popup was cut short: %v", err)
 	}
 }

@@ -1,6 +1,9 @@
 package mcp
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -54,19 +57,42 @@ func TestCLIToolsPruneNeedsConfirmed(t *testing.T) {
 	}
 }
 
-// Exit 1 from fleet touching is the overlap answer, not a failure.
+// fleet_touching runs in process: an overlap is an answer, not a failure,
+// and a dir outside git is an error, never "no overlap".
 func TestCLIToolsTouchingOverlap(t *testing.T) {
-	s, runs := cliServer(t, "a.go  fleet/x\n", 1)
-	msg, isErr := callText(t, s, "fleet_touching", map[string]any{"dir": "/r", "files": []string{"a.go"}})
-	if isErr || !strings.HasPrefix(msg, "overlap:\na.go") {
+	s, runs := cliServer(t, "", 0)
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	t.Setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+	root := t.TempDir()
+	repo := filepath.Join(root, "repo")
+	git := func(dir string, args ...string) {
+		t.Helper()
+		args = append([]string{"-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.invalid"}, args...)
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	os.MkdirAll(repo, 0o755)
+	git(repo, "init", "-q", "-b", "main")
+	os.WriteFile(filepath.Join(repo, "a.go"), []byte("a\n"), 0o644)
+	git(repo, "add", ".")
+	git(repo, "commit", "-q", "-m", "init")
+	wt := filepath.Join(root, "repo.wt", "x")
+	git(repo, "worktree", "add", "-q", "-b", "fleet/x", wt)
+	os.WriteFile(filepath.Join(wt, "a.go"), []byte("a2\n"), 0o644)
+
+	msg, isErr := callText(t, s, "fleet_touching", map[string]any{"dir": repo, "files": []string{"a.go"}})
+	if isErr || !strings.HasPrefix(msg, "overlap:\n") || !strings.Contains(msg, "fleet/x  1 files\n    a.go") {
 		t.Fatalf("%q %v", msg, isErr)
 	}
-	if want := []string{"touching", "-C", "/r", "a.go"}; !reflect.DeepEqual((*runs)[0].argv, want) {
-		t.Fatalf("argv %v", (*runs)[0].argv)
+	if msg, isErr := callText(t, s, "fleet_touching", map[string]any{"dir": repo, "files": []string{"b.go"}}); isErr || msg != "no other worktree touches these files" {
+		t.Fatalf("no overlap: %q %v", msg, isErr)
 	}
-	s, _ = cliServer(t, "boom", 2)
-	if msg, isErr := callText(t, s, "fleet_touching", map[string]any{"dir": "/r"}); !isErr || msg != "boom" {
-		t.Fatalf("exit 2: %q %v", msg, isErr)
+	if msg, isErr := callText(t, s, "fleet_touching", map[string]any{"dir": root}); !isErr || !strings.Contains(msg, "git") {
+		t.Fatalf("outside git: %q %v", msg, isErr)
+	}
+	if len(*runs) != 0 {
+		t.Fatalf("forked: %v", *runs)
 	}
 }
 
@@ -98,8 +124,15 @@ func TestCLIToolsAdmiralAddAndChanges(t *testing.T) {
 	if want := []string{"admiral", "add", "ops", "--profile", "fake"}; !reflect.DeepEqual((*runs)[0].argv, want) {
 		t.Fatalf("argv %v", (*runs)[0].argv)
 	}
-	if msg, _ := callText(t, s, "fleet_changes", map[string]any{"limit": 2}); msg != "1\n2\n(2 more lines: limit=N for more)" {
+	if len(*runs) != 1 {
+		t.Fatalf("runs %v", *runs)
+	}
+	// fleet_changes reads the changelog built into the binary, in process.
+	if msg, _ := callText(t, s, "fleet_changes", map[string]any{"limit": 2}); len(strings.Split(msg, "\n")) != 3 || !strings.Contains(msg, "more lines: limit=N for more)") {
 		t.Fatalf("changes: %q", msg)
+	}
+	if len(*runs) != 1 {
+		t.Fatalf("changes forked: %v", *runs)
 	}
 }
 
