@@ -36,6 +36,11 @@ if out=$("$exe" spawn --fake --driver tmux t1 "$work" 2>&1); then bad "--driver 
 	grep -q 'needs tmux' <<<"$out" && ok "--driver tmux refused" || bad "--driver tmux message" "$out"
 fi
 
+# Real claude can't run here; its spawn must fail on the missing tool, not on tmux.
+if out=$("$exe" spawn c1 claude "$work" 2>&1); then bad "claude spawn without claude installed" "$out"; "$exe" close c1 >/dev/null 2>&1; else
+	grep -q 'not found' <<<"$out" && ! grep -qi tmux <<<"$out" && ok "claude spawn checks for the tool" || bad "claude spawn message" "$out"
+fi
+
 must "spawn --fake a1" "$exe" spawn --fake a1 "$work"
 idle() { "$exe" ls --json | grep -q '"status": *"idle"'; }
 until_ok 30 idle && ok "a1 is idle" || bad "a1 is idle" "$("$exe" ls 2>&1)"

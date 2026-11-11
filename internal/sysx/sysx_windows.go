@@ -20,14 +20,15 @@ const (
 	lockfileExclusiveLock   = 0x2
 	detachedProcess         = 0x8
 	stillActive             = 259
+	lockOffsetHigh          = 0x100 // byte 1<<40
 )
 
 // Flock applies or removes a lock on f with LockFileEx. Unlike flock(2) the
-// lock is mandatory for the locked range, so fleet locks only its own
-// lock files, never the data it guards.
+// lock is mandatory for the locked range, so it is one byte far past any
+// data: other handles still read and write the file (watch.lock holds a pid).
 func Flock(f *os.File, how int) error {
 	h := uintptr(f.Fd())
-	ol := new(syscall.Overlapped)
+	ol := &syscall.Overlapped{OffsetHigh: lockOffsetHigh}
 	if how&LockUn != 0 {
 		r, _, err := unlockFileEx.Call(h, 0, 1, 0, uintptr(unsafe.Pointer(ol)))
 		if r == 0 {

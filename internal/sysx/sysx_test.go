@@ -21,6 +21,13 @@ func TestFlockExcludesASecondHandle(t *testing.T) {
 	if err := Flock(a, LockEx); err != nil {
 		t.Fatal(err)
 	}
+	// The lock guards nothing else: the file stays readable (watch.lock holds a pid).
+	if _, err := a.WriteString("1234"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(p); err != nil || string(got) != "1234" {
+		t.Fatalf("read while locked: %q, %v", got, err)
+	}
 	if Flock(b, LockEx|LockNB) == nil {
 		t.Fatal("second exclusive lock succeeded while the first is held")
 	}

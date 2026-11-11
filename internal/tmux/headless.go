@@ -303,7 +303,8 @@ func (c *Client) hlNew(st *hlState, dir string, window bool, args []string) (str
 		return "", true, err
 	}
 	p.PID = ex.Process.Pid
-	_ = ex.Process.Release()
+	// Reaped while this process lives, so an exited pane reads dead, not as a zombie.
+	go ex.Wait()
 	st.Panes = append(st.Panes, p)
 	if fl['P'] == "" {
 		return "", true, nil
