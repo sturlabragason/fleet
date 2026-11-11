@@ -204,7 +204,14 @@ func (p Profile) ACPEnv(commandPath string) map[string]string {
 	for k, v := range p.Env {
 		out[k] = v
 	}
+	// An npm shim on Windows (claude.cmd) can't be spawned by the adapter
+	// without a shell: leave the variable unset, and the adapter runs the
+	// Claude Code it bundles.
+	shim := strings.HasSuffix(strings.ToLower(commandPath), ".cmd") || strings.HasSuffix(strings.ToLower(commandPath), ".bat")
 	for k, v := range p.ACPEnvVars {
+		if shim && strings.Contains(v, CommandPathVar) {
+			continue
+		}
 		out[k] = strings.ReplaceAll(v, CommandPathVar, commandPath)
 	}
 	return out

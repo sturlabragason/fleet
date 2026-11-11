@@ -109,7 +109,7 @@ func Eligible(version, channel string) (bool, string) {
 	if _, ok := Parse(version); !ok {
 		return false, fmt.Sprintf("version %q is not a release tag", version)
 	}
-	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
 		return false, "no release binary for " + runtime.GOOS
 	}
 	return true, ""
@@ -117,6 +117,24 @@ func Eligible(version, channel string) (bool, string) {
 
 // Target is the release asset suffix for this machine: linux-amd64, ...
 func Target() string { return runtime.GOOS + "-" + runtime.GOARCH }
+
+// Asset is the release file for target: fleet-linux-amd64,
+// fleet-windows-amd64.exe.
+func Asset(target string) string {
+	if strings.HasPrefix(target, "windows-") {
+		return "fleet-" + target + ".exe"
+	}
+	return "fleet-" + target
+}
+
+// exeExt is what an executable's name must end in here: Windows runs
+// nothing without it.
+func exeExt() string {
+	if runtime.GOOS == "windows" {
+		return ".exe"
+	}
+	return ""
+}
 
 // State is what the updater remembers between passes and re-execs, in
 // <home>/update/state.json.
@@ -373,14 +391,14 @@ func (u *Updater) Latest(ctx context.Context) (string, error) {
 }
 
 func (u *Updater) stagedPath(version string) string {
-	return filepath.Join(Dir(u.Home), "fleet-"+version)
+	return filepath.Join(Dir(u.Home), "fleet-"+version+exeExt())
 }
 
 // Stage downloads release version, checks it against SHA256SUMS and its
 // attestation, runs it, and leaves it at <home>/update/fleet-<version>. It
 // returns the checked sum. Nothing is staged on any failure.
 func (u *Updater) Stage(ctx context.Context, version string) (string, error) {
-	asset := "fleet-" + u.target()
+	asset := Asset(u.target())
 	url := u.base() + "/download/" + version + "/"
 	sums, err := u.get(ctx, url+"SHA256SUMS", maxSums)
 	if err != nil {
@@ -412,7 +430,7 @@ func (u *Updater) Stage(ctx context.Context, version string) (string, error) {
 		return "", err
 	}
 	path := u.stagedPath(version)
-	tmp := path + ".part"
+	tmp := strings.TrimSuffix(path, exeExt()) + ".part" + exeExt()
 	if err := os.WriteFile(tmp, bin, 0o755); err != nil {
 		os.Remove(tmp)
 		return "", err
@@ -497,7 +515,7 @@ func (u *Updater) apply(s *State, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	tmp := filepath.Join(filepath.Dir(u.Exe), fmt.Sprintf(".fleet.new.%d", os.Getpid()))
+	tmp := filepath.Join(filepath.Dir(u.Exe), fmt.Sprintf(".fleet.new.%d%s", os.Getpid(), exeExt()))
 	if err := os.WriteFile(tmp, data, fi.Mode().Perm()|0o500); err != nil {
 		os.Remove(tmp)
 		return fmt.Errorf("cannot write beside %s: %w", u.Exe, err)
@@ -514,7 +532,22 @@ func (u *Updater) apply(s *State, now time.Time) error {
 		s.Applied = before
 		return err
 	}
+	// Windows renames a running exe but never replaces it: move it aside
+	// first. The .old copy goes once nothing runs it, on a later apply.
+	old := ""
+	if runtime.GOOS == "windows" {
+		old = u.Exe + ".old"
+		os.Remove(old)
+		if err := os.Rename(u.Exe, old); err != nil {
+			os.Remove(tmp)
+			s.Applied = before
+			return err
+		}
+	}
 	if err := os.Rename(tmp, u.Exe); err != nil {
+		if old != "" {
+			os.Rename(old, u.Exe)
+		}
 		os.Remove(tmp)
 		s.Applied = before
 		return err

@@ -658,6 +658,9 @@ func TestClaudeACPProfile(t *testing.T) {
 		env["CLAUDE_CODE_SUBAGENT_MODEL"] != "" {
 		t.Errorf("acp env %v", env)
 	}
+	if e := p.ACPEnv(`C:\npm\claude.CMD`); e["CLAUDE_CODE_EXECUTABLE"] != "" || e["ANTHROPIC_MODEL"] != ClaudeModel {
+		t.Errorf("an npm shim must leave CLAUDE_CODE_EXECUTABLE unset: %v", e)
+	}
 	// Terms (ADR-76): no API key or token is ever set, and one inherited is dropped.
 	for _, k := range []string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"} {
 		if _, ok := env[k]; ok {

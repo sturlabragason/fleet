@@ -1,0 +1,31 @@
+{
+    "version": "1.21.0",
+    "description": "Run a fleet of coding agents (Claude, Copilot) from one terminal; on Windows they run over ACP.",
+    "homepage": "https://github.com/sturlabragason/fleet",
+    "license": "MIT",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/sturlabragason/fleet/releases/download/v1.21.0/fleet-windows-amd64.exe#/fleet.exe",
+            "hash": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "arm64": {
+            "url": "https://github.com/sturlabragason/fleet/releases/download/v1.21.0/fleet-windows-arm64.exe#/fleet.exe",
+            "hash": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+    },
+    "bin": "fleet.exe",
+    "checkver": "github",
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/sturlabragason/fleet/releases/download/v$version/fleet-windows-amd64.exe#/fleet.exe"
+            },
+            "arm64": {
+                "url": "https://github.com/sturlabragason/fleet/releases/download/v$version/fleet-windows-arm64.exe#/fleet.exe"
+            }
+        },
+        "hash": {
+            "url": "$baseurl/SHA256SUMS"
+        }
+    }
+}

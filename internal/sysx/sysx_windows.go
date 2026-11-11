@@ -1,6 +1,7 @@
 package sysx
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -87,7 +88,25 @@ func Detach(cmd *exec.Cmd) {
 // KillGroupOnCancel puts cmd in its own process group; the default cancel
 // (TerminateProcess) ends it. Its children are not ended with it.
 func KillGroupOnCancel(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP}
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.CreationFlags |= syscall.CREATE_NEW_PROCESS_GROUP
+}
+
+// ShellCommand runs line in a shell: sh -c when an sh is on PATH (Git
+// for Windows), else cmd.exe, which gets line verbatim.
+func ShellCommand(ctx context.Context, line string) *exec.Cmd {
+	if sh, err := exec.LookPath("sh"); err == nil {
+		return exec.CommandContext(ctx, sh, "-c", line)
+	}
+	comspec := os.Getenv("ComSpec")
+	if comspec == "" {
+		comspec = "cmd.exe"
+	}
+	cmd := exec.CommandContext(ctx, comspec)
+	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: `cmd.exe /d /s /c "` + line + `"`}
+	return cmd
 }
 
 // Exec runs argv0 in place of this process as far as Windows allows: the

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/prefs"
 	"github.com/sturlabragason/fleet/internal/rexec"
+	"github.com/sturlabragason/fleet/internal/sysx"
 )
 
 // cmdExec is `fleet exec [--host H] -- <cmd...>`: run a build or test for
@@ -38,7 +40,7 @@ func cmdExec(args []string) error {
 		return err
 	}
 	if cfg.Host == "" {
-		return runExec(exec.Command("sh", "-c", rexec.Line(cmd)))
+		return runExec(sysx.ShellCommand(context.Background(), rexec.Line(cmd)))
 	}
 	out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
 	if err != nil {

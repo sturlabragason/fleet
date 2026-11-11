@@ -79,6 +79,31 @@ Releases carry GitHub [artifact attestations](https://docs.github.com/en/actions
 gh attestation verify fleet-linux-amd64 -R sturlabragason/fleet
 ```
 
+### Windows
+
+In PowerShell, no admin needed:
+
+```powershell
+irm https://raw.githubusercontent.com/sturlabragason/fleet/main/install.ps1 | iex
+```
+
+It puts `fleet.exe` in `%LOCALAPPDATA%\Programs\fleet`, checks it against `SHA256SUMS` and adds the directory to your user PATH (open a new terminal afterwards). With [Scoop](https://scoop.sh) instead:
+
+```powershell
+scoop bucket add fleet https://github.com/sturlabragason/fleet
+scoop install fleet/fleet
+```
+
+Or download `fleet-windows-amd64.exe` (or arm64) from [Releases](https://github.com/sturlabragason/fleet/releases), rename it `fleet.exe` and put it on your PATH. On Windows there is no tmux and no overview or wall: every agent runs under the ACP driver, and you drive them with `fleet spawn`, `send`, `peek`, `ls`, `close` and the admiral's MCP tools (ADR-117). For Claude agents install [Node.js](https://nodejs.org), then Claude Code and log in once:
+
+```powershell
+npm install -g @anthropic-ai/claude-code
+claude          # log in, then exit
+fleet spawn w1 claude C:\path\to\project "your task"
+```
+
+fleet starts the Claude ACP adapter with `npx`, which downloads it on first use.
+
 To read it before you run it:
 
 ```sh

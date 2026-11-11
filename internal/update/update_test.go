@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -32,6 +33,15 @@ func TestNewer(t *testing.T) {
 		if got := Newer(c.a, c.b); got != c.want {
 			t.Errorf("Newer(%q, %q) = %v", c.a, c.b, got)
 		}
+	}
+}
+
+func TestAsset(t *testing.T) {
+	if a := Asset("windows-arm64"); a != "fleet-windows-arm64.exe" {
+		t.Errorf("windows asset = %q", a)
+	}
+	if a := Asset("darwin-arm64"); a != "fleet-darwin-arm64" {
+		t.Errorf("darwin asset = %q", a)
 	}
 }
 
@@ -137,7 +147,7 @@ func TestStepUpgradesWhenQuiet(t *testing.T) {
 	if content(t, exe) != "new" {
 		t.Fatal("binary not replaced")
 	}
-	if fi, _ := os.Stat(exe); fi.Mode().Perm()&0o100 == 0 {
+	if fi, _ := os.Stat(exe); runtime.GOOS != "windows" && fi.Mode().Perm()&0o100 == 0 {
 		t.Fatal("new binary not executable")
 	}
 	s := Load(u.Home)

@@ -113,7 +113,7 @@ func RunCheck(dir string, c *board.Card, timeout time.Duration) *board.Check {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "sh", "-c", c.Check)
+	cmd := sysx.ShellCommand(ctx, c.Check)
 	cmd.Dir = dir
 	// Its own process group, killed as a group: a check is usually a build
 	// or a test run, and its children must not outlive the timeout or keep

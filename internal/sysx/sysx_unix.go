@@ -3,6 +3,7 @@
 package sysx
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -40,6 +41,11 @@ func Detach(cmd *exec.Cmd) {
 func KillGroupOnCancel(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+}
+
+// ShellCommand runs line with sh -c.
+func ShellCommand(ctx context.Context, line string) *exec.Cmd {
+	return exec.CommandContext(ctx, "sh", "-c", line)
 }
 
 // Exec replaces this process with argv0 (execve(2)).
