@@ -9,13 +9,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/sturlabragason/fleet/internal/jsonx"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
-	"syscall"
 	"time"
+
+	"github.com/sturlabragason/fleet/internal/jsonx"
+	"github.com/sturlabragason/fleet/internal/sysx"
 
 	"github.com/sturlabragason/fleet/internal/logx"
 )
@@ -80,10 +81,10 @@ func (s *Store) update(fn func(*File) error) error {
 		return err
 	}
 	defer lf.Close()
-	if err := syscall.Flock(int(lf.Fd()), syscall.LOCK_EX); err != nil {
+	if err := sysx.Flock(lf, sysx.LockEx); err != nil {
 		return err
 	}
-	defer syscall.Flock(int(lf.Fd()), syscall.LOCK_UN)
+	defer sysx.Flock(lf, sysx.LockUn)
 	f, err := s.load()
 	if errors.Is(err, errBroken) {
 		logx.For("adr").Error("broken adr-claims.json, moved to adr-claims.json.broken, starting empty", "path", s.path())

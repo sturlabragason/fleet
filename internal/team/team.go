@@ -6,14 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/sturlabragason/fleet/internal/jsonx"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
+
+	"github.com/sturlabragason/fleet/internal/jsonx"
+	"github.com/sturlabragason/fleet/internal/sysx"
 
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/theme"
@@ -86,10 +87,10 @@ func (s *Store) Update(fn func(*File) error) error {
 		return err
 	}
 	defer lf.Close()
-	if err := syscall.Flock(int(lf.Fd()), syscall.LOCK_EX); err != nil {
+	if err := sysx.Flock(lf, sysx.LockEx); err != nil {
 		return err
 	}
-	defer syscall.Flock(int(lf.Fd()), syscall.LOCK_UN)
+	defer sysx.Flock(lf, sysx.LockUn)
 	f := s.Load()
 	if err := fn(f); err != nil {
 		if errors.Is(err, errSkip) {

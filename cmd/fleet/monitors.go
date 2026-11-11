@@ -13,10 +13,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/sysx"
 	"github.com/sturlabragason/fleet/internal/tmux"
 	"github.com/sturlabragason/fleet/internal/tools"
 	"github.com/sturlabragason/fleet/internal/wall"
@@ -118,7 +118,7 @@ func attachTmux(args ...string) error {
 			env = append(env, e)
 		}
 	}
-	return syscall.Exec(tm, append([]string{"tmux", "-L", fleet.Socket}, args...), env)
+	return sysx.Exec(tm, append([]string{"tmux", "-L", fleet.Socket}, args...), env)
 }
 
 // wallAttach is `fleet wall attach`: this terminal shows the main window
@@ -193,7 +193,7 @@ func openWallTerminal(f *fleet.Fleet) (string, error) {
 		return "", fmt.Errorf("no terminal found (set FLEET_TERMINAL)")
 	}
 	c := exec.Command(argv[0], argv[1:]...)
-	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	sysx.Detach(c)
 	if err := c.Start(); err != nil {
 		return "", err
 	}

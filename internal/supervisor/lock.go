@@ -3,7 +3,8 @@ package supervisor
 import (
 	"os"
 	"path/filepath"
-	"syscall"
+
+	"github.com/sturlabragason/fleet/internal/sysx"
 )
 
 // Lock takes an exclusive lock on admiral/reset.lock so concurrent resets
@@ -15,7 +16,7 @@ func LockOf(home, name string) (unlock func(), err error) { return lockOf(home, 
 
 // TryLockOf is LockOf that fails at once when another process holds it.
 func TryLockOf(home, name string) (unlock func(), err error) {
-	return lockOf(home, name, syscall.LOCK_NB)
+	return lockOf(home, name, sysx.LockNB)
 }
 
 func lockOf(home, name string, nb int) (unlock func(), err error) {
@@ -27,9 +28,9 @@ func lockOf(home, name string, nb int) (unlock func(), err error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|nb); err != nil {
+	if err := sysx.Flock(f, sysx.LockEx|nb); err != nil {
 		f.Close()
 		return nil, err
 	}
-	return func() { syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, nil
+	return func() { sysx.Flock(f, sysx.LockUn); f.Close() }, nil
 }

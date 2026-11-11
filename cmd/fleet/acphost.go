@@ -15,6 +15,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/acphost"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/sysx"
 	"golang.org/x/term"
 )
 
@@ -107,7 +108,7 @@ func cmdACPHost(args []string) error {
 				return w, h
 			}
 			winch := make(chan os.Signal, 1)
-			signal.Notify(winch, syscall.SIGWINCH)
+			sysx.NotifyResize(winch)
 			defer signal.Stop(winch)
 			cfg.Resized = winch
 			if exe, err := os.Executable(); err == nil {
@@ -127,7 +128,7 @@ func paneTakeover(exe, home, name string, say func(string)) error {
 	log := filepath.Join(acphost.Dir(home), name+".takeover.log")
 	_ = os.Remove(log)
 	cmd := exec.Command("/bin/sh", "-c", `"$0" takeover "$1" >"$2" 2>&1 </dev/null &`, exe, name, log)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	sysx.Detach(cmd)
 	// The user pressed the key, not the agent: without TMUX_PANE the CLI
 	// does not take the call for one from this agent's pane (leaderScope).
 	cmd.Env = acphost.FilterEnv(os.Environ(), []string{"TMUX_PANE"})

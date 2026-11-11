@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
@@ -12,6 +11,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/mail"
 	"github.com/sturlabragason/fleet/internal/park"
 	"github.com/sturlabragason/fleet/internal/prefs"
+	"github.com/sturlabragason/fleet/internal/sysx"
 )
 
 // The memory guard (DESIGN §7, ADR-44). When free RAM falls under
@@ -144,10 +144,10 @@ func (f *Fleet) claimGuard(now time.Time, every time.Duration) (bool, time.Time)
 		return false, time.Time{}
 	}
 	defer lf.Close()
-	if err := syscall.Flock(int(lf.Fd()), syscall.LOCK_EX); err != nil {
+	if err := sysx.Flock(lf, sysx.LockEx); err != nil {
 		return false, time.Time{}
 	}
-	defer syscall.Flock(int(lf.Fd()), syscall.LOCK_UN)
+	defer sysx.Flock(lf, sysx.LockUn)
 	var before time.Time
 	// A fresh file (size 0) has never been claimed; its mtime is now.
 	if st, err := lf.Stat(); err == nil && st.Size() > 0 {

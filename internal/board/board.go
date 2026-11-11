@@ -13,12 +13,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/jsonx"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/status"
+	"github.com/sturlabragason/fleet/internal/sysx"
 )
 
 // Agent is one board entry.
@@ -455,10 +455,10 @@ func (s *Store) Update(fn func(*Board) error) error {
 		return err
 	}
 	defer lf.Close()
-	if err := syscall.Flock(int(lf.Fd()), syscall.LOCK_EX); err != nil {
+	if err := sysx.Flock(lf, sysx.LockEx); err != nil {
 		return err
 	}
-	defer syscall.Flock(int(lf.Fd()), syscall.LOCK_UN)
+	defer sysx.Flock(lf, sysx.LockUn)
 	b, old, err := s.load()
 	if err != nil {
 		return err

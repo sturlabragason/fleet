@@ -9,10 +9,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
+	"github.com/sturlabragason/fleet/internal/sysx"
 )
 
 // Task cards (DESIGN §18 #5/#6, ADR-43). A spawn may attach a goal, a
@@ -118,8 +118,7 @@ func RunCheck(dir string, c *board.Card, timeout time.Duration) *board.Check {
 	// Its own process group, killed as a group: a check is usually a build
 	// or a test run, and its children must not outlive the timeout or keep
 	// the output pipe open past it.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	sysx.KillGroupOnCancel(cmd)
 	cmd.WaitDelay = checkWaitDelay
 	var buf bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &buf, &buf

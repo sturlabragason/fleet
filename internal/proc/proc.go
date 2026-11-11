@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/sysx"
 )
 
 // Proc is one process, identified by pid and start time so a reused pid is
@@ -91,7 +92,7 @@ func Kill(ps []Proc, grace time.Duration) {
 		return
 	}
 	for _, p := range live {
-		syscall.Kill(p.PID, syscall.SIGTERM)
+		sysx.Kill(p.PID, syscall.SIGTERM)
 	}
 	deadline := time.Now().Add(grace)
 	for {
@@ -109,7 +110,7 @@ func Kill(ps []Proc, grace time.Duration) {
 	}
 	for _, p := range live {
 		log.Warn("SIGKILL after grace", "pid", p.PID)
-		syscall.Kill(p.PID, syscall.SIGKILL)
+		sysx.Kill(p.PID, syscall.SIGKILL)
 	}
 	// SIGKILL is delivered asynchronously; wait briefly so callers see the tree gone.
 	for end := time.Now().Add(500 * time.Millisecond); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {

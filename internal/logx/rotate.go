@@ -4,8 +4,9 @@ import (
 	"os"
 	"strconv"
 	"sync"
-	"syscall"
 	"time"
+
+	"github.com/sturlabragason/fleet/internal/sysx"
 )
 
 // fleet.log is shared by every fleet process (the watcher, the overview,
@@ -77,10 +78,10 @@ func (r *rotator) check(now time.Time) {
 		return
 	}
 	defer lf.Close()
-	if syscall.Flock(int(lf.Fd()), syscall.LOCK_EX) != nil {
+	if sysx.Flock(lf, sysx.LockEx) != nil {
 		return
 	}
-	defer syscall.Flock(int(lf.Fd()), syscall.LOCK_UN)
+	defer sysx.Flock(lf, sysx.LockUn)
 	// Another process may have rotated while this one waited for the lock.
 	if on, err := os.Stat(r.path); err == nil && os.SameFile(cur, on) && on.Size() >= MaxSize {
 		for i := Keep; i > 1; i-- {

@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 	"unicode"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/mail"
 	"github.com/sturlabragason/fleet/internal/status"
+	"github.com/sturlabragason/fleet/internal/sysx"
 )
 
 // Report wakes (DESIGN §6.7, ADR-36). A report is always on disk and on the
@@ -223,12 +223,12 @@ func (f *Fleet) lockWake(box string) (release func(), ok bool) {
 	if err != nil {
 		return func() {}, false
 	}
-	if err := syscall.Flock(int(lf.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err := sysx.Flock(lf, sysx.LockEx|sysx.LockNB); err != nil {
 		lf.Close()
 		return func() {}, false
 	}
 	return func() {
-		syscall.Flock(int(lf.Fd()), syscall.LOCK_UN)
+		sysx.Flock(lf, sysx.LockUn)
 		lf.Close()
 	}, true
 }

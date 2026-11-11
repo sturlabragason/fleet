@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/sturlabragason/fleet/internal/sysx"
 )
 
 // Proc is one running process: its comm name and argv.
@@ -66,7 +68,7 @@ func Holder(id string, paths []string, procs []Proc) (int, string) {
 }
 
 func alive(pid int) bool {
-	err := syscall.Kill(pid, 0)
+	err := sysx.Kill(pid, 0)
 	return err == nil || errors.Is(err, syscall.EPERM)
 }
 

@@ -61,7 +61,7 @@ type Server struct {
 	ExePath string
 	// Probe checks a new binary before exec (default `<path> mcp --probe`).
 	Probe func(path string) error
-	// Exec replaces this process (default syscall.Exec).
+	// Exec replaces this process (default sysx.Exec).
 	Exec func(path string, argv, env []string) error
 	Now  func() time.Time
 	// Reloaded marks a process started by a reload: Serve first sends

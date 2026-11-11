@@ -7,7 +7,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"syscall"
+
+	"github.com/sturlabragason/fleet/internal/sysx"
 )
 
 // Main is the admiral every fleet has. It keeps every path, mailbox and pane
@@ -112,10 +113,10 @@ func updateRegistry(home string, fn func([]Admiral) ([]Admiral, error)) error {
 		return err
 	}
 	defer lf.Close()
-	if err := syscall.Flock(int(lf.Fd()), syscall.LOCK_EX); err != nil {
+	if err := sysx.Flock(lf, sysx.LockEx); err != nil {
 		return err
 	}
-	defer syscall.Flock(int(lf.Fd()), syscall.LOCK_UN)
+	defer sysx.Flock(lf, sysx.LockUn)
 	as, err := fn(Admirals(home))
 	if err != nil {
 		return err
