@@ -87,20 +87,21 @@ func (t *stubTracker) State() trackState { return t.s }
 // stubConn is a scripted agent: each prompt waits for a turn func the test
 // hands it on turns.
 type stubConn struct {
-	h       handler
-	caps    acp.AgentCapabilities
-	turns   chan func(h handler) acp.StopReason
-	done    chan struct{}
-	err     error
-	once    sync.Once
-	mu      sync.Mutex
-	calls   []string
-	cancel  chan struct{}
-	gate    chan struct{}   // NewSession waits for it when set
-	usage   *acp.Usage      // every prompt's usage, when set
-	newErr  error           // NewSession fails with it, when set
-	modeErr error           // SetMode fails with it, when set
-	mcp     []acp.MCPServer // the last session call's servers
+	h        handler
+	caps     acp.AgentCapabilities
+	turns    chan func(h handler) acp.StopReason
+	done     chan struct{}
+	err      error
+	once     sync.Once
+	mu       sync.Mutex
+	calls    []string
+	cancel   chan struct{}
+	gate     chan struct{}   // NewSession waits for it when set
+	usage    *acp.Usage      // every prompt's usage, when set
+	newErr   error           // NewSession fails with it, when set
+	modeErr  error           // SetMode fails with it, when set
+	modelErr error           // UseModel fails with it, when set
+	mcp      []acp.MCPServer // the last session call's servers
 }
 
 func newStubConn(caps acp.AgentCapabilities) *stubConn {
@@ -164,6 +165,12 @@ func (c *stubConn) Prompt(ctx context.Context, id, text string) (acp.PromptResul
 func (c *stubConn) SetMode(ctx context.Context, id, mode string) error {
 	c.call("mode " + id + " " + mode)
 	return c.modeErr
+}
+func (c *stubConn) UseModel(ctx context.Context, id, model string) error {
+	if model != "" {
+		c.call("model " + id + " " + model)
+	}
+	return c.modelErr
 }
 func (c *stubConn) Cancel(id string) error { c.call("cancel"); c.cancel <- struct{}{}; return nil }
 func (c *stubConn) CloseSession(ctx context.Context, id string) error {
@@ -767,6 +774,26 @@ func TestSessionModeFailureFailsSetup(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(PromptPath(r.home, "a1")); string(b) != "first goal" {
 		t.Fatalf("prompt file %q", b)
+	}
+}
+
+// A model the agent refuses ends the host before any prompt (ADR-112).
+func TestSessionModelFailureFailsSetup(t *testing.T) {
+	gate := make(chan struct{})
+	r := startRigGated(t, Config{Model: "no-such-model", Prompt: "first goal"}, acp.AgentCapabilities{}, gate)
+	r.conn.modelErr = errors.New("the agent refused model")
+	close(gate)
+	select {
+	case err := <-r.errC:
+		if err == nil || !strings.Contains(err.Error(), "model") {
+			t.Fatalf("run returned %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("host did not end")
+	}
+	calls := strings.Join(r.conn.Calls(), "|")
+	if strings.Contains(calls, "prompt ") || !strings.Contains(calls, " no-such-model") {
+		t.Fatalf("calls %v", r.conn.Calls())
 	}
 }
 

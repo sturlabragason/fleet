@@ -38,6 +38,9 @@ type Config struct {
 	Mode string    // session mode set after new, resume or load; "" sets none
 	Out  io.Writer // the pane; nil draws nothing
 	In   io.Reader // typed lines; nil reads nothing
+	// Model is the model the session must run (ADR-112), set after new,
+	// resume or load when the agent names another; "" leaves the agent's.
+	Model string
 	// Keys reads In as raw key presses (a terminal in raw mode) and keeps
 	// an input line at the bottom of Out (ADR-82); off, In is read as lines.
 	Keys bool
@@ -64,6 +67,7 @@ type agentConn interface {
 	LoadSession(ctx context.Context, id, cwd string, mcp []acp.MCPServer) error
 	ResumeSession(ctx context.Context, id, cwd string, mcp []acp.MCPServer) error
 	SetMode(ctx context.Context, id, mode string) error
+	UseModel(ctx context.Context, id, model string) error
 	Prompt(ctx context.Context, id, text string) (acp.PromptResult, error)
 	Cancel(id string) error
 	CloseSession(ctx context.Context, id string) error
@@ -309,6 +313,10 @@ func (h *host) setup() error {
 		if err := c.SetMode(h.bg, id, h.cfg.Mode); err != nil {
 			return fmt.Errorf("session mode %s: %w", h.cfg.Mode, err)
 		}
+	}
+	// Likewise the model: never a turn on a model fleet wasn't asked for.
+	if err := c.UseModel(h.bg, id, h.cfg.Model); err != nil {
+		return fmt.Errorf("session model: %w", err)
 	}
 	h.mu.Lock()
 	h.sid, h.caps, h.ready = id, caps, true

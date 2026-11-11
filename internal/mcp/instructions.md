@@ -120,7 +120,9 @@ Use only the `fleet` MCP tools: never bash, tmux or fleet source code for fleet 
   your dir, no secrets, report), `standard` for a contained change (plan, build, test, commit on its branch),
   `pro` for professional code work (worktree, review, pre-merge checklist, merge into local main; it pushes only its own `fleet/` branch, for CI).
   Default: `pro` with a worktree, `light` without one. Pick it deliberately: `pro` over-steers a small job.
-- Every fleet agent runs Opus, at every effort and as a leader; fleet refuses a `model` that is not Opus (ADR-100).
+- Fleet agents run their profile's default model (Opus for copilot and claude) unless `model` names another. Any model the
+  profile's tool offers is allowed: `fleet_profiles` with `profile` lists them; fleet refuses one the tool doesn't list,
+  and any model on a profile with no model flag (vibe). The model is kept across park, wake and resume (ADR-112).
   Subagents (yours, a leader's, an agent's): Opus by default, never Haiku; Sonnet only for a clearly scoped subtask
   with a machine-checkable done condition (a mechanical edit, a search, running tests, a summary of known files).
   Design, review, debugging and judgment stay on Opus.

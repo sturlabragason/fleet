@@ -71,14 +71,14 @@ var toolDefs = []tool{
 		"leader":      map[string]any{"type": "boolean", "description": "make it a leader: it gets squad tools and may spawn a squad of its own, whose reports come to it instead of you. Use for a job you want planned, split and summarised by one agent."},
 		"driver":      map[string]any{"type": "string", "enum": []string{"tmux", "acp"}, "description": "how fleet runs the agent: tmux (the tool's own screen) or acp (the tool's ACP server under fleet acp-host: status, questions and sends over the protocol, no screen reading). Default: the user's config, else acp for every profile that runs copilot or agy (claude-copilot too) and tmux for the rest. Claude runs over acp only when asked (this field or the profile's config), never from [defaults]; vibe refuses acp."},
 		"effort":      map[string]any{"type": "string", "enum": []string{"light", "standard", "pro"}, "description": "how much process the agent is given. light: an errand or a quick read-only question (a few lines: stay in your dir, no secrets, report). standard: a contained change (plan, build and test, commit on its branch; no ADR, no review, no merge). pro: professional code work in this repo (the full playbook: worktree, failing test first, subagent review, pre-merge checklist, merge into local main). Default: pro with a worktree, light without one."},
-		"model":       map[string]any{"type": "string", "description": "an Opus model in the profile's own ids (opus or claude-opus-4-8 for claude, claude-opus-4.8 for copilot). Default: the profile's Opus model, at every effort. Anything not Opus is refused (ADR-100), and so is any model for a profile whose tool has no model flag."}})},
+		"model":       map[string]any{"type": "string", "description": "a model id the profile's tool offers, in the tool's own ids (fleet_profiles with profile lists them, e.g. claude-sonnet-5.5 or gemini-3.8-flash for copilot, sonnet for claude). Checked against the tool's own list when it has an ACP server; a model it doesn't list is refused, never swapped for another, and so is any model for a profile with no model flag (vibe). Default: the profile's (Opus for copilot and claude, the tool's own for agy), at every effort. The model is kept across park, wake and resume."}})},
 	{"fleet_sessions", "Find copilot/claude sessions the user started outside fleet, newest first: id | age | profile | dir | title | flags. Use before fleet_adopt.", obj(nil, map[string]any{
 		"query": str("optional words; every word must appear in title, dir, branch or id"), "limit": map[string]any{"type": "integer", "description": "max sessions (default 15)"}})},
 	{"fleet_adopt", "Resume an existing session the user started outside fleet as a fleet agent. Pass session_id (full id or unique 8+ char prefix) or query (words that match exactly one session), not both. Refuses if the session is missing or still open elsewhere.", obj(nil, map[string]any{
 		"session_id": str("session id from fleet_sessions"), "query": str("words matching exactly one session"), "profile": str("optional tool profile; default the suggested one"),
 		"dir": str("optional working directory (absolute); default from the session"), "name": str("optional agent name; default base name of dir"),
 		"driver": map[string]any{"type": "string", "enum": []string{"tmux", "acp"}, "description": "as for fleet_spawn: acp loads the session in the tool's ACP server, tmux resumes it in the tool's own screen. Default as for fleet_spawn."}})},
-	{"fleet_profiles", "List tool profiles that fleet_spawn accepts.", obj(nil, map[string]any{})},
+	{"fleet_profiles", "List tool profiles that fleet_spawn accepts, with their model support; with profile, the models that profile's tool offers for fleet_spawn's model.", obj(nil, map[string]any{"profile": str("optional profile: list the models its tool offers (fleet starts the tool's ACP server once, no prompt, no tokens; cached 10 minutes). Without it: every profile, whether it can select a model, and its default.")})},
 	{"fleet_close", "Stop an agent and remove it from the board. Ask the user first; set confirmed=true only after an explicit yes. The reply notes uncommitted or unmerged work in its dir. Closing a leader leaves its squad running and hands it back to you; squad=true closes its agents too.", obj([]string{"name", "confirmed"}, map[string]any{
 		"name": str("agent name"), "confirmed": confirmedProp,
 		"squad": map[string]any{"type": "boolean", "description": "for a leader: close its squad agents with it"}})},
@@ -260,7 +260,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		}
 		return fmt.Sprintf("adopted %s (%s) session %s in %s%s", ag.Name, ag.Profile, ag.SessionID, ag.Dir, s.dirNote(ag.Dir)), nil
 	case "fleet_profiles":
-		return s.profiles(), nil
+		return s.profiles(a.Profile)
 	case "fleet_close":
 		return s.close(a)
 	case "fleet_park":
@@ -378,13 +378,55 @@ func queueNote(ag *board.Agent) string {
 	return " (" + ag.LastLine + ")"
 }
 
-// profiles lists the tool profiles a spawn accepts, one line each.
-func (s *Server) profiles() string {
+// profiles lists the tool profiles a spawn accepts, one line each with
+// its model support; with profile, the models its tool offers (ADR-112).
+func (s *Server) profiles(profile string) (string, error) {
+	if profile != "" {
+		pm, err := s.F.ProfileModels(profile)
+		if err != nil {
+			return "", err
+		}
+		return modelList(pm), nil
+	}
 	var b strings.Builder
 	for _, n := range tools.Names(s.F.Profiles) {
 		p := s.F.Profiles[n]
 		argv, _ := p.Argv(tools.Vars{Fleet: "fleet", Name: "<name>", PeerMCP: "<peer-mcp>", PeerMCPClaude: "<peer-mcp>"}, tools.Launch{})
-		fmt.Fprintf(&b, "%s: %s\n", n, strings.Join(argv, " "))
+		fmt.Fprintf(&b, "%s: %s", n, strings.Join(argv, " "))
+		if pm, err := s.F.ModelSupport(n); err == nil {
+			b.WriteString(modelSummary(pm))
+		}
+		b.WriteString("\n")
+	}
+	return b.String(), nil
+}
+
+func modelSummary(pm fleet.ProfileModels) string {
+	if !pm.Selectable {
+		return " | model: fixed (no model flag)"
+	}
+	def := pm.Default
+	if def == "" {
+		def = "the tool's own"
+	}
+	return " | model: selectable, default " + def
+}
+
+func modelList(pm fleet.ProfileModels) string {
+	var b strings.Builder
+	b.WriteString(pm.Profile + modelSummary(pm) + "\n")
+	if pm.Note != "" {
+		b.WriteString(pm.Note + "\n")
+	}
+	if pm.Listed {
+		fmt.Fprintf(&b, "the tool offers (its current: %s):\n", pm.Current)
+	}
+	for _, m := range pm.Models {
+		b.WriteString(m.ModelID)
+		if m.Name != "" && m.Name != m.ModelID {
+			b.WriteString(" | " + m.Name)
+		}
+		b.WriteString("\n")
 	}
 	return b.String()
 }

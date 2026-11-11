@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/acp"
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/mail"
@@ -110,7 +111,11 @@ type Fleet struct {
 	SummaryModel summary.Model
 	// LookCmd reports whether a profile's command can be run; nil = look
 	// in ~/.local/bin, PATH and a login shell (tests replace it).
-	LookCmd     func(cmd string) error
+	LookCmd func(cmd string) error
+	// ModelProbe asks a profile's tool, already set to its model, which
+	// models it offers (ADR-112); nil starts its ACP server (tests set it).
+	ModelProbe  func(profile string, p tools.Profile) (acp.Models, error)
+	modelCache  modelCache
 	summarizer  *summary.Summarizer
 	summaryMu   sync.Mutex
 	wakeMu      sync.Mutex
@@ -187,9 +192,10 @@ type SpawnOpts struct {
 	// Driver is "tmux" or "acp" (DESIGN §7d, ADR-74); "" takes the
 	// profile's driver from config.toml, else tmux.
 	Driver string
-	// Model is the model the agent runs (ADR-100); "" is the profile's,
-	// pinned to Opus. A model that is not Opus is refused, and so is any
-	// model for a profile whose tool has no model flag.
+	// Model is the model the agent runs (ADR-112): any id the profile's
+	// tool offers. "" is the profile's (Opus for the built-in Copilot and
+	// Claude profiles). A profile whose tool has no model flag refuses one,
+	// and so does a tool that lists its models without this one.
 	Model string
 }
 
@@ -249,6 +255,11 @@ func (f *Fleet) SpawnWith(o SpawnOpts, name, profile, dir, prompt string) (*boar
 	}
 	if err := f.CheckCommand(profile, f.Profiles[profile], driver); err != nil {
 		return nil, err
+	}
+	if o.Model != "" {
+		if err := f.checkModel(profile, f.Profiles[profile], o.Model); err != nil {
+			return nil, err
+		}
 	}
 	if driver == prefs.DriverACP {
 		if err := acpSocketFits(f.Home, name); err != nil {

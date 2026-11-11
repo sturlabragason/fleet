@@ -18,7 +18,7 @@ import (
 	"golang.org/x/term"
 )
 
-const acpHostUsage = "usage: fleet acp-host <name> [--dir D] [--session ID] [--prompt-file F] [--copilot-events] [--mode M] [--mcp JSON] [--meta JSON] [--unset-env A,B] [--profile P] -- <argv...>"
+const acpHostUsage = "usage: fleet acp-host <name> [--dir D] [--session ID] [--prompt-file F] [--copilot-events] [--mode M] [--mcp JSON] [--meta JSON] [--unset-env A,B] [--profile P] [--model M] -- <argv...>"
 
 // cmdACPHost runs one ACP agent in this terminal (its tmux window) until it
 // is stopped or its child exits (DESIGN §7d, ADR-74).
@@ -37,6 +37,7 @@ func cmdACPHost(args []string) error {
 	metaJSON := fs.String("meta", "", "_meta object for session/new, load and resume (claude-agent-acp options)")
 	unset := fs.String("unset-env", "", "comma-separated variables the agent must not inherit")
 	profile := fs.String("profile", "", "the fleet profile, shown in the pane's header")
+	model := fs.String("model", "", "the model the session must run, switched over ACP when the agent names another (ADR-112)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -86,7 +87,7 @@ func cmdACPHost(args []string) error {
 	cfg := acphost.Config{
 		Home: logx.Home(), Name: name, Dir: *dir, Argv: argv, Env: acphost.FilterEnv(os.Environ(), drop),
 		SessionID: *session, Prompt: prompt, OnPromptSent: sent, CopilotEvents: *copilotEvents,
-		Mode: *mode, MCP: mcp, Meta: meta, Profile: *profile,
+		Mode: *mode, Model: *model, MCP: mcp, Meta: meta, Profile: *profile,
 		Out: os.Stdout, In: os.Stdin,
 	}
 	// A terminal gets the input line: raw key presses, so Esc cancels and

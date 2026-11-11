@@ -205,8 +205,8 @@ func (f *Fleet) Wake(name string, force bool) (*board.Agent, error) {
 	if old.Effort != "" {
 		ctx = contextKey(p, playbook.Level(old.Effort), role.Leader)
 	}
-	// The model it was started with; an agent from before ADR-100 gets the
-	// profile's Opus pin.
+	// The model it was started with (ADR-112); an agent from before ADR-100
+	// gets the profile's pin.
 	p, model, err := f.withModel(old.Profile, p, old.Model)
 	if err != nil {
 		f.unclaimWake(name, old)

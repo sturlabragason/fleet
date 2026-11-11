@@ -138,8 +138,9 @@ func TestAdmiralLaunchBootPrompt(t *testing.T) {
 	}
 }
 
-// The admiral runs Opus (ADR-100): copilot and claude pin their Opus model,
-// and a profile whose args name another model is refused.
+// The admiral runs Opus by default (ADR-100): copilot and claude pin their
+// Opus model, and a profile whose args name another model runs that one
+// (ADR-112).
 func TestAdmiralRunsOpus(t *testing.T) {
 	f := testFleet(t)
 	for prof, want := range map[string]string{"copilot": "--model " + tools.CopilotClaudeModel, "claude": "--model " + tools.ClaudeModel} {
@@ -151,8 +152,8 @@ func TestAdmiralRunsOpus(t *testing.T) {
 	p := f.Profiles["claude"]
 	p.Args = []string{"--model", "sonnet"}
 	f.Profiles["claude-sonnet"] = p
-	if _, err := supervisorCmd(f, "claude-sonnet", ""); err == nil || !strings.Contains(err.Error(), "ADR-100") {
-		t.Errorf("sonnet admiral: %v", err)
+	if sl, err := supervisorCmd(f, "claude-sonnet", ""); err != nil || !strings.Contains(sl.Cmd, "--model sonnet") || strings.Contains(sl.Cmd, "--model "+tools.ClaudeModel+" ") {
+		t.Errorf("sonnet admiral: %s %v", sl.Cmd, err)
 	}
 }
 

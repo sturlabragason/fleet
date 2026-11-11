@@ -329,7 +329,7 @@ func TestClaudeACPSpawnAndWake(t *testing.T) {
 		"--mode", "bypassPermissions", "--mcp", peer,
 		"--meta", `{"claudeCode":{"options":{"plugins":[{"path":"` + tools.PluginDir(home, "a1") + `","type":"local"}]}}}`,
 		"--unset-env", "ANTHROPIC_API_KEY,ANTHROPIC_AUTH_TOKEN,CLAUDE_CODE_OAUTH_TOKEN",
-		"--profile", "claude", "--", "npx", "-y", "@agentclientprotocol/claude-agent-acp@" + tools.ClaudeACPVersion}
+		"--profile", "claude", "--model", "opus", "--", "npx", "-y", "@agentclientprotocol/claude-agent-acp@" + tools.ClaudeACPVersion}
 	got := hostArgs(t, home)
 	if len(got) != 1 || !reflect.DeepEqual(got[0], wantArgv) {
 		t.Errorf("host argv %q\nwant %q", got, wantArgv)

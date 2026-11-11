@@ -22,6 +22,11 @@ const (
 	MethodSessionCancel  = "session/cancel" // a notification, no response
 	MethodSessionClose   = "session/close"
 	MethodSessionSetMode = "session/set_mode"
+	// MethodSessionSetModel and MethodSessionSetConfig pick a session's
+	// model (ADR-112): the first where the agent sends "models" (Copilot,
+	// agy), the second for a "model" config option (claude-agent-acp).
+	MethodSessionSetModel  = "session/set_model"
+	MethodSessionSetConfig = "session/set_config_option"
 )
 
 // Method names, agent to client.
@@ -156,6 +161,58 @@ type NewSessionParams struct {
 // NewSessionResult carries the new session's id.
 type NewSessionResult struct {
 	SessionID string `json:"sessionId"`
+}
+
+// SessionModelState is what a session/new, load or resume result says about
+// models: the "models" object (unstable ACP: Copilot, agy) and the config
+// options, one of which may be the model (category "model": claude-agent-acp).
+type SessionModelState struct {
+	Models        *ModelState    `json:"models,omitempty"`
+	ConfigOptions []ConfigOption `json:"configOptions,omitempty"`
+}
+
+// ModelState is the session's current model and the ones it may switch to.
+type ModelState struct {
+	CurrentModelID  string      `json:"currentModelId"`
+	AvailableModels []ModelInfo `json:"availableModels"`
+}
+
+// ModelInfo is one model an agent offers.
+type ModelInfo struct {
+	ModelID     string `json:"modelId"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// ConfigOption is one session config option; fleet reads only selects.
+type ConfigOption struct {
+	ID           string `json:"id"`
+	Category     string `json:"category,omitempty"`
+	Type         string `json:"type,omitempty"`
+	CurrentValue any    `json:"currentValue,omitempty"`
+	// Options may be values or groups of values; only a flat list of
+	// values is read (see SessionModelState.models).
+	Options json.RawMessage `json:"options,omitempty"`
+}
+
+// ConfigChoice is one value of a select config option.
+type ConfigChoice struct {
+	Value       string `json:"value"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// SetModelParams picks a session's model (session/set_model).
+type SetModelParams struct {
+	SessionID string `json:"sessionId"`
+	ModelID   string `json:"modelId"`
+}
+
+// SetConfigParams sets one config option (session/set_config_option).
+type SetConfigParams struct {
+	SessionID string `json:"sessionId"`
+	ConfigID  string `json:"configId"`
+	Value     string `json:"value"`
 }
 
 // SessionRefParams is the params of session/load and session/resume.
