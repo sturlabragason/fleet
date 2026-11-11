@@ -180,3 +180,15 @@ func CheckState(a *board.Agent) string {
 	}
 	return "not run yet"
 }
+
+// ResultFiles are the task-card result files of every agent on b: each agent
+// writes its own, so they are never an overlap (#11).
+func ResultFiles(b *board.Board) []string {
+	var ps []string
+	for _, a := range b.Agents {
+		if p, _, ok := ResultPath(a); ok {
+			ps = append(ps, p)
+		}
+	}
+	return ps
+}

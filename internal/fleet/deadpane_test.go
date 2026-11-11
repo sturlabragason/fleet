@@ -110,8 +110,11 @@ func TestDeadPaneCleanExitCloses(t *testing.T) {
 	}
 }
 
+// The grace is long enough that a slow machine cannot run past it between
+// the report and the checks; the test then ends the grace by backdating the
+// exit instead of waiting it out.
 func TestDeadPaneCrashGrace(t *testing.T) {
-	f, r := deadFleet(t, "sleep 0.3; echo boom; echo last words; exit 3", "[defaults]\ndead_pane_grace = \"300ms\"\n", "")
+	f, r := deadFleet(t, "sleep 0.3; echo boom; echo last words; exit 3", "[defaults]\ndead_pane_grace = \"5s\"\n", "")
 	poll(t, f, func() bool { return len(reports(t, f)) > 0 })
 	closed, pasted := r.get()
 	if len(closed) != 0 {
@@ -121,9 +124,10 @@ func TestDeadPaneCrashGrace(t *testing.T) {
 	if len(ms) != 1 || !strings.HasPrefix(ms[0].Text, "blocked: crashed (exit 3)\n") || !strings.Contains(ms[0].Text, "boom\nlast words") || strings.Contains(ms[0].Text, "Pane is dead") {
 		t.Fatalf("report %+v", ms)
 	}
-	if want := "[fleet] d1 crashed (exit 3): last words. Closing in 300ms. Full text: call fleet_reports."; len(pasted) != 1 || pasted[0] != want {
+	if want := "[fleet] d1 crashed (exit 3): last words. Closing in 5s. Full text: call fleet_reports."; len(pasted) != 1 || pasted[0] != want {
 		t.Fatalf("wake %q, want %q", pasted, want)
 	}
+	f.Store.Update(func(b *board.Board) error { b.Agents["d1"].Exit.At = time.Now().Add(-time.Hour); return nil })
 	poll(t, f, func() bool { c, _ := r.get(); return len(c) == 1 })
 	if len(reports(t, f)) != 1 {
 		t.Fatal("reported twice")

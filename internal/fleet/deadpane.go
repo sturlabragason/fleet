@@ -38,8 +38,29 @@ type deadJob struct {
 // background, one run at a time; a busy run leaves the rest for a later poll.
 // off holds every dead pane for the outage (ADR-110): no report, no close.
 func (f *Fleet) reapDead(as []*board.Agent, panes map[string]tmux.PaneInfo, now time.Time, off bool) {
+	jobs := f.deadJobs(as, panes, now, off)
+	if len(jobs) == 0 || !f.dead.run.TryLock() {
+		return
+	}
+	go func() {
+		defer f.dead.run.Unlock()
+		for _, j := range jobs {
+			if j.fresh {
+				f.reportDead(j.a, j.pane)
+			} else {
+				f.closeDead(j.a.Name)
+			}
+		}
+	}()
+}
+
+// deadJobs picks the dead panes to report or close. The lock is released by
+// defer: the watcher recovers a panicking pass (ADR-113), and a lock left
+// held would hang every later one.
+func (f *Fleet) deadJobs(as []*board.Agent, panes map[string]tmux.PaneInfo, now time.Time, off bool) []deadJob {
 	var jobs []deadJob
 	f.dead.mu.Lock()
+	defer f.dead.mu.Unlock()
 	if f.dead.tried == nil {
 		f.dead.tried = map[string]time.Time{}
 	}
@@ -58,20 +79,7 @@ func (f *Fleet) reapDead(as []*board.Agent, panes map[string]tmux.PaneInfo, now 
 			jobs = append(jobs, deadJob{a: a, pane: p})
 		}
 	}
-	f.dead.mu.Unlock()
-	if len(jobs) == 0 || !f.dead.run.TryLock() {
-		return
-	}
-	go func() {
-		defer f.dead.run.Unlock()
-		for _, j := range jobs {
-			if j.fresh {
-				f.reportDead(j.a, j.pane)
-			} else {
-				f.closeDead(j.a.Name)
-			}
-		}
-	}()
+	return jobs
 }
 
 // reportDead claims the first sighting of a's death on the board and, if

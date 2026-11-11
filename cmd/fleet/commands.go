@@ -162,12 +162,17 @@ const usage = `usage:
   fleet worktrees [--repo DIR] [--json] [--prune]
                                             the repo's leftover worktrees under <repo>.wt/: size, merged,
                                             dirty, and which agent holds each. --prune removes the merged,
-                                            clean ones no live or parked agent holds (git's own refusal
-                                            guards uncommitted work; never --force)
+                                            clean ones no live, parked or recently closed (resumable)
+                                            agent holds (git's own refusal guards uncommitted work;
+                                            never --force)
   fleet branches [--repo DIR] [--json] [--prune]
                                             the repo's fleet/ branches on origin, merged or not, and the
                                             agent on each. --prune deletes the merged ones (by ancestry or
-                                            equal patch) no live or parked agent is on
+                                            equal patch) no live, parked or recently closed agent is on
+  fleet config explain [--json] [profile]   the settings a spawn of profile gets (default: [defaults]
+                                            profile), each with the layer that set it: --driver,
+                                            [profile.<name>], [defaults], the tool profile or built-in;
+                                            and the FLEET_* variables set here
   fleet adr claim [--for AGENT] [-C dir]    take the next free ADR number for DESIGN.md §14 and print it;
                                             atomic, so parallel agents never pick the same one
   fleet adr ls [--json] [-C dir]            ADR numbers claimed but not yet on main
@@ -407,6 +412,8 @@ func run(args []string) error {
 		return cmdWait(f, rest)
 	case "models":
 		return cmdModels(f, rest)
+	case "config":
+		return cmdConfig(f, rest)
 	case "profiles":
 		for _, n := range tools.Names(f.Profiles) {
 			p := f.Profiles[n]

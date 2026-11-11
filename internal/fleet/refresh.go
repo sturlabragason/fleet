@@ -173,6 +173,7 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 		f.reapDead(out, deadPanes, now, off)
 		f.watchAdmirals(panes, now)
 		f.checkNet(out, now, off)
+		f.retain(now)
 	}
 	return out, err
 }

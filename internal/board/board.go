@@ -5,10 +5,14 @@ package board
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -353,11 +357,17 @@ type Report struct {
 // Board is the whole file.
 type Board struct {
 	Agents map[string]*Agent `json:"agents"`
-	// Closed are recently closed agents, kept so fleet_send resume=true can
-	// bring one back with its card, team and owner (ADR-95). They are not
-	// agents: nothing that lists Agents shows them.
-	Closed map[string]*Closed `json:"closed,omitempty"`
-	extra  jsonx.Extra
+	// LegacyClosed is the "closed" key of a board.json written before
+	// ADR-113, or by an older build still running. The records now live in
+	// closed.json (see closed.go); the next Update moves these there. Use
+	// the Closed methods, never this field.
+	LegacyClosed map[string]*Closed `json:"closed,omitempty"`
+	extra        jsonx.Extra
+
+	store     *Store
+	closed    map[string]*Closed // nil until read
+	closedOld []byte
+	closedErr error
 }
 
 // Store reads and writes the board under a directory.
@@ -368,34 +378,74 @@ func NewStore(dir string) *Store { return &Store{Dir: dir} }
 
 func (s *Store) path() string { return filepath.Join(s.Dir, "board.json") }
 
-// Load reads the board. Broken JSON is logged, backed up and treated as empty.
+// Load reads the board for reading. A board.json that cannot be read or
+// parsed is logged, kept aside and read as empty; Update refuses to write
+// over it (ADR-113).
 func (s *Store) Load() *Board {
-	b, _ := s.load()
+	b, _, _ := s.load()
 	return b
 }
 
-// load is Load plus the bytes it read, so Update can tell a no-op.
-func (s *Store) load() (*Board, []byte) {
-	b := &Board{Agents: map[string]*Agent{}}
-	data, err := os.ReadFile(s.path())
+// Check reports why board.json or closed.json cannot be used, nil when
+// both read fine (fleet doctor).
+func (s *Store) Check() error {
+	_, err := s.LoadChecked()
+	return err
+}
+
+// LoadChecked is Load with the closed records read, or the error that makes
+// either file untrustworthy, for a caller that must not mistake a broken file
+// for "no agents" (retention deleting a resumable agent's files).
+func (s *Store) LoadChecked() (*Board, error) {
+	b, _, err := s.load()
 	if err != nil {
-		return b, nil
+		return nil, err
+	}
+	if b.closedSet(); b.closedErr != nil {
+		return nil, b.closedErr
+	}
+	return b, nil
+}
+
+// load is Load plus the bytes it read, so Update can tell a no-op, and the
+// error that makes Update refuse to write.
+func (s *Store) load() (*Board, []byte, error) {
+	b := &Board{Agents: map[string]*Agent{}, store: s}
+	data, err := os.ReadFile(s.path())
+	if errors.Is(err, fs.ErrNotExist) {
+		return b, nil, nil
+	}
+	if err != nil {
+		logx.For("board").Error("cannot read board.json", "err", err)
+		return b, nil, fmt.Errorf("read board.json: %w", err)
 	}
 	if err := json.Unmarshal(data, b); err != nil {
-		logx.For("board").Error("broken board.json, starting empty", "err", err)
-		_ = os.WriteFile(s.path()+".broken", data, 0o644)
-		return &Board{Agents: map[string]*Agent{}}, nil
+		return &Board{Agents: map[string]*Agent{}, store: s}, nil, s.broken("board.json", data, err)
 	}
+	b.store = s
 	if b.Agents == nil {
 		b.Agents = map[string]*Agent{}
 	}
-	return b, data
+	return b, data, nil
+}
+
+// broken logs a state file that does not parse and keeps a copy beside it
+// as <name>.broken (rewritten only when its content changed), so a hand
+// edit or a bad write can be recovered. The error it returns names both.
+func (s *Store) broken(name string, data []byte, err error) error {
+	path := filepath.Join(s.Dir, name)
+	if old, rerr := os.ReadFile(path + ".broken"); rerr != nil || !bytes.Equal(old, data) {
+		logx.For("board").Error("state file does not parse; fleet will not write over it until it is fixed or moved aside", "file", path, "err", err)
+		_ = os.WriteFile(path+".broken", data, 0o644)
+	}
+	return fmt.Errorf("%s does not parse (%v); copy kept at %s.broken: fix the file or move it aside", path, err, path)
 }
 
 // Update runs fn on the board under an exclusive lock and saves the result.
 // A result identical to the file on disk is not written: the watcher
 // refreshes every second, and an idle fleet would otherwise rewrite the
-// board each time (ADR-62).
+// board each time (ADR-62). A board.json or closed.json that cannot be read
+// is an error, never an empty board written over the user's state (ADR-113).
 func (s *Store) Update(fn func(*Board) error) error {
 	if err := os.MkdirAll(s.Dir, 0o755); err != nil {
 		return err
@@ -409,19 +459,85 @@ func (s *Store) Update(fn func(*Board) error) error {
 		return err
 	}
 	defer syscall.Flock(int(lf.Fd()), syscall.LOCK_UN)
-	b, old := s.load()
+	b, old, err := s.load()
+	if err != nil {
+		return err
+	}
+	if len(b.LegacyClosed) > 0 {
+		b.closedSet()
+	}
+	before := agentNames(b)
 	if err := fn(b); err != nil {
 		return err
 	}
-	data, _ := json.MarshalIndent(b, "", "  ")
+	if b.closedErr != nil {
+		return b.closedErr
+	}
+	wroteClosed, err := s.saveClosed(b)
+	if err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(b, "", "  ")
+	if err != nil {
+		return err
+	}
 	if old != nil && bytes.Equal(data, old) {
 		return nil
 	}
-	tmp := s.path() + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	// Only a structural change is synced: an agent added or removed, or a
+	// close that moved one into closed.json. The watcher's scrape-only
+	// writes (hash, last line, status) are redone within a second, so they
+	// get the atomic rename without the fsync (ADR-113).
+	return writeAtomic(s.path(), data, wroteClosed || agentNames(b) != before)
+}
+
+// agentNames is the board's agent set as one comparable string.
+func agentNames(b *Board) string {
+	names := make([]string, 0, len(b.Agents))
+	for n := range b.Agents {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return strings.Join(names, "\x00")
+}
+
+// fileSync is f.Sync; tests count the calls.
+var fileSync = (*os.File).Sync
+
+// writeAtomic replaces path with data through a temp file and a rename, so
+// a reader or a crash sees the old file or the new one. With sync, the temp
+// file and then the directory are synced, so the new file also survives a
+// power loss.
+func writeAtomic(path string, data []byte, sync bool) error {
+	tmp := path + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.path())
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if sync {
+		if err := fileSync(f); err != nil {
+			f.Close()
+			return err
+		}
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return err
+	}
+	if !sync {
+		return nil
+	}
+	if d, err := os.Open(filepath.Dir(path)); err == nil {
+		_ = d.Sync()
+		d.Close()
+	}
+	return nil
 }
 
 // Sorted returns agents sorted by name.

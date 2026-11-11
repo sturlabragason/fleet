@@ -97,7 +97,7 @@ func (f *Fleet) ObserveUsage(now time.Time, c usage.Config) *usage.Ledger {
 	for _, a := range b.Agents {
 		see(a)
 	}
-	for _, cl := range b.Closed {
+	for _, cl := range b.ClosedRecords() {
 		if usage.Day(cl.At.In(now.Location())) == today {
 			a := cl.Agent
 			see(&a)

@@ -10,21 +10,27 @@ import (
 	"strings"
 	"time"
 
+	aifleet "github.com/sturlabragason/fleet"
 	"github.com/sturlabragason/fleet/internal/board"
+	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/whatsnew"
+	"github.com/sturlabragason/fleet/internal/worktree"
 )
 
 // CLI-backed admiral tools (ADR-86): fleet commands whose work lives in the
 // fleet binary's own command code (wall placement, git walks, admiral panes).
 // The tool runs that command, so the MCP tool and the CLI can't drift apart.
+// fleet_touching and fleet_changes call the internal packages the command
+// itself uses instead, with the same text (ADR-113).
 
 var cliToolDefs = []tool{
 	{"fleet_takeover", "Move an idle acp agent's session into the tool's own screen (tmux), in the same wall slot; acp=true hands a tmux agent back to fleet's acp host. Use when the user wants the tool's real UI for an agent.", obj([]string{"name"}, map[string]any{
 		"name": str("agent name"), "acp": map[string]any{"type": "boolean", "description": "move it back from tmux to the acp host"}})},
 	{"fleet_touching", "Files other worktrees of a repo change (merge order: fewer touched files merges first). With files, only the overlaps.", obj([]string{"dir"}, map[string]any{
 		"dir": str("a directory inside the repo (absolute)"), "files": strList("files to check for overlap, relative to dir")})},
-	{"fleet_worktrees", "A repo's leftover agent worktrees under <repo>.wt/: size, merged, dirty, the agent holding each. prune=true removes the merged, clean ones no live or parked agent holds (git refuses uncommitted work; never forced): ask the user first, confirmed=true only after an explicit yes.", obj([]string{"dir"}, map[string]any{
+	{"fleet_worktrees", "A repo's leftover agent worktrees under <repo>.wt/: size, merged, dirty, the agent holding each. prune=true removes the merged, clean ones no live, parked or recently closed (resumable) agent holds (git refuses uncommitted work; never forced): ask the user first, confirmed=true only after an explicit yes.", obj([]string{"dir"}, map[string]any{
 		"dir": str("the repo (absolute)"), "prune": map[string]any{"type": "boolean", "description": "remove the prunable worktrees"}, "confirmed": confirmedProp})},
-	{"fleet_branches", "A repo's fleet/ branches on origin, merged or not, and the agent on each. prune=true deletes the merged ones no live or parked agent is on, from origin: ask the user first, confirmed=true only after an explicit yes.", obj([]string{"dir"}, map[string]any{
+	{"fleet_branches", "A repo's fleet/ branches on origin, merged or not, and the agent on each. prune=true deletes the merged ones no live, parked or recently closed agent is on, from origin: ask the user first, confirmed=true only after an explicit yes.", obj([]string{"dir"}, map[string]any{
 		"dir": str("the repo (absolute)"), "prune": map[string]any{"type": "boolean", "description": "delete the merged branches from origin"}, "confirmed": confirmedProp})},
 	{"fleet_admiral_add", "Start another admiral beside main (its own pane, agents and reports), only when the user asks. fleet_admirals lists them.", obj([]string{"name"}, map[string]any{
 		"name": str("new admiral name"), "profile": str("tool profile (default: main's), see fleet_profiles")})},
@@ -107,14 +113,20 @@ func (s *Server) cliCall(name string, a args) (string, error) {
 		if err := absDir(a.Dir); err != nil {
 			return "", err
 		}
-		out, code, err := s.runFleet(a.Dir, append([]string{"touching", "-C", a.Dir}, a.Files...)...)
-		if err == nil && code == 1 { // 1 = overlap, an answer rather than a failure
-			return "overlap:\n" + strings.TrimSpace(out), nil
+		ctx, cancel := context.WithTimeout(context.Background(), cliTimeout)
+		defer cancel()
+		ws, overlap, err := worktree.Touching(ctx, a.Dir, a.Dir, a.Files, fleet.ResultFiles(s.F.Store.Load()))
+		if err != nil {
+			return "", err
 		}
-		if out, err = cliResult(out, code, err); err == nil && out == "" {
+		out := strings.TrimSpace(worktree.TouchingText(ws, len(a.Files) > 0))
+		if overlap {
+			return "overlap:\n" + out, nil
+		}
+		if out == "" {
 			out = "no other worktree changes files"
 		}
-		return out, err
+		return out, nil
 	case "fleet_worktrees", "fleet_branches":
 		if err := absDir(a.Dir); err != nil {
 			return "", err
@@ -146,10 +158,8 @@ func (s *Server) cliCall(name string, a args) (string, error) {
 		return cliResult(s.runFleet("", "admiral", "close", a.Name))
 	}
 	// fleet_changes
-	out, err := cliResult(s.runFleet("", "changes"))
-	if err != nil {
-		return "", err
-	}
+	es := whatsnew.List(aifleet.Changelog, whatsnew.Repo())
+	out := strings.TrimSpace(whatsnew.Text(whatsnew.Version(), es, whatsnew.NewIDs(es)))
 	n := a.Limit
 	if n <= 0 {
 		n = 15

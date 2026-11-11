@@ -275,3 +275,31 @@ func TestFenceWritesPref(t *testing.T) {
 		t.Errorf("claude %v, other %v", p.For("claude").FenceWrites, p.For("other").FenceWrites)
 	}
 }
+
+// fleet config explain: each key's effective value and the layer that set it.
+func TestExplain(t *testing.T) {
+	write(t, "[defaults]\nmode = \"auto\"\nstuck_after = \"off\"\nenv = { A = \"secret\" }\n[profile.x]\nmode = \"plan\"\nready_timeout = \"0s\"\nenv = { B = \"1\" }\n")
+	p, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, s := range p.Explain("x") {
+		got[s.Key] = s.Value + " " + s.Source
+	}
+	for k, want := range map[string]string{
+		"mode":          "plan [profile.x]",
+		"stuck_after":   "off [defaults]",
+		"env.A":         "(set) [defaults]",
+		"env.B":         "(set) [profile.x]",
+		"ready_timeout": "15s built-in", // 0s is refused, so not the profile's
+		"worktree":      "true built-in",
+	} {
+		if got[k] != want {
+			t.Errorf("%s: %q want %q", k, got[k], want)
+		}
+	}
+	if got := p.Explain("y")[0]; got.Value+" "+got.Source != "auto [defaults]" {
+		t.Errorf("y mode: %+v", got)
+	}
+}

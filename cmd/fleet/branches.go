@@ -15,12 +15,14 @@ import (
 )
 
 // cmdBranches lists the repo's fleet/ branches on origin and, with --prune,
-// deletes the merged ones no live or parked agent is on (ADR-87).
+// deletes the merged ones no live, parked or recently closed agent is on
+// (ADR-87, ADR-113).
 func cmdBranches(f *fleet.Fleet, args []string) error {
-	return runBranches(f.Store.Load(), args, os.Stdout)
+	b, bad := loadBoard(f.Store)
+	return runBranches(b, bad, args, os.Stdout)
 }
 
-func runBranches(b *board.Board, args []string, out io.Writer) error {
+func runBranches(b *board.Board, bad error, args []string, out io.Writer) error {
 	fs := flag.NewFlagSet("branches", flag.ContinueOnError)
 	repo := fs.String("repo", "", "repo dir (default: the current directory)")
 	asJSON := fs.Bool("json", false, "machine-readable output")
@@ -48,6 +50,19 @@ func runBranches(b *board.Board, args []string, out io.Writer) error {
 		if a.Worktree != nil && a.Worktree.Branch != "" {
 			held[a.Worktree.Branch] = st
 		}
+	}
+	if err := holdClosed(b, bad, *prune, func(a *board.Agent) {
+		brs := []string{worktree.BranchPrefix + a.Name}
+		if a.Worktree != nil {
+			brs = append(brs, a.Worktree.Branch)
+		}
+		for _, br := range brs {
+			if br != "" && held[br] == "" {
+				held[br] = "closed"
+			}
+		}
+	}); err != nil {
+		return err
 	}
 	bs, err := worktree.RemoteBranches(main, held)
 	if err != nil {
@@ -92,6 +107,6 @@ func runBranches(b *board.Board, args []string, out io.Writer) error {
 	if err := w.Flush(); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(out, "%d branches on %s; %d can be deleted (merged, no live or parked agent): fleet branches --prune\n", len(bs), worktree.Remote, pr)
+	_, err = fmt.Fprintf(out, "%d branches on %s; %d can be deleted (merged, no live, parked or recently closed agent): fleet branches --prune\n", len(bs), worktree.Remote, pr)
 	return err
 }

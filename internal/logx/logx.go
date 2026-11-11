@@ -28,7 +28,7 @@ func Init() {
 	once.Do(func() {
 		dir := filepath.Join(Home(), "logs")
 		_ = os.MkdirAll(dir, 0o755)
-		f, err := os.OpenFile(filepath.Join(dir, "fleet.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+		f, err := openRotator(filepath.Join(dir, "fleet.log"))
 		if err != nil {
 			return
 		}

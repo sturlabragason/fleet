@@ -18,7 +18,7 @@ type RemoteBranch struct {
 	Branch   string `json:"branch"` // fleet/<name>, without the remote
 	Sha      string `json:"sha"`
 	Merged   bool   `json:"merged"` // every commit is in main, by ancestry or by patch
-	Agent    string `json:"agent"`  // "live", "parked" or ""
+	Agent    string `json:"agent"`  // "live", "parked", "closed" or ""
 	Prunable bool   `json:"prunable"`
 }
 

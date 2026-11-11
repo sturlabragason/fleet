@@ -97,6 +97,8 @@ type Fleet struct {
 	// watcher sets it (it is the resident poll, ADR-49); the overview TUI
 	// sets it too and does the work itself only while no watcher is live.
 	Housekeeping bool
+	// retainedAt is the resident poll's last retention pass (retain.go).
+	retainedAt time.Time
 	// FreeMem reads free memory for the guard; nil = /proc/meminfo (tests
 	// replace it).
 	FreeMem func() (uint64, error)
@@ -578,7 +580,7 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 			return fmt.Errorf("agent %q already exists", name)
 		}
 		b.Agents[name] = a
-		delete(b.Closed, name) // a new agent of the name is not the closed one
+		b.DropClosed(name) // a new agent of the name is not the closed one
 		return nil
 	}); err != nil {
 		f.KillPane(pane)

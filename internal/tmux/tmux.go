@@ -3,10 +3,12 @@ package tmux
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/sturlabragason/fleet/internal/logx"
 )
@@ -18,6 +20,38 @@ type Client struct {
 	// OnRun, when set, is told about every command before it runs (tests
 	// count tmux execs with it).
 	OnRun func(args []string)
+	// Timeout bounds one command; 0 is DefaultTimeout. Commands that wait
+	// on the user (Interactive) are never bounded.
+	Timeout time.Duration
+}
+
+// DefaultTimeout bounds a tmux command. tmux answers in milliseconds; one
+// that has not after this is hung (a wedged server, a stopped client), and
+// without a bound it would stall the watcher's refresh, wakes and reaping
+// for good (ADR-113).
+const DefaultTimeout = 10 * time.Second
+
+// Interactive reports whether a tmux command waits on the user: a popup,
+// menu or prompt stays open until they close it.
+func Interactive(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	switch args[0] {
+	case "display-popup", "popup", "display-menu", "menu", "confirm-before", "confirm", "command-prompt":
+		return true
+	}
+	return false
+}
+
+func (c *Client) timeout(args []string) time.Duration {
+	if Interactive(args) {
+		return 0
+	}
+	if c.Timeout > 0 {
+		return c.Timeout
+	}
+	return DefaultTimeout
 }
 
 // New returns a client for the given socket name.
@@ -62,13 +96,25 @@ func (c *Client) RunInput(stdin string, args ...string) (string, error) {
 	if c.OnRun != nil {
 		c.OnRun(args)
 	}
-	cmd := exec.Command("tmux", append(c.base(), args...)...)
+	ctx := context.Background()
+	if d := c.timeout(args); d > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, d)
+		defer cancel()
+	}
+	cmd := exec.CommandContext(ctx, "tmux", append(c.base(), args...)...)
+	cmd.WaitDelay = time.Second
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
 	}
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	err := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		err = fmt.Errorf("tmux %s: timed out after %v", strings.Join(args, " "), c.timeout(args))
+		logx.For("tmux").Error("command timed out", "socket", c.Socket, "err", err)
+		return strings.TrimRight(out.String(), "\n"), err
+	}
 	if err != nil {
 		err = fmt.Errorf("tmux %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(errb.String()))
 		if !quietErr(errb.String()) {

@@ -38,25 +38,48 @@ var ACPCallTimeout = 5 * time.Second
 // server refuses the acp driver. An adapter profile (claude, ADR-76) is
 // opt-in: [defaults] never moves it.
 func (f *Fleet) driverFor(want, profile string) (string, error) {
-	d := f.Prefs.For(profile).Driver
+	d, _, err := f.driverSource(want, profile)
+	return d, err
+}
+
+// driverSource is driverFor with the layer that decided.
+func (f *Fleet) driverSource(want, profile string) (d, src string, err error) {
 	if f.Profiles[profile].ACPOptIn() {
-		d = f.Prefs.ProfileDriver(profile)
+		d, src = f.Prefs.ProfileDriver(profile), "[profile."+profile+"] (opt-in profile: [defaults] does not apply)"
+	} else if d = f.Prefs.For(profile).Driver; d != "" {
+		if f.Prefs.ProfileDriver(profile) == "" {
+			src = "[defaults]"
+		} else {
+			src = "[profile." + profile + "]"
+		}
 	}
 	if want != "" {
 		if d = prefs.ParseDriver(want); d == "" {
-			return "", fmt.Errorf("unknown driver %q (use tmux or acp)", want)
+			return "", "", fmt.Errorf("unknown driver %q (use tmux or acp)", want)
 		}
+		src = "--driver"
 	}
 	if d == "" {
-		d = prefs.ParseDriver(f.Profiles[profile].DefaultDriver())
+		d, src = prefs.ParseDriver(f.Profiles[profile].DefaultDriver()), "tool profile's default"
 	}
 	if d == "" {
-		d = prefs.DriverTmux
+		d, src = prefs.DriverTmux, "built-in"
 	}
 	if d == prefs.DriverACP && !f.Profiles[profile].HasACP() {
-		return "", fmt.Errorf("profile %s has no ACP server (no acp args in its profile); use --driver tmux", profile)
+		return "", "", fmt.Errorf("profile %s has no ACP server (no acp args in its profile); use --driver tmux", profile)
 	}
-	return d, nil
+	return d, src, nil
+}
+
+// ExplainDriver is the driver a spawn of profile gets with no --driver and
+// the layer that decided it: --driver > [profile.<name>] > [defaults] (not
+// for an opt-in profile, ADR-76) > the tool profile > tmux.
+func (f *Fleet) ExplainDriver(profile string) prefs.Setting {
+	d, src, err := f.driverSource("", profile)
+	if err != nil {
+		return prefs.Setting{Key: "driver", Value: "refused: " + err.Error(), Source: src}
+	}
+	return prefs.Setting{Key: "driver", Value: d, Source: src}
 }
 
 // boardDriver is the board's Driver value for a driver name.

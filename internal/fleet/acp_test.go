@@ -55,6 +55,12 @@ func TestDriverResolution(t *testing.T) {
 			t.Errorf("%q %s: %q, %v want %q", c.flag, c.profile, got, err, c.want)
 		}
 	}
+	// fleet config explain names the layer that decided.
+	for profile, want := range map[string]string{"copilot": "acp [defaults]", "agy": "tmux [profile.agy]", "claude": "tmux built-in", "vibe": "refused: profile vibe has no ACP server (no acp args in its profile); use --driver tmux "} {
+		if s := f.ExplainDriver(profile); s.Value+" "+s.Source != want {
+			t.Errorf("explain %s: %q want %q", profile, s.Value+" "+s.Source, want)
+		}
+	}
 	t.Setenv("FLEET_CONFIG", filepath.Join(home, "none.toml"))
 	f, _ = New(&tmux.Client{Socket: "fleet-test-unused"}, home, "/bin/fleet")
 	// v1.0.0 (ADR-74): with no config, copilot and agy default to acp and

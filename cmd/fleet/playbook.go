@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -49,17 +50,8 @@ func cmdPlaybook(args []string) error {
 	return nil
 }
 
-// resultFiles are the task-card result files of every agent on the board:
-// each agent writes its own, so they are never an overlap (#11).
-func resultFiles() []string {
-	var ps []string
-	for _, a := range board.NewStore(logx.Home()).Load().Agents {
-		if p, _, ok := fleet.ResultPath(a); ok {
-			ps = append(ps, p)
-		}
-	}
-	return ps
-}
+// resultFiles are the task-card result files of every agent on the board.
+func resultFiles() []string { return fleet.ResultFiles(board.NewStore(logx.Home()).Load()) }
 
 // cmdTouching lists the files other worktrees of this repo change; with file
 // arguments it reports only overlaps. Exit 0: no overlap, 1: overlap, 2: error
@@ -83,24 +75,14 @@ func touching(args []string) (int, error) {
 	if err := fs.Parse(args); err != nil {
 		return 0, err
 	}
-	ws, err := worktree.Others(*dir, resultFiles()...)
+	cwd, err := os.Getwd()
 	if err != nil {
 		return 0, err
 	}
 	files := fs.Args()
-	if len(files) > 0 {
-		top, err := worktree.TopLevel(*dir)
-		if err != nil {
-			return 0, err
-		}
-		cwd, err := os.Getwd()
-		if err != nil {
-			return 0, err
-		}
-		for i, f := range files {
-			files[i] = worktree.RepoRel(top, cwd, f)
-		}
-		ws = worktree.Overlap(ws, files)
+	ws, overlap, err := worktree.Touching(context.Background(), *dir, cwd, files, resultFiles())
+	if err != nil {
+		return 0, err
 	}
 	if *asJSON {
 		if ws == nil {
@@ -108,17 +90,10 @@ func touching(args []string) (int, error) {
 		}
 		b, _ := json.MarshalIndent(ws, "", "  ")
 		fmt.Println(string(b))
-	} else if len(files) > 0 && len(ws) == 0 {
-		fmt.Println("no other worktree touches these files")
 	} else {
-		for _, w := range ws {
-			fmt.Printf("%s  %s  %d files\n", w.Path, w.Branch, len(w.Files))
-			for _, f := range w.Files {
-				fmt.Printf("    %s\n", f)
-			}
-		}
+		fmt.Print(worktree.TouchingText(ws, len(files) > 0))
 	}
-	if len(files) > 0 && len(ws) > 0 {
+	if overlap {
 		return 1, nil
 	}
 	return 0, nil

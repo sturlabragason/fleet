@@ -13,13 +13,16 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/conf"
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/prefs"
 	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/tools"
+	"github.com/sturlabragason/fleet/internal/watch"
 )
 
 // minTmux is the oldest tmux fleet runs on: display-popup -b/-T (the
@@ -91,7 +94,7 @@ func writeDoctor(w io.Writer, cs []doctorCheck, asJSON bool) error {
 }
 
 func doctor(env doctorEnv) []doctorCheck {
-	cs := []doctorCheck{checkTmux(env.tmuxVersion), checkLocale(env.getenv), checkLocalBin(env)}
+	cs := []doctorCheck{checkTmux(env.tmuxVersion), checkLocale(env.getenv), checkLocalBin(env), checkBoard(env), checkWatcher(env.home, time.Now())}
 	pr, c := checkConfig(env)
 	cs = append(cs, c)
 	userTools, profiles, c := checkTools(env, pr)
@@ -172,6 +175,38 @@ func tildePath(env doctorEnv, p string) string {
 		return "~" + p[len(env.userHome):]
 	}
 	return p
+}
+
+// checkBoard fails when board.json or closed.json does not read: fleet
+// refuses to write over it, so every spawn, close and refresh errors until
+// the file is fixed or moved aside (ADR-113).
+func checkBoard(env doctorEnv) doctorCheck {
+	c := doctorCheck{Name: "board"}
+	if err := board.NewStore(env.home).Check(); err != nil {
+		c.Level, c.Detail, c.Fix = levelFail, err.Error(), "repair the file from its .broken copy, or move it aside to start empty"
+		return c
+	}
+	c.Level, c.Detail = levelOK, "board.json and closed.json read"
+	return c
+}
+
+// checkWatcher warns when a watcher left a heartbeat but is not keeping the
+// board fresh: dead, hung, or every refresh failing or panicking (ADR-113).
+// The overview refreshes for itself meanwhile, so it is a warning only.
+func checkWatcher(home string, now time.Time) doctorCheck {
+	c := doctorCheck{Name: "watcher"}
+	b, ok := watch.ReadBeat(home)
+	switch {
+	case !ok:
+		c.Level, c.Detail = levelOK, "none running (fleet up starts one)"
+	case watch.Live(home, now):
+		c.Level, c.Detail = levelOK, fmt.Sprintf("pid %d, last refresh %s ago", b.PID, now.Sub(b.OK).Round(time.Second))
+	default:
+		c.Level = levelWarn
+		c.Detail = fmt.Sprintf("pid %d is not keeping the board fresh (heartbeat %s ago, last good refresh %s ago)", b.PID, now.Sub(b.At).Round(time.Second), now.Sub(b.OK).Round(time.Second))
+		c.Fix = "see ~/.fleet/logs/fleet.log (component=watch); fleet up restarts it"
+	}
+	return c
 }
 
 func checkConfig(env doctorEnv) (*prefs.Prefs, doctorCheck) {

@@ -7,7 +7,9 @@ package watch
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"runtime/debug"
 	"strconv"
 	"time"
 
@@ -119,7 +121,7 @@ func (w *Watcher) Step() bool {
 	w.last = now
 	w.refreshes++
 	if w.Refresh != nil {
-		if err := w.Refresh(); err != nil {
+		if err := w.refresh(); err != nil {
 			logx.For("watch").Debug("refresh", "err", err, "why", why)
 		} else {
 			w.ok = now
@@ -131,6 +133,22 @@ func (w *Watcher) Step() bool {
 	// to notice an agent that appeared or went away.
 	w.rescan()
 	return true
+}
+
+// refresh runs Refresh and turns a panic in it into an error. One bad
+// refresh (a nil board entry, a malformed screen) must not take down the
+// loop that wakes, reaps and drains for every agent; the panic is logged
+// with its stack, and the heartbeat's OK stays at the last good refresh, so
+// a watcher that panics every pass reads as stale, never as healthy
+// (ADR-113).
+func (w *Watcher) refresh() (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			logx.For("watch").Error("refresh panicked", "panic", r, "stack", string(debug.Stack()))
+			err = fmt.Errorf("refresh panicked: %v", r)
+		}
+	}()
+	return w.Refresh()
 }
 
 // changed returns the first watched path whose mtime or size moved since the

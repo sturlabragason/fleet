@@ -17,6 +17,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/mcp"
 	"github.com/sturlabragason/fleet/internal/supervisor"
+	"github.com/sturlabragason/fleet/internal/testenv"
 	"github.com/sturlabragason/fleet/internal/tools"
 )
 
@@ -294,6 +295,11 @@ patterns = "fake"
 	}
 	f.T.SetPaneOption(sup, "@role", "sup")
 	f.T.SetPaneOption(sup, "remain-on-exit", "on")
+	// The swap's handoff captures this pane, so wait until it has drawn.
+	testenv.Eventually(t, 5*time.Second, "the admiral pane to draw", func() bool {
+		out, _ := f.T.Capture(sup, 0)
+		return strings.Contains(out, "admiral was here")
+	})
 	return f, sup
 }
 
@@ -313,7 +319,6 @@ func TestSwapAdmiralEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	agPid := paneFmt(t, f, ag.PaneID, "#{pane_pid}")
-	time.Sleep(200 * time.Millisecond) // let the pane draw its line
 
 	if _, err := swapAdmiral(f, "nope"); err == nil || err.Error() != `no profile "nope"; kept fake` {
 		t.Fatalf("unknown: %v", err)
