@@ -1,6 +1,7 @@
 package acphost
 
 import (
+	"hash/fnv"
 	"image/color"
 	"strconv"
 	"strings"
@@ -20,6 +21,7 @@ import (
 type sty struct {
 	fg, bg                     string
 	bold, italic, under, faint bool
+	href                       string // an OSC 8 link target
 }
 
 // painter turns styled text into escape sequences for one colour profile.
@@ -69,10 +71,23 @@ func (pt painter) paint(s sty, text string) string {
 			st = st.BackgroundColor(c)
 		}
 	}
-	if len(st) == 0 {
-		return text
+	out := text
+	if len(st) > 0 {
+		out = st.String() + text + "\x1b[m"
 	}
-	return st.String() + text + "\x1b[m"
+	if s.href != "" {
+		out = hyperlink(s.href, out)
+	}
+	return out
+}
+
+// hyperlink wraps text in an OSC 8 link. Every piece of a URL that wrap
+// cut over several rows carries the same id, so the terminal treats them
+// as one link and a click on any row opens the whole URL.
+func hyperlink(url, text string) string {
+	h := fnv.New32a()
+	h.Write([]byte(url))
+	return ansi.SetHyperlink(url, "id=fl-"+strconv.FormatUint(uint64(h.Sum32()), 36)) + text + ansi.ResetHyperlink()
 }
 
 func (pt painter) conv(hex string) color.Color {

@@ -269,6 +269,14 @@ func inline(s string, base sty, ms mdStyles) []seg {
 	}
 	for i := 0; i < len(s); {
 		rest := s[i:]
+		if n := urlLen(s, i); n > 0 {
+			emit()
+			us := st
+			us.href = rest[:n]
+			out = append(out, seg{rest[:n], us})
+			i += n
+			continue
+		}
 		switch {
 		case rest[0] == '`':
 			n := 1
@@ -319,9 +327,13 @@ func inline(s string, base sty, ms mdStyles) []seg {
 				emit()
 				ls := ms.link
 				ls.bold = st.bold
+				us := ms.url
+				if safeURL(url) {
+					ls.href, us.href = url, url
+				}
 				out = append(out, seg{text, ls})
 				if url != text && url != "" {
-					out = append(out, seg{" (" + url + ")", ms.url})
+					out = append(out, seg{" (" + url + ")", us})
 				}
 				i += n
 				continue
@@ -377,4 +389,42 @@ func link(s string) (text, url string, n int, ok bool) {
 		return "", "", 0, false
 	}
 	return s[1:end], s[end+2 : end+2+close], end + 2 + close + 1, true
+}
+
+// urlLen is the length of a bare http(s) URL starting at s[i], or 0. It
+// must start a word, ends at a space, control character or quote, and leaves
+// trailing sentence punctuation out.
+func urlLen(s string, i int) int {
+	rest := s[i:]
+	if !strings.HasPrefix(rest, "https://") && !strings.HasPrefix(rest, "http://") {
+		return 0
+	}
+	if i > 0 && isWord(s[:i], true) {
+		return 0
+	}
+	n := strings.IndexFunc(rest, func(r rune) bool {
+		return r <= ' ' || r == 0x7f || strings.ContainsRune("<>\"'`", r)
+	})
+	if n < 0 {
+		n = len(rest)
+	}
+	n = len(strings.TrimRight(rest[:n], ".,;:!?)]*_"))
+	if n <= len("https://") || !safeURL(rest[:n]) {
+		return 0
+	}
+	return n
+}
+
+// safeURL reports whether u can go into an OSC 8 sequence: no control
+// characters that could end it early or smuggle escapes.
+func safeURL(u string) bool {
+	if !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, "http://") {
+		return false
+	}
+	for i := 0; i < len(u); i++ {
+		if u[i] < 0x20 || u[i] == 0x7f {
+			return false
+		}
+	}
+	return true
 }
