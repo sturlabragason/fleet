@@ -138,6 +138,24 @@ func TestAdmiralLaunchBootPrompt(t *testing.T) {
 	}
 }
 
+// The admiral runs Opus (ADR-100): copilot and claude pin their Opus model,
+// and a profile whose args name another model is refused.
+func TestAdmiralRunsOpus(t *testing.T) {
+	f := testFleet(t)
+	for prof, want := range map[string]string{"copilot": "--model " + tools.CopilotClaudeModel, "claude": "--model " + tools.ClaudeModel} {
+		sl, err := supervisorCmd(f, prof, "")
+		if err != nil || !strings.Contains(sl.Cmd, want+" ") {
+			t.Errorf("%s: %s %v, want %q", prof, sl.Cmd, err, want)
+		}
+	}
+	p := f.Profiles["claude"]
+	p.Args = []string{"--model", "sonnet"}
+	f.Profiles["claude-sonnet"] = p
+	if _, err := supervisorCmd(f, "claude-sonnet", ""); err == nil || !strings.Contains(err.Error(), "ADR-100") {
+		t.Errorf("sonnet admiral: %v", err)
+	}
+}
+
 // fleet up refuses an admiral profile whose command is not on PATH rather
 // than start a pane that dies with exit 127 (fleet#23).
 func TestAdmiralLaunchNeedsCommand(t *testing.T) {

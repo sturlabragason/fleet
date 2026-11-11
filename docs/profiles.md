@@ -71,7 +71,7 @@ Two Claude Code accounts, kept apart by `CLAUDE_CONFIG_DIR`:
 command = "claude"
 args = ["--model", "opus"]
 mode_args = { auto = "--permission-mode bypassPermissions" }
-env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-personal", CLAUDE_CODE_SUBAGENT_MODEL = "sonnet" }
+env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-personal" }
 launch_id = ["--session-id", "{id}"]
 resume = ["--resume", "{id}"]
 patterns = "claude"
@@ -80,7 +80,7 @@ patterns = "claude"
 command = "claude"
 args = ["--model", "opus"]
 mode_args = { auto = "--permission-mode bypassPermissions" }
-env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-work", CLAUDE_CODE_SUBAGENT_MODEL = "sonnet" }
+env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-work" }
 launch_id = ["--session-id", "{id}"]
 resume = ["--resume", "{id}"]
 patterns = "claude"

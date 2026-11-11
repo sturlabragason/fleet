@@ -35,6 +35,24 @@ func (f *Fleet) pickModel(profile string, p tools.Profile, named string) (string
 	return p.DefaultModel, nil
 }
 
+// AdmiralModel is p set up to run Opus as an admiral (ADR-100): a model its
+// args name must be Opus, else default_model is pinned. The admiral takes no
+// extra_args, so only args count. m is the model it runs, "" for a tool
+// with no model flag.
+func AdmiralModel(profile string, p tools.Profile) (tools.Profile, string, error) {
+	if !p.HasModelFlag() {
+		return p, "", nil
+	}
+	m := p.DefaultModel
+	if own := tools.ModelArg(p.Args); own != "" {
+		if !tools.IsOpus(own) {
+			return p, "", fmt.Errorf("admiral profile %s runs model %q: fleet runs Opus (ADR-100); set an Opus model in its args", profile, own)
+		}
+		m = own
+	}
+	return p.WithModel(m), m, nil
+}
+
 // withModel is p set up for the model pickModel gives profile, for the
 // launch, wake, adopt and resume paths; m is what the board records.
 func (f *Fleet) withModel(profile string, p tools.Profile, named string) (tools.Profile, string, error) {

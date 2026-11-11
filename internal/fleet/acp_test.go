@@ -347,7 +347,7 @@ func TestClaudeACPSpawnAndWake(t *testing.T) {
 			time.Sleep(50 * time.Millisecond)
 		}
 	}
-	if e, want := envOf(1), "exe="+claude+" model=opus sub=sonnet"; e != want {
+	if e, want := envOf(1), "exe="+claude+" model=opus sub="; e != want {
 		t.Errorf("host env %q want %q", e, want)
 	}
 
