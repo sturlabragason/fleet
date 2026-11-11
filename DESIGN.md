@@ -1197,6 +1197,10 @@ Rules:
 - When a bug is found, the fix comes with a test that fails without it.
 - Real tools (copilot, claude, agy, vibe) are tested only by an opt-in smoke test (`make smoke`) because it costs tokens. Everything else runs on fakes and recorded captures.
 
+### Extensions
+
+A few packages expose hooks that a feature built with a Go build tag fills in from its own `init()`: `ext.go` in `cmd/fleet` (extra commands and usage lines, a check before a command, start-up of the overview, watcher and admiral server), `internal/fleet` (an extra wake pass, extra admiral border text), `internal/mcp` (extra admiral tools, a gate before any tool, a result suffix, a brief section) and `internal/ui` (extra poll state, messages, keys, a full-screen view, header badge); `keys.ExtOverviewHint` and the `Bindings` slice for keys; and `update.Repo`, `update.DefaultBaseURL` (settable with `-ldflags -X`), `update.VerifySums` and `update.Authorize` for a build that updates from its own signed release channel. A default build leaves every hook empty and behaves as if they were not there. The extension's files are new files in the same packages, so they can use package internals without the public structs carrying their fields; state they need per `*Fleet` or `*Model` is kept beside it, keyed by the pointer.
+
 ## 16. Keeping maintenance low (R15)
 
 The biggest maintenance risk is not the language. It's the four agent tools changing their screens every week, which breaks status detection. The design limits this:

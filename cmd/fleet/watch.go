@@ -72,6 +72,7 @@ func cmdWatch(f *fleet.Fleet, args []string) error {
 	}
 	// Those done-checks may take minutes; off the loop they cannot stall it.
 	f.Async()
+	runExtOpen(f)
 	// Each refresh's one tmux read is shared, so the overview makes no
 	// tmux calls of its own while this watcher is live (ADR-98).
 	f.ShareSnapshot = func(s *tmux.Snapshot) {

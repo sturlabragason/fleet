@@ -385,7 +385,7 @@ func TestHelpOverlay(t *testing.T) {
 		t.Errorf("header hint under fleet up with no target:\n%s", v)
 	}
 	m.be = &fakeBE{noWall: true}
-	if v := m.View(); !strings.Contains(v, "⏎ replace ▶ · a add · Space preview · Tab next waiting · x take off wall · ←↑↓→ select · g what's new · ? all keys") {
+	if v := m.View(); !strings.Contains(v, "⏎ replace ▶ · a add · Space preview · Tab next waiting · x take off wall · ←↑↓→ select · g what's new"+keys.ExtOverviewHint+" · ? all keys") {
 		t.Errorf("header hint without fleet up:\n%s", v)
 	}
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})

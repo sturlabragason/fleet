@@ -61,6 +61,7 @@ type agentsMsg struct {
 	offline time.Time
 	adms    []AdmiralInfo
 	badgeBy string
+	ext     any // extPoll's result
 	err     error
 }
 
@@ -117,7 +118,11 @@ func (m *Model) poll() tea.Cmd {
 		if ob, ok := be.(OfflineBackend); ok {
 			off = ob.OfflineSince()
 		}
-		return agentsMsg{offline: off, adms: adms, badgeBy: by, agents: as, onWall: be.OnWall(), pinned: be.Pinned(), teams: be.Teams(), target: be.Target(), supCtx: [2]string{l, c}, reports: be.Reports(), err: err}
+		var ext any
+		if extPoll != nil {
+			ext = extPoll(be)
+		}
+		return agentsMsg{ext: ext, offline: off, adms: adms, badgeBy: by, agents: as, onWall: be.OnWall(), pinned: be.Pinned(), teams: be.Teams(), target: be.Target(), supCtx: [2]string{l, c}, reports: be.Reports(), err: err}
 	}
 }
 
@@ -153,6 +158,11 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 			cmd = nil
 		}
 	}()
+	if extUpdate != nil {
+		if c, ok := extUpdate(m, msg); ok {
+			return m, c
+		}
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
@@ -168,6 +178,9 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 		m.reports = msg.reports
 		m.offline = msg.offline
 		m.adms, m.badgeBy = msg.adms, msg.badgeBy
+		if extApply != nil {
+			extApply(m, msg.ext)
+		}
 		m.setAgents(msg.agents) // tiers need the wall and teams
 		return m, tea.Batch(pollLater(), m.syncSupCtx(msg.supCtx))
 	case pollMsg:
@@ -194,6 +207,9 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 		return m, m.key(msg.String())
 	case tea.MouseMsg:
 		m.touch() // the pointer is over the overview: hold the order still
+		if extViewOpen(m) {
+			return m, nil
+		}
 		if m.help && msg.Action == tea.MouseActionPress {
 			switch msg.Button {
 			case tea.MouseButtonWheelUp:
@@ -293,6 +309,9 @@ func (m *Model) key(k string) tea.Cmd {
 		m.sel = m.agents[j].Name
 		m.saveCursor()
 	}
+	if extViewOpen(m) {
+		return extView.Key(m, k)
+	}
 	if m.help {
 		switch k {
 		case "q", "esc", "?": // q closes the overlay, it doesn't quit
@@ -321,6 +340,9 @@ func (m *Model) key(k string) tea.Cmd {
 				return nil
 			}
 		}
+	}
+	if h := extKeys[k]; h != nil {
+		return h(m)
 	}
 	switch k {
 	case "q", "ctrl+c":

@@ -285,6 +285,9 @@ func (f *Fleet) DeliverWake() {
 	for _, l := range f.Leaders() {
 		f.DeliverWakeTo(l)
 	}
+	if extWake != nil {
+		extWake(f)
+	}
 }
 
 // DeliverWakeTo delivers one box's queue: the admiral's, or a leader's

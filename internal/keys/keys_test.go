@@ -11,7 +11,7 @@ import (
 func TestHintExact(t *testing.T) {
 	cases := map[Scope]string{
 		ScopeTmux:     "Alt-←↑↓→ switch pane · Alt-n next waiting · Alt-z zoom · Alt-x hide · Alt-s admiral · Alt-g what's new · Alt-? all keys",
-		ScopeOverview: "⏎ replace ▶ · a add · Space preview · Tab next waiting · x take off wall · ←↑↓→ select · g what's new · ? all keys",
+		ScopeOverview: "⏎ replace ▶ · a add · Space preview · Tab next waiting · x take off wall · ←↑↓→ select · g what's new" + ExtOverviewHint + " · ? all keys",
 		ScopeTarget:   "a add · Space preview · Tab next waiting · Esc clear · ? all keys",
 		ScopeNoTarget: "⏎ add/evict · Space preview · ? all keys",
 	}
@@ -193,7 +193,7 @@ func TestHelpColumns(t *testing.T) {
 // TestDesignTableInSync fails when the DESIGN.md keys block drifts from the
 // registry. Regenerate with `fleet keys --markdown`.
 func TestDesignTableInSync(t *testing.T) {
-	if got := markedBlock(t, "../../DESIGN.md"); got != Markdown() {
+	if got := markedBlock(t, "../../DESIGN.md"); got != markdown(true) {
 		t.Errorf("DESIGN.md keys block is stale; replace it with `fleet keys --markdown` output.\n got:\n%s\nwant:\n%s", got, Markdown())
 	}
 }
@@ -201,7 +201,7 @@ func TestDesignTableInSync(t *testing.T) {
 // TestKeysDocInSync fails when the docs/keys.md table drifts from the
 // registry. Regenerate with `fleet keys --markdown`.
 func TestKeysDocInSync(t *testing.T) {
-	if got := markedBlock(t, "../../docs/keys.md"); got != Markdown() {
+	if got := markedBlock(t, "../../docs/keys.md"); got != markdown(true) {
 		t.Errorf("docs/keys.md keys block is stale; replace it with `fleet keys --markdown` output.\n got:\n%s\nwant:\n%s", got, Markdown())
 	}
 }
@@ -216,6 +216,9 @@ func TestEveryBindingDocumented(t *testing.T) {
 	}
 	doc := string(b)
 	for _, bind := range Bindings {
+		if bind.Ext {
+			continue
+		}
 		row := "| " + string(bind.Group) + " | `" + bind.Key + "` | " + bind.Desc + " |"
 		if !strings.Contains(doc, row+"\n") {
 			t.Errorf("docs/keys.md has no line for %s %q; expected row:\n%s", bind.Group, bind.Key, row)
