@@ -211,3 +211,11 @@ mode_args = { autopilot = "--allow-all --autopilot", plan = "--plan" }
 # [squad]
 # max_members = 4
 # max_depth = 1
+
+# Auto-upgrade of a release install (ADR-114). On by default: the watcher
+# checks GitHub every interval, verifies a new release and swaps it in once
+# no agent is working. Builds from source never upgrade themselves.
+# `fleet update` shows the state.
+# [update]
+# auto = true
+# interval = "6h"

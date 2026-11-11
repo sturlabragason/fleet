@@ -94,6 +94,8 @@ func cmdWatch(f *fleet.Fleet, args []string) error {
 	// A new release reaches the tmux server here, not only at `fleet up`:
 	// this runs again each time the watcher re-execs into a new binary.
 	hotApply(f)
+	// A release install upgrades itself; the swap above re-execs us (ADR-114).
+	startUpdater(ctx, f)
 	err := w.Run(ctx)
 	if err == nil {
 		watch.DropSnapshot(f.Home)

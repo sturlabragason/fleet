@@ -20,6 +20,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/tools"
+	"github.com/sturlabragason/fleet/internal/update"
 	"github.com/sturlabragason/fleet/internal/wall"
 )
 
@@ -272,6 +273,9 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		if s.Reloaded && !s.noted {
 			s.noted = true
 			text += reloadedNote + s.staleNote()
+		}
+		if s.Agent == "" && s.F != nil {
+			text += update.Announce(s.F.Home, fleet.Version, s.Admiral, time.Now()) // once per upgrade (ADR-114)
 		}
 		text += s.instructionsNote(p.Name)
 		return toolResult(text, isErr), nil
