@@ -96,6 +96,9 @@ func (c *Client) RunInput(stdin string, args ...string) (string, error) {
 	if c.OnRun != nil {
 		c.OnRun(args)
 	}
+	if Headless {
+		return c.headlessRun(args)
+	}
 	ctx := context.Background()
 	if d := c.timeout(args); d > 0 {
 		var cancel context.CancelFunc
