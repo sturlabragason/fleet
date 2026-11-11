@@ -106,12 +106,62 @@ jobs:
           go build -trimpath -ldflags "-X main.version=$v" -o bin/fleet.exe ./cmd/fleet
           go build -o bin/fakeagent.exe ./cmd/fakeagent
           ls -l bin
-      - name: Unit tests of the OS layer
-        run: go test ./internal/sysx/
+      - name: Unit tests of the OS layer and self-upgrade
+        run: go test ./internal/sysx/ ./internal/update/
       - name: Smoke test
         env:
           FLEET_CONFIG: ${{ runner.temp }}/no-config.toml
         run: scripts/windows-smoke.sh bin/fleet.exe
+      # install.ps1 and the Scoop manifest against a local copy of a release
+      # holding this build, in Windows PowerShell 5.1 as most users have it.
+      - name: install.ps1 and scoop install
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $v = 'v9.9.9'
+          $rel = "$env:RUNNER_TEMP\rel"
+          New-Item -ItemType Directory -Force "$rel\download\$v" | Out-Null
+          Copy-Item bin\fleet.exe "$rel\download\$v\fleet-windows-amd64.exe"
+          $h = (Get-FileHash -Algorithm SHA256 bin\fleet.exe).Hash.ToLower()
+          "$h  fleet-windows-amd64.exe" | Set-Content "$rel\download\$v\SHA256SUMS"
+          $srv = Start-Process python -ArgumentList '-m','http.server','8765','--bind','127.0.0.1','--directory',$rel -PassThru -WindowStyle Hidden
+          try {
+            Start-Sleep 3
+            $env:FLEET_BASE_URL = 'http://127.0.0.1:8765'
+            $env:FLEET_VERSION = $v
+            $env:FLEET_INSTALL_DIR = "$env:RUNNER_TEMP\fleetbin"
+            $env:FLEET_DRY_RUN = '1'; Get-Content -Raw install.ps1 | iex; $env:FLEET_DRY_RUN = ''
+            if (Test-Path "$env:FLEET_INSTALL_DIR\fleet.exe") { throw 'dry run installed' }
+            Get-Content -Raw install.ps1 | iex
+            Get-Content -Raw install.ps1 | iex # again: an upgrade replaces it
+            fleet version
+            if ([Environment]::GetEnvironmentVariable('Path', 'User') -notlike "*fleetbin*") { throw 'not on the user PATH' }
+            "$('0' * 64)  fleet-windows-amd64.exe" | Set-Content "$rel\download\$v\SHA256SUMS"
+            $bad = $false
+            try { Get-Content -Raw install.ps1 | iex } catch { $bad = $_.ToString() -like '*checksum mismatch*' }
+            if (-not $bad) { throw 'a checksum mismatch was installed' }
+            "$h  fleet-windows-amd64.exe" | Set-Content "$rel\download\$v\SHA256SUMS"
+
+            iex "& {$(irm -UseBasicParsing get.scoop.sh)} -RunAsAdmin"
+            $env:Path = "$env:USERPROFILE\scoop\shims;$env:Path"
+            $m = Get-Content -Raw bucket\fleet.json | ConvertFrom-Json
+            $m.version = '9.9.9'
+            $m.architecture.'64bit'.url = "http://127.0.0.1:8765/download/$v/fleet-windows-amd64.exe#/fleet.exe"
+            $m.architecture.'64bit'.hash = $h
+            $m | ConvertTo-Json -Depth 10 | Set-Content "$env:RUNNER_TEMP\fleet.json"
+            scoop install "$env:RUNNER_TEMP\fleet.json"
+            if ($LASTEXITCODE) { throw "scoop install: $LASTEXITCODE" }
+            & "$env:USERPROFILE\scoop\shims\fleet.exe" version
+            if ($LASTEXITCODE) { throw 'scoop shim did not run fleet' }
+          } finally { Stop-Process -Id $srv.Id -Force }
+      - name: Claude ACP adapter handshake
+        env:
+          FLEET_CONFIG: ${{ runner.temp }}/no-config.toml
+        run: |
+          acp=$(sed -n 's/^const ClaudeACPVersion = "\(.*\)"/\1/p' internal/tools/tools.go)
+          npm install -g --no-fund --no-audit @anthropic-ai/claude-code "@agentclientprotocol/claude-agent-acp@$acp"
+          command -v claude npx
+          scripts/windows-smoke.sh --claude bin/fleet.exe
       - uses: actions/upload-artifact@v4
         with:
           name: fleet-windows-amd64

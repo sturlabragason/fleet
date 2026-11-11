@@ -279,6 +279,9 @@ func (h *host) setup() error {
 	if err != nil {
 		return fmt.Errorf("initialize: %w", err)
 	}
+	if ai := res.AgentInfo; ai != nil {
+		logx.For("acphost").Info("initialized", "agent", h.cfg.Name, "server", ai.Name, "version", ai.Version)
+	}
 	caps := res.AgentCapabilities
 	id, how := h.cfg.SessionID, ""
 	switch {

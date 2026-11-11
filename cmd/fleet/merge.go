@@ -1,17 +1,18 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/sturlabragason/fleet/internal/adr"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/sysx"
 	"github.com/sturlabragason/fleet/internal/worktree"
 )
 
@@ -145,7 +146,7 @@ func hasMakefile(dir string) bool {
 }
 
 func shellCheck(dir, cmdline string) error {
-	cmd := exec.Command("sh", "-c", cmdline)
+	cmd := sysx.ShellCommand(context.Background(), cmdline)
 	cmd.Dir = dir
 	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
 	return cmd.Run()

@@ -42,3 +42,4 @@ release:
   # installs it (ADR-78).
   extra_files:
     - glob: ./install.sh
+    - glob: ./install.ps1

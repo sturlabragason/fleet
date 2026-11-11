@@ -3,7 +3,12 @@
 # the CLI, the MCP server and an acp agent's whole life with the fake agent
 # (spawn, status, send, peek, info, close), all without tmux (ADR-117).
 # usage: scripts/windows-smoke.sh path/to/fleet.exe
+#        scripts/windows-smoke.sh --claude path/to/fleet.exe
+# --claude spawns real claude through the Claude ACP adapter (both installed
+# with npm first) and checks the ACP initialize handshake; nothing logs in.
 set -uo pipefail
+claude=0
+[[ ${1:-} == --claude ]] && { claude=1; shift; }
 exe=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 home=$(mktemp -d)
 export HOME=$home USERPROFILE=$home FLEET_HOME=$home/.fleet TMUX_TMPDIR=$home/tmp
@@ -23,6 +28,21 @@ until_ok() { # until_ok <secs> <cmd...>: retry until it exits 0
 	for ((i = 0; i < n * 2; i++)); do "$@" >/dev/null 2>&1 && return 0; sleep 0.5; done
 	return 1
 }
+
+dump() {
+	echo "--- fleet.log"; tail -40 "$FLEET_HOME/logs/fleet.log" 2>/dev/null
+	for f in "$TMUX_TMPDIR"/fleet-headless/fleet/*.log; do [[ -f $f ]] && { echo "--- $f"; tail -20 "$f"; }; done
+}
+
+if ((claude)); then
+	must "spawn c1 claude" "$exe" spawn c1 claude "$work"
+	inited() { grep 'msg=initialized' "$FLEET_HOME/logs/fleet.log" | grep -q 'agent=c1'; }
+	until_ok 180 inited && ok "claude adapter answered initialize: $(grep 'msg=initialized' "$FLEET_HOME/logs/fleet.log" | tail -1)" || bad "claude adapter initialize"
+	"$exe" ls 2>&1 | sed 's/^/      /'
+	must "close c1" "$exe" close c1
+	((fail)) && dump
+	exit $fail
+fi
 
 must "version" "$exe" version
 [[ $out == "fleet "* ]] || bad "version line" "$out"
@@ -63,8 +83,5 @@ grep -q '"a1"' <<<"$out" && bad "a1 gone after close" "$out"
 gone() { ! grep -q '"pid": *[1-9]' "$TMUX_TMPDIR/fleet-headless/fleet/state.json"; }
 gone && ok "no host left" || bad "no host left" "$(cat "$TMUX_TMPDIR/fleet-headless/fleet/state.json")"
 
-if ((fail)); then
-	echo "--- fleet.log"; tail -40 "$FLEET_HOME/logs/fleet.log" 2>/dev/null
-	for f in "$TMUX_TMPDIR"/fleet-headless/fleet/*.log; do [[ -f $f ]] && { echo "--- $f"; tail -20 "$f"; }; done
-fi
+((fail)) && dump
 exit $fail
