@@ -104,12 +104,12 @@ func TestKeysPromptAnswerCancelAndTakeover(t *testing.T) {
 	}
 }
 
-func TestConsoleClipsInputToWidth(t *testing.T) {
+func TestConsoleWrapsInputToWidth(t *testing.T) {
 	var b syncBuf
-	v := newView(&b, func() (int, int) { return 10, 3 }, 0, "a1", "")
-	v.edit(func([]rune) []rune { return []rune("abcdefghijklmnop") })
+	v := newView(&b, func() (int, int) { return 10, 12 }, 0, "a1", "")
+	v.paste("abcdefghijklmnop")
 	v.flush()
-	if got := lastFrame(b.String()); !strings.Contains(got, "› jklmnop") {
+	if got := lastFrame(b.String()); !strings.Contains(got, "› abcdefg") || !strings.Contains(got, "  hijklmn") || !strings.Contains(got, "  op") {
 		t.Fatalf("frame = %q", got)
 	}
 }
@@ -154,12 +154,11 @@ func TestConsolePasteBackspace(t *testing.T) {
 	if got := lastFrame(b.String()); !strings.Contains(got, "› [Paste #1 +2 lines]short") {
 		t.Fatalf("frame = %q", got)
 	}
-	for range 5 {
-		v.edit(backspace)
+	for range 6 {
+		v.edit((*editor).backspace)
 	}
-	v.edit(backspace)
 	if !v.empty() {
-		t.Fatalf("buf = %q", string(v.buf))
+		t.Fatalf("buf = %q", string(v.ed.buf))
 	}
 	v.paste("x\ny")
 	if got := v.take(); got != "x\ny" {
@@ -173,4 +172,41 @@ func lastFrame(out string) string {
 		return out[i:]
 	}
 	return out
+}
+
+// Escape sequences from the terminal edit the box: arrows, Home/End,
+// word jumps, Delete, Alt-Enter and Shift-Enter newlines, a mouse click,
+// and Up for the last sent line.
+func TestKeysEditSequences(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	r := startRig(t, Config{In: pr, Keys: true, Size: func() (int, int) { return 40, 12 }}, acp.AgentCapabilities{})
+	r.waitStatus("idle")
+	type_ := func(s string) {
+		t.Helper()
+		if _, err := io.WriteString(pw, s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sent := func(want string) {
+		t.Helper()
+		r.waitFor(func() bool { c := r.conn.Calls(); return len(c) > 0 && c[len(c)-1] == "prompt "+want }, want)
+		r.conn.turns <- func(handler) acp.StopReason { return acp.StopEndTurn }
+		r.waitStatus("idle")
+	}
+	// Left, Home, End, Ctrl-Left, Delete, Ctrl-A/E.
+	type_("world\x1b[D\x1b[D\x1b[Hhello \x1b[F!\x1b[1;5D\x1b[3~\x01>\x05<\r")
+	sent(">hello orld!<")
+	// Alt-Enter, Shift-Enter (kitty and modifyOtherKeys) and Ctrl-J add lines.
+	type_("a\x1b\rb\x1b[13;2uc\x1b[27;2;13~d\ne\r")
+	sent("a\nb\nc\nd\ne")
+	// A click on the box's first cell puts the cursor there: the box is
+	// row 11 of a 12-row pane, under the rule and above the hint.
+	type_("xyz")
+	r.waitFor(func() bool { return strings.Contains(lastFrame(r.out.String()), "› xyz") }, "typed")
+	type_("\x1b[<0;3;11M\x1b[<0;3;11m>\r")
+	sent(">xyz")
+	// Up recalls the last line; Ctrl-W then deletes its last word.
+	type_("\x1b[A\x17again\r")
+	sent("again")
 }

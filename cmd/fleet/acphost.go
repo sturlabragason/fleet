@@ -94,8 +94,8 @@ func cmdACPHost(args []string) error {
 	if fd := int(os.Stdin.Fd()); term.IsTerminal(fd) {
 		if old, err := term.MakeRaw(fd); err == nil {
 			defer term.Restore(fd, old)
-			os.Stdout.WriteString(acphost.ScreenOn + acphost.PasteOn)
-			defer os.Stdout.WriteString(acphost.PasteOff + acphost.ScreenOff)
+			os.Stdout.WriteString(acphost.ScreenOn + acphost.PasteOn + acphost.MouseOn)
+			defer os.Stdout.WriteString(acphost.MouseOff + acphost.PasteOff + acphost.ScreenOff)
 			cfg.Keys = true
 			cfg.Color = acphost.ColorProfile(os.Environ())
 			cfg.Size = func() (int, int) {
