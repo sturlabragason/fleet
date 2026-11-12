@@ -6,6 +6,9 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
+## 2026-11-12
+- A wrapped link in the admiral pane now opens the whole URL even in a terminal that was attached before that fix: tmux gives OSC 8 links only to clients that attach after fleet turns them on, so the watcher now re-attaches older clients in place (one redraw) when it starts or moves onto a new release.
+
 ## 2026-11-11
 - Windows install without admin: `irm https://raw.githubusercontent.com/sturlabragason/fleet/main/install.ps1 | iex`, or `scoop bucket add fleet https://github.com/sturlabragason/fleet` then `scoop install fleet/fleet`; Claude agents run through the npm-installed Claude ACP adapter, card checks run under `cmd` when there is no `sh`, and self-upgrade works there too (ADR-117).
 - fleet runs on Windows: a portable `fleet-windows-amd64.exe` (and arm64) needs no tmux and runs every agent, Claude included, under the ACP driver, with spawn, send, status, peek, close and the admiral's MCP tools working as on Linux; the overview and wall stay Linux and macOS only (ADR-117).
