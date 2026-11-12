@@ -380,6 +380,8 @@ func (f *Fleet) DeliverWakeTo(box string) {
 // should wait for more: the newest arrived less than WakeSettle ago and the
 // oldest less than WakeMaxHold ago (ADR-93). The times are the reports' own,
 // from the mailbox, so every process that delivers wakes agrees on them.
+// A question or blocked report among them is never held: someone is waiting
+// on the answer.
 func settling(es []wakeEntry, unread []mail.Msg, mark string, now time.Time) bool {
 	if WakeSettle <= 0 {
 		return false
@@ -393,6 +395,9 @@ func settling(es []wakeEntry, unread []mail.Msg, mark string, now time.Time) boo
 		t := at[e.id]
 		if e.id <= mark || t.IsZero() {
 			continue
+		}
+		if e.state == "question" || e.state == "blocked" {
+			return false
 		}
 		if oldest.IsZero() || t.Before(oldest) {
 			oldest = t

@@ -108,3 +108,41 @@ func TestWaitSendsProgress(t *testing.T) {
 		t.Fatalf("want progress notifications every 100ms over 1s, got %d", progress)
 	}
 }
+
+// A client that gives up on fleet_wait (Copilot cancels it when the user
+// types into an ACP agent's pane) must not leave the server blocked: the
+// next tool call queued behind the wait for minutes and the agent's report
+// never went out (live, 2026-11-12). Any message from the client ends it.
+func TestWaitEndsOnCancelAndNextCall(t *testing.T) {
+	fastWait(t)
+	f := mailHome(t)
+	r := startRPC(t, NewAgent(f, "a"))
+	send := func(m map[string]any) {
+		b, _ := json.Marshal(m)
+		r.in.Write(append(b, '\n'))
+	}
+	start := time.Now()
+	send(map[string]any{"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": map[string]any{
+		"name": "fleet_wait", "arguments": map[string]any{"timeout_s": 20}}})
+	go func() { // the pipe is unbuffered: write while the replies are read
+		time.Sleep(50 * time.Millisecond)
+		send(map[string]any{"jsonrpc": "2.0", "method": "notifications/cancelled", "params": map[string]any{"requestId": 7}})
+		send(map[string]any{"jsonrpc": "2.0", "id": 8, "method": "ping"})
+	}()
+	var ids []string
+	for len(ids) < 2 && r.out.Scan() {
+		var m map[string]any
+		json.Unmarshal(r.out.Bytes(), &m)
+		if id, ok := m["id"]; ok {
+			ids = append(ids, string(mustJSON(id)))
+		}
+	}
+	if len(ids) != 2 || ids[0] != "7" || ids[1] != "8" {
+		t.Fatalf("responses %v, want the wait (7) then the ping (8)", ids)
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Fatalf("the cancelled wait held the server for %s", d)
+	}
+}
+
+func mustJSON(v any) []byte { b, _ := json.Marshal(v); return b }
