@@ -442,7 +442,7 @@ func TestWakeSettlesBeforeTyping(t *testing.T) {
 	if len(a.submitted) != 0 {
 		t.Fatalf("typed before the settle window: %q", a.submitted)
 	}
-	f.Report("b", "blocked", "y")
+	f.Report("b", "done", "y")
 	*off = 29 * time.Second
 	f.DeliverWake()
 	if len(a.submitted) != 0 {
@@ -450,7 +450,7 @@ func TestWakeSettlesBeforeTyping(t *testing.T) {
 	}
 	*off = 31 * time.Second
 	f.DeliverWake()
-	want := "[fleet] 2 new reports: a (done), b (blocked). Full text: call fleet_reports."
+	want := "[fleet] 2 new reports: a (done), b (done). Full text: call fleet_reports."
 	if len(a.submitted) != 1 || a.submitted[0] != want {
 		t.Fatalf("submitted %q, want %q", a.submitted, want)
 	}
@@ -581,5 +581,20 @@ func TestWakeUnreadableBoxIsNotASubmit(t *testing.T) {
 	f.Report("a", "done", "x")
 	if want := ReportLine("a", "done", "x"); a.box != "" || len(a.submitted) != 1 || a.submitted[0] != want {
 		t.Fatalf("box %q submitted %q", a.box, a.submitted)
+	}
+}
+
+// A question or a blocked report has someone waiting on the answer: it is
+// not held for the settle window (live, 2026-11-12: a question reached the
+// admiral 50 s late, 30 s of it settling).
+func TestWakeUrgentSkipsSettle(t *testing.T) {
+	for _, state := range []string{"question", "blocked"} {
+		f, pasted := mailFleet(t)
+		settleWake(t, 30*time.Second, time.Hour)
+		a := fakeAdm(f, pasted, ptr(true))
+		f.Report("a", state, "x")
+		if want := ReportLine("a", state, "x"); len(a.submitted) != 1 || a.submitted[0] != want {
+			t.Fatalf("%s: submitted %q, want %q at once", state, a.submitted, want)
+		}
 	}
 }

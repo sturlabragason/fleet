@@ -18,7 +18,7 @@ import (
 const (
 	// WaitDefault is how long fleet_wait and `fleet wait` block by default.
 	WaitDefault = 300 * time.Second
-	// WaitMax caps a wait; the server answers nothing else while it blocks.
+	// WaitMax caps a wait; the next request from the client ends it.
 	WaitMax = 600 * time.Second
 	// WaitNoProgress caps fleet_wait for a client that sent no progress
 	// token: Copilot CLI cancels an MCP call after 180 s unless progress
@@ -33,7 +33,7 @@ var (
 	progressEvery = 30 * time.Second
 )
 
-var waitToolDef = tool{"fleet_wait", "Block until a new report or message arrives for you, or timeout_s passes (default 300, max 600; 170 if your client sends no progress token). Use it instead of sleep or calling fleet_reports again and again. Returns only headlines (who, state, first line) and marks nothing read: fleet_reports, fleet_squad_reports or fleet_inbox give the full text. Call it on its own: other fleet tool calls queue behind it.", obj(nil, map[string]any{
+var waitToolDef = tool{"fleet_wait", "Block until a new report or message arrives for you, or timeout_s passes (default 300, max 600; 170 if your client sends no progress token). Use it instead of sleep or calling fleet_reports again and again. Returns only headlines (who, state, first line) and marks nothing read: fleet_reports, fleet_squad_reports or fleet_inbox give the full text. Call it on its own: another fleet tool call ends it.", obj(nil, map[string]any{
 	"agents":    strList("only wake for these agents (default: anyone)"),
 	"timeout_s": map[string]any{"type": "integer", "description": "seconds to wait (default 300, max 600)"}})}
 
@@ -169,7 +169,12 @@ func (s *Server) wait(box, readWith string, a args) (string, error) {
 		o.Timeout = WaitNoProgress
 	}
 	start := time.Now()
-	ms := Wait(context.Background(), s.F.Mail(), o)
+	ctx, cancel := s.interruptible()
+	defer cancel()
+	ms := Wait(ctx, s.F.Mail(), o)
+	if len(ms) == 0 && ctx.Err() != nil {
+		return fmt.Sprintf("interrupted after %s by the client, nothing new", time.Since(start).Round(time.Second)), nil
+	}
 	return RenderWait(ms, time.Since(start), readWith), nil
 }
 

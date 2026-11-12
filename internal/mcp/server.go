@@ -6,6 +6,7 @@ package mcp
 import (
 	"bufio"
 	"bytes"
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -84,6 +85,47 @@ type Server struct {
 	// (fleet_wait, ADR-72). Both are used only on the serving goroutine.
 	out      *json.Encoder
 	progress func(n int, msg string)
+
+	// in is Serve's input; ahead, while set, holds the one line a blocking
+	// call read ahead of the loop (see interruptible).
+	in    *bufio.Reader
+	ahead chan lineRead
+}
+
+type lineRead struct {
+	raw []byte
+	err error
+}
+
+// interruptible is the context of a call that blocks (fleet_wait): it ends
+// as soon as the client sends anything else, a notifications/cancelled or
+// the next request, so a call the client gave up on does not hold every
+// later one behind it. It reads that one line on the server's behalf; the
+// serve loop takes it next.
+func (s *Server) interruptible() (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(context.Background())
+	if s.in == nil || s.ahead != nil {
+		return ctx, cancel
+	}
+	ch := make(chan lineRead, 1)
+	s.ahead = ch
+	in := s.in
+	go func() {
+		raw, err := readLine(in)
+		ch <- lineRead{raw, err}
+		cancel()
+	}()
+	return ctx, cancel
+}
+
+// next is the next input line: the one read ahead, if any, else a fresh read.
+func (s *Server) next() ([]byte, error) {
+	if ch := s.ahead; ch != nil {
+		s.ahead = nil
+		r := <-ch
+		return r.raw, r.err
+	}
+	return readLine(s.in)
 }
 
 // New returns a server.
@@ -167,9 +209,10 @@ func (s *Server) Serve(r io.Reader, w io.Writer) error {
 		}
 	}
 	br := bufio.NewReader(r)
+	s.in = br
 	enc := json.NewEncoder(w)
 	for {
-		raw, rerr := readLine(br)
+		raw, rerr := s.next()
 		if rerr != nil && rerr != io.EOF {
 			log.Info("stdin closed", "err", rerr)
 			return rerr
