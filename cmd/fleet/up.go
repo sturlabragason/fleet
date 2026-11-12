@@ -5,7 +5,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"os/exec"
+	"path"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -408,12 +411,89 @@ func hotApply(f *fleet.Fleet) bool {
 	rethemeWith(f, false)
 	cmds := tmuxCommands(f)
 	cur, _ := f.T.Run("show-options", "-gqv", chromeOption)
-	if strings.TrimSpace(cur) == chromeStamp(cmds) {
-		return false
+	applied := strings.TrimSpace(cur) != chromeStamp(cmds)
+	if applied {
+		configure(f)
+		logx.For("watch").Info("re-applied tmux options for this build", "commands", len(cmds))
 	}
-	configure(f)
-	logx.For("watch").Info("re-applied tmux options for this build", "commands", len(cmds))
-	return true
+	if n := relinkClients(f); n > 0 {
+		logx.For("watch").Info("re-attached clients for OSC 8 hyperlinks", "clients", n)
+	}
+	return applied
+}
+
+// hyperlinkTerms is the TERM pattern fleet gives tmux's hyperlinks feature.
+const hyperlinkTerms = "xterm*"
+
+// relinkedOption lists the client pids relinkClients already re-attached.
+const relinkedOption = "@fleet_relinked"
+
+type staleClient struct{ name, pid, session string }
+
+// staleLinkClients picks from list-clients output (name, pid, termname,
+// termfeatures, session, control mode; tab-separated) the clients that
+// should have tmux's hyperlinks feature but lack it, skipping the pids in
+// done.
+func staleLinkClients(listing, done string) []staleClient {
+	skip := map[string]bool{}
+	for _, p := range strings.Fields(done) {
+		skip[p] = true
+	}
+	var out []staleClient
+	for _, l := range strings.Split(listing, "\n") {
+		c := strings.Split(l, "\t")
+		if len(c) < 6 || c[0] == "" || c[4] == "" || c[5] == "1" || skip[c[1]] {
+			continue
+		}
+		if ok, _ := path.Match(hyperlinkTerms, c[2]); !ok {
+			continue
+		}
+		if slices.Contains(strings.Split(c[3], ","), "hyperlinks") {
+			continue
+		}
+		out = append(out, staleClient{name: c[0], pid: c[1], session: c[4]})
+	}
+	return out
+}
+
+// relinkClients re-attaches, in place, every client that attached before
+// fleet set terminal-features[91]. tmux reads terminal features
+// only when a client attaches, so a terminal still attached from an older
+// build, or from before the watcher hot-applied the option, gets every OSC 8
+// link as plain text: the terminal's own URL detection then stops at the
+// row's end and a wrapped URL opens cut off. detach-client -E execs a new
+// client in the same process and terminal, so the user sees one redraw. Each
+// pid is re-attached at most once, so a terminal tmux will not give the
+// feature to is not re-attached on every watcher start.
+func relinkClients(f *fleet.Fleet) int {
+	out, err := f.T.Run("list-clients", "-F",
+		"#{client_name}\t#{client_pid}\t#{client_termname}\t#{client_termfeatures}\t#{client_session}\t#{client_control_mode}")
+	if err != nil || strings.TrimSpace(out) == "" {
+		return 0
+	}
+	done, _ := f.T.Run("show-options", "-gqv", relinkedOption)
+	stale := staleLinkClients(out, done)
+	if len(stale) == 0 {
+		return 0
+	}
+	sock, _ := f.T.Run("display-message", "-p", "#{socket_path}")
+	sock = strings.TrimSpace(sock)
+	tm, err := exec.LookPath("tmux")
+	if sock == "" || err != nil {
+		return 0
+	}
+	n := 0
+	for _, c := range stale {
+		cmd := "exec env -u TMUX -u TMUX_PANE " + tools.Quote(tm) + " -u -S " + tools.Quote(sock) +
+			" attach-session -t " + tools.Quote("="+c.session)
+		if _, err := f.T.Run("detach-client", "-t", c.name, "-E", cmd); err != nil {
+			continue
+		}
+		done = strings.TrimSpace(done + " " + c.pid)
+		n++
+	}
+	f.T.Run("set-option", "-g", relinkedOption, done)
+	return n
 }
 
 // tmuxCommands returns the tmux commands configure runs. Pure, so tests can
@@ -433,7 +513,8 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		// OSC 8 hyperlinks: without this tmux keeps the link in the pane
 		// but sends the outer terminal plain text, so a URL wrapped across
 		// rows is clickable only up to the line break.
-		{"set-option", "-s", "terminal-features[91]", "xterm*:hyperlinks"},
+		// tmux applies it only at attach; relinkClients re-attaches older clients.
+		{"set-option", "-s", "terminal-features[91]", hyperlinkTerms + ":hyperlinks"},
 		{"set-option", "-g", "pane-border-status", "top"},
 		{"set-option", "-g", "pane-border-lines", "heavy"},
 		{"set-option", "-g", "pane-border-style", "fg=" + theme.Surface1},

@@ -1915,9 +1915,11 @@ Rejected: auto-approve after a timeout; killing and re-adopting another admiral'
 
 **Decision.** `configure` records a hash of the commands it ran in `@fleet_chrome`; the watcher runs `hotApply` at every start, which re-applies them when the hash differs, so a re-exec into a new release updates the server. An ACP host whose process runs another binary is reported to the admiral after an MCP reload (`StaleHosts`), with park and wake as the way to move it once it is idle and nobody is typing.
 
-**Rejected.** Re-applying on every watcher start regardless of the hash: about 70 tmux calls each restart for nothing. Re-exec'ing ACP hosts in place: the host owns the agent's stdio and the input box draft, and park/wake restarts the agent process too, so doing it unasked could cut a turn or drop typing. Detaching clients to pick up `terminal-features`: it interrupts the user; the next attach is enough.
+**Rejected.** Re-applying on every watcher start regardless of the hash: about 70 tmux calls each restart for nothing. Re-exec'ing ACP hosts in place: the host owns the agent's stdio and the input box draft, and park/wake restarts the agent process too, so doing it unasked could cut a turn or drop typing. ~~Detaching clients to pick up `terminal-features`~~ (reversed 2026-11-12, see Amendment).
 
-**Trade-offs.** A tmux option a release removes is not unset on the live server. `terminal-features` wait for the next attach. ACP hosts stay on the old build until the admiral or user restarts them.
+**Trade-offs.** A tmux option a release removes is not unset on the live server. ACP hosts stay on the old build until the admiral or user restarts them.
+
+**Amendment 2026-11-12.** "The next attach is enough" failed in practice: a terminal attached two days before v1.15.0's `terminal-features[91]` still had no `hyperlinks` feature, so tmux sent the admiral's OSC 8 links as plain text and a wrapped URL opened cut off, though the user believed he had re-attached. tmux reads terminal features only at attach and has no command to add them to a live client. `hotApply` now also runs `relinkClients` on every watcher start (one `list-clients`): each `xterm*` client without `hyperlinks` is re-attached in place with `detach-client -E 'exec tmux -S <socket> attach -t =<session>'`, which keeps the terminal and its process and costs one redraw; copy mode or an open popup on that client is lost. Each client pid is re-attached at most once (`@fleet_relinked`), so a terminal tmux won't give the feature to is not re-attached on every start.
 
 **ADR-110: network outages hold agents and resume them** (§7e) — accepted 2026-11-11.
 
