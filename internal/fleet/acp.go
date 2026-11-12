@@ -344,7 +344,7 @@ func acpSocketFits(home, name string) error {
 	return nil
 }
 
-// acpSend sends text as a prompt (or steers the running turn).
+// acpSend sends text as a prompt (queued by the host while a turn runs).
 func (f *Fleet) acpSend(name, text string) error {
 	if _, err := f.Pane(name); err != nil {
 		return err

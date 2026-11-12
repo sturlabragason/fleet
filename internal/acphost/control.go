@@ -36,7 +36,7 @@ func PromptPath(home, name string) string { return filepath.Join(Dir(home), name
 
 // Control operations.
 const (
-	OpPrompt = "prompt" // Text: send as a prompt (or steer the running turn)
+	OpPrompt = "prompt" // Text: send as a prompt (held until the running turn ends)
 	OpAnswer = "answer" // Option: 1-based option number, or OptionID
 	OpCancel = "cancel" // cancel the running turn (session/cancel)
 	OpState  = "state"  // no change; the response carries the host's state

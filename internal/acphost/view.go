@@ -53,6 +53,7 @@ type view struct {
 	blocks                []*block
 	tools                 map[string]*block // tool call id → its line
 	asks                  map[string]*block // tool call id → its open question
+	queued                []string          // prompts held until the turn ends
 	ed                    editor
 	dirty                 bool  // the box changed since the last draw
 	inTop                 int   // first box row shown, when it is taller than its room
@@ -178,6 +179,26 @@ func (v *view) push(b *block) {
 			delete(v.asks, id)
 		}
 	}
+}
+
+// setQueued shows the prompts held until the running turn ends.
+func (v *view) setQueued(q []string) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.queued = append(v.queued[:0:0], q...)
+	v.draw()
+}
+
+// restore puts text back into the input box, ahead of what is typed there.
+func (v *view) restore(text string) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if !v.ed.empty() {
+		text += "\n" + v.ed.text()
+	}
+	v.ed.clear()
+	v.ed.insert([]rune(clean(text))...)
+	v.draw()
 }
 
 // edit changes the input box; flush draws it.
@@ -308,6 +329,9 @@ func (v *view) frame(w, h int) (rows []string, cx, cy int) {
 	input, cx, crow := v.input(w, inputRows(h))
 	if h >= 6 {
 		bottom = append(bottom, "") // the rule, drawn once the scroll is known
+	}
+	if h >= 8 {
+		bottom = append(bottom, v.queue(w)...)
 	}
 	bottom = append(bottom, input...)
 	if hint != "" {
@@ -599,14 +623,35 @@ func (v *view) input(w, n int) ([]string, int, int) {
 	return out, pw + ccol + 1, crow - v.inTop
 }
 
+// maxQueued is how many held prompts the pane lists above the input.
+const maxQueued = 3
+
+// queue lists the held prompts, one line each, newest last. Caller holds mu.
+func (v *view) queue(w int) []string {
+	q := v.queued
+	var out []string
+	if len(q) > maxQueued {
+		out = append(out, v.paintLine(segLine{segs: []seg{{fmt.Sprintf("  … %d more queued", len(q)-maxQueued), sty{fg: v.pal.dim}}}}, w))
+		q = q[len(q)-maxQueued:]
+	}
+	for _, t := range q {
+		segs := []seg{{"  queued ", sty{fg: v.pal.dim}}, {clean(firstLine(t)), sty{fg: v.pal.sub}}}
+		out = append(out, v.paintLine(segLine{segs: clipSegs(segs, w)}, w))
+	}
+	return out
+}
+
 // hint is the key line under the input; what Enter does follows the state.
 func (v *view) hint(w int) string {
 	pl := v.pal
 	enter := "send"
-	if v.status == "working" {
-		enter = "steer"
+	if v.status == "working" || v.status == "waiting" {
+		enter = "queue"
 	}
 	items := [][2]string{{"Enter", enter}, {"Esc", "cancel turn"}, {"Ctrl-T", "take over"}, {"PgUp/PgDn", "scroll"}, {"Alt-Enter", "newline"}}
+	if len(v.queued) > 0 {
+		items = append(items[:1], append([][2]string{{"↑", "edit queued"}}, items[1:]...)...)
+	}
 	if len(v.asks) > 0 {
 		items = append([][2]string{{"1-9", "answer"}}, items...)
 	}
