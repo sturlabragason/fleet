@@ -24,19 +24,15 @@ func cmdVersion(args []string) error {
 // and the build-info form ("fleet <rev> · built <time>") otherwise. A
 // `go install …@vX.Y.Z` binary has no ldflags but carries its module version.
 func versionLine(linked, module string) string {
-	build := whatsnew.Version()
-	tag := linked
-	if tag == "" && module != "" && module != "(devel)" {
-		tag = module
+	return whatsnew.WithTag(versionTag(linked, module), whatsnew.BuildInfo())
+}
+
+// versionTag is the linked release tag, else a `go install` module version.
+func versionTag(linked, module string) string {
+	if linked == "" && module != "(devel)" {
+		return module
 	}
-	if tag == "" {
-		return build
-	}
-	rest := build[len("fleet "):]
-	if rest == "(unknown build)" {
-		return "fleet " + tag
-	}
-	return "fleet " + tag + " (" + rest + ")"
+	return linked
 }
 
 func moduleVersion() string {
@@ -55,7 +51,7 @@ func shortVersion(linked, module string) string {
 	if module != "" && module != "(devel)" {
 		return module
 	}
-	rev, _, _ := strings.Cut(strings.TrimPrefix(whatsnew.Version(), "fleet "), " · ")
+	rev, _, _ := strings.Cut(strings.TrimPrefix(whatsnew.BuildInfo(), "fleet "), " · ")
 	if strings.HasPrefix(rev, "(") {
 		return "" // unknown build
 	}

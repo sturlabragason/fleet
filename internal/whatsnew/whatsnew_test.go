@@ -235,3 +235,15 @@ func TestVersion(t *testing.T) {
 		t.Error("Plain")
 	}
 }
+
+func TestWithTag(t *testing.T) {
+	for _, c := range []struct{ tag, build, want string }{
+		{"", "fleet (unknown build)", "fleet (unknown build)"},
+		{"v1.21.0+pro.fae2220", "fleet (unknown build)", "fleet v1.21.0+pro.fae2220"},
+		{"v1.2.0", "fleet 66a2ece · built 2026-11-12 10:00", "fleet v1.2.0 (66a2ece · built 2026-11-12 10:00)"},
+	} {
+		if got := WithTag(c.tag, c.build); got != c.want {
+			t.Errorf("WithTag(%q, %q) = %q, want %q", c.tag, c.build, got, c.want)
+		}
+	}
+}
