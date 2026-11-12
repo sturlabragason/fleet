@@ -210,3 +210,44 @@ func TestKeysEditSequences(t *testing.T) {
 	type_("\x1b[A\x17again\r")
 	sent("again")
 }
+
+// Enter during a turn queues the prompt; Up takes it back to edit; Esc puts
+// what the pane queued back into the box instead of sending it.
+func TestKeysQueueDuringTurn(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	r := startRig(t, Config{Prompt: "go", In: pr, Keys: true, Size: func() (int, int) { return 60, 16 }}, acp.AgentCapabilities{})
+	r.waitStatus("working")
+	type_ := func(s string) {
+		t.Helper()
+		if _, err := io.WriteString(pw, s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	calls := func() string { return strings.Join(r.conn.Calls(), "|") }
+	frame := func() string { return lastFrame(r.out.String()) }
+
+	type_("first\r")
+	r.waitFor(func() bool {
+		return strings.Contains(frame(), "queued first") && strings.Contains(frame(), "Enter queue")
+	}, "queued line")
+	type_("\x1b[A") // Up: back into the box
+	r.waitFor(func() bool {
+		return !strings.Contains(frame(), "queued first") && strings.Contains(frame(), "› first")
+	}, "queued prompt in the box")
+	type_(" edited\r")
+	r.waitFor(func() bool { return strings.Contains(frame(), "queued first edited") }, "edited prompt queued")
+	type_("\x1b")
+	r.waitFor(func() bool {
+		return strings.Contains(calls(), "cancel") && strings.Contains(frame(), "› first edited")
+	}, "Esc returns it to the box")
+	r.conn.turns <- func(handler) acp.StopReason { return acp.StopCancelled }
+	r.waitStatus("idle")
+	if strings.Contains(calls(), "prompt first") {
+		t.Fatalf("queued prompt sent after Esc: %s", calls())
+	}
+	type_("\r")
+	r.waitFor(func() bool { return strings.Contains(calls(), "prompt first edited") }, "sent when idle")
+	r.conn.turns <- func(handler) acp.StopReason { return acp.StopEndTurn }
+	r.waitStatus("idle")
+}

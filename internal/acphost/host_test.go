@@ -552,7 +552,10 @@ func (r *rig) kinds(kind string) []Entry {
 	return out
 }
 
-func TestSteerErrorKeepsQuestionTurnEndCancelsIt(t *testing.T) {
+// A prompt sent while a turn runs is held, not sent: a second session/prompt
+// makes copilot cancel the running turn. Once the turn ends (its open
+// question answered "cancelled") the held prompts go as one prompt.
+func TestPromptDuringTurnIsQueued(t *testing.T) {
 	r := startRig(t, Config{Prompt: "go"}, acp.AgentCapabilities{})
 	r.waitStatus("working")
 	results := make(chan acp.RequestPermissionResult, 1)
@@ -569,16 +572,17 @@ func TestSteerErrorKeepsQuestionTurnEndCancelsIt(t *testing.T) {
 		return acp.StopEndTurn
 	}
 	r.waitStatus("waiting")
-	if _, err := r.call(Request{Op: OpPrompt, Text: "steer"}); err != nil {
-		t.Fatal(err)
+	for _, text := range []string{"one", "two"} {
+		if _, err := r.call(Request{Op: OpPrompt, Text: text}); err != nil {
+			t.Fatal(err)
+		}
 	}
-	r.conn.turns <- func(handler) acp.StopReason { return "ERR" }
-	r.waitFor(func() bool { return len(r.kinds(KindError)) > 0 }, "prompt error entry")
+	calls := func() string { return strings.Join(r.conn.Calls(), "|") }
 	resp, _ := r.call(Request{Op: OpState})
-	if resp.Status != "waiting" || resp.Question == nil || r.status().Status != "waiting" {
-		t.Fatalf("after rejected steer: %+v, file %+v", resp, r.status())
+	if strings.Contains(calls(), "prompt one") || strings.Contains(calls(), "cancel") || resp.Status != "waiting" || resp.Question == nil {
+		t.Fatalf("prompt during a turn was sent: calls %s, state %+v", calls(), resp)
 	}
-	close(release) // the turn ends with the question still open
+	close(release)
 	select {
 	case res := <-results:
 		if res.Outcome.Outcome != "cancelled" {
@@ -587,10 +591,17 @@ func TestSteerErrorKeepsQuestionTurnEndCancelsIt(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("permission goroutine not released at turn end")
 	}
-	r.waitStatus("idle")
-	if resp, _ := r.call(Request{Op: OpState}); resp.Question != nil || resp.Status != "idle" {
-		t.Fatalf("after turn end: %+v", resp)
+	r.waitFor(func() bool { return strings.Contains(calls(), "prompt one\n\ntwo") }, "queued prompts sent as one")
+	r.waitStatus("working")
+	var users []string
+	for _, e := range r.kinds(KindUser) {
+		users = append(users, e.Text)
 	}
+	if strings.Join(users, "|") != "go|one\n\ntwo" {
+		t.Fatalf("user entries = %q", users)
+	}
+	r.conn.turns <- func(handler) acp.StopReason { return acp.StopEndTurn }
+	r.waitStatus("idle")
 }
 
 func TestPromptBeforeReadyIsQueued(t *testing.T) {

@@ -147,6 +147,7 @@ type host struct {
 	questions []*question
 	replaying bool
 	pending   []string          // prompts that came before the session was ready
+	queued    []queuedPrompt    // prompts that came while a turn ran (ADR-118)
 	inflight  int               // prompts sent and not yet answered
 	titles    map[string]string // tool call id → title
 	subs      map[string]string // tool call id → the subagent it starts
@@ -332,8 +333,12 @@ func (h *host) setup() error {
 	if len(queue) == 0 {
 		h.apply(h.tr.Ready())
 	}
-	for _, text := range queue { // no idle blip: straight from starting to working
-		h.send(text)
+	if len(queue) > 0 { // no idle blip: straight from starting to working
+		h.send(queue[0])
+		for _, text := range queue[1:] { // one turn at a time
+			h.queued = append(h.queued, queuedPrompt{text: text})
+		}
+		h.showQueue()
 	}
 	h.mu.Unlock()
 	if h.cfg.Prompt != "" && h.cfg.OnPromptSent != nil {
@@ -552,8 +557,13 @@ func (h *host) answer(n int, id, by string) error {
 	return nil
 }
 
-// prompt sends text as a prompt; one sent during a turn steers it. Before
-// the session is ready it is queued and sent once it is.
+// queuedPrompt is a prompt held until the running turn ends.
+type queuedPrompt struct{ text, by string }
+
+// prompt sends text as a prompt. Before the session is ready it is queued
+// and sent once it is; during a turn it is held and sent when the turn
+// ends, as a second session/prompt would cancel the running turn (copilot
+// does) rather than steer it.
 func (h *host) prompt(text, by string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -567,14 +577,68 @@ func (h *host) prompt(text, by string) error {
 		h.pending = append(h.pending, text)
 		return nil
 	}
+	if h.inflight > 0 {
+		h.queued = append(h.queued, queuedPrompt{text, by})
+		if h.con == nil {
+			h.emit(Entry{Kind: KindUser, Text: text + "  (queued until the turn ends)"}, false)
+		}
+		h.showQueue()
+		return nil
+	}
 	h.sendBy(text, by)
 	return nil
 }
 
+// showQueue draws the held prompts above the input box. Caller holds mu.
+func (h *host) showQueue() {
+	if h.con == nil {
+		return
+	}
+	texts := make([]string, len(h.queued))
+	for i, q := range h.queued {
+		texts[i] = q.text
+	}
+	h.con.setQueued(texts)
+}
+
+// sendQueued sends the held prompts as one prompt, recorded as typed by
+// whoever typed them all. Caller holds mu.
+func (h *host) sendQueued() {
+	if len(h.queued) == 0 {
+		return
+	}
+	texts := make([]string, len(h.queued))
+	by := h.queued[0].by
+	for i, q := range h.queued {
+		texts[i] = q.text
+		if q.by != by {
+			by = ""
+		}
+	}
+	h.queued = nil
+	h.showQueue()
+	h.sendBy(strings.Join(texts, "\n\n"), by)
+}
+
+// unqueueLast takes the newest held prompt back out of the queue, for the
+// pane's Up key to edit it; ok is false when nothing is held.
+func (h *host) unqueueLast() (text string, ok bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	n := len(h.queued)
+	if n == 0 {
+		return "", false
+	}
+	text = h.queued[n-1].text
+	h.queued = h.queued[:n-1]
+	h.showQueue()
+	return text, true
+}
+
 // send records text and sends it as session/prompt. The turn ends when the
 // last prompt in flight returns: then a question the agent left open is
-// moot and is answered "cancelled". A prompt that fails while others run
-// (a rejected steer) only leaves an error entry. Caller holds mu.
+// moot and is answered "cancelled", and the prompts held meanwhile are
+// sent. Caller holds mu.
 func (h *host) send(text string) { h.sendBy(text, "") }
 
 // sendBy is send recording who typed the prompt (Entry.By).
@@ -609,6 +673,9 @@ func (h *host) sendBy(text, by string) {
 			}
 		}
 		h.apply(h.tr.PromptDone(r.StopReason, err))
+		if h.inflight == 0 {
+			h.sendQueued()
+		}
 	}()
 }
 
@@ -630,7 +697,23 @@ func (h *host) cancel(by string) error {
 	for len(h.questions) > 0 {
 		h.resolveBy(h.questions[0], acp.CancelledOutcome(), "cancelled", by)
 	}
+	var back []string // Esc in the pane: what it typed returns to the box
+	if by == ByPane && h.con != nil {
+		kept := h.queued[:0]
+		for _, q := range h.queued {
+			if q.by == ByPane {
+				back = append(back, q.text)
+			} else {
+				kept = append(kept, q)
+			}
+		}
+		h.queued = kept
+		h.showQueue()
+	}
 	h.mu.Unlock()
+	if len(back) > 0 {
+		h.con.restore(strings.Join(back, "\n\n"))
+	}
 	return err
 }
 

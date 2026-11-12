@@ -121,6 +121,7 @@ func (h *host) keys(r io.Reader) {
 			h.paneTakeover()
 		case b == '\t':
 			con.edit(func(e *editor) { e.insert(' ') })
+		case b == 0x10 && h.editQueued(): // Ctrl-P, like Up
 		case b < 0x20 || b == 0x7f:
 			if fn := ctrlKeys[b]; fn != nil {
 				con.edit(fn)
@@ -206,6 +207,9 @@ func (h *host) csiKey(seq string) {
 	var fn func(*editor)
 	switch final {
 	case 'A':
+		if h.editQueued() {
+			return
+		}
 		fn = (*editor).up
 	case 'B':
 		fn = (*editor).down
@@ -333,6 +337,19 @@ func (h *host) submit(line string) {
 	if err != nil {
 		h.say("! " + err.Error())
 	}
+}
+
+// editQueued is Up in an empty box while prompts are held: the newest
+// comes back into the box to edit, or to drop with Ctrl-C.
+func (h *host) editQueued() bool {
+	if !h.con.empty() {
+		return false
+	}
+	text, ok := h.unqueueLast()
+	if ok {
+		h.con.restore(text)
+	}
+	return ok
 }
 
 // busy reports whether a turn runs or a question is open.
