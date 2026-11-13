@@ -156,6 +156,8 @@ type args struct {
 	ACP   bool `json:"acp"`
 	Files []string
 	Prune bool
+	// Days is fleet_recall's window (ADR-119).
+	Days int
 	// NeedsAction is agent fleet_msg_send's wake switch; nil is the default,
 	// fleet.NeedsAction (ADR-92).
 	NeedsAction *bool `json:"needs_action"`
@@ -172,7 +174,7 @@ var identityBound = map[string]bool{
 	"fleet_admiral_profile": true, "fleet_access_decide": true, "fleet_handover": true, "fleet_handover_request": true,
 	"fleet_admirals": true, "fleet_msg_send": true, "fleet_inbox": true,
 	"fleet_access_request": true, "fleet_access_respond": true, "fleet_access_revoke": true,
-	"fleet_takeover": true, "fleet_worktrees": true, "fleet_branches": true, "fleet_admiral_add": true,
+	"fleet_takeover": true, "fleet_recall": true, "fleet_worktrees": true, "fleet_branches": true, "fleet_admiral_add": true,
 	"fleet_admiral_close": true,
 }
 
@@ -298,7 +300,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		return "", fmt.Errorf("action must be park or wake")
 	case "fleet_handover", "fleet_handover_request", "fleet_admirals", "fleet_msg_send", "fleet_inbox", "fleet_access_request", "fleet_access_respond", "fleet_access_revoke":
 		return s.admiralCall(name, a)
-	case "fleet_takeover", "fleet_touching", "fleet_worktrees", "fleet_branches", "fleet_admiral_add", "fleet_admiral_close", "fleet_changes":
+	case "fleet_takeover", "fleet_touching", "fleet_worktrees", "fleet_branches", "fleet_admiral_add", "fleet_admiral_close", "fleet_changes", "fleet_recall":
 		return s.cliCall(name, a)
 	case "fleet_wall":
 		switch a.Action {

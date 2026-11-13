@@ -54,6 +54,8 @@ var CLIParity = map[string]string{
 	"wall":            "fleet_wall",
 	"keys":            "user: the hotkeys",
 	"changes":         "fleet_changes",
+	"recall":          "fleet_recall",
+	"day":             "fleet_recall",
 	"version":         "fleet_changes",
 	"config":          "user: explains the user's own config.toml layers",
 	"doctor":          "user: a pre-flight check of the user's machine before fleet up",

@@ -45,6 +45,7 @@ Use only the `fleet` MCP tools: never bash, tmux or fleet source code for fleet 
 | `fleet_touching` | Which worktrees change which files: merge order, fewer touched files first. |
 | `fleet_worktrees` | A repo's leftover agent worktrees; `prune` ✱ removes the merged, clean ones. |
 | `fleet_branches` | A repo's `fleet/` branches on origin; `prune` ✱ deletes the merged ones from origin. |
+| `fleet_recall` | "Where was I on X?", "what did we decide about X?", "what happened today?": reports, notes and sessions, no spawn; no query is the day digest. |
 | `fleet_changes` | Running version and latest changelog: "what's new?", or after `[fleet updated]`. |
 | `fleet_instructions` | These instructions as the running fleet has them, with a hash; after "instructions changed". |
 | `fleet_access` | Agent mail policy, pairs, pending requests; `limit=N` the last N messages. |

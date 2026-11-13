@@ -154,3 +154,24 @@ func TestCLIToolsAdmiralClose(t *testing.T) {
 		t.Fatal("refused close still ran the CLI")
 	}
 }
+
+// fleet_recall runs in process: a query searches the notes, no query is
+// the day digest; without cass both say how to get session search.
+func TestRecallTool(t *testing.T) {
+	t.Setenv("FLEET_CASS", "off")
+	s, runs := cliServer(t, "", 0)
+	if _, isErr := callText(t, s, "fleet_note", map[string]any{"text": "decision: integrate cass"}); isErr {
+		t.Fatal("note refused")
+	}
+	msg, isErr := callText(t, s, "fleet_recall", map[string]any{"query": "Cass"})
+	if isErr || !strings.Contains(msg, "decision: integrate cass") || !strings.Contains(msg, "cass is not installed") {
+		t.Fatalf("recall: %q", msg)
+	}
+	msg, isErr = callText(t, s, "fleet_recall", nil)
+	if isErr || !strings.Contains(msg, "## Waiting on you") || !strings.Contains(msg, "p1 ") {
+		t.Fatalf("day: %q", msg)
+	}
+	if len(*runs) != 0 {
+		t.Fatalf("recall forked: %v", *runs)
+	}
+}

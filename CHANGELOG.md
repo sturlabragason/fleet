@@ -6,6 +6,9 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
+## 2026-11-13
+- `fleet recall <words>` finds what you were doing on a topic: agent reports and notes, plus every Copilot CLI and Claude Code session on the machine when [cass](https://github.com/Dicklesworthstone/coding_agent_session_search) is installed, each with its agent, repo and session id to resume. `fleet day` is a digest of what waits on you, what got done by repo and what is still running. The admiral has both as `fleet_recall`, with no model call (ADR-119).
+
 ## 2026-11-12
 - Typing into an ACP agent's pane while it works no longer cancels the turn: Enter queues the message (shown as `queued …` above the box, Up takes it back to edit) and it is sent when the turn ends; `fleet send` to a working ACP agent queues the same way. Only Esc cancels (ADR-118).
 - An agent's `question` or `blocked` report wakes the admiral at once instead of after the 30 s settle window, and a `fleet_wait` that the agent's tool cancels (for example when you type into an ACP agent's pane) ends at once. Before, the agent's next reports queued behind it for up to 10 minutes and then arrived late and out of date (ADR-72, ADR-93).
