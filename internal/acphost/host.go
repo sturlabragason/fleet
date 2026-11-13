@@ -17,6 +17,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/acp"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/proc"
 	"github.com/sturlabragason/fleet/internal/status"
 )
 
@@ -763,6 +764,14 @@ func (h *host) shutdown(cmd *exec.Cmd, exited <-chan struct{}) {
 	if c == nil {
 		return
 	}
+	// Read the child's tree while it is still parented to it: once the
+	// child exits, its helpers (MCP servers, background shells) are
+	// reparented away and fleet's pane kill can no longer find them (#48).
+	var tree []proc.Proc
+	if cmd != nil && cmd.Process != nil {
+		tree = proc.Tree(cmd.Process.Pid)
+	}
+	defer proc.Kill(tree, exitTimeout)
 	if sid != "" && caps.CanClose() {
 		ctx, cancel := context.WithTimeout(h.bg, closeTimeout)
 		if err := c.CloseSession(ctx, sid); err != nil {

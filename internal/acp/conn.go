@@ -85,13 +85,40 @@ func newConn(r io.Reader, w io.Writer, onNotify notifyFunc, onRequest requestFun
 	return c
 }
 
-// read splits the stream into lines of any length and queues the frames.
+// maxFrame caps one frame. A line over it is skipped, not buffered: a
+// child that writes without newlines must not grow the host without bound
+// (#48). Big tool results and images fit well inside it.
+var maxFrame = 64 << 20
+
+// readLine reads one line like ReadBytes('\n'), but past max it drops the
+// rest of the line and returns nil with long = true.
+func readLine(br *bufio.Reader, max int) (line []byte, long bool, err error) {
+	for {
+		chunk, err := br.ReadSlice('\n')
+		if !long {
+			if len(line)+len(chunk) > max {
+				line, long = nil, true
+			} else {
+				line = append(line, chunk...)
+			}
+		}
+		if err != bufio.ErrBufferFull {
+			return line, long, err
+		}
+	}
+}
+
+// read splits the stream into lines and queues the frames.
 func (c *conn) read() {
 	br := bufio.NewReaderSize(c.r, 64*1024)
 	var err error
 	for {
 		var line []byte
-		line, err = br.ReadBytes('\n')
+		var long bool
+		line, long, err = readLine(br, maxFrame)
+		if long {
+			logx.For("acp").Warn("acp: oversized frame skipped", "max", maxFrame)
+		}
 		if len(bytes.TrimSpace(line)) > 0 {
 			c.parse(line)
 		}

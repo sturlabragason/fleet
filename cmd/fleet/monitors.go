@@ -194,6 +194,7 @@ func openWallTerminal(f *fleet.Fleet) (string, error) {
 	}
 	c := exec.Command(argv[0], argv[1:]...)
 	sysx.Detach(c)
+	c.Env = sysx.DropOwner(nil)
 	if err := c.Start(); err != nil {
 		return "", err
 	}

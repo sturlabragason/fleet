@@ -135,10 +135,15 @@ func (f *Fleet) tellAdmiralBox(box, text string) {
 // It returns the stamp it replaced, so a claim that ends up parking
 // nothing can hand the interval back with releaseGuard.
 func (f *Fleet) claimGuard(now time.Time, every time.Duration) (bool, time.Time) {
+	return f.claimStamp("memguard", now, every)
+}
+
+// claimStamp is claimGuard on the stamp file name in the fleet home.
+func (f *Fleet) claimStamp(name string, now time.Time, every time.Duration) (bool, time.Time) {
 	if err := os.MkdirAll(f.Home, 0o755); err != nil {
 		return false, time.Time{}
 	}
-	p := filepath.Join(f.Home, "memguard")
+	p := filepath.Join(f.Home, name)
 	lf, err := os.OpenFile(p, os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		return false, time.Time{}

@@ -190,6 +190,7 @@ func startWatcher(f *fleet.Fleet) {
 	}
 	cmd := exec.Command(f.Exe, "watch")
 	sysx.Detach(cmd)
+	cmd.Env = sysx.DropOwner(nil) // the watcher is fleet's, not the agent's that started it
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
 	if err := cmd.Start(); err != nil {
 		log.Error("start watcher", "err", err)

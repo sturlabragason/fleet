@@ -27,7 +27,27 @@ import (
 // the board lock, re-checking there, so an agent that started working
 // between the check and the kill is left alone instead of being killed
 // mid-thought. A failed kill puts the entry back as it was.
-func (f *Fleet) Park(name, reason string) error {
+func (f *Fleet) Park(name, reason string) error { return f.park(name, reason, false) }
+
+// ParkRunaway parks an agent whatever its status, pin or prompt: the
+// resource guard's stop for an agent whose processes are taking the machine
+// down (ADR-122). Waking it resumes the session when it has one.
+func (f *Fleet) ParkRunaway(name, reason string) error { return f.park(name, reason, true) }
+
+// blocker is park.Blocker, or for a forced park only "already parked".
+func blocker(a *board.Agent, pinned map[string]bool, force bool) string {
+	switch {
+	case !force:
+		return park.Blocker(a, pinned)
+	case a == nil:
+		return "not on the board"
+	case a.Status == string(status.Parked):
+		return "it is already parked"
+	}
+	return ""
+}
+
+func (f *Fleet) park(name, reason string, force bool) error {
 	a, ok := f.Store.Load().Agents[name]
 	if !ok {
 		return fmt.Errorf("no agent %q", name)
@@ -65,10 +85,13 @@ func (f *Fleet) Park(name, reason string) error {
 			})
 		}
 	}
-	if why := park.Blocker(a, pinned); why != "" {
+	if why := blocker(a, pinned, force); why != "" {
 		return fmt.Errorf("can't park %s: %s", name, why)
 	}
-	w, err := f.Prompting(name)
+	w, err := "", error(nil)
+	if !force {
+		w, err = f.Prompting(name)
+	}
 	switch {
 	case err != nil && pane != "":
 		// Fail closed: an unreadable screen may be a prompt.
@@ -88,7 +111,7 @@ func (f *Fleet) Park(name, reason string) error {
 		if !ok {
 			return fmt.Errorf("no agent %q", name)
 		}
-		if why := park.Blocker(cur, pinned); why != "" {
+		if why := blocker(cur, pinned, force); why != "" {
 			return fmt.Errorf("can't park %s: %s", name, why)
 		}
 		now := time.Now()

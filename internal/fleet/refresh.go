@@ -171,6 +171,7 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 		}
 		f.sweepChecks(out)
 		f.reapDead(out, deadPanes, now, off)
+		go f.guardProcs(out, now)
 		f.watchAdmirals(panes, now)
 		f.checkNet(out, now, off)
 		f.retain(now)

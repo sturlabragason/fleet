@@ -22,6 +22,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/prefs"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/summary"
+	"github.com/sturlabragason/fleet/internal/sysx"
 	"github.com/sturlabragason/fleet/internal/team"
 	"github.com/sturlabragason/fleet/internal/tmux"
 	"github.com/sturlabragason/fleet/internal/tools"
@@ -128,6 +129,7 @@ type Fleet struct {
 	globMu      sync.Mutex
 	sweep       doneSweep
 	dead        deadReaper
+	procs       procGuard
 	admWatch    admiralWatch
 }
 
@@ -540,7 +542,8 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 		}
 		p.Env = env
 	}
-	pane, err := f.T.Spawn(Session, WindowPrefix+name, dir, p.EnvList(), tools.ShellCommand(argv))
+	env := append(p.EnvList(), sysx.OwnerEnv+"="+OwnerTag(f.Home, name))
+	pane, err := f.T.Spawn(Session, WindowPrefix+name, dir, env, tools.ShellCommand(argv))
 	if err != nil {
 		log.Error("spawn failed", "agent", name, "err", err)
 		return nil, err

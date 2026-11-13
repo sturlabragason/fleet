@@ -394,3 +394,16 @@ func TestRPCErrorReturned(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestReadLineSkipsOversizedFrames(t *testing.T) {
+	big := strings.Repeat("x", 300)
+	br := bufio.NewReaderSize(strings.NewReader(big+"\n{\"ok\":1}\n"), 16)
+	line, long, err := readLine(br, 100)
+	if !long || line != nil || err != nil {
+		t.Fatalf("oversized: line %d bytes, long %v, err %v", len(line), long, err)
+	}
+	line, long, err = readLine(br, 100)
+	if long || string(line) != "{\"ok\":1}\n" || err != nil {
+		t.Fatalf("next frame: %q, long %v, err %v", line, long, err)
+	}
+}

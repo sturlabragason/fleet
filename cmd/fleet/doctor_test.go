@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/watch"
 )
 
@@ -143,5 +144,18 @@ func TestDoctorStaleWatcher(t *testing.T) {
 	watch.WriteBeat(home, watch.Beat{PID: os.Getpid(), Started: now.Add(-time.Hour), At: now, OK: now})
 	if c := checkWatcher(home, now); c.Level != levelOK {
 		t.Errorf("live watcher: %+v", c)
+	}
+}
+
+func TestCheckOrphans(t *testing.T) {
+	c := checkOrphans(func() ([]fleet.Orphan, error) { return nil, nil })
+	if c.Level != levelOK {
+		t.Errorf("no orphans: %+v", c)
+	}
+	c = checkOrphans(func() ([]fleet.Orphan, error) {
+		return []fleet.Orphan{{Agent: "a1", PID: 42, Comm: "node", Mem: 2 << 30}}, nil
+	})
+	if c.Level != levelWarn || !strings.Contains(c.Detail, "a1 pid 42 (node") || c.Fix == "" {
+		t.Errorf("one orphan: %+v", c)
 	}
 }

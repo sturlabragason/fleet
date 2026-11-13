@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -235,5 +236,18 @@ func TestHungCommandTimesOut(t *testing.T) {
 	}
 	if _, err := c.Run("display-popup", "-E", "true"); err != nil {
 		t.Errorf("popup was cut short: %v", err)
+	}
+}
+
+func TestNoServer(t *testing.T) {
+	for msg, want := range map[string]bool{
+		"tmux list-panes: exit status 1: no server running on /tmp/tmux-1/x":                     true,
+		"tmux list-panes: exit status 1: error connecting to /tmp/x (No such file or directory)": true,
+		"tmux list-panes: exit status 1: error connecting to /tmp/x (Permission denied)":         false,
+		"tmux list-panes: context deadline exceeded: ":                                           false,
+	} {
+		if got := NoServer(errors.New(msg)); got != want {
+			t.Errorf("NoServer(%q) = %v, want %v", msg, got, want)
+		}
 	}
 }

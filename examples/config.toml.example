@@ -181,6 +181,9 @@ mode_args = { autopilot = "--allow-all --autopilot", plan = "--plan" }
 # min_free = "4GB"       # park below this much free memory (B/KB/MB/GB/TB)
 # check_every = "30s"    # at most one park per interval, across all processes
 # park_idle = "10m"      # also park an agent idle this long, memory or not (default: off)
+# Per agent (ADR-122): its own processes, not the builds and tests it runs.
+# agent_max = "8GB"      # park an agent above this RSS + swap, whatever its status (default: RAM/4, at least 2GB; "off")
+# agent_max_cpu = "2"    # park an idle agent burning more cores than this for 5 min (default: 2; "off")
 
 # Where `fleet exec -- <cmd>` runs builds and tests (DESIGN §4, ADR-107): an ssh
 # destination with the toolchain and rsync. Unset: fleet exec runs locally.

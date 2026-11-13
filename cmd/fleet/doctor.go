@@ -19,6 +19,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/conf"
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/park"
 	"github.com/sturlabragason/fleet/internal/prefs"
 	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/tools"
@@ -47,7 +48,8 @@ type doctorEnv struct {
 	home, userHome, exe string
 	getenv              func(string) string
 	tmuxVersion         func() (string, error)
-	look                func(cmd string) error // nil: as spawn looks (fleet.CheckCommand)
+	look                func(cmd string) error         // nil: as spawn looks (fleet.CheckCommand)
+	orphans             func() ([]fleet.Orphan, error) // nil: not checked
 }
 
 func cmdDoctor(args []string) error {
@@ -59,6 +61,13 @@ func cmdDoctor(args []string) error {
 	userHome, _ := os.UserHomeDir()
 	exe, _ := os.Executable()
 	env := doctorEnv{home: logx.Home(), userHome: userHome, exe: exe, getenv: os.Getenv, tmuxVersion: tmuxVersion}
+	env.orphans = func() ([]fleet.Orphan, error) {
+		f, err := fleet.Open()
+		if err != nil {
+			return nil, err
+		}
+		return f.Orphans()
+	}
 	return writeDoctor(os.Stdout, doctor(env), *asJSON)
 }
 
@@ -95,6 +104,9 @@ func writeDoctor(w io.Writer, cs []doctorCheck, asJSON bool) error {
 
 func doctor(env doctorEnv) []doctorCheck {
 	cs := []doctorCheck{checkTmux(env.tmuxVersion), checkLocale(env.getenv), checkLocalBin(env), checkBoard(env), checkWatcher(env.home, time.Now())}
+	if env.orphans != nil {
+		cs = append(cs, checkOrphans(env.orphans))
+	}
 	pr, c := checkConfig(env)
 	cs = append(cs, c)
 	userTools, profiles, c := checkTools(env, pr)
@@ -205,6 +217,34 @@ func checkWatcher(home string, now time.Time) doctorCheck {
 		c.Level = levelWarn
 		c.Detail = fmt.Sprintf("pid %d is not keeping the board fresh (heartbeat %s ago, last good refresh %s ago)", b.PID, now.Sub(b.At).Round(time.Second), now.Sub(b.OK).Round(time.Second))
 		c.Fix = "see ~/.fleet/logs/fleet.log (component=watch); fleet up restarts it"
+	}
+	return c
+}
+
+// checkOrphans warns about agent processes that outlived their agent's
+// pane (ADR-122, #48). The watcher kills them on its next pass.
+func checkOrphans(list func() ([]fleet.Orphan, error)) doctorCheck {
+	c := doctorCheck{Name: "orphans"}
+	orph, err := list()
+	switch {
+	case err != nil:
+		c.Level, c.Detail = levelWarn, "not checked: "+err.Error()
+	case len(orph) == 0:
+		c.Level, c.Detail = levelOK, "no agent processes outlived their pane"
+	default:
+		var mem uint64
+		var ps []string
+		for _, o := range orph {
+			mem += o.Mem
+			left := ""
+			if o.Spared {
+				left = ", a daemon left alone"
+			}
+			ps = append(ps, fmt.Sprintf("%s pid %d (%s, %s%s)", o.Agent, o.PID, o.Comm, park.Bytes(o.Mem), left))
+		}
+		c.Level = levelWarn
+		c.Detail = fmt.Sprintf("%d leftover agent process(es), %s: %s", len(orph), park.Bytes(mem), strings.Join(ps, "; "))
+		c.Fix = "the watcher kills them within a few minutes (fleet up starts it); or kill the pids yourself"
 	}
 	return c
 }

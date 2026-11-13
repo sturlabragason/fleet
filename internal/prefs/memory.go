@@ -23,17 +23,32 @@ type Memory struct {
 	// ParkIdle parks an agent once it has been idle this long, with memory
 	// to spare or not; 0 (the default) leaves idle agents running.
 	ParkIdle time.Duration
+	// AgentMax caps the memory (RSS + swap) one agent's own processes may
+	// hold; over it the guard parks the agent whatever its status
+	// (ADR-122). 0 = a quarter of the machine's RAM; AgentMaxOff = no cap.
+	AgentMax uint64
+	// AgentMaxCPU caps the CPU, in cores, an idle agent's own processes
+	// may burn over AgentCPUFor before the guard parks it (ADR-122);
+	// 0 = no cap.
+	AgentMaxCPU float64
 }
+
+// AgentMaxOff is AgentMax for agent_max = "off".
+const AgentMaxOff = math.MaxUint64
 
 // Defaults for [memory] (DESIGN §7).
 const (
 	DefaultMinFree  = 4 << 30 // 4 GiB
 	DefaultMemEvery = 30 * time.Second
+	// DefaultAgentMaxCPU is cores; a spinning CLI burns 3-6 (#48).
+	DefaultAgentMaxCPU = 2.0
+	// AgentCPUFor is how long an idle agent must stay over agent_max_cpu.
+	AgentCPUFor = 5 * time.Minute
 )
 
 // DefaultMemory is the guard without a config file: on, 4 GiB, every 30s.
 func DefaultMemory() Memory {
-	return Memory{Guard: true, MinFree: DefaultMinFree, Every: DefaultMemEvery}
+	return Memory{Guard: true, MinFree: DefaultMinFree, Every: DefaultMemEvery, AgentMaxCPU: DefaultAgentMaxCPU}
 }
 
 // Memory is [memory]: the RAM guard settings. It is read live, so a change
@@ -67,6 +82,27 @@ func applyMemory(m Memory, sec map[string]conf.Value, path string) (Memory, erro
 			return m, fmt.Errorf("%s: park_idle: want a duration >= 0", path)
 		}
 		m.ParkIdle = v
+	}
+	if v := strings.TrimSpace(conf.Str(sec, "agent_max")); v != "" {
+		if v == "off" || v == "0" {
+			m.AgentMax = AgentMaxOff
+		} else {
+			n, err := ParseSize(v)
+			if err != nil {
+				return m, fmt.Errorf("%s: agent_max %q: %w", path, v, err)
+			}
+			m.AgentMax = n
+		}
+	}
+	if v := strings.TrimSpace(conf.Str(sec, "agent_max_cpu")); v != "" {
+		if v == "off" {
+			v = "0"
+		}
+		n, err := strconv.ParseFloat(v, 64)
+		if err != nil || n < 0 {
+			return m, fmt.Errorf("%s: agent_max_cpu %q: want a number of cores >= 0, or off", path, v)
+		}
+		m.AgentMaxCPU = n
 	}
 	return m, nil
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/sysx"
 )
 
 // Client runs tmux commands against one server socket.
@@ -107,6 +108,9 @@ func (c *Client) RunInput(stdin string, args ...string) (string, error) {
 	}
 	cmd := exec.CommandContext(ctx, "tmux", append(c.base(), args...)...)
 	cmd.WaitDelay = time.Second
+	// A tmux server started from an agent's pane would hand that agent's
+	// owner tag to every pane it opens later (ADR-122).
+	cmd.Env = sysx.DropOwner(nil)
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
 	}
@@ -129,6 +133,18 @@ func (c *Client) RunInput(stdin string, args ...string) (string, error) {
 
 func quietErr(s string) bool {
 	return strings.Contains(s, "no server running") || strings.Contains(s, "error connecting")
+}
+
+// NoServer reports whether err says plainly that no server is running on
+// the socket, as opposed to one that did not answer (a timeout under load,
+// a permission error).
+func NoServer(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "no server running") ||
+		strings.Contains(s, "error connecting") && (strings.Contains(s, "No such file or directory") || strings.Contains(s, "Connection refused"))
 }
 
 // Running reports whether the server is up.

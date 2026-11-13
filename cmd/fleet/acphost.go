@@ -133,7 +133,7 @@ func paneTakeover(exe, home, name string, say func(string)) error {
 	sysx.Detach(cmd)
 	// The user pressed the key, not the agent: without TMUX_PANE the CLI
 	// does not take the call for one from this agent's pane (leaderScope).
-	cmd.Env = acphost.FilterEnv(os.Environ(), []string{"TMUX_PANE"})
+	cmd.Env = acphost.FilterEnv(os.Environ(), []string{"TMUX_PANE", sysx.OwnerEnv})
 	if err := cmd.Run(); err != nil {
 		return err
 	}

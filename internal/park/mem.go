@@ -13,13 +13,18 @@ var MemInfo = "/proc/meminfo"
 // Free is the memory the machine can still hand out without swapping, in
 // bytes: MemAvailable from /proc/meminfo, which already accounts for
 // reclaimable cache (MemFree alone reads far too low on a warm machine).
-func Free() (uint64, error) {
+func Free() (uint64, error) { return memInfo("MemAvailable:") }
+
+// Total is the machine's RAM in bytes (MemTotal).
+func Total() (uint64, error) { return memInfo("MemTotal:") }
+
+func memInfo(key string) (uint64, error) {
 	b, err := os.ReadFile(MemInfo)
 	if err != nil {
 		return 0, err
 	}
 	for _, l := range strings.Split(string(b), "\n") {
-		v, ok := strings.CutPrefix(l, "MemAvailable:")
+		v, ok := strings.CutPrefix(l, key)
 		if !ok {
 			continue
 		}
@@ -33,7 +38,7 @@ func Free() (uint64, error) {
 		}
 		return kb * 1024, nil
 	}
-	return 0, fmt.Errorf("%s: no MemAvailable line", MemInfo)
+	return 0, fmt.Errorf("%s: no %s line", MemInfo, strings.TrimSuffix(key, ":"))
 }
 
 // Bytes formats a byte count the way the guard reports it: "3.2 GiB".
