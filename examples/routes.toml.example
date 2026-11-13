@@ -1,0 +1,34 @@
+# Request routes for the fleet admiral (ADR-120). Copy to ~/.fleet/routes.toml.
+# Local only: it holds your own paths, so never commit it.
+#
+# One [route.NAME] per recurring kind of request. The admiral matches the
+# request to a route itself (triggers are hints, not regexes) and spawns with
+# fleet_spawn route=NAME; arguments it passes explicitly win over the route.
+# Values are one line each; use \n inside a string for a line break.
+# fleet_route set rewrites this file (comments are not kept).
+
+[route.inbox]
+description = "messages and mail: read, then draft replies"
+triggers = ["check my messages", "draft replies", "answer my mail"]
+dir = "~/work/my-business"
+profile = "claude"
+effort = "light"
+worktree = false
+skill = "email-inbox"
+prompt = "Draft only: never send anything without my go per message.\n\n{task}"
+
+[route.fleet-code]
+triggers = ["fleet bug", "fleet feature", "in fleet"]
+dir = "~/src/fleet"
+profile = "copilot"
+effort = "pro"
+worktree = true
+may = ["merge-local"]
+check = "make build"
+
+[route.hours]
+triggers = ["log my hours", "timesheet", "sync the week"]
+dir = "~/work/my-business"
+effort = "light"
+worktree = false
+interactive = true

@@ -7,6 +7,7 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
 ## 2026-11-13
+- The admiral remembers where your recurring requests go: request routes in `~/.fleet/routes.toml` (dir, profile, effort, skill, permissions, prompt template) are listed in its brief, `fleet_spawn route=NAME` applies one, and when you correct it ("no, that goes to X") it saves the change with `fleet_route set`. See `examples/routes.toml.example` (#46, ADR-120).
 - `fleet recall <words>` finds what you were doing on a topic: agent reports and notes, plus every Copilot CLI and Claude Code session on the machine when [cass](https://github.com/Dicklesworthstone/coding_agent_session_search) is installed, each with its agent, repo and session id to resume. `fleet day` is a digest of what waits on you, what got done by repo and what is still running. The admiral has both as `fleet_recall`, with no model call (ADR-119).
 
 ## 2026-11-12

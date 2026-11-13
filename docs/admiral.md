@@ -27,7 +27,8 @@ To use a tool fleet doesn't start itself, register `fleet mcp --admiral main` (o
 | `fleet_peek` | `name`, `lines` (max 80), `raw`, `last_message` | Last lines of the agent's screen, or its last reply from the session log |
 | `fleet_send` | `name` / `names` / `team`, `text`, `keys`, `confirmed`, `force` | Paste a prompt and press Enter, or press keys; refused while you are typing in that pane unless `force` (ADR-61) |
 | `fleet_answer` | `name`, `answer` (`y`/`n`) or `option` N, `expect`, `confirmed` | Answer a y/n prompt or a numbered menu |
-| `fleet_spawn` | `name`, `profile`, `dir`, `prompt`, `worktree`, `effort`, `leader`, `interactive` | Start an agent; in a git repo it gets its own worktree `<repo>.wt/<name>` on branch `fleet/<name>` (`worktree: false` spawns straight into `dir`). `effort` sizes the worker playbook: `light` (errand), `standard` (contained change), `pro` (full process); default `pro` with a worktree, `light` without. `leader: true` lets it run its own squad. `interactive: true` for an agent you will talk to directly: never auto-closed, reports progress until you end the session (ADR-61) |
+| `fleet_spawn` | `name`, `profile`, `dir`, `prompt`, `worktree`, `effort`, `leader`, `interactive`, `route` | Start an agent; in a git repo it gets its own worktree `<repo>.wt/<name>` on branch `fleet/<name>` (`worktree: false` spawns straight into `dir`). `effort` sizes the worker playbook: `light` (errand), `standard` (contained change), `pro` (full process); default `pro` with a worktree, `light` without. `leader: true` lets it run its own squad. `interactive: true` for an agent you will talk to directly: never auto-closed, reports progress until you end the session (ADR-61). `route: NAME` fills what you leave out from that request route, `dir` included (ADR-120) |
+| `fleet_route` | `action` (`list`, `show`, `set`, `rm`), `name`, `fields`, `reason` | Request routes in `~/.fleet/routes.toml`: where and how a recurring kind of request runs. `set` creates or corrects one and logs it to `decisions.log` (§6.14, ADR-120) |
 | `fleet_adopt` | `session_id` or `query`, optional `profile`, `dir`, `name` | Resume a session started outside fleet |
 | `fleet_sessions` | `query`, `limit` | Copilot/Claude sessions started outside fleet, newest first |
 | `fleet_profiles` | none | Profiles and their command lines |
@@ -38,7 +39,7 @@ To use a tool fleet doesn't start itself, register `fleet mcp --admiral main` (o
 | `fleet_access` | `limit` | Who may message whom, and recent agent-to-agent messages |
 | `fleet_access_decide` | `a`, `b`, `action`, `confirmed` | Grant, deny or revoke that |
 | `fleet_note` | `text`, `agent`, `pin` | Append a line to `~/.fleet/decisions.log`; `pin` also keeps it in every `fleet_brief` (`~/.fleet/pinned.log`) |
-| `fleet_brief` | none | Last handoff, recent notes, then the status table. A fresh admiral calls this first |
+| `fleet_brief` | none | Last handoff, pinned notes, the request routes (name and trigger only), recent notes, then the status table. A fresh admiral calls this first |
 | `fleet_handoff` | `summary` | Write a handoff and get replaced by a fresh admiral |
 | `fleet_admiral_profile` | `profile`, `summary` | Switch the admiral to another tool profile |
 | `fleet_park` | `name`, `action` (`wake`), `force` | Stop an idle agent to free RAM, kept on the board; `wake` resumes it |

@@ -39,13 +39,14 @@ func TestSpawnSchemaHasTheTaskCard(t *testing.T) {
 	if got := props["check_exit"].(map[string]any)["type"]; got != "integer" {
 		t.Fatalf("check_exit type %v, want integer", got)
 	}
-	// The card is optional, and so is the profile ([defaults] profile).
+	// The card is optional, and so is the profile ([defaults] profile); dir
+	// may come from a route (ADR-120).
 	for _, d := range toolDefs {
 		if d.Name != "fleet_spawn" {
 			continue
 		}
 		req, _ := json.Marshal(d.InputSchema["required"])
-		if string(req) != `["name","dir"]` {
+		if string(req) != `["name"]` {
 			t.Fatalf("fleet_spawn required %s", req)
 		}
 	}
