@@ -362,7 +362,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 	case "fleet_reports":
 		return s.reports(a.Name, a.All, a.Limit)
 	case "fleet_wait":
-		return s.wait(s.box(), waitReadAdmiral, a)
+		return s.wait(s.box(), waitReadAdmiral, a, nil)
 	case "fleet_access":
 		out := PolicyLine(s.F.MailPolicy()) + "\n" + RenderPairs(s.F.Mail().All())
 		if a.Limit > 0 {

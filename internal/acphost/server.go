@@ -97,11 +97,14 @@ func (h *host) handle(req Request) Response {
 		err = h.answer(req.Option, req.OptionID, "")
 	case OpCancel:
 		err = h.cancel("")
-	case OpState, OpStop:
+	case OpState, OpStop, OpTake:
 	default:
 		err = fmt.Errorf("unknown op %q", req.Op)
 	}
 	resp := h.snapshot()
+	if req.Op == OpTake {
+		resp.Queued = h.take()
+	}
 	if err != nil {
 		resp.OK, resp.Err = false, err.Error()
 	}

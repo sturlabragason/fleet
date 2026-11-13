@@ -1,11 +1,18 @@
 package mcp
 
 import (
+	"bufio"
 	"encoding/json"
+	"net"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/acphost"
+	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/mail"
 	"github.com/sturlabragason/fleet/internal/wall"
@@ -146,3 +153,56 @@ func TestWaitEndsOnCancelAndNextCall(t *testing.T) {
 }
 
 func mustJSON(v any) []byte { b, _ := json.Marshal(v); return b }
+
+// fakeHost answers an ACP agent's control socket: take hands over held
+// after the first few calls, once.
+func fakeHost(t *testing.T, f *fleet.Fleet, name string, held []string) *atomic.Int32 {
+	t.Helper()
+	f.Store.Update(func(b *board.Board) error { b.Agents[name].Driver = board.DriverACP; return nil })
+	p := acphost.SocketPath(f.Home, name)
+	os.MkdirAll(filepath.Dir(p), 0o700)
+	ln, err := net.Listen("unix", p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	var takes atomic.Int32
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			line, _ := bufio.NewReader(c).ReadBytes('\n')
+			var req acphost.Request
+			json.Unmarshal(line, &req)
+			resp := acphost.Response{OK: true, Status: "working"}
+			if req.Op == acphost.OpTake {
+				if takes.Add(1) == 3 {
+					resp.Queued = held
+				}
+			}
+			b, _ := json.Marshal(resp)
+			c.Write(append(b, '\n'))
+			c.Close()
+		}
+	}()
+	return &takes
+}
+
+// An ACP agent blocked in fleet_wait keeps its turn open, so a prompt the
+// admiral or the user sent meanwhile sat queued in the host until someone
+// pressed Esc (live, 2026-11-13). The wait takes it and returns it in full.
+func TestWaitReturnsPromptQueuedForACPAgent(t *testing.T) {
+	fastWait(t)
+	f := mailHome(t)
+	takes := fakeHost(t, f, "a", []string{"go. Sturla approved\nsecond line"})
+	ra := startRPC(t, NewAgent(f, "a"))
+	got, isErr := ra.tool("fleet_wait", map[string]any{"timeout_s": 5})
+	if isErr || !strings.Contains(got, "go. Sturla approved\nsecond line") || strings.HasPrefix(got, "timeout") {
+		t.Fatalf("wait: %q", got)
+	}
+	if n := takes.Load(); n != 3 {
+		t.Fatalf("takes = %d, want the wait to stop at the one that returned the prompt", n)
+	}
+}

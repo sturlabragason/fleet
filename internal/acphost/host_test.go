@@ -832,3 +832,41 @@ func TestFilterEnv(t *testing.T) {
 		t.Errorf("%q want %q", got, want)
 	}
 }
+
+// An agent blocked in fleet_wait holds its turn open, so a prompt queued
+// meanwhile never went out until someone pressed Esc (live, 2026-11-13).
+// The wait takes the held prompts with OpTake: they leave the queue, are
+// recorded as sent, and are not sent again when the turn ends.
+func TestTakeHandsQueuedPromptsOver(t *testing.T) {
+	r := startRig(t, Config{Prompt: "go"}, acp.AgentCapabilities{})
+	r.waitStatus("working")
+	release := make(chan struct{})
+	r.conn.turns <- func(handler) acp.StopReason { <-release; return acp.StopEndTurn }
+	if resp, err := r.call(Request{Op: OpTake}); err != nil || len(resp.Queued) != 0 {
+		t.Fatalf("take with nothing held = %+v, %v", resp, err)
+	}
+	for _, text := range []string{"one", "two"} {
+		if _, err := r.call(Request{Op: OpPrompt, Text: text}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	resp, err := r.call(Request{Op: OpTake})
+	if err != nil || strings.Join(resp.Queued, "|") != "one|two" {
+		t.Fatalf("take = %+v, %v", resp, err)
+	}
+	if resp, _ := r.call(Request{Op: OpTake}); len(resp.Queued) != 0 {
+		t.Fatalf("second take = %+v", resp)
+	}
+	close(release)
+	r.waitStatus("idle")
+	if calls := strings.Join(r.conn.Calls(), "|"); strings.Contains(calls, "prompt one") {
+		t.Fatalf("taken prompts sent again: %s", calls)
+	}
+	var users []string
+	for _, e := range r.kinds(KindUser) {
+		users = append(users, e.Text)
+	}
+	if strings.Join(users, "|") != "go|one\n\ntwo" {
+		t.Fatalf("user entries = %q", users)
+	}
+}

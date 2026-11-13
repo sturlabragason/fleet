@@ -41,6 +41,10 @@ const (
 	OpCancel = "cancel" // cancel the running turn (session/cancel)
 	OpState  = "state"  // no change; the response carries the host's state
 	OpStop   = "stop"   // close the session, stop the child and exit
+	// OpTake hands over the prompts held during the running turn and drops
+	// them from the queue: an agent blocked in fleet_wait reads them there
+	// instead of after a turn that will not end on its own.
+	OpTake = "take"
 )
 
 // Request is one control request, one JSON line on the socket.
@@ -58,6 +62,7 @@ type Response struct {
 	Status    string    `json:"status,omitempty"` // working, waiting, idle, error
 	SessionID string    `json:"session_id,omitempty"`
 	Question  *Question `json:"question,omitempty"` // the open permission request
+	Queued    []string  `json:"queued,omitempty"`   // OpTake: the prompts taken, oldest first
 }
 
 // Question is an open permission request as fleet shows it.

@@ -33,7 +33,7 @@ var (
 	progressEvery = 30 * time.Second
 )
 
-var waitToolDef = tool{"fleet_wait", "Block until a new report or message arrives for you, or timeout_s passes (default 300, max 600; 170 if your client sends no progress token). Use it instead of sleep or calling fleet_reports again and again. Returns only headlines (who, state, first line) and marks nothing read: fleet_reports, fleet_squad_reports or fleet_inbox give the full text. Call it on its own: another fleet tool call ends it.", obj(nil, map[string]any{
+var waitToolDef = tool{"fleet_wait", "Block until a new report or message arrives for you, a prompt is sent to your ACP pane, or timeout_s passes (default 300, max 600; 170 if your client sends no progress token). Use it instead of sleep or calling fleet_reports again and again. Returns only headlines (who, state, first line) and marks nothing read: fleet_reports, fleet_squad_reports or fleet_inbox give the full text. Call it on its own: another fleet tool call ends it.", obj(nil, map[string]any{
 	"agents":    strList("only wake for these agents (default: anyone)"),
 	"timeout_s": map[string]any{"type": "integer", "description": "seconds to wait (default 300, max 600)"}})}
 
@@ -51,7 +51,21 @@ type WaitOpts struct {
 	// Progress, when set, is called every progressEvery with the time
 	// waited so far.
 	Progress func(waited time.Duration)
+	// Prompts, when set, is polled every tick for prompts sent to the
+	// waiting agent and held by its ACP host (fleet.QueuedTaker): any
+	// ends the wait. Each call takes what it returns.
+	Prompts func() []string
 }
+
+// WaitResult is what ended a wait: new messages, prompts taken from the
+// agent's ACP host, or neither on timeout.
+type WaitResult struct {
+	Msgs    []mail.Msg
+	Prompts []string
+}
+
+// Empty is true when the wait timed out or was interrupted with nothing.
+func (r WaitResult) Empty() bool { return len(r.Msgs) == 0 && len(r.Prompts) == 0 }
 
 // WaitTimeout turns a requested wait into the one used: the default for
 // zero, WaitMax at most; negative is an error.
@@ -68,11 +82,11 @@ func WaitTimeout(d time.Duration) (time.Duration, error) {
 }
 
 // Wait blocks until o.Box holds a message it did not hold when Wait began
-// (from one of o.From, if set), ctx ends or the timeout passes, and returns
-// the new messages, oldest first: none on timeout. It stats the inbox file
-// every waitTick and reads it only when the file changed. Nothing is marked
-// read.
-func Wait(ctx context.Context, st *mail.Store, o WaitOpts) []mail.Msg {
+// (from one of o.From, if set), o.Prompts returns a prompt, ctx ends or the
+// timeout passes, and returns the new messages, oldest first, and the
+// prompts: none on timeout. It stats the inbox file every waitTick and
+// reads it only when the file changed. Nothing is marked read.
+func Wait(ctx context.Context, st *mail.Store, o WaitOpts) WaitResult {
 	d, err := WaitTimeout(o.Timeout)
 	if err != nil {
 		d = WaitDefault
@@ -110,15 +124,22 @@ func Wait(ctx context.Context, st *mail.Store, o WaitOpts) []mail.Msg {
 	for {
 		select {
 		case <-ctx.Done():
-			return news() // one last look: a message from the final tick counts
+			// One last look: a message from the final tick counts. Prompts are
+			// not taken here: a client that gave up would lose them, and the
+			// host sends them when the turn ends.
+			return WaitResult{Msgs: news()}
 		case now := <-t.C:
 			if o.Progress != nil && now.Sub(lastProgress) >= progressEvery {
 				lastProgress = now
 				o.Progress(now.Sub(start))
 			}
 		}
-		if out := news(); len(out) > 0 {
-			return out
+		var ps []string
+		if o.Prompts != nil {
+			ps = o.Prompts()
+		}
+		if out := news(); len(out) > 0 || len(ps) > 0 {
+			return WaitResult{Msgs: out, Prompts: ps}
 		}
 	}
 }
@@ -126,14 +147,25 @@ func Wait(ctx context.Context, st *mail.Store, o WaitOpts) []mail.Msg {
 // waitHead caps each headline in a wait result.
 const waitHead = 120
 
-// RenderWait is the short result of a wait: one headline per new message
-// and where to read the full text, or the timeout line.
-func RenderWait(ms []mail.Msg, waited time.Duration, readWith string) string {
+// RenderWait is the short result of a wait: any prompts taken in full, one
+// headline per new message and where to read the full text, or the
+// timeout line.
+func RenderWait(r WaitResult, waited time.Duration, readWith string) string {
 	waited = waited.Round(time.Second)
-	if len(ms) == 0 {
+	if r.Empty() {
 		return fmt.Sprintf("timeout after %s, nothing new", waited)
 	}
 	var b strings.Builder
+	if len(r.Prompts) > 0 {
+		fmt.Fprintf(&b, "a prompt for you arrived after %s (from the user or the admiral, sent to your pane while you waited; it is delivered here and will not come again, so act on it now):\n\n%s\n", waited, strings.Join(r.Prompts, "\n\n"))
+	}
+	ms := r.Msgs
+	if len(ms) == 0 {
+		return strings.TrimRight(b.String(), "\n")
+	}
+	if b.Len() > 0 {
+		b.WriteString("\n")
+	}
 	fmt.Fprintf(&b, "%d new after %s (headlines only, nothing marked read; %s):\n", len(ms), waited, readWith)
 	for _, m := range ms {
 		head, _, _ := strings.Cut(m.Text, "\n")
@@ -150,7 +182,8 @@ func RenderWait(ms []mail.Msg, waited time.Duration, readWith string) string {
 }
 
 // wait is fleet_wait on box for the admiral, a leader or an agent.
-func (s *Server) wait(box, readWith string, a args) (string, error) {
+// prompts is the agent's fleet.QueuedTaker, nil for the admiral.
+func (s *Server) wait(box, readWith string, a args, prompts func() []string) (string, error) {
 	d, err := WaitTimeout(time.Duration(a.TimeoutS) * time.Second)
 	if err != nil {
 		return "", err
@@ -158,7 +191,7 @@ func (s *Server) wait(box, readWith string, a args) (string, error) {
 	if err := CheckSenders(s.F, a.Agents); err != nil {
 		return "", err
 	}
-	o := WaitOpts{Box: box, From: a.Agents, Timeout: d}
+	o := WaitOpts{Box: box, From: a.Agents, Timeout: d, Prompts: prompts}
 	if p := s.progress; p != nil {
 		n := 0
 		o.Progress = func(waited time.Duration) {
@@ -172,7 +205,7 @@ func (s *Server) wait(box, readWith string, a args) (string, error) {
 	ctx, cancel := s.interruptible()
 	defer cancel()
 	ms := Wait(ctx, s.F.Mail(), o)
-	if len(ms) == 0 && ctx.Err() != nil {
+	if ms.Empty() && ctx.Err() != nil {
 		return fmt.Sprintf("interrupted after %s by the client, nothing new", time.Since(start).Round(time.Second)), nil
 	}
 	return RenderWait(ms, time.Since(start), readWith), nil
@@ -204,5 +237,5 @@ func (s *Server) agentWait(me string, a args) (string, error) {
 	if s.F.IsLeader(me) {
 		hint = waitReadLeader
 	}
-	return s.wait(me, hint, a)
+	return s.wait(me, hint, a, s.F.QueuedTaker(me))
 }

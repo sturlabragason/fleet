@@ -40,7 +40,7 @@ Use only the `fleet` MCP tools: never bash, tmux or fleet source code for fleet 
 | `fleet_wall` | `show`/`hide` a pane, `preset`, `hide_all`/`restore` ("clear the wall"). "wall full: …" is a no-op: offer to hide a named pane, don't retry. |
 | `fleet_team` | Named coloured groups, one team per agent: "all the X agents" (send, show, hide; `close` ✱). |
 | `fleet_reports` | Unread reports in full, marked read; `name=<agent>` one agent's; `all=true` old headlines. |
-| `fleet_wait` | Wait for the next report or message (`agents=[...]`); never `sleep` or poll. |
+| `fleet_wait` | Wait for the next report or message (`agents=[...]`); never `sleep` or poll. An ACP agent's wait also returns a `fleet_send` to it. |
 | `fleet_note` | One line to the decisions and RAID log; `pin: true` for a standing rule. |
 | `fleet_adr` | `claim` an ADR number per agent before spawning; `list` the claims. |
 | `fleet_touching` | Which worktrees change which files: merge order, fewer touched files first. |

@@ -56,16 +56,17 @@ func runWait(ctx context.Context, w io.Writer, f *fleet.Fleet, as, adm string, f
 	// An agent (a leader too) waits on its own mailbox; a shell outside
 	// every agent pane waits on the admiral's.
 	box, readWith := mail.BoxOf(adm), "fleet reports reads reports, fleet mail inbox other messages"
+	var prompts func() []string
 	if me != "" {
-		box, readWith = me, "fleet mail inbox reads them"
+		box, readWith, prompts = me, "fleet mail inbox reads them", f.QueuedTaker(me)
 	}
 	if err := mcp.CheckSenders(f, from); err != nil {
 		return err
 	}
 	start := time.Now()
-	ms := mcp.Wait(ctx, f.Mail(), mcp.WaitOpts{Box: box, From: from, Timeout: d})
+	ms := mcp.Wait(ctx, f.Mail(), mcp.WaitOpts{Box: box, From: from, Timeout: d, Prompts: prompts})
 	fmt.Fprintln(w, mcp.RenderWait(ms, time.Since(start), readWith))
-	if len(ms) == 0 {
+	if ms.Empty() {
 		return exitCode(2)
 	}
 	return nil

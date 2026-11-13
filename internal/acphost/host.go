@@ -604,20 +604,41 @@ func (h *host) showQueue() {
 // sendQueued sends the held prompts as one prompt, recorded as typed by
 // whoever typed them all. Caller holds mu.
 func (h *host) sendQueued() {
-	if len(h.queued) == 0 {
-		return
+	if texts, by := h.drainQueued(); len(texts) > 0 {
+		h.sendBy(strings.Join(texts, "\n\n"), by)
 	}
-	texts := make([]string, len(h.queued))
-	by := h.queued[0].by
-	for i, q := range h.queued {
-		texts[i] = q.text
+}
+
+// drainQueued empties the queue and returns what it held and who typed it
+// all ("" when not one typist). Caller holds mu.
+func (h *host) drainQueued() (texts []string, by string) {
+	if len(h.queued) == 0 {
+		return nil, ""
+	}
+	by = h.queued[0].by
+	for _, q := range h.queued {
+		texts = append(texts, q.text)
 		if q.by != by {
 			by = ""
 		}
 	}
 	h.queued = nil
 	h.showQueue()
-	h.sendBy(strings.Join(texts, "\n\n"), by)
+	return texts, by
+}
+
+// take hands the held prompts to the agent's fleet_wait (OpTake) and
+// records them as sent, as they reach the agent in that tool's result.
+func (h *host) take() []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	texts, by := h.drainQueued()
+	if len(texts) == 0 {
+		return nil
+	}
+	h.flush()
+	h.emit(Entry{Kind: KindUser, Text: strings.Join(texts, "\n\n"), By: by}, true)
+	return texts
 }
 
 // unqueueLast takes the newest held prompt back out of the queue, for the

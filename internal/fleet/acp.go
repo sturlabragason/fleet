@@ -357,6 +357,28 @@ func (f *Fleet) acpSend(name, text string) error {
 	return nil
 }
 
+// QueuedTaker is what an agent's fleet_wait polls for prompts held by its
+// ACP host while its turn stays open in the wait: each call takes them out
+// of the host's queue. nil for an agent that does not run over ACP.
+func (f *Fleet) QueuedTaker(name string) func() []string {
+	if !f.isACP(name) {
+		return nil
+	}
+	return func() []string {
+		r, err := acphost.Call(f.Home, name, acphost.Request{Op: acphost.OpTake}, ACPTakeTimeout)
+		if err != nil {
+			if !errors.Is(err, acphost.ErrNoHost) {
+				logx.For("fleet").Warn("acp: take queued", "agent", name, "err", err)
+			}
+			return nil
+		}
+		return r.Queued
+	}
+}
+
+// ACPTakeTimeout bounds one QueuedTaker call, made every wait tick.
+var ACPTakeTimeout = 2 * time.Second
+
 // acpKeys maps the keys fleet_send allows onto control requests: text with
 // Enter is a prompt, Escape cancels the turn, a digit answers the open
 // question. There is no input box to type into without submitting.
