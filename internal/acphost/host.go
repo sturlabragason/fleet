@@ -58,6 +58,9 @@ type Config struct {
 	// tool's own screen (fleet takeover). It must not block.
 	// say prints a line in the pane, for an outcome that comes later.
 	Takeover func(say func(string)) error
+	// Bordered is set when tmux's pane border already names the agent and
+	// its status: the pane then has no header row of its own.
+	Bordered bool
 }
 
 // agentConn is the part of *acp.Client the host uses.
@@ -197,6 +200,12 @@ func run(ctx context.Context, cfg Config, start starter, tr stateTracker) error 
 			prof = filepath.Base(cfg.Argv[0])
 		}
 		h.con = newView(h.out, cfg.Size, cfg.Color, cfg.Name, prof)
+		if cfg.Bordered {
+			// fleet's tmux reports focus changes but not the focus a pane
+			// starts with: hints wait for the first focus in.
+			h.con.bordered, h.con.focus = true, -1
+		}
+		defer h.con.close()
 		h.out = h.con
 		if cfg.Resized != nil {
 			go func() {

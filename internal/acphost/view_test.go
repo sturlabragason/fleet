@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
@@ -167,7 +168,7 @@ func TestPaneShowsTypedPromptOnce(t *testing.T) {
 	if n := strings.Count(f, "can i type here?"); n != 1 || !strings.Contains(f, "› can i type here?") {
 		t.Fatalf("prompt drawn %d times in %q", n, f)
 	}
-	if strings.Contains(f, "\x1b[2J") || strings.Contains(f, "> can i") {
+	if strings.Contains(r.out.String(), "\x1b[2J") || strings.Contains(f, "> can i") {
 		t.Fatalf("frame %q", f)
 	}
 	r.conn.turns <- func(handler) acp.StopReason { return acp.StopEndTurn }
@@ -284,7 +285,68 @@ func TestResizeRedrawsAtOnce(t *testing.T) {
 	h.Store(9)
 	winch <- syscall.SIGWINCH
 	r.waitFor(func() bool {
-		f := lastFrame(r.out.String())
+		f := rawLastFrame(r.out.String())
 		return strings.Contains(f, "\x1b[9;1H") && !strings.Contains(f, "\x1b[10;1H")
 	}, "frame at the new size")
+}
+
+// In a fleet pane the tmux border names the agent, so there is no header;
+// the key hints show only while the pane has focus, and the rule above the
+// input only when scrolled back (ADR-121).
+func TestViewBorderedChrome(t *testing.T) {
+	v := newView(io.Discard, nil, colorprofile.TrueColor, "a1", "copilot")
+	v.bordered = true
+	for i := range 30 {
+		v.add(Entry{Kind: KindAgent, Text: fmt.Sprintf("line %d", i)})
+	}
+	all := func() string { return strings.Join(screen(v, 60, 12), "\n") }
+	if s := all(); strings.Contains(s, "a1 · copilot") || !strings.Contains(s, "Esc cancel turn") || strings.Contains(s, "──") {
+		t.Fatalf("focus unknown: want hints, no header or rule:\n%s", s)
+	}
+	v.setFocus(false)
+	if s := all(); strings.Contains(s, "Esc cancel turn") {
+		t.Fatalf("unfocused pane shows hints:\n%s", s)
+	}
+	v.setFocus(true)
+	if s := all(); !strings.Contains(s, "Esc cancel turn") {
+		t.Fatalf("focused pane lacks hints:\n%s", s)
+	}
+	v.scrollBy(1)
+	if s := all(); !strings.Contains(s, "newer lines") {
+		t.Fatalf("scrolled back without the rule:\n%s", s)
+	}
+	short := newView(io.Discard, nil, colorprofile.TrueColor, "a1", "")
+	short.bordered = true
+	short.add(Entry{Kind: KindAgent, Text: "only line"})
+	short.scroll = 5 // more than there is to scroll back to
+	if s := strings.Join(screen(short, 60, 12), "\n"); strings.Contains(s, "──") {
+		t.Fatalf("rule without scrollback:\n%s", s)
+	}
+}
+
+// A frame writes only the rows that changed, and an unchanged one writes
+// nothing at all: an idle wall must not repaint.
+func TestViewWritesOnlyChangedRows(t *testing.T) {
+	var out strings.Builder
+	v := newView(&out, func() (int, int) { return 40, 10 }, colorprofile.TrueColor, "a1", "")
+	v.add(Entry{Kind: KindAgent, Text: "first"})
+	time.Sleep(2 * frameGap)
+	v.mu.Lock()
+	v.paint(false)
+	n := out.Len()
+	v.paint(false)
+	v.mu.Unlock()
+	if out.Len() != n {
+		t.Fatalf("unchanged frame wrote %q", out.String()[n:])
+	}
+	v.redraw()
+	full := out.String()[n:]
+	v.mu.Lock()
+	v.blocks[0].text, v.blocks[0].w = "second", 0
+	m := out.Len()
+	v.paint(false)
+	v.mu.Unlock()
+	if got := strings.Count(out.String()[m:], ";1H"); got != 1 || strings.Count(full, ";1H") != 10 {
+		t.Fatalf("changed one row: wrote %d rows, full redraw %d", got, strings.Count(full, ";1H"))
+	}
 }

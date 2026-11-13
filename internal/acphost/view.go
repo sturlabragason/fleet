@@ -6,18 +6,21 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The pane when it is a terminal (ADR-82, ADR-85): a header with the
-// agent's name, profile and status, the conversation, a rule, the input
-// line and a line of key hints. The whole screen is drawn again on every
-// change, from the conversation kept as blocks, so a tool call is one line
-// whose status changes in place and every line wraps to the pane's width
-// and reflows when it is resized. Nothing blinks: glyphs and colours are
-// static and the cursor is a steady bar.
+// The pane when it is a terminal (ADR-82, ADR-85, ADR-121): a header with
+// the agent's name, profile and status (left out when tmux's pane border
+// already names the agent), the conversation, the input line and, in the
+// focused pane only, a line of key hints. The frame is laid out again on
+// every change, from the conversation kept as blocks, so a tool call is one
+// line whose status changes in place and every line wraps to the pane's
+// width and reflows when it is resized; only the rows that differ from the
+// last frame are written, at most once per frameGap. Nothing blinks: glyphs
+// and colours are static and the cursor is a steady bar.
 
 // Terminal modes the pane sets on start and resets on exit.
 const (
@@ -26,7 +29,15 @@ const (
 	ScreenOn = "\x1b[?1049h\x1b[6 q\x1b[?25h"
 	// ScreenOff restores the cursor and the normal screen.
 	ScreenOff = "\x1b[0 q\x1b[?1049l"
+	// FocusOn asks the terminal (tmux, with focus-events on) to report
+	// focus in and out, so only the focused pane shows key hints.
+	FocusOn  = "\x1b[?1004h"
+	FocusOff = "\x1b[?1004l"
 )
+
+// frameGap is the shortest time between two frames: a burst of updates
+// (a streamed message, a run of tool calls) is drawn once at its end.
+const frameGap = 33 * time.Millisecond
 
 // maxBlocks bounds what the pane keeps; the transcript has everything.
 const maxBlocks = 1000
@@ -61,6 +72,16 @@ type view struct {
 	inY, inX              int   // 1-based screen row and column of their first cell
 	scroll                int   // lines scrolled back from the bottom
 	page                  int   // body height at the last draw, for PgUp
+
+	bordered bool // tmux's pane border names the agent: no header row
+	focus    int  // 1 focused, -1 not, 0 not reported (hints shown)
+
+	shown    []string  // rows on screen, to write only what changed
+	shownW   int       // width shown was drawn at
+	cursor   [2]int    // cursor column and row after the last frame
+	drawnAt  time.Time // when the last frame was written
+	drawWait bool      // a frame is due once frameGap has passed
+	closed   bool      // the host is done: nothing more is written
 }
 
 func newView(out io.Writer, size func() (int, int), p colorprofile.Profile, name, profile string) *view {
@@ -279,11 +300,19 @@ func (v *view) scrollBy(pages int) {
 	v.draw()
 }
 
-// redraw draws the screen again, after a resize.
+// close stops drawing, before the terminal leaves the pane's screen.
+func (v *view) close() {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.closed = true
+}
+
+// redraw draws every row again at once, after a resize.
 func (v *view) redraw() {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	v.draw()
+	v.dirty = false
+	v.paint(true)
 }
 
 func (v *view) dims() (int, int) {
@@ -296,39 +325,88 @@ func (v *view) dims() (int, int) {
 	return w, h
 }
 
-// draw writes the whole frame, inside one synchronized update so the
-// terminal shows it at once. Caller holds mu.
+// setFocus records a focus report from the terminal: the key hints show
+// in the focused pane only.
+func (v *view) setFocus(in bool) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	f := -1
+	if in {
+		f = 1
+	}
+	if v.focus != f {
+		v.focus = f
+		v.draw()
+	}
+}
+
+// draw writes the frame now, or once frameGap has passed since the last
+// one, so a burst of changes is one frame. Caller holds mu.
 func (v *view) draw() {
 	v.dirty = false
+	if v.drawWait {
+		return
+	}
+	if wait := frameGap - time.Since(v.drawnAt); wait > 0 {
+		v.drawWait = true
+		time.AfterFunc(wait, func() {
+			v.mu.Lock()
+			defer v.mu.Unlock()
+			v.drawWait = false
+			v.paint(false)
+		})
+		return
+	}
+	v.paint(false)
+}
+
+// paint writes the rows that differ from what is on screen (all of them
+// when full is set or the size changed), with the cursor hidden, inside
+// one synchronized update so the terminal shows the frame at once. An
+// unchanged frame writes nothing. Caller holds mu.
+func (v *view) paint(full bool) {
+	if v.closed {
+		return
+	}
 	w, h := v.dims()
 	rows, cx, cy := v.frame(w, h)
+	if full || w != v.shownW || len(rows) != len(v.shown) {
+		v.shown = nil
+	}
 	var b strings.Builder
-	b.WriteString("\x1b[?2026h")
 	for i, r := range rows {
+		if v.shown != nil && v.shown[i] == r {
+			continue
+		}
 		fmt.Fprintf(&b, "\x1b[%d;1H%s", i+1, r)
 		// Erasing after a full-width line would eat its last cell.
 		if ansi.StringWidth(r) < w {
 			b.WriteString("\x1b[K")
 		}
 	}
-	fmt.Fprintf(&b, "\x1b[%d;%dH\x1b[?2026l", cy, cx)
-	_, _ = io.WriteString(v.out, b.String())
+	if b.Len() == 0 && v.cursor == [2]int{cx, cy} {
+		return
+	}
+	v.shown, v.shownW, v.cursor, v.drawnAt = rows, w, [2]int{cx, cy}, time.Now()
+	_, _ = fmt.Fprintf(v.out, "\x1b[?2026h\x1b[?25l%s\x1b[%d;%dH\x1b[?25h\x1b[?2026l", b.String(), cy, cx)
 }
 
 // frame lays the screen out as h styled rows and returns where the cursor
 // goes (1-based column, row). Caller holds mu.
 func (v *view) frame(w, h int) (rows []string, cx, cy int) {
 	var top, bottom []string
-	if h >= 3 {
+	if h >= 3 && !v.bordered {
 		top = append(top, v.header(w))
 	}
 	var hint string
-	if h >= 8 {
+	if h >= 8 && v.focus >= 0 {
 		hint = v.hint(w)
 	}
 	input, cx, crow := v.input(w, inputRows(h))
-	if h >= 6 {
-		bottom = append(bottom, "") // the rule, drawn once the scroll is known
+	// The rule above the input only shows scrolled back, to say so.
+	ruled := h >= 6 && v.scroll > 0
+	if ruled {
+		bottom = append(bottom, "") // drawn once the scroll is known
 	}
 	if h >= 8 {
 		bottom = append(bottom, v.queue(w)...)
@@ -343,7 +421,10 @@ func (v *view) frame(w, h int) (rows []string, cx, cy int) {
 	}
 	v.page = bodyH
 	body, more := v.body(w, bodyH)
-	if h >= 6 {
+	if ruled && v.scroll == 0 { // nothing to scroll back to: lay out without the rule
+		return v.frame(w, h)
+	}
+	if ruled {
 		bottom[0] = v.rule(w, more)
 	}
 	rows = append(rows, top...)

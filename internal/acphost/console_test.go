@@ -3,6 +3,8 @@ package acphost
 import (
 	"fmt"
 	"io"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -167,7 +169,37 @@ func TestConsolePasteBackspace(t *testing.T) {
 }
 
 // lastFrame is the last screen the view wrote.
+// lastFrame is the screen after every frame in out: the pane writes only
+// the rows that changed, so each row is the last one written to it, kept
+// with its "ESC[row;1H" position.
 func lastFrame(out string) string {
+	rows := map[int]string{}
+	idx := rowAt.FindAllStringSubmatchIndex(out, -1)
+	for k, m := range idx {
+		end := len(out)
+		if k+1 < len(idx) {
+			end = idx[k+1][0]
+		}
+		row := out[m[1]:end]
+		if j := strings.Index(row, "\x1b[?25h"); j >= 0 {
+			row = row[:j]
+		}
+		n, _ := strconv.Atoi(out[m[2]:m[3]])
+		rows[n] = out[m[0]:m[1]] + row
+	}
+	var b strings.Builder
+	for n := 1; n <= len(rows)+100; n++ {
+		if r, ok := rows[n]; ok {
+			b.WriteString(r)
+		}
+	}
+	return b.String()
+}
+
+var rowAt = regexp.MustCompile(`\x1b\[(\d+);1H`)
+
+// rawLastFrame is the last write as it went out, rows that changed only.
+func rawLastFrame(out string) string {
 	if i := strings.LastIndex(out, "\x1b[?2026h"); i >= 0 {
 		return out[i:]
 	}

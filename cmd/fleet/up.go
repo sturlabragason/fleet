@@ -516,6 +516,9 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		// tmux applies it only at attach; relinkClients re-attaches older clients.
 		{"set-option", "-s", "terminal-features[91]", hyperlinkTerms + ":hyperlinks"},
 		{"set-option", "-g", "pane-border-status", "top"},
+		// Panes learn when they gain and lose focus: an acp pane shows its
+		// key hints only while focused (ADR-121).
+		{"set-option", "-s", "focus-events", "on"},
 		{"set-option", "-g", "pane-border-lines", "heavy"},
 		{"set-option", "-g", "pane-border-style", "fg=" + theme.Surface1},
 		// Not Select: Lavender means "target slot" and nothing else (ADR-37).

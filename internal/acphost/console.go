@@ -190,7 +190,11 @@ func (h *host) csiKey(seq string) {
 		h.mouse(m)
 		return
 	}
-	if seq == "" {
+	switch seq {
+	case "":
+		return
+	case "I", "O": // focus in, focus out
+		con.setFocus(seq == "I")
 		return
 	}
 	final := seq[len(seq)-1]
