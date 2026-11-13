@@ -59,8 +59,8 @@ var toolDefs = []tool{
 		"expect": str("the question the user confirmed (or part of it, or of the option label); refused if the prompt on screen no longer matches"), "confirmed": confirmedProp})},
 	{"fleet_info", "Facts about one agent: profile, team, driver (acp with its ACP server, or tmux), the fleet version that started it, status and age, last activity, dir, its task card (goal, done-check and its verdict, result file), git (worktree, branch, dirty files, merged into main, commits ahead), session id, context %, spend so far, mode.", obj([]string{"name"}, map[string]any{
 		"name": str("agent name")})},
-	{"fleet_spawn", "Start a new agent with a tool profile in a directory, optionally with a first prompt. Never spawn in the home directory: pass the repo or project dir, not $HOME (fleet moves a home-directory spawn to a scratch dir of its own and says so). In a git repo the agent gets its own worktree, <repo>.wt/<name> on branch fleet/<name>, and works there; pass worktree=false to put it straight in dir (e.g. a read-only task, or work that must land in the user's checkout). goal, check and result make a task card: fleet runs check in the agent's dir when it reports done and tells you whether it passed, and the agent is told to write the result file. effort sizes the worker process the agent is given: pick it per task. interactive=true for an agent the user will talk to directly: it is never auto-closed and reports progress, not done, until the user ends the session.", obj([]string{"name", "dir"}, map[string]any{
-		"name": str("short unique agent name"), "profile": str("tool profile, see fleet_profiles; default [defaults] profile in config.toml"), "dir": str("working directory (absolute)"), "prompt": str("optional first prompt"),
+	{"fleet_spawn", "Start a new agent with a tool profile in a directory, optionally with a first prompt. Never spawn in the home directory: pass the repo or project dir, not $HOME (fleet moves a home-directory spawn to a scratch dir of its own and says so). In a git repo the agent gets its own worktree, <repo>.wt/<name> on branch fleet/<name>, and works there; pass worktree=false to put it straight in dir (e.g. a read-only task, or work that must land in the user's checkout). goal, check and result make a task card: fleet runs check in the agent's dir when it reports done and tells you whether it passed, and the agent is told to write the result file. effort sizes the worker process the agent is given: pick it per task. interactive=true for an agent the user will talk to directly: it is never auto-closed and reports progress, not done, until the user ends the session. route=NAME fills dir, profile, effort and the rest from that route (fleet_route); explicit arguments win.", obj([]string{"name"}, map[string]any{
+		"name": str("short unique agent name"), "route": str("a request route from the brief (fleet_route): fills every argument you leave out and wraps prompt in the route's template"), "profile": str("tool profile, see fleet_profiles; default [defaults] profile in config.toml"), "dir": str("working directory (absolute); required unless the route has one"), "prompt": str("optional first prompt"),
 		"worktree":    map[string]any{"type": "boolean", "description": "give the agent its own git worktree (default: the user's config, normally true)"},
 		"goal":        str("task card: the goal in one line (shown on the tile and in fleet_info)"),
 		"check":       str("task card: done-check shell command, run in the agent's dir when it reports done, keep it cheap: a build plus the touched packages' tests, e.g. \"go build ./... && go test ./internal/x/...\", or a check that CI passed on the branch head (the full suite runs in CI, ADR-69)"),
@@ -94,7 +94,7 @@ var toolDefs = []tool{
 	{"fleet_note", "Save one line to the decisions log: a user decision, preference or promise, or a RAID entry starting risk:, assumption:, issue: or decision:. Survives an admiral reset. pin=true for a standing user rule: fleet_brief always shows pinned notes, not just the last 30.", obj([]string{"text"}, map[string]any{
 		"text": str("the note, one line"), "agent": str("optional agent the note is about"),
 		"pin": map[string]any{"type": "boolean", "description": "a standing rule, always shown in fleet_brief"}})},
-	{"fleet_brief", "Start-of-session brief: the last handoff, pinned notes, recent notes and the agent table. Call first in a fresh session.", obj(nil, map[string]any{})},
+	{"fleet_brief", "Start-of-session brief: the last handoff, pinned notes, the request routes, recent notes and the agent table. Call first in a fresh session.", obj(nil, map[string]any{})},
 	{"fleet_access", "List agent-to-agent access: the agent_mail policy, then every explicit pair with its state (pending, granted, denied), who asked, who decided and why. limit=N adds the last N messages between agents.", obj(nil, map[string]any{
 		"limit": map[string]any{"type": "integer", "description": "also show the last N agent-to-agent messages"}})},
 	{"fleet_access_decide", "Grant, deny or revoke access between two agents. Ask the user first; set confirmed=true only after an explicit yes.", obj([]string{"a", "b", "action", "confirmed"}, map[string]any{
@@ -158,6 +158,12 @@ type args struct {
 	Prune bool
 	// Days is fleet_recall's window (ADR-119).
 	Days int
+	// Route is fleet_spawn's request route; Fields are fleet_route set's
+	// changes (ADR-120).
+	Route  string
+	Fields map[string]any
+	// interactiveSet: the call passed interactive, so a route's doesn't apply.
+	interactiveSet bool
 	// NeedsAction is agent fleet_msg_send's wake switch; nil is the default,
 	// fleet.NeedsAction (ADR-92).
 	NeedsAction *bool `json:"needs_action"`
@@ -174,7 +180,7 @@ var identityBound = map[string]bool{
 	"fleet_admiral_profile": true, "fleet_access_decide": true, "fleet_handover": true, "fleet_handover_request": true,
 	"fleet_admirals": true, "fleet_msg_send": true, "fleet_inbox": true,
 	"fleet_access_request": true, "fleet_access_respond": true, "fleet_access_revoke": true,
-	"fleet_takeover": true, "fleet_recall": true, "fleet_worktrees": true, "fleet_branches": true, "fleet_admiral_add": true,
+	"fleet_takeover": true, "fleet_recall": true, "fleet_route": true, "fleet_worktrees": true, "fleet_branches": true, "fleet_admiral_add": true,
 	"fleet_admiral_close": true,
 }
 
@@ -220,6 +226,13 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 	case "fleet_info":
 		return s.info(a)
 	case "fleet_spawn":
+		var set struct{ Interactive *bool }
+		_ = json.Unmarshal(raw, &set)
+		a.interactiveSet = set.Interactive != nil
+		via, err := s.applyRoute(&a)
+		if err != nil {
+			return "", err
+		}
 		for f, v := range map[string]string{"name": a.Name, "dir": a.Dir} {
 			if err := need(v, f); err != nil {
 				return "", err
@@ -237,9 +250,9 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 			return s.queuedReply(ag) + cardNote(ag), nil
 		}
 		if w := ag.Worktree; w != nil {
-			return fmt.Sprintf("spawned %s (%s) in its own worktree %s on branch %s (of %s)", ag.Name, s.spawnLabel(ag), w.Path, w.Branch, w.Repo) + cardNote(ag) + leaderNote(ag), nil
+			return fmt.Sprintf("spawned %s (%s) in its own worktree %s on branch %s (of %s)", ag.Name, s.spawnLabel(ag), w.Path, w.Branch, w.Repo) + cardNote(ag) + leaderNote(ag) + via, nil
 		}
-		return fmt.Sprintf("spawned %s (%s) in %s%s", ag.Name, s.spawnLabel(ag), ag.Dir, s.dirNote(ag.Dir)) + cardNote(ag) + leaderNote(ag), nil
+		return fmt.Sprintf("spawned %s (%s) in %s%s", ag.Name, s.spawnLabel(ag), ag.Dir, s.dirNote(ag.Dir)) + cardNote(ag) + leaderNote(ag) + via, nil
 	case "fleet_sessions":
 		return s.sessions(a.Query, a.Limit)
 	case "fleet_adopt":
@@ -339,6 +352,8 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 			return "pinned", supervisor.AppendPinnedBy(s.F.Home, s.Me(), a.Agent, a.Text)
 		}
 		return "noted", supervisor.AppendNoteBy(s.F.Home, s.Me(), a.Agent, a.Text)
+	case "fleet_route":
+		return s.route(a)
 	case "fleet_brief":
 		br, err := s.brief()
 		return s.admiralHeader() + "\n" + br, err
@@ -549,6 +564,7 @@ func (s *Server) brief() (string, error) {
 	if len(pinned) > 0 {
 		b.WriteString("## Pinned\n" + strings.Join(pinned, "\n") + "\n\n")
 	}
+	b.WriteString(s.routesBrief())
 	b.WriteString("## Notes\n")
 	if notes := unpinned(supervisor.TailNotes(s.F.Home, 30), pinned); len(notes) > 0 {
 		b.WriteString(strings.Join(notes, "\n") + "\n\n")

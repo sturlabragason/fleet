@@ -1018,6 +1018,17 @@ Fleet's own history already lasts: every report stays in the admiral inboxes (`~
 - **cass stays optional.** Without it (`cass` not on PATH, or `FLEET_CASS=off`), both commands still show fleet's own records and say how to install cass. `FLEET_CASS=<path>` picks a binary. Everything cass-specific is in `internal/recall/cass.go`.
 - **Privacy.** The index is cass's own, under `~/.local/share/coding-agent-search`; fleet sends nothing anywhere, and no session text is stored by fleet.
 
+### 6.14 Request routes: the admiral stops asking where things go (ADR-120, built 2026-11-13)
+
+The user asks for the same kinds of work again and again ("check my messages and draft replies", "fix this fleet bug", "log my hours"), and each kind belongs in the same repo with the same profile, effort, skill and rules. Pinned notes held some of this as prose; a fresh admiral still asked. Routes make it data.
+
+- **The file** is `~/.fleet/routes.toml` (`internal/routes`), local and never committed: it holds private paths. One `[route.NAME]` per kind of request with `description` and/or `triggers` (hints for the admiral), `dir` (`~` allowed), `profile`, `effort`, `model`, `worktree`, `skill`, `may`, `interactive`, `check`, `prompt` (a template; `{task}` is the spawn's prompt, without it the template goes first), and `updated` and `learned_from`, which fleet stamps. Values are one line each (the `internal/conf` subset; `\n` in a string for a line break). Unknown keys and other sections are kept on save; comments are not. `examples/routes.toml.example` has placeholders.
+- **`fleet_brief`** shows `## Routes` after Pinned: one `- name: hint` line per route (the description, else the triggers, cut to 80 characters). The cards themselves stay out of the brief.
+- **`fleet_route`** (`list`, `show NAME`, `set NAME fields reason`, `rm NAME`). `set` validates the fields, rewrites the file atomically (0600) under a lock (`routes.lock`, so two admirals don't overwrite each other), stamps `updated` and, with a `reason`, `learned_from`, and appends one decisions.log line (`route inbox: dir /a → /b (user: that goes to b)`; a changed prompt is logged as "prompt changed").
+- **`fleet_spawn route=NAME`** fills every argument the call leaves out: dir, profile, effort, model, check, worktree, may (an explicit `may` replaces the route's), interactive, and wraps the prompt in the template with a `Use the <skill> skill for this task.` line first. `dir` is no longer required when a route gives one. The reply ends with `— route NAME`; a spawn without a route ends with a one-line hint to save one.
+- **Matching is the admiral's.** Fleet has no keyword or regex matcher; the admiral reads the index and picks by meaning, says which route it used, and saves a correction with `fleet_route set` (`internal/mcp/instructions.md`, "Routes").
+- **From the hand-made `~/.fleet/routes.md`** (phase 0): fleet does not parse markdown. The instructions tell the admiral to read that file while there is no `routes.toml`, and on the user's OK to move each card in with `fleet_route set`.
+
 ## 7. Memory (RAM): parking (ADR-44, built)
 
 An idle agent still holds its CLI process, about 300-450 MB (`docs/perf.md`). Parking gives that memory back without losing the conversation.
@@ -1998,3 +2009,13 @@ Rejected: moving every CLI-backed tool at once (the admiral and takeover code is
 **Rejected.** A fleet journal (`~/.fleet/journal.jsonl`): it would duplicate the inboxes. Reading the tools' session files in fleet: one parser per tool per format change, which is what cass maintains. Semantic memory platforms (mem0, Letta, Graphiti and the rest): a server, embeddings and a model for a question that full-text search answers. Running the indexer from the watcher: about 20 s and 2 GB per incremental run on this machine, too much to run unasked.
 
 **Trade-offs.** cass has one maintainer, and its licence (MIT with a rider that bars OpenAI and Anthropic) is fine for personal use but rules out shipping it; fleet only calls it, and the adapter is one file to replace. Session hits are as fresh as the last `cass index`. Areas are repo names guessed from dirs, so a closed agent that ran in a plain checkout and has no cass session shows under "other". Claude Code deletes transcripts after `cleanupPeriodDays` (30 by default), and cass's index only keeps what it saw before that.
+
+**ADR-120: request routes are data the admiral matches; fleet stores and applies them** (§6.14) — accepted 2026-11-13. Issue #46.
+
+**Context.** The routing investigation (2026-11-13) read 334 admiral messages and 60+ spawn cards: about a dozen kinds of request recur, each always run in the same place, and the user had to correct the admiral on several of them more than once ("I keep asking for an agent in …", "I already told the previous admiral all of this"). Pinned notes carried some routes as prose among standing rules and cost about 3.5k tokens a brief.
+
+**Decision.** (a) A local `~/.fleet/routes.toml`, one card per kind of request, in the `internal/conf` TOML subset; never in the repo. (b) The brief carries only a name-and-trigger index, the card goes into the spawn. (c) `fleet_route list|show|set|rm`; `set` logs to decisions.log, so a correction is one tool call and survives handoffs. (d) `fleet_spawn route=NAME`: explicit arguments > route > profile and config defaults. (e) No matcher in code: triggers are hints for the admiral, which already is the language model.
+
+**Rejected.** A router agent or skill: an extra model turn per request with no knowledge the admiral lacks. Regex or keyword matching in fleet: misses paraphrases and adds a classifier to maintain. Learning routes from spawn history: `closed.json` keeps 50 agents, too little; a lasting spawn log and `fleet route suggest` are a later phase. Routes in each repo's AGENTS.md: useless for choosing the repo. A `fleet route` CLI: the admiral is the only caller for now (not in CLIParity, so no parity gap).
+
+**Trade-offs.** `fleet_route set` rewrites the file and drops hand-written comments. Values are single-line, so long prompt templates use `\n`. Routes go stale when a repo moves; the `learned_from` and `updated` stamps show how old a card is.

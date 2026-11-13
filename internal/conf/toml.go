@@ -61,7 +61,7 @@ func stripComment(s string) string {
 	in, lit := false, false // inside a "basic" or a 'literal' string
 	for i, r := range s {
 		switch {
-		case r == '"' && !lit && (i == 0 || s[i-1] != '\\'):
+		case r == '"' && !lit && !escaped(s, i):
 			in = !in
 		case r == '\'' && !in:
 			lit = !lit
@@ -70,6 +70,16 @@ func stripComment(s string) string {
 		}
 	}
 	return s
+}
+
+// escaped says whether s[i] follows an odd run of backslashes, so a
+// closing quote after an escaped backslash ("C:\\") still closes.
+func escaped(s string, i int) bool {
+	n := 0
+	for j := i - 1; j >= 0 && s[j] == '\\'; j-- {
+		n++
+	}
+	return n%2 == 1
 }
 
 func parseValue(v string) (Value, error) {
@@ -116,7 +126,7 @@ func splitList(s string) ([]string, error) {
 	for i, r := range s {
 		switch {
 		case q != 0:
-			if r == q && (q == '\'' || i == 0 || s[i-1] != '\\') {
+			if r == q && (q == '\'' || !escaped(s, i)) {
 				q = 0
 			}
 			cur.WriteRune(r)
