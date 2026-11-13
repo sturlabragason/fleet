@@ -38,6 +38,10 @@ var cliToolDefs = []tool{
 		"name": str("admiral name, see fleet_admirals")})},
 	{"fleet_changes", "What's new in fleet: the running version and its latest changelog lines, newest first. Use when the user asks what changed, or after [fleet updated] or [fleet upgraded itself].", obj(nil, map[string]any{
 		"limit": map[string]any{"type": "integer", "description": "lines to return (default 15)"}})},
+	{"fleet_recall", "What was the user doing on a topic, without spawning: the agent reports and notes that mention it, and the matching Copilot CLI and Claude Code sessions on this machine (through cass, when installed), newest first, with the agent and repo. Without query: the day digest (what waits on the user, what got done by area, what is on the board, sessions outside fleet). Use for \"where was I on X\", \"what did we decide about X\", \"what happened today\".", obj(nil, map[string]any{
+		"query": str("words to look for; empty for the day digest"),
+		"days":  map[string]any{"type": "integer", "description": "only the last N days (digest: default 1)"},
+		"limit": map[string]any{"type": "integer", "description": "hits per section (default 10)"}})},
 }
 
 func init() { toolDefs = append(toolDefs, cliToolDefs...) }
@@ -156,6 +160,8 @@ func (s *Server) cliCall(name string, a args) (string, error) {
 			return "", fmt.Errorf("only main closes an admiral; ask main or the user")
 		}
 		return cliResult(s.runFleet("", "admiral", "close", a.Name))
+	case "fleet_recall":
+		return s.recall(a)
 	}
 	// fleet_changes
 	es := whatsnew.List(aifleet.Changelog, whatsnew.Repo())

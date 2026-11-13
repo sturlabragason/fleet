@@ -204,6 +204,12 @@ var usage = `usage:
                                             (--keep-focus: show/add leave keyboard focus where it is;
                                             --notify: the result goes to a tmux message, not stdout)
   fleet keys [--markdown]                   list every hotkey (Alt-? in tmux, ? in the overview)
+  fleet recall [--days N] [-n 10] [--refresh] [--json] <words...>
+                                            what was I doing on X: agent reports and notes, and every
+                                            Copilot CLI and Claude Code session through cass when it is
+                                            installed (local only; --refresh updates its index first)
+  fleet day [--since 24h|3d|DATE]           token-free digest: what waits on you, what got done by area,
+                                            what is on the board, sessions run outside fleet
   fleet changes [--json]                    what's new in fleet: its latest features, newest first (Alt-g)
   fleet version                             the release tag and commit this binary was built from
   fleet update [--check | --now]            auto-upgrade state of a release install; --check asks GitHub for
@@ -301,6 +307,10 @@ func run(args []string) error {
 	switch commandName(cmd) {
 	case "spawn":
 		return cmdSpawn(f, rest)
+	case "recall":
+		return cmdRecall(f, rest)
+	case "day":
+		return cmdDay(f, rest)
 	case "adopt":
 		return cmdAdopt(f, rest)
 	case "sessions":

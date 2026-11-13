@@ -119,6 +119,7 @@ Where the ID can't be set at launch, `fleet` has to find it after the start. It 
 | `fleet ls [--json]` | All agents with status, live/parked and RAM; a `DRIVER` column (`acp` or `tmux`, ADR-77) |
 | `fleet info <name>` | One agent's facts, the same lines as `fleet_info` (ADR-77) |
 | `fleet spend [--json]` | ✅ built (2026-11-05) What each agent has cost so far and the fleet total, read from its own session file: AI credits for Copilot, tokens for Claude (§7b, ADR-46) |
+| `fleet recall <words>` / `fleet day` | ✅ built (2026-11-13) "Where was I on X?" over agent reports, notes and, through cass, every Copilot CLI and Claude Code session; `fleet day` is the token-free digest (§6.13, ADR-119) |
 | `fleet peek <name> [--raw] [-n 200]` | The pane text. `--summary`: about 5 lines from a cheap model instead (§6.2, ADR-40). |
 | `fleet send <name> "text"` | Paste into the agent and press Enter |
 | `fleet park <name>` | Ask the agent to update its card, wait, stop the process, mark it parked |
@@ -1006,6 +1007,16 @@ The agent's unread reports move with it, and the receiving admiral gets one wake
 ---
 
 ---
+
+### 6.13 Recall: "where was I?" without a model (ADR-119, built 2026-11-13)
+
+Fleet's own history already lasts: every report stays in the admiral inboxes (`~/.fleet/mail/<box>/inbox.jsonl`, since the first one), and `decisions.log` and `pinned.log` are never trimmed. Only the board's closed records go after 24 h (ADR-95). What fleet could not search is the sessions themselves. cass (`coding_agent_session_search`, a local Rust binary) indexes the session files of Copilot CLI, Claude Code and about 30 other tools into a local SQLite and full-text index, and answers `--json`. Fleet calls it; it does not read the sessions itself.
+
+- `fleet recall [--days N] [-n 10] [--refresh] [--json] <words...>`: two sections, newest first. **Fleet reports and notes**: reports and note lines that hold every word (case-insensitive), with the matching detail line under a report's headline. **Sessions (cass)**: `cass search --json`, one hit per session, each named with its fleet agent (the board's or a recent closed record's session id, else the `<repo>.wt/<name>` dir, else `admiral` for an admiral's boot prompt), its area (the repo), its tool and short session id, and the matching snippet. `fleet adopt <id>` resumes one; `cass view <path>` reads it. `--refresh` first runs an incremental `cass index` under `nice`/`ionice` (about 20 s and 2 GB here); otherwise the index age is shown and an index older than 6 h gets a hint.
+- `fleet day [--since 24h|3d|DATE]`: **Waiting on you** (unread `question`/`blocked` reports, agents waiting, erroring or stuck, agents whose latest report is a question or blocker, the unread count), **Done since** (each agent's latest `done` report in the window, grouped by area), **Still on the board** (by area, with the latest headline), **Sessions outside fleet** (cass sessions in the window that are not fleet agents, fleet probes, one-shot calls or in the temp dir, by area).
+- `fleet_recall(query?, days?, limit?)` is both for the admiral: a query searches, no query is the digest (`days` default 1). It runs in process, calls no model and spawns nothing, so "what was I doing on X?" costs one tool result instead of a research agent.
+- **cass stays optional.** Without it (`cass` not on PATH, or `FLEET_CASS=off`), both commands still show fleet's own records and say how to install cass. `FLEET_CASS=<path>` picks a binary. Everything cass-specific is in `internal/recall/cass.go`.
+- **Privacy.** The index is cass's own, under `~/.local/share/coding-agent-search`; fleet sends nothing anywhere, and no session text is stored by fleet.
 
 ## 7. Memory (RAM): parking (ADR-44, built)
 
@@ -1977,3 +1988,13 @@ Rejected: moving every CLI-backed tool at once (the admiral and takeover code is
 **Rejected.** Mid-turn steering by a second `session/prompt`: ACP has no steer, and Copilot cancels; agy's in-turn steer is lost, which is acceptable for one behaviour across tools. Sending each held prompt as its own turn: more turns and more cost for what the user meant as one follow-up.
 
 **Trade-offs.** A held prompt is lost if the host stops before the turn ends (park, close, crash); the user sees it in the pane until then.
+
+**ADR-119: recall goes through cass; fleet keeps no journal of its own** (§6.13) — accepted 2026-11-13.
+
+**Context.** Sturla runs about 200 sessions a day across fleet, work repos and personal projects, and loses track of what each was about. The memory survey (2026-11-12) found no memory platform worth adopting (they store facts for agents, need a server and a model, and do not answer "where was I"), and one local search tool that covers this machine: cass, which indexes Copilot CLI's session-state and Claude Code's transcripts. Fleet cannot read Copilot's `session-store.db` itself (no SQLite in the standard library; the dependency rule is stdlib plus Charm). The context-recall design proposed a closed-agent journal because `board.ClosedMax` drops closed records.
+
+**Decision.** (a) `internal/recall` searches fleet's own records (every report in the mail inboxes, `decisions.log`, `pinned.log`) and shells out to `cass search --json`, `cass sessions --json` and `cass status --json` for sessions, through one adapter file. (b) Surface: `fleet recall <words>`, `fleet day`, and one admiral tool, `fleet_recall` (no query gives the digest), so the admiral answers "what was I doing on X?" or "what happened today?" without a spawn or a model call. (c) No journal: the inboxes already keep every report with its full text since the first one, and cass keeps every session with its dir, so a closed agent's work is found by name, repo or words long after its closed record is gone. (d) cass is optional and pinned by the user: fleet works without it and says how to install it. Fleet never runs `cass index` on its own; `--refresh` runs it on request at low priority. (e) cass 0.11 leaves the workspace of Copilot CLI search hits empty, so the adapter reads `cwd:` from the session's `workspace.yaml`. (f) `fleet_brief` does not include the digest; the admiral calls `fleet_recall` when the user asks.
+
+**Rejected.** A fleet journal (`~/.fleet/journal.jsonl`): it would duplicate the inboxes. Reading the tools' session files in fleet: one parser per tool per format change, which is what cass maintains. Semantic memory platforms (mem0, Letta, Graphiti and the rest): a server, embeddings and a model for a question that full-text search answers. Running the indexer from the watcher: about 20 s and 2 GB per incremental run on this machine, too much to run unasked.
+
+**Trade-offs.** cass has one maintainer, and its licence (MIT with a rider that bars OpenAI and Anthropic) is fine for personal use but rules out shipping it; fleet only calls it, and the adapter is one file to replace. Session hits are as fresh as the last `cass index`. Areas are repo names guessed from dirs, so a closed agent that ran in a plain checkout and has no cass session shows under "other". Claude Code deletes transcripts after `cleanupPeriodDays` (30 by default), and cass's index only keeps what it saw before that.
