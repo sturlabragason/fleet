@@ -759,6 +759,21 @@ func TestApplyHidesAdmiralsThatDoNotFit(t *testing.T) {
 	if win(sup1) != "main" || win(sup2) != "sup-hidden" {
 		t.Fatalf("windows: main admiral %q, second %q", win(sup1), win(sup2))
 	}
+	// No room yet: the next apply must not pull it back only to hide it again.
+	if err := w.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	if win(sup2) != "sup-hidden" {
+		t.Errorf("second admiral moved to %q with no room in the column", win(sup2))
+	}
+	// Room again: it comes back under main.
+	c.Run("resize-window", "-t", "f:main", "-y", "80")
+	if err := w.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	if win(sup2) != "main" {
+		t.Errorf("second admiral in %q after the window grew, want main", win(sup2))
+	}
 }
 
 // setupTwoAdmirals is setupWall with a second admiral ("personal") stacked
@@ -917,5 +932,110 @@ func TestSnapshotPollRunsNoTmux(t *testing.T) {
 	}
 	if execs == 0 {
 		t.Error("a snapshot with a different layout did not go to tmux")
+	}
+}
+
+func panePID(t *testing.T, c *tmux.Client, id string) string {
+	t.Helper()
+	out, err := c.Run("display-message", "-p", "-t", id, "#{pane_pid}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(out)
+}
+
+func paneWindow(c *tmux.Client, id string) string {
+	out, _ := c.Run("display-message", "-p", "-t", id, "#{window_name}")
+	return strings.TrimSpace(out)
+}
+
+// An admiral stranded in another window (two-monitor mode undone after main
+// was recreated) is moved back under main by a forced apply, the same
+// process still running, and a second apply leaves it there.
+func TestApplyGathersStrandedAdmiral(t *testing.T) {
+	c, w, _ := setupWall(t, 2)
+	s, _ := w.Read()
+	stray, err := c.Run("new-window", "-d", "-t", "f:", "-n", "admiral", "-P", "-F", "#{pane_id}", "cat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.SetPaneOption(stray, "@role", "sup")
+	c.SetPaneOption(stray, "@fleet_admiral", "personal")
+	pid := panePID(t, c, stray)
+	if err := w.ApplyCached(); err != nil {
+		t.Fatal(err)
+	}
+	if paneWindow(c, stray) != "admiral" {
+		t.Fatal("the cached apply looked outside the main window")
+	}
+	for i := 0; i < 2; i++ {
+		if err := w.Apply(); err != nil {
+			t.Fatal(err)
+		}
+		if got := paneWindow(c, stray); got != "main" {
+			t.Fatalf("apply %d: stranded admiral in window %q, want main", i, got)
+		}
+	}
+	if got := panePID(t, c, stray); got != pid {
+		t.Errorf("admiral process changed: pid %s -> %s", pid, got)
+	}
+	geo := func(id string) (left, top int) {
+		out, _ := c.Run("display-message", "-p", "-t", id, "#{pane_left} #{pane_top}")
+		fmt.Sscan(out, &left, &top)
+		return
+	}
+	ml, mt := geo(s.Sups[0])
+	pl, pt := geo(stray)
+	if pl != ml || pt <= mt {
+		t.Errorf("personal at left %d top %d, want under main (left %d top %d)", pl, pt, ml, mt)
+	}
+	if s, _ := w.Read(); len(s.Sups) != 2 || s.SupNames[1] != "personal" {
+		t.Errorf("sups %v", s.SupNames)
+	}
+}
+
+// With every admiral hidden (Alt-s), apply does not drag one back alone.
+func TestApplyLeavesAdmiralsHiddenWithMain(t *testing.T) {
+	c, w, _, sup2 := setupTwoAdmirals(t, 2)
+	if err := w.ToggleSup(); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	if got := paneWindow(c, sup2); got == "main" {
+		t.Error("apply brought one admiral back while main was hidden")
+	}
+}
+
+// admiral-hide keeps an admiral out through applies and Alt-s; admiral-show
+// puts it back under main. The process is never restarted.
+func TestHideAndShowAdmiral(t *testing.T) {
+	c, w, _, sup2 := setupTwoAdmirals(t, 2)
+	pid := panePID(t, c, sup2)
+	if err := w.HideAdmiral("main"); err == nil {
+		t.Error("hiding main alone should be refused")
+	}
+	if err := w.HideAdmiral("personal"); err != nil {
+		t.Fatal(err)
+	}
+	w.Apply()
+	w.ToggleSup()
+	w.ToggleSup()
+	if got := paneWindow(c, sup2); got == "main" {
+		t.Fatal("a hidden admiral came back on apply or Alt-s")
+	}
+	if s, _ := w.Read(); len(s.Sups) != 1 {
+		t.Fatalf("main not back after Alt-s twice: %v", s.SupNames)
+	}
+	shown, err := w.ShowAdmiral("personal")
+	if err != nil || !shown {
+		t.Fatalf("show: %v %v", shown, err)
+	}
+	if s, _ := w.Read(); len(s.Sups) != 2 || s.SupNames[1] != "personal" {
+		t.Fatalf("sups %v", s.SupNames)
+	}
+	if got := panePID(t, c, sup2); got != pid {
+		t.Errorf("admiral process changed: pid %s -> %s", pid, got)
 	}
 }

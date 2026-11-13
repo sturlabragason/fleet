@@ -676,7 +676,7 @@ func wallCmdAct(exe, verb string) string {
 }
 
 // wallUsage lists the `fleet wall` verbs.
-const wallUsage = "fleet wall attach|apply|refresh|preset N|sup|side|chips|emphasis|show NAME|hide NAME|add NAME|next|prev|untarget|undo|pin NAME|hide-all|restore|toggle-all [--keep-focus] [--notify]"
+const wallUsage = "fleet wall attach|apply|refresh|preset N|sup|side|chips|emphasis|show NAME|hide NAME|add NAME|next|prev|untarget|undo|pin NAME|hide-all|restore|toggle-all|admiral-show NAME|admiral-hide NAME [--keep-focus] [--notify]"
 
 // pinMsg says what a pin toggle did (the overview's p says the same).
 func pinMsg(name string, on bool) string {
@@ -764,6 +764,21 @@ func wallVerb(f *fleet.Fleet, w *wall.Wall, args []string) (string, error) {
 		return "", w.SetPreset(args[1])
 	case "sup":
 		return "", w.ToggleSup()
+	case "admiral-show", "admiral-hide":
+		if len(args) < 2 {
+			return "", fmt.Errorf("usage: fleet wall %s NAME", args[0])
+		}
+		if args[0] == "admiral-hide" {
+			return wall.AdmiralMsg(args[1], false), w.HideAdmiral(args[1])
+		}
+		shown, err := w.ShowAdmiral(args[1])
+		if err != nil {
+			return "", err
+		}
+		if !shown {
+			return wall.NoRoomMsg, nil
+		}
+		return wall.AdmiralMsg(args[1], true), nil
 	case "side":
 		return "", w.SwapSide()
 	case "chips":

@@ -173,6 +173,13 @@ func (w *Wall) apply(force bool) error {
 	if err != nil {
 		return err
 	}
+	// Only a forced apply looks outside the window for stranded admirals:
+	// the cached path runs on every refresh and must stay one window read.
+	if force && w.gather(s) > 0 {
+		if s, err = w.Read(); err != nil {
+			return err
+		}
+	}
 	// break-pane mutates the window, so shedding panes takes the apply lock
 	// too. The state is reread under the lock -- a pane may have been pinned
 	// or started waiting since the first read, and evicting on that stale
@@ -588,7 +595,7 @@ func (w *Wall) ToggleSup() error {
 	panes, _ := w.T.ListPanes("")
 	sups := panes[:0:0]
 	for _, p := range panes {
-		if p.Role == "sup" && p.Session == session {
+		if p.Role == "sup" && p.Session == session && (isMainAdmiral(p.Admiral) || w.T.PaneOption(p.ID, HiddenAdmiralOption) != "1") {
 			sups = append(sups, p)
 		}
 	}

@@ -37,7 +37,7 @@ Use only the `fleet` MCP tools: never bash, tmux or fleet source code for fleet 
 | `fleet_park` | Stop an idle agent to free RAM, kept on the board (working, waiting and pinned ones are refused); `action="wake"` resumes it. Wake fleet's own low-memory parks when there is room; a refused wake: park another, `force=true` only if the user insists. |
 | `fleet_takeover` | Move an idle acp agent into the tool's own screen when the user wants to type in it; `acp=true` hands it back. |
 | `fleet_close` ✱ | Stop an agent (`squad=true`: its squad too). |
-| `fleet_wall` | `show`/`hide` a pane, `preset`, `hide_all`/`restore` ("clear the wall"). "wall full: …" is a no-op: offer to hide a named pane, don't retry. |
+| `fleet_wall` | `show`/`hide` a pane, `preset`, `hide_all`/`restore` ("clear the wall"), `admiral_show`/`admiral_hide` name=<admiral> for another admiral's pane. "wall full: …" is a no-op: offer to hide a named pane, don't retry. |
 | `fleet_team` | Named coloured groups, one team per agent: "all the X agents" (send, show, hide; `close` ✱). |
 | `fleet_reports` | Unread reports in full, marked read; `name=<agent>` one agent's; `all=true` old headlines. |
 | `fleet_wait` | Wait for the next report or message (`agents=[...]`); never `sleep` or poll. An ACP agent's wait also returns a `fleet_send` to it. |

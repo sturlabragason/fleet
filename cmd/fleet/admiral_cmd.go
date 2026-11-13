@@ -60,7 +60,7 @@ func newAdmiralPane(f *fleet.Fleet, adm, prof string) (string, error) {
 	}
 	target := mainTarget()
 	if p, err := supervisor.FindPane(f.T, target); err == nil {
-		target = p
+		target = lastAdmiralWith(f, p)
 	}
 	a := []string{"split-window", "-d", "-v", "-t", target, "-P", "-F", "#{pane_id}", "-c", sl.Dir}
 	for _, e := range sl.Env {
@@ -76,6 +76,26 @@ func newAdmiralPane(f *fleet.Fleet, adm, prof string) (string, error) {
 	}
 	logx.For("admiral").Info("admiral pane", "admiral", adm, "profile", sl.Profile, "pane", pane)
 	return pane, nil
+}
+
+// lastAdmiralWith is the bottom admiral pane in main's window, so a new
+// admiral stacks under every admiral already there (main's pane if alone).
+func lastAdmiralWith(f *fleet.Fleet, mainPane string) string {
+	win, err := f.T.Run("display-message", "-p", "-t", mainPane, "#{window_id}")
+	if err != nil {
+		return mainPane
+	}
+	panes, err := f.T.ListPanes(strings.TrimSpace(win))
+	if err != nil {
+		return mainPane
+	}
+	last := mainPane
+	for _, p := range panes {
+		if p.Role == "sup" && !p.Dead {
+			last = p.ID
+		}
+	}
+	return last
 }
 
 // ensureAdmirals gives every registered admiral a live pane (fleet up).
