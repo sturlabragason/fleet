@@ -5,7 +5,9 @@ import "strings"
 // CLIParity maps every `fleet` command (and `fleet admiral` subcommand) to
 // the admiral MCP tool that does the same, or to why there is none (ADR-86):
 // "user: …" for the user's own terminal or keys, "agent: …" for what an
-// agent runs in its own worktree, "infra: …" for what fleet itself runs.
+// agent runs in its own worktree, "infra: …" for what fleet itself runs,
+// and "integration: fleet_<name> …" for a command of an integration whose
+// admiral verbs are grouped under that one tool's `action` argument (ADR-126).
 // A test fails when a command in the usage text has no entry here, or a tool
 // named here is missing, so a new command can't skip the admiral.
 var CLIParity = map[string]string{
@@ -65,12 +67,33 @@ var CLIParity = map[string]string{
 	"hook":            "infra: tool hooks call it",
 }
 
+// integrationPrefix marks a CLIParity value whose command belongs to an
+// integration's grouped admiral tool (ADR-126).
+const integrationPrefix = "integration:"
+
 // ParityTool is the admiral tool for a CLIParity value, "" for an exclusion.
 func ParityTool(v string) string {
 	if strings.HasPrefix(v, "fleet_") {
 		return v
 	}
+	if t, ok := IntegrationTool(v); ok {
+		return t
+	}
 	return ""
+}
+
+// IntegrationTool is the grouped tool an "integration: fleet_<name> …"
+// value names; ok is false for any other value.
+func IntegrationTool(v string) (string, bool) {
+	rest, ok := strings.CutPrefix(v, integrationPrefix)
+	if !ok {
+		return "", false
+	}
+	name, _, _ := strings.Cut(strings.TrimSpace(rest), " ")
+	if !strings.HasPrefix(name, "fleet_") {
+		return "", false
+	}
+	return name, true
 }
 
 // ToolNames lists the admiral server's tools.
