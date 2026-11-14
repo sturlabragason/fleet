@@ -1,7 +1,6 @@
 package fleet
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -168,7 +167,7 @@ func adoptWorktree(dir string) *board.Worktree {
 func adoptDir(dir string, matches []string) (string, error) {
 	if dir == "" {
 		for _, m := range matches {
-			if d := workspaceCwd(m); d != "" {
+			if d := sessions.CopilotCwd(m); d != "" {
 				dir = d
 				break
 			}
@@ -185,22 +184,6 @@ func adoptDir(dir string, matches []string) (string, error) {
 		return "", fmt.Errorf("dir %s is not a directory", abs)
 	}
 	return abs, nil
-}
-
-// workspaceCwd reads the `cwd:` line of a Copilot session folder's workspace.yaml.
-func workspaceCwd(sessionDir string) string {
-	fh, err := os.Open(filepath.Join(sessionDir, "workspace.yaml"))
-	if err != nil {
-		return ""
-	}
-	defer fh.Close()
-	sc := bufio.NewScanner(fh)
-	for sc.Scan() {
-		if v, ok := strings.CutPrefix(sc.Text(), "cwd:"); ok {
-			return strings.Trim(strings.TrimSpace(v), `"'`)
-		}
-	}
-	return ""
 }
 
 // adoptName returns an explicit free name, or a safe base(dir) with -2, -3… if taken.

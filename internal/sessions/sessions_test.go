@@ -216,3 +216,23 @@ func TestAgeSuggest(t *testing.T) {
 		t.Errorf("oneline %q", OneLine("a\n b   c", 4))
 	}
 }
+
+func TestCopilotCwd(t *testing.T) {
+	for _, tc := range []struct{ yaml, want string }{
+		{"id: x\ncwd: /a/b\nbranch: main\n", "/a/b"},
+		{"cwd: \"/a b/c\"\n", "/a b/c"},
+		{"cwd:/x\n", "/x"},
+		{"summary: |\n  cwd: /not\n", ""},
+	} {
+		d := t.TempDir()
+		if err := os.WriteFile(filepath.Join(d, "workspace.yaml"), []byte(tc.yaml), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if got := CopilotCwd(d); got != tc.want {
+			t.Errorf("%q: got %q, want %q", tc.yaml, got, tc.want)
+		}
+	}
+	if got := CopilotCwd(t.TempDir()); got != "" {
+		t.Errorf("missing file: got %q", got)
+	}
+}

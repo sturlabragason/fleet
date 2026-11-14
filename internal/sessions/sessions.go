@@ -448,7 +448,7 @@ func Newest(p tools.Profile, dir string, since time.Time) (Session, bool) {
 			break
 		}
 		if st, err := os.Stat(c.path); err == nil && st.IsDir() {
-			if filepath.Clean(workspaceCwd(c.path)) != dir {
+			if filepath.Clean(CopilotCwd(c.path)) != dir {
 				continue
 			}
 		} else if filepath.Base(filepath.Dir(c.path)) != proj {
@@ -466,8 +466,10 @@ var nonAlnum = regexp.MustCompile(`[^A-Za-z0-9]`)
 // claudeProject is the folder Claude keeps a dir's transcripts in.
 func claudeProject(dir string) string { return nonAlnum.ReplaceAllString(dir, "-") }
 
-// workspaceCwd is the cwd line of a Copilot session's workspace.yaml.
-func workspaceCwd(sessionDir string) string {
+// CopilotCwd is the cwd line of a Copilot session folder's workspace.yaml,
+// or "" when it has none. It is the one reader of that file's cwd (adopt,
+// recall and session discovery share it).
+func CopilotCwd(sessionDir string) string {
 	var cwd string
 	lines(filepath.Join(sessionDir, "workspace.yaml"), func(l string) bool {
 		if v, ok := strings.CutPrefix(l, "cwd:"); ok {

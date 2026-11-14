@@ -1,7 +1,6 @@
 package recall
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/sturlabragason/fleet/internal/sessions"
 )
 
 // The cass adapter (ADR-119): everything fleet knows about cass is in this
@@ -189,18 +190,7 @@ func copilotCwd(sourcePath string) string {
 	if filepath.Base(sourcePath) != "events.jsonl" {
 		return ""
 	}
-	f, err := os.Open(filepath.Join(filepath.Dir(sourcePath), "workspace.yaml"))
-	if err != nil {
-		return ""
-	}
-	defer f.Close()
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		if v, ok := strings.CutPrefix(sc.Text(), "cwd: "); ok {
-			return strings.TrimSpace(v)
-		}
-	}
-	return ""
+	return sessions.CopilotCwd(filepath.Dir(sourcePath))
 }
 
 // sessionID is the tool's session id in a session file path: the
