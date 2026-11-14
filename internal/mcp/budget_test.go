@@ -5,22 +5,29 @@ import (
 	"testing"
 )
 
-// admiralToolBudget is the most tools the admiral server may list (ADR-126):
-// every tool's schema rides on every admiral request.
+// admiralToolBudget is the most built-in tools the admiral server may list
+// (ADR-126): every tool's schema rides on every admiral request.
 const admiralToolBudget = 40
 
-// The admiral stays at a fixed tool budget. ToolNames includes every
-// registered extension's tools, so a tagged build counts them here too; only
-// the public test-only example extension (build tag extexample) is left out.
+// The admiral's built-in tools stay at a fixed budget, and each extension
+// (one integration) adds at most one tool, grouped by an `action` enum, so a
+// build's total is the budget plus one per integration. Only the public
+// test-only example extension (build tag extexample) skips the enum rule.
 func TestAdmiralToolBudget(t *testing.T) {
 	n := len(ToolNames())
 	for _, e := range exts {
-		if e.Name == "example" {
-			n -= len(e.Tools)
+		n -= len(e.Tools)
+		if len(e.Tools) > 1 {
+			t.Errorf("extension %s adds %d admiral tools; an integration gets one, with an `action` argument (ADR-126)", e.Name, len(e.Tools))
+		}
+		for _, d := range e.Tools {
+			if e.Name != "example" && !hasActionEnum(d) {
+				t.Errorf("extension %s: tool %s has no `action` enum argument (ADR-126)", e.Name, d.Name)
+			}
 		}
 	}
 	if n > admiralToolBudget {
-		t.Errorf("the admiral has %d tools, over its budget of %d (ADR-126): merge the new verb into an existing tool with an `action` argument, or retire a tool; don't raise the budget", n, admiralToolBudget)
+		t.Errorf("the admiral has %d built-in tools, over its budget of %d (ADR-126): merge the new verb into an existing tool with an `action` argument, or retire a tool; don't raise the budget", n, admiralToolBudget)
 	}
 }
 

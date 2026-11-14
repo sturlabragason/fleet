@@ -7,8 +7,9 @@ import "strings"
 // init(); a default build registers nothing.
 type Extension struct {
 	Name string
-	// Tools are extra admiral tools. They count against the admiral's tool
-	// budget like any other: ToolNames lists them.
+	// Tools are extra admiral tools, at most one per extension, grouped by
+	// an `action` enum (ADR-126). ToolNames lists them; they sit outside the
+	// built-in budget.
 	Tools []tool
 	// Call serves Tools; it is only called with one of their names.
 	Call func(s *Server, name string, a args) (string, error)
