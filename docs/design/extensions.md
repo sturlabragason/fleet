@@ -323,8 +323,8 @@ helper.
   that exist (`fleet_recall`, `fleet_brief`, the day digest), as cass does.
 - Hold the admiral's built-in tools at 40, with a test, and each extension at one tool, so a
   build lists at most 40 plus one per integration; a new built-in verb merges into an existing
-  tool or retires one. (Built: counting extensions against the 40 left pro, whose peer tools
-  fold into one, no room at all.)
+  tool or retires one. (Built: counting extensions against the 40 left an
+  extension no room at all.)
 - When an integration needs admiral verbs (park a thread, let it go, start a timer), group them
   under one tool per integration with an `action` enum, as `fleet_route list|show|set|rm` does
   (ADR-120), not one tool per verb.
