@@ -25,7 +25,7 @@ The release notes are built from these lines (`scripts/release-notes.sh`), group
 ## 2026-11-12
 - Typing into an ACP agent's pane while it works no longer cancels the turn: Enter queues the message (shown as `queued …` above the box, Up takes it back to edit) and it is sent when the turn ends; `fleet send` to a working ACP agent queues the same way. Only Esc cancels (ADR-118).
 - An agent's `question` or `blocked` report wakes the admiral at once instead of after the 30 s settle window, and a `fleet_wait` that the agent's tool cancels (for example when you type into an ACP agent's pane) ends at once. Before, the agent's next reports queued behind it for up to 10 minutes and then arrived late and out of date (ADR-72, ADR-93).
-- `fleet changes`, `Alt-g` and `fleet_changes` name the build you run (`fleet v1.22.0`, or `v1.22.0+ext.<sha>` for a overlay build) instead of `fleet (unknown build)`.
+- `fleet changes`, `Alt-g` and `fleet_changes` name the build you run (`fleet v1.22.0`, or `v1.22.0+<label>.<sha>` for a build with a local suffix) instead of `fleet (unknown build)`.
 - A wrapped link in the admiral pane now opens the whole URL even in a terminal that was attached before that fix: tmux gives OSC 8 links only to clients that attach after fleet turns them on, so the watcher now re-attaches older clients in place (one redraw) when it starts or moves onto a new release.
 
 ## 2026-11-11

@@ -17,7 +17,7 @@ integration it already has:
 1. **Capabilities an agent uses** (a browser, publishing a page, an issue tracker) belong to the
    agent tool's own extension model: skills and MCP servers. Fleet's only job is to let a
    profile keep a server switched on (`keep_mcp`, which exists). No fleet code.
-2. **Companion CLIs fleet reads or writes** (cass now; task tracker and time tracker next; also
+2. **Companion CLIs fleet reads or writes** (cass now; a task tracker next; also
    gh, git, rsync and ssh, the summary model CLI, clipboard and terminal) become one adapter
    file per tool on a shared helper: lookup, an `off` switch, a version floor, JSON only, a
    timeout, a one-line install hint, a `fleet doctor` line, and fixture tests through a fake
@@ -26,12 +26,13 @@ integration it already has:
    `family`, that selects the small amount of Go each tool family needs (trust store, session
    files, spend, admiral launch). Today that Go is reached by comparing the status-pattern name
    or the command name in nine places.
-4. **overlay features** keep the build-tag overlay, but through a typed registry that public CI
-   compiles against an example extension, so a public refactor cannot silently break the overlay.
+4. **Extensions compiled into fleet** keep the build-tag overlay, but through a typed registry
+   that public CI compiles against an example extension, so a public refactor cannot silently
+   break a downstream overlay.
 
 Out-of-process plugins on PATH (`fleet-<name>`, as git and kubectl do) are the right model for
 third parties later; the cheap prerequisite is a schema version on fleet's JSON outputs.
-task tracker is the first integration to build on the companion contract.
+A task-tracker CLI is the first new integration to build on the companion contract.
 
 ## 1. What exists today
 
@@ -58,8 +59,8 @@ imports 20 and `cmd/fleet` 33. Integrations hang off all three.
 | clipboard | companion CLI | first of pbcopy, wl-copy, xclip, xsel on PATH (`cmd/fleet/clipboard.go:14-29`), ADR-28 | no copy |
 | terminal | companion CLI | `$FLEET_TERMINAL`, `$TERMINAL`, then a list (`cmd/fleet/monitors.go:191`), ADR-108 | the command errors |
 | git | core companion | `exec.Command("git", …)` in `internal/adr/design.go:36`, `internal/whatsnew/commits.go:49`, `cmd/fleet/exec.go:45` and `internal/worktree` | worktree falls back to the dir (ADR-39) |
-| artifact publishing, browser automation | agent capability | not in fleet: both are skills the agent tool loads from the user's skill dirs. The `artifact-ext-only` audit (2026-11-14) found no fleet code for either | n/a |
-| overlay | build-tag overlay | package-level hook variables in `cmd/fleet/ext.go:12-23`, `internal/fleet/ext.go:5-11`, `internal/mcp/ext.go:6-17`, `internal/ui/ext.go:7-25`, plus `keys` and `update` (DESIGN.md:1225) | a default build leaves them nil |
+| page publishing, browser automation | agent capability | not in fleet: both are skills the agent tool loads from the user's skill dirs; there is no fleet code for either | n/a |
+| extensions | build-tag overlay | package-level hook variables in `cmd/fleet/ext.go:12-23`, `internal/fleet/ext.go:5-11`, `internal/mcp/ext.go:6-17`, `internal/ui/ext.go:7-25`, plus `keys` and `update` (DESIGN.md:1225) | a default build leaves them nil |
 
 ### 1.2 Configuration surface
 
@@ -110,22 +111,22 @@ shows which features are off.
 **P4. Every adapter rebuilds the same plumbing.** Lookup with an env override, `off`, PATH, a
 timeout, stderr capture and lenient JSON decoding are written out in `recall/cass.go:37-67`,
 and in part again in `summary/model.go:63-80`, `update/update.go:591-600`,
-`cmd/fleet/clipboard.go:14` and `cmd/fleet/monitors.go:191`. task tracker and time tracker
+`cmd/fleet/clipboard.go:14` and `cmd/fleet/monitors.go:191`. A task tracker and a time tracker
 would be the sixth and seventh copies.
 
 **P5. Integration config has no home.** See 1.2: an env var for one tool, a section for
-another, nothing for a third. A task tracker adapter needs at least a data dir and an on/off
+another, nothing for a third. A task-tracker adapter needs at least a data dir and an on/off
 switch, and has nowhere obvious to put them.
 
-**P6. The overlay seams are untested in public and single-slot.** No public test sets any `ext*`
-hook, so a broken seam shows up only when the private build runs. The hooks are read at 34
+**P6. The extension seams are untested in public and single-slot.** No public test sets any `ext*`
+hook, so a broken seam shows up only when a downstream overlay is built. The hooks are read at 34
 call sites in 9 files. Each hook is one variable, so two extensions would overwrite each other.
 The overlay is allowed to use package internals (DESIGN.md:1225), so any internal rename can
 break it.
 
 **P7. MCP tool growth.** See 1.3. Each integration that adds an admiral tool adds schema to
-every admiral request and one more choice for the model. tracker's plan adds
-`fleet_thread`; task tracker or time tracker verbs would add more.
+every admiral request and one more choice for the model. A task-tracker integration's
+verbs would add several.
 
 **P8. Fleet's own JSON outputs are unversioned.** `board.json`, `fleet ls --json` and the
 `fleet web` event stream carry no schema version; the only version in `internal/board/board.go`
@@ -156,8 +157,8 @@ From the projects' documentation as remembered on 2026-11-14, not re-checked aga
 | Neovim | Lua plugins in-process; remote plugins over msgpack-RPC on stdio; lazy loading on events; `:checkhealth` runs each plugin's own health check | a health check per plugin; load only when used | in-process Lua needs an embedded runtime fleet does not have |
 | VS Code | a manifest declares contribution points and activation events; extensions run in a separate extension host; `engines.vscode` pins the host range | a static declaration of what a plugin adds; lazy activation; a host-version range | a large host API to keep stable |
 | MCP servers | a server exposes tools to a model over stdio or HTTP; the agent tool loads them | agent tools already host them; any language | every tool schema costs context on every request; many servers mean many tools to choose from |
-| Unix pipes with JSON | `tracker export`, `timetrack export`, `cass … --json`, `gh … --json`, jq between them | the contract is the other tool's documented output; nothing to install in fleet | no push events, so fleet polls or is called; formats drift between versions |
-| task tracker hooks | executables in the hooks dir get the task as JSON on stdin and return it on stdout (`on-add`, `on-modify`, …) | a small, stable contract owned by the tool | runs inside the other tool, on its terms |
+| Unix pipes with JSON | `<tool> export`, `cass … --json`, `gh … --json`, jq between them | the contract is the other tool's documented output; nothing to install in fleet | no push events, so fleet polls or is called; formats drift between versions |
+| tool-owned hooks (e.g. a task tracker's) | executables in the hooks dir get the task as JSON on stdin and return it on stdout (`on-add`, `on-modify`, …) | a small, stable contract owned by the tool | runs inside the other tool, on its terms |
 
 What carries over to fleet:
 
@@ -166,7 +167,7 @@ What carries over to fleet:
 - **A health check per integration** (Neovim) maps onto `fleet doctor`.
 - **A version handshake** (go-plugin, Docker metadata, `engines`) is cheap as `<tool> --version`
   against a floor, cached by binary mtime.
-- **A static declaration of what an extension adds** (VS Code) is what the overlay seams lack.
+- **A static declaration of what an extension adds** (VS Code) is what the extension seams lack.
 - **MCP is the agent's extension model, not fleet's.** Fleet should not proxy a browser or a
   publishing tool through its own MCP server when the agent tool loads that server directly.
 - **PATH plugins** are the right shape for third parties, once fleet's JSON is versioned.
@@ -181,8 +182,8 @@ What carries over to fleet:
 |---|---|---|
 | is something the agent does (browse, publish a page, file a ticket) | a skill or MCP server in the agent tool | none; `keep_mcp` per profile when a worker needs a user MCP server |
 | is an agent CLI fleet drives | a profile (data) with a `family` | only when a new family needs new tool-private code |
-| is a CLI fleet reads or writes (cass, task, timetrack, gh, git) | a companion adapter | one file on the shared helper |
-| needs fleet's loop, UI or admiral hooks and is in the overlay | a registered extension in the overlay | the overlay |
+| is a CLI fleet reads or writes (cass, a task tracker, gh, git) | a companion adapter | one file on the shared helper |
+| needs fleet's loop, UI or admiral hooks | a registered extension in a build-tag overlay | the overlay |
 | is a separate program that wants fleet's state | a consumer of fleet's versioned JSON, optionally `fleet-<name>` on PATH | none in fleet (planned, later) |
 
 ### 4.2 The companion contract
@@ -193,8 +194,8 @@ tool in the package that uses it, as `recall/cass.go` is today. Sketch:
 ```go
 // Spec is what an adapter declares about the tool it calls.
 type Spec struct {
-	Name    string   // "cass", "task", "timetrack"
-	Env     string   // override: a path, or "off" (FLEET_CASS, FLEET_TASK)
+	Name    string   // "cass", "gh", "rsync"
+	Env     string   // override: a path, or "off" (FLEET_CASS)
 	Version []string // argv that prints the version, e.g. {"--version"}
 	Min     string   // oldest version the adapter's fixtures cover
 	Feature string   // what is off without it, for doctor: "session search"
@@ -225,13 +226,13 @@ Rules for an adapter:
 
 1. **Read the tool's documented machine output only:** `--json`, `export`. No scraping of
    human output, and no reading the tool's private files when it has an export (P2).
-2. **Write through the tool's own CLI** (`tracker add`, `task <uuid> modify`), never into its data
+2. **Write through the tool's own CLI** (its `add` and `modify` commands), never into its data
    files, and idempotently: fleet tags what it owns (a user-defined attribute such as
    `fleet_agent`) and matches on it.
 3. **Never block a spawn, the TUI loop or the watcher.** Calls happen on request or on a user
    event; each has a timeout; an indexer or other expensive call runs only when asked
    (ADR-119 (d)).
-4. **One file per tool.** Swapping the tool (task tracker for beads, cass for something else) is
+4. **One file per tool.** Swapping the tool (one task tracker for another, cass for something else) is
    replacing that file.
 
 Failure modes, the same for every adapter:
@@ -260,7 +261,7 @@ path = "auto"            # auto (PATH) | off | /path/to/cass
 
 [integrations.tracker]
 path = "auto"
-data = "~/.tracker"         # passed as TRACKER_DATA; tests point it at a temp dir
+data = "~/.tracker"      # passed to the tool; tests point it at a temp dir
 ```
 
 Precedence: environment variable, then config, then PATH. `FLEET_CASS` keeps working.
@@ -291,9 +292,9 @@ cass over parsing its files, and delete readers as they fall out of use. (The `s
 `spend` packages import `tools` today, so the table may need to live in `internal/fleet` to
 avoid an import cycle; that is an implementation detail for M8.)
 
-### 4.5 Overlay
+### 4.5 Compiled-in extensions
 
-Keep the build-tag overlay: a static binary with no runtime loading is the right trade for one
+Keep the build-tag overlay: a static binary with no runtime loading is the right trade for a
 downstream extension. Change the seams from single variables to a registry. Sketch:
 
 ```go
@@ -312,10 +313,9 @@ func Register(e Extension)
 
 Public CI builds and tests a small example extension under a test-only tag
 (`go vet -tags extexample ./...` plus one test per seam), so a public refactor that breaks a
-seam fails on the public side first. overlay features that need a companion tool use the public companion contract; pro
-decides only whether a feature is compiled in, not how a tool is reached. The task tracker
-adapter itself is in the overlay (section 7, decision 1): an adapter file in the overlay on the public
-helper.
+seam fails on the public side first. An extension that needs a companion tool uses the public
+companion contract; the overlay decides only whether a feature is compiled in, not how a tool
+is reached (section 7, decision 1).
 
 ### 4.6 The admiral's tool budget
 
@@ -337,7 +337,7 @@ helper.
 |---|---|---|
 | companion tool output | `Min` per adapter, probed once per binary; fixtures per tested version in `testdata/<tool>/<version>/` | treated as missing, with the hint |
 | fleet's JSON (`board.json`, `ls --json`, web events) | a top-level `schema` integer; additive changes keep it, renames and removals bump it | a consumer refuses a schema it does not know |
-| overlay seams | Go types, compiled by public CI against the example extension | public CI fails |
+| extension seams | Go types, compiled by public CI against the example extension | public CI fails |
 | PATH plugins (later) | `fleet-<name> fleet-metadata` prints JSON with `schema` and the fleet range it supports, as Docker does | fleet does not list or run it |
 
 ### 4.8 Testing
@@ -348,7 +348,7 @@ helper.
   pinned to a nonexistent path as today.
 - Missing and `off` are table cases in every adapter test; the doctor block has its own.
 - An opt-in contract test per tool (like `make smoke`) runs the real binary against a temp data
-  dir (`TRACKER_DATA`, `time trackerDB`, a temp cass index). It never touches the user's data.
+  dir (the tool's data-dir variable, a temp cass index). It never touches the user's data.
 
 ## 5. Migration, smallest first
 
@@ -359,10 +359,10 @@ helper.
 | M3 | `fleet doctor` "optional tools" block; gh's silent skip says so (P3) | doctor and update | new info lines |
 | M4 | port the summary CLI, gh, rsync and ssh, clipboard and terminal lookups onto `Find` (P4) | one small commit each | none |
 | M5 | `[integrations.<name>]` in prefs, `examples/config.toml.example`, `fleet config explain` (P5) | prefs | new optional keys |
-| M6 | task tracker adapter on the contract (tracker slice 2), then time tracker read-only | new files | a new optional feature |
+| M6 | the first new adapter on the contract (a task tracker), then a read-only one | new files | a new optional feature |
 | M7 | `schema` on `board.json`, `ls --json` and web events (P8) | small | an additive key |
 | M8 | `family` profile key and the family table; the nine call sites in P1 | medium | none for existing profiles |
-| M9 | overlay registry and the public example extension in CI (P6) | medium; needs a matching overlay change | none in a default build |
+| M9 | extension registry and the public example extension in CI (P6) | medium; needs a matching overlay change | none in a default build |
 | M10 | admiral tool budget test and the `CLIParity` class (P7) | small | none |
 | M11 | `fleet-<name>` PATH plugins with a metadata handshake | only when someone needs it | new |
 
@@ -372,11 +372,11 @@ M1 to M5 are one commit each and unblock M6. M7 to M10 are independent of M6 and
 
 | Integration | Tier | Notes |
 |---|---|---|
-| task tracker | overlay companion (M6) | reads `tracker export`, writes `tracker add` and `task <uuid> modify` with fleet attributes; `TRACKER_DATA` from config; the first new adapter |
-| time tracker | companion, read-only | task tracker's own on-modify hook drives it; fleet reads `timetrack export` for display only |
+| a task tracker | companion (M6) | reads its JSON export, writes through its own `add` and `modify` with fleet attributes; data dir from config; the first new adapter |
+| a time tracker | companion, read-only | the tracker's own hooks drive it; fleet reads its export for display only |
 | cass | companion (M2) | already one file; moves onto the helper |
-| syncall, a sync tool | the user's own setup | they sync into task tracker on the user's schedule; fleet never runs them |
-| artifact publishing, browser automation | agent capability | skills in the agent tool; `keep_mcp` if a worker needs a browser MCP server |
+| sync tools for those trackers | the user's own setup | they run on the user's schedule; fleet never runs them |
+| page publishing, browser automation | agent capability | skills in the agent tool; `keep_mcp` if a worker needs a browser MCP server |
 | new agent CLIs | profile plus `family` (M8) | data only, when the family exists |
 | a separate UI or dashboard | JSON consumer (M7) | reads `ls --json` or web events, acts through the fleet CLI |
 
@@ -385,10 +385,10 @@ M1 to M5 are one commit each and unblock M6. M7 to M10 are independent of M6 and
 **ADR-126: integrations are adapters over other tools' CLIs, not plugins fleet loads** (§3, §15
 Extensions, §16; builds on ADR-10, ADR-91, ADR-119).
 
-**Context.** Fleet is gaining integrations (cass, task tracker and time tracker for tracker,
-more agent CLIs) and has a downstream overlay. Each integration is wired its own way today: an
+**Context.** Fleet is gaining integrations (cass, task and time trackers, more agent CLIs)
+and supports a build-tag extension overlay. Each integration is wired its own way today: an
 env var for cass, a config section for the summary CLI, a silent skip for gh. Tool-family code
-is chosen by comparing the status-pattern name or command in nine places. overlay hooks are single
+is chosen by comparing the status-pattern name or command in nine places. Extension hooks are single
 variables no public test exercises. The admiral's tool count grows with each feature.
 
 **Decision.** (a) Capabilities an agent uses are the agent tool's skills and MCP servers; fleet
@@ -397,7 +397,7 @@ companion: one adapter file on `internal/companion`, resolved from `FLEET_<NAME>
 `[integrations.<name>]`, then PATH, with `off`, a version floor, JSON-only output, a timeout, a
 one-line install hint and a `fleet doctor` line. A missing companion turns off its feature and
 nothing else. (c) Agent tools stay profiles; a `family` key selects the tool-private Go. (d)
-the overlay stays a build-tag overlay, through a registry that public CI compiles against an example
+Compiled-in extensions stay a build-tag overlay, through a registry that public CI compiles against an example
 extension. (e) No integration adds an admiral tool by default; verbs are grouped per
 integration under one tool with an action. (f) Fleet's JSON outputs carry a `schema` integer.
 (g) PATH plugins (`fleet-<name>`) are the model for third parties, when there is one.
@@ -409,7 +409,7 @@ through fleet's MCP server (the agent tool already hosts MCP, and it would add s
 admiral request). Reading tools' private files where they offer an export (ADR-119's reason).
 
 **Trade-offs.** Adapters are in-tree, so a new companion needs a fleet release. JSON exports
-change between tool versions, so each adapter carries fixtures per version and a floor. the overlay
+change between tool versions, so each adapter carries fixtures per version and a floor. The extension
 registry is a Go API that must stay stable for the overlay. Grouped tools with an action enum
 are slightly harder for the model than one tool per verb.
 
@@ -417,7 +417,7 @@ are slightly harder for the model than one tool per verb.
 
 Answered by the user on 2026-11-14; 2, 5 and 6 take the suggested default.
 
-1. **The task tracker adapter is pro.** It lives in the overlay, built on the public
+1. **An adapter may live in an overlay.** An overlay builds its adapters on the public
    companion helper. The helper, cass and every other existing adapter stay public.
 2. **An integration gets at most one admiral tool, with an `action` argument**, and only when
    `fleet_recall` or `fleet_brief` cannot carry what it needs.
