@@ -2,6 +2,7 @@ package acphost
 
 import (
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"unicode"
@@ -53,6 +54,19 @@ func (e *editor) paste(s string) {
 	}
 	e.insert(rune(pasteBase + len(e.pastes)))
 	e.pastes = append(e.pastes, s)
+}
+
+// attach inserts an image attachment at the cursor: a collapsed paste
+// holding its token (attach.go), shown as "[Image #N name]".
+func (e *editor) attach(path string) {
+	e.insert(rune(pasteBase + len(e.pastes)))
+	e.pastes = append(e.pastes, attachToken(path))
+}
+
+// insertText inserts text at the cursor, its attachment tokens as
+// attachments again (a held prompt brought back to edit).
+func (e *editor) insertText(s string) {
+	splitAttach(s, func(t string) { e.insert([]rune(clean(t))...) }, e.attach)
 }
 
 // cut removes buf[i:j] and leaves the cursor at i.
@@ -237,10 +251,20 @@ func (e *editor) pasteLabel(r rune) string {
 	if i < 0 || i >= len(e.pastes) {
 		return ""
 	}
-	if n := strings.Count(strings.TrimRight(e.pastes[i], "\n"), "\n") + 1; n > 1 {
-		return fmt.Sprintf("[Paste #%d +%d lines]", i+1, n)
+	k := 0 // the paste's number among pastes of its kind
+	_, img := attachPath(e.pastes[i])
+	for _, p := range e.pastes[:i+1] {
+		if _, ok := attachPath(p); ok == img {
+			k++
+		}
 	}
-	return fmt.Sprintf("[Paste #%d %d chars]", i+1, utf8.RuneCountInString(e.pastes[i]))
+	if p, ok := attachPath(e.pastes[i]); ok {
+		return fmt.Sprintf("[Image #%d %s]", k, filepath.Base(p))
+	}
+	if n := strings.Count(strings.TrimRight(e.pastes[i], "\n"), "\n") + 1; n > 1 {
+		return fmt.Sprintf("[Paste #%d +%d lines]", k, n)
+	}
+	return fmt.Sprintf("[Paste #%d %d chars]", k, utf8.RuneCountInString(e.pastes[i]))
 }
 
 // cell is one drawn rune of the box: its index in buf, text and width.

@@ -247,6 +247,7 @@ Click the agent's pane and type at the `›` line at the bottom:
 | Esc, or Ctrl-C on an empty line | Cancels the running turn |
 | Ctrl-C, Ctrl-U, Ctrl-W | Clear the line, or the last word |
 | Ctrl-T | Takes the agent over in the tool's own screen |
+| Ctrl-V | Attaches the image on the clipboard (needs wl-clipboard or xclip on Linux); pasting or dropping an image file's path attaches that file |
 
 While you type there, the admiral won't send to the agent, the same as a tmux agent you type into. To work in the tool's own TUI instead, `fleet takeover <name>` (or Ctrl-T) parks the idle agent and resumes the same session on tmux in the same wall slot; `fleet takeover <name> --acp` hands it back to fleet's ACP host.
 

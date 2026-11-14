@@ -72,7 +72,7 @@ type agentConn interface {
 	ResumeSession(ctx context.Context, id, cwd string, mcp []acp.MCPServer) error
 	SetMode(ctx context.Context, id, mode string) error
 	UseModel(ctx context.Context, id, model string) error
-	Prompt(ctx context.Context, id, text string) (acp.PromptResult, error)
+	PromptBlocks(ctx context.Context, id string, blocks []acp.ContentBlock) (acp.PromptResult, error)
 	Cancel(id string) error
 	CloseSession(ctx context.Context, id string) error
 	Done() <-chan struct{}
@@ -338,7 +338,7 @@ func (h *host) setup() error {
 	queue := h.pending
 	h.pending = nil
 	if h.cfg.Prompt != "" {
-		queue = append([]string{h.cfg.Prompt}, queue...)
+		queue = append([]string{stripMarks(h.cfg.Prompt)}, queue...)
 	}
 	if len(queue) == 0 {
 		h.apply(h.tr.Ready())
@@ -580,9 +580,12 @@ func (h *host) prompt(text, by string) error {
 	if h.stopping || h.exited {
 		return errors.New("agent is stopping")
 	}
+	if by != ByPane {
+		text = stripMarks(text)
+	}
 	if !h.ready {
 		if by != "" { // drawn only: setup records it when it is sent
-			h.emit(Entry{Kind: KindUser, Text: text + "  (queued until the session is ready)"}, false)
+			h.emit(Entry{Kind: KindUser, Text: shown(text) + "  (queued until the session is ready)"}, false)
 		}
 		h.pending = append(h.pending, text)
 		return nil
@@ -590,7 +593,7 @@ func (h *host) prompt(text, by string) error {
 	if h.inflight > 0 {
 		h.queued = append(h.queued, queuedPrompt{text, by})
 		if h.con == nil {
-			h.emit(Entry{Kind: KindUser, Text: text + "  (queued until the turn ends)"}, false)
+			h.emit(Entry{Kind: KindUser, Text: shown(text) + "  (queued until the turn ends)"}, false)
 		}
 		h.showQueue()
 		return nil
@@ -606,7 +609,7 @@ func (h *host) showQueue() {
 	}
 	texts := make([]string, len(h.queued))
 	for i, q := range h.queued {
-		texts[i] = q.text
+		texts[i] = shown(q.text)
 	}
 	h.con.setQueued(texts)
 }
@@ -646,6 +649,9 @@ func (h *host) take() []string {
 	if len(texts) == 0 {
 		return nil
 	}
+	for i, t := range texts {
+		texts[i] = shown(t)
+	}
 	h.flush()
 	h.emit(Entry{Kind: KindUser, Text: strings.Join(texts, "\n\n"), By: by}, true)
 	return texts
@@ -675,12 +681,12 @@ func (h *host) send(text string) { h.sendBy(text, "") }
 // sendBy is send recording who typed the prompt (Entry.By).
 func (h *host) sendBy(text, by string) {
 	h.flush()
-	h.emit(Entry{Kind: KindUser, Text: text, By: by}, true)
+	h.emit(Entry{Kind: KindUser, Text: shown(text), By: by}, true)
 	h.inflight++
 	h.apply(h.tr.PromptSent())
-	c, sid := h.conn, h.sid
+	c, sid, pc := h.conn, h.sid, h.caps.PromptCapabilities
 	go func() {
-		r, err := c.Prompt(h.bg, sid, text)
+		r, err := c.PromptBlocks(h.bg, sid, blocks(text, pc, func(s string) { h.say("! " + s) }))
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		h.inflight--
@@ -835,7 +841,9 @@ func (h *host) keepUnsent() {
 	if h.cfg.Prompt != "" {
 		all = append(all, h.cfg.Prompt)
 	}
-	all = append(all, h.pending...)
+	for _, p := range h.pending {
+		all = append(all, shown(p))
+	}
 	h.pending = nil
 	if len(all) == 0 {
 		return

@@ -150,7 +150,16 @@ func (c *stubConn) ResumeSession(ctx context.Context, id, cwd string, mcp []acp.
 	c.call("resume " + id)
 	return nil
 }
-func (c *stubConn) Prompt(ctx context.Context, id, text string) (acp.PromptResult, error) {
+func (c *stubConn) PromptBlocks(ctx context.Context, id string, blocks []acp.ContentBlock) (acp.PromptResult, error) {
+	text := ""
+	for _, b := range blocks {
+		switch b.Type {
+		case "text":
+			text += b.Text
+		default:
+			text += "<" + b.Type + " " + b.MimeType + b.Name + ">"
+		}
+	}
 	c.call("prompt " + text)
 	select {
 	case f := <-c.turns:

@@ -218,7 +218,7 @@ func (v *view) restore(text string) {
 		text += "\n" + v.ed.text()
 	}
 	v.ed.clear()
-	v.ed.insert([]rune(clean(text))...)
+	v.ed.insertText(text)
 	v.draw()
 }
 
@@ -251,6 +251,9 @@ func isPasteRune(r rune) bool { return r >= pasteBase && r <= 0xFFFFD }
 
 // paste puts pasted text into the input box at the cursor.
 func (v *view) paste(s string) { v.edit(func(e *editor) { e.paste(s) }) }
+
+// attach puts an image attachment into the input box at the cursor.
+func (v *view) attach(path string) { v.edit(func(e *editor) { e.attach(path) }) }
 
 // take empties the input box and returns what it held, pastes expanded.
 func (v *view) take() (s string) {
@@ -729,7 +732,7 @@ func (v *view) hint(w int) string {
 	if v.status == "working" || v.status == "waiting" {
 		enter = "queue"
 	}
-	items := [][2]string{{"Enter", enter}, {"Esc", "cancel turn"}, {"Ctrl-T", "take over"}, {"PgUp/PgDn", "scroll"}, {"Alt-Enter", "newline"}}
+	items := [][2]string{{"Enter", enter}, {"Esc", "cancel turn"}, {"Ctrl-T", "take over"}, {"Ctrl-V", "image"}, {"PgUp/PgDn", "scroll"}, {"Alt-Enter", "newline"}}
 	if len(v.queued) > 0 {
 		items = append(items[:1], append([][2]string{{"↑", "edit queued"}}, items[1:]...)...)
 	}

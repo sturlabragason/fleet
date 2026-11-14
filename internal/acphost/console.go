@@ -13,7 +13,7 @@ import (
 // input box that the user types into (editor.go, drawn by view.go). The
 // terminal is in raw mode, so the host reads key presses, not lines: Enter
 // sends, Esc cancels the turn, Ctrl-T hands the session to the tool's own
-// screen, PgUp and PgDn scroll the conversation, and the rest edit the box.
+// screen, Ctrl-V attaches the clipboard's image (attach.go), PgUp and PgDn scroll the conversation, and the rest edit the box.
 
 // escWait is how long a lone Esc waits for the rest of an escape sequence
 // before it counts as the Esc key.
@@ -77,7 +77,7 @@ func (h *host) keys(r io.Reader) {
 				if nb, ok := next(); !ok {
 					return
 				} else if nb == '[' && csi(next) == "201~" {
-					con.paste(pasteText(paste))
+					h.pasted(pasteText(paste))
 					paste = nil
 				}
 				continue
@@ -119,6 +119,8 @@ func (h *host) keys(r io.Reader) {
 			}
 		case b == 0x14: // Ctrl-T
 			h.paneTakeover()
+		case b == 0x16: // Ctrl-V: attach the clipboard's image
+			h.clipImage()
 		case b == '\t':
 			con.edit(func(e *editor) { e.insert(' ') })
 		case b == 0x10 && h.editQueued(): // Ctrl-P, like Up
@@ -291,6 +293,32 @@ func (h *host) mouse(m string) {
 	case 65:
 		h.con.scrollLines(-3)
 	}
+}
+
+// pasted puts a paste into the box: the image files it names (a dropped
+// file) as attachments, anything else as text.
+func (h *host) pasted(s string) {
+	if paths, ok := pastedImages(s); ok {
+		for _, p := range paths {
+			h.con.attach(p)
+		}
+		return
+	}
+	h.con.paste(s)
+}
+
+// clipImage is Ctrl-V: the image on the clipboard, saved under the agent's
+// attachment dir, or the image file the clipboard names, as an attachment.
+func (h *host) clipImage() {
+	data, path, err := clipboardImage(h.bg)
+	if err == nil && path == "" {
+		path, err = saveImage(AttachDir(h.home, h.cfg.Name), data)
+	}
+	if err != nil {
+		h.say("! paste image: " + err.Error())
+		return
+	}
+	h.con.attach(path)
 }
 
 // pasteText is a pasted block as prompt text: CRLF and CR become newlines,

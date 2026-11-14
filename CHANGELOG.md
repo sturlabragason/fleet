@@ -6,6 +6,9 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
+## 2026-11-14
+- You can give an ACP agent an image: Ctrl-V in its pane attaches the image on the clipboard, and pasting or dropping an image file attaches that file; it shows as `[Image #1 name.png]` and goes to the agent as an image (ADR-125).
+
 ## 2026-11-13
 - A second admiral no longer gets stranded in another window: `fleet wall apply`, `fleet up` and `fleet up --monitors 1` move every admiral back under main in the left column (the pane moves, its process keeps running), one that did not fit comes back once the window is tall enough, a new `fleet admiral add` stacks under the last one, and `fleet wall admiral-hide|admiral-show NAME` (or `fleet_wall` `admiral_hide`/`admiral_show`) takes one out of the column and back (ADR-123).
 - Agent processes can no longer eat the machine: fleet kills processes left behind by a closed, parked or crashed agent, parks an agent whose own processes grow past `[memory] agent_max` (default a quarter of RAM, swap included) or that burns more than `agent_max_cpu` cores while idle, tells the admiral, and `fleet doctor` lists leftovers under `orphans` (#48, ADR-122).

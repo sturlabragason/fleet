@@ -199,8 +199,14 @@ func (cl *Client) SetMode(ctx context.Context, id, mode string) error {
 
 // Prompt sends text as the user's turn and blocks until the turn ends.
 func (cl *Client) Prompt(ctx context.Context, id, text string) (PromptResult, error) {
+	return cl.PromptBlocks(ctx, id, []ContentBlock{TextBlock(text)})
+}
+
+// PromptBlocks sends content blocks (text, images) as the user's turn and
+// blocks until the turn ends.
+func (cl *Client) PromptBlocks(ctx context.Context, id string, blocks []ContentBlock) (PromptResult, error) {
 	var res PromptResult
-	if err := cl.c.call(ctx, MethodSessionPrompt, PromptParams{SessionID: id, Prompt: []ContentBlock{TextBlock(text)}}, &res); err != nil {
+	if err := cl.c.call(ctx, MethodSessionPrompt, PromptParams{SessionID: id, Prompt: blocks}, &res); err != nil {
 		return PromptResult{}, err
 	}
 	return res, nil

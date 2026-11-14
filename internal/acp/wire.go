@@ -7,7 +7,10 @@
 // read stay as json.RawMessage so an unknown shape never fails a decode.
 package acp
 
-import "encoding/json"
+import (
+	"encoding/base64"
+	"encoding/json"
+)
 
 // ProtocolVersion is the ACP version fleet speaks.
 const ProtocolVersion = 1
@@ -113,6 +116,17 @@ type InitializeResult struct {
 type AgentCapabilities struct {
 	LoadSession         bool                `json:"loadSession"`
 	SessionCapabilities SessionCapabilities `json:"sessionCapabilities"`
+	PromptCapabilities  PromptCapabilities  `json:"promptCapabilities"`
+}
+
+// PromptCapabilities says which content blocks a prompt may hold besides
+// text and resource_link, which every agent takes. Probed 2026-11-14:
+// Copilot 1.0.112, agy 1.5.8 and claude-agent-acp 0.103.0 all take image
+// and embeddedContext, none takes audio.
+type PromptCapabilities struct {
+	Image           bool `json:"image"`
+	Audio           bool `json:"audio"`
+	EmbeddedContext bool `json:"embeddedContext"`
 }
 
 // SessionCapabilities: a non-nil field means the agent offers the method.
@@ -234,15 +248,31 @@ type SessionIDParams struct {
 	SessionID string `json:"sessionId"`
 }
 
-// ContentBlock is one piece of content. Fleet sends and draws text only;
-// other kinds are kept by type name.
+// ContentBlock is one piece of content. Fleet draws text only and sends
+// text, image and resource_link blocks; other kinds are kept by type name.
 type ContentBlock struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
+	MimeType string `json:"mimeType,omitempty"` // image
+	Data     string `json:"data,omitempty"`     // image: base64
+	URI      string `json:"uri,omitempty"`      // image (optional), resource_link
+	Name     string `json:"name,omitempty"`     // resource_link
 }
 
 // TextBlock is a text content block.
 func TextBlock(s string) ContentBlock { return ContentBlock{Type: "text", Text: s} }
+
+// ImageBlock is an image content block: data is the raw image, sent
+// base64; uri names where it came from.
+func ImageBlock(mime string, data []byte, uri string) ContentBlock {
+	return ContentBlock{Type: "image", MimeType: mime, Data: base64.StdEncoding.EncodeToString(data), URI: uri}
+}
+
+// ResourceLinkBlock points the agent at a resource, e.g. a file:// URI it
+// reads with its own tools.
+func ResourceLinkBlock(uri, name string) ContentBlock {
+	return ContentBlock{Type: "resource_link", URI: uri, Name: name}
+}
 
 // PromptParams sends the user's turn.
 type PromptParams struct {
@@ -342,6 +372,9 @@ func (u SessionUpdate) Text() string {
 	}
 	var one ContentBlock
 	if err := json.Unmarshal(u.Content, &one); err == nil && one.Type != "" {
+		if one.Type == "image" {
+			return "[image]" // a replayed prompt's attachment
+		}
 		return one.Text
 	}
 	var many []struct {
