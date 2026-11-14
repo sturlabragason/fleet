@@ -1,9 +1,9 @@
 # Extensions: how fleet hosts integrations
 
-Design review, written 2026-11-14 on branch `fleet/arch-extensions`. Nothing here is built. It
+Design review, written 2026-11-14 on branch `fleet/arch-extensions`. It
 maps what exists today, names the problems, compares how other tools do extensions, and
-proposes one extension model with a migration path. The proposed ADR at the end has no number;
-it gets one at merge time (ADR-50).
+proposes one extension model with a migration path. The ADR at the end is ADR-126 in DESIGN.md §14.
+M1 to M10 are built (section 5); M11 waits for a user.
 
 Line references are to commit `4034546` (local main on 2026-11-14). Counts were measured on that
 commit: MCP tool counts by marshalling `toolDefs`, `agentToolDefs` and `squadToolDefs` in a
@@ -378,9 +378,9 @@ M1 to M5 are one commit each and unblock M6. M7 to M10 are independent of M6 and
 | new agent CLIs | profile plus `family` (M8) | data only, when the family exists |
 | a separate UI or dashboard | JSON consumer (M7) | reads `ls --json` or web events, acts through the fleet CLI |
 
-## 6. Proposed ADR
+## 6. The ADR
 
-**ADR-NN: integrations are adapters over other tools' CLIs, not plugins fleet loads** (§3, §15
+**ADR-126: integrations are adapters over other tools' CLIs, not plugins fleet loads** (§3, §15
 Extensions, §16; builds on ADR-10, ADR-91, ADR-119).
 
 **Context.** Fleet is gaining integrations (cass, task tracker and time tracker for tracker,
