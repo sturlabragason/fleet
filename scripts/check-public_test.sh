@@ -93,19 +93,21 @@ GITHUB_ACTIONS=true expect fail "CI mode still fails" "$d" main~1..main
 if grep -q -i zebracorp "$tmp/out"; then echo "FAIL CI mode printed the matched text"; failed=1; else echo "ok   CI mode prints locations only"; fi
 
 # The private deny list (this clone's .git/info/public-deny, or $CHECK_PUBLIC_REAL_DENY) must catch
-# every line scrubbed on 2026-11-14 and pass the scrubbed files. The leaked lines are read from
-# the published commit before the scrub, so this file names none of them.
+# every sample line in the private .git/info/public-leak-samples (or $CHECK_PUBLIC_LEAK_SAMPLES), one
+# leaked line per line, and pass the scrubbed files. Both files stay private, so this one names no leak.
 src=$(cd "$here/.." && pwd)
-real=${CHECK_PUBLIC_REAL_DENY:-$(git -C "$src" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)/info/public-deny}
-leaked=06bf7740131c
-if [[ -s $real ]] && git -C "$src" cat-file -e "$leaked^{commit}" 2>/dev/null; then
+info=$(git -C "$src" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)/info
+real=${CHECK_PUBLIC_REAL_DENY:-$info/public-deny}
+samples=${CHECK_PUBLIC_LEAK_SAMPLES:-$info/public-leak-samples}
+if [[ -s $real && -s $samples ]]; then
   real_repo() { repo; cp "$real" "$d/.git/info/public-deny"; cp "$src/scripts/public-allow" "$d/scripts/"; }
-  for at in docs/design/extensions.md:{20,29,30,34,61,62,113,117,120,127,128,159,160,169,184,185,196,228,234,261,263,294,297,315,316,317,340,351,362,365,375,376,378,388,389,391,400,412,420} \
-    CHANGELOG.md:28 DESIGN.md:{1642,1647,2074,2076,2080} internal/whatsnew/version.go:10 internal/whatsnew/whatsnew_test.go:242 .github/workflows/ci.yml:86 \
-    internal/prefs/prefs_test.go:317 internal/prefs/integrations.go:16; do
-    real_repo; commit "$d" a.txt "$(git -C "$src" show "$leaked:${at%:*}" | sed -n "${at##*:}p")"
-    expect fail "private deny list catches $at at $leaked" "$d" main~1..main
-  done
+  n=0
+  while IFS= read -r line || [[ -n $line ]]; do
+    [[ -n $line ]] || continue
+    n=$((n + 1))
+    real_repo; commit "$d" a.txt "$line"
+    expect fail "private deny list catches leak sample $n" "$d" main~1..main
+  done <"$samples"
   real_repo
   for f in docs/design/extensions.md CHANGELOG.md DESIGN.md internal/whatsnew/version.go internal/whatsnew/whatsnew_test.go .github/workflows/ci.yml \
     internal/prefs/prefs_test.go internal/prefs/integrations.go; do
@@ -114,7 +116,7 @@ if [[ -s $real ]] && git -C "$src" cat-file -e "$leaked^{commit}" 2>/dev/null; t
   git -C "$d" add -A && git -C "$d" commit -q -m scrubbed >/dev/null
   expect pass "private deny list passes the scrubbed files" "$d" main~1..main
 else
-  echo "skip private deny list cases: no $real"
+  echo "skip private deny list cases: no $real or $samples"
 fi
 
 exit $failed

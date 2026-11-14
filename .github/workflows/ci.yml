@@ -26,13 +26,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: check-public tests (private deny cases use the PUBLIC_DENY secret)
+      - name: check-public tests (private deny cases use the PUBLIC_DENY and PUBLIC_LEAK_SAMPLES secrets)
         env:
           DENY: ${{ secrets.PUBLIC_DENY }}
+          SAMPLES: ${{ secrets.PUBLIC_LEAK_SAMPLES }}
         run: |
           if [[ -n $DENY ]]; then
             printf '%s\n' "$DENY" >"$RUNNER_TEMP/public-deny"
             export CHECK_PUBLIC_REAL_DENY=$RUNNER_TEMP/public-deny
+          fi
+          if [[ -n $SAMPLES ]]; then
+            printf '%s\n' "$SAMPLES" >"$RUNNER_TEMP/public-leak-samples"
+            export CHECK_PUBLIC_LEAK_SAMPLES=$RUNNER_TEMP/public-leak-samples
           fi
           scripts/check-public_test.sh
       - run: scripts/release-notes_test.sh
