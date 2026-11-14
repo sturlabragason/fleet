@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/companion"
 	"github.com/sturlabragason/fleet/internal/logx"
 )
 
@@ -580,24 +581,44 @@ func Probe(path, want string) error {
 	return nil
 }
 
+// GH is the gh companion (ADR-126): without it, or logged out, a
+// self-update is checked by SHA-256 only.
+var GH = companion.Register(companion.Spec{
+	Name:    "gh",
+	Version: []string{"--version"},
+	Feature: "release provenance on self-update (gh attestation verify); without it only the checksum is checked",
+	Hint:    "install the GitHub CLI (https://cli.github.com) and run `gh auth login`",
+})
+
+// Provenance says how a self-update is checked beyond its checksum: ""
+// when Attest will run gh, else why it won't.
+func Provenance() string {
+	if os.Getenv("FLEET_SKIP_ATTEST") == "1" {
+		return "FLEET_SKIP_ATTEST=1"
+	}
+	t, err := companion.Find(GH)
+	if err != nil {
+		return err.Error()
+	}
+	if exec.Command(t.Path, "auth", "token").Run() != nil {
+		return "gh is not logged in"
+	}
+	return ""
+}
+
 // Attest checks that the release workflow built the file, with
 // `gh attestation verify`, when gh is installed and logged in (ADR-103);
-// otherwise the checksum is all there is, as with install.sh.
-// FLEET_SKIP_ATTEST=1 skips it.
+// otherwise the checksum is all there is, as with install.sh, and the log
+// says so. FLEET_SKIP_ATTEST=1 skips it.
 func Attest(path string) error {
-	if os.Getenv("FLEET_SKIP_ATTEST") == "1" {
+	if why := Provenance(); why != "" {
+		logx.For("update").Warn("provenance not checked, checksum only", "why", why)
 		return nil
 	}
-	gh, err := exec.LookPath("gh")
-	if err != nil {
-		return nil
-	}
-	if exec.Command(gh, "auth", "token").Run() != nil {
-		return nil
-	}
+	t, _ := companion.Find(GH)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, gh, "attestation", "verify", path, "-R", Repo,
+	out, err := exec.CommandContext(ctx, t.Path, "attestation", "verify", path, "-R", Repo,
 		"--signer-workflow", Repo+"/.github/workflows/release.yml").CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("gh attestation verify failed: %v: %s", err, strings.TrimSpace(string(out)))

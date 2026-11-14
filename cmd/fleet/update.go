@@ -93,6 +93,13 @@ func cmdUpdate(f *fleet.Fleet, args []string) error {
 	default:
 		fmt.Printf("auto:      on, every %s, applied when no agent is working\n", cfg.Every)
 	}
+	if update.VerifySums != nil {
+		fmt.Println("verified:  signed checksums")
+	} else if why := update.Provenance(); why == "" {
+		fmt.Println("verified:  checksum and gh attestation")
+	} else {
+		fmt.Printf("verified:  checksum only (%s)\n", why)
+	}
 	s := update.Load(f.Home)
 	if !s.CheckedAt.IsZero() {
 		fmt.Printf("checked:   %s (latest %s)\n", s.CheckedAt.Local().Format(time.DateTime), orDash(s.Latest))

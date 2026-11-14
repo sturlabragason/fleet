@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
+	"github.com/sturlabragason/fleet/internal/companion"
 	"github.com/sturlabragason/fleet/internal/conf"
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/logx"
@@ -34,6 +35,7 @@ const (
 	levelOK   = "ok"
 	levelWarn = "warn"
 	levelFail = "fail"
+	levelInfo = "info"
 )
 
 type doctorCheck struct {
@@ -50,6 +52,7 @@ type doctorEnv struct {
 	tmuxVersion         func() (string, error)
 	look                func(cmd string) error         // nil: as spawn looks (fleet.CheckCommand)
 	orphans             func() ([]fleet.Orphan, error) // nil: not checked
+	companions          func() []companion.Status      // nil: not checked
 }
 
 func cmdDoctor(args []string) error {
@@ -67,6 +70,13 @@ func cmdDoctor(args []string) error {
 			return nil, err
 		}
 		return f.Orphans()
+	}
+	env.companions = func() []companion.Status {
+		var out []companion.Status
+		for _, s := range companion.Registered() {
+			out = append(out, companion.Check(s))
+		}
+		return out
 	}
 	return writeDoctor(os.Stdout, doctor(env), *asJSON)
 }
@@ -115,6 +125,36 @@ func doctor(env doctorEnv) []doctorCheck {
 		cs = append(cs, doctorCheck{Name: "profiles", Level: levelWarn, Detail: "not checked: tools.toml does not load"})
 	} else {
 		cs = append(cs, checkProfiles(env, pr, userTools, profiles)...)
+	}
+	if env.companions != nil {
+		cs = append(cs, checkCompanions(env.companions())...)
+	}
+	return cs
+}
+
+// checkCompanions is the "optional tools" block (ADR-126): one line per
+// companion CLI, ok or info, never a failure. A missing one names the
+// feature that is off and how to get it; fleet never installs it.
+func checkCompanions(sts []companion.Status) []doctorCheck {
+	var cs []doctorCheck
+	for _, st := range sts {
+		c := doctorCheck{Name: "optional: " + st.Spec.Name, Level: levelOK}
+		var e *companion.Error
+		switch {
+		case st.Err == nil:
+			c.Detail = st.Path
+			if st.Version != "" {
+				c.Detail += " " + st.Version
+			}
+			if st.Source != "PATH" {
+				c.Detail += " (from " + st.Source + ")"
+			}
+		case errors.As(st.Err, &e) && e.Err == companion.ErrOff:
+			c.Level, c.Detail = levelInfo, "off by "+st.Source+": "+st.Spec.Feature+" is off"
+		default:
+			c.Level, c.Detail, c.Fix = levelInfo, st.Err.Error()+": "+st.Spec.Feature+" is off", st.Spec.Hint
+		}
+		cs = append(cs, c)
 	}
 	return cs
 }

@@ -5,10 +5,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/companion"
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/watch"
 )
@@ -157,5 +159,28 @@ func TestCheckOrphans(t *testing.T) {
 	})
 	if c.Level != levelWarn || !strings.Contains(c.Detail, "a1 pid 42 (node") || c.Fix == "" {
 		t.Errorf("one orphan: %+v", c)
+	}
+}
+
+func TestCheckCompanions(t *testing.T) {
+	spec := companion.Spec{Name: "cass", Feature: "session search", Hint: "install cass"}
+	cs := checkCompanions([]companion.Status{
+		{Spec: spec, Path: "/bin/cass", Source: "PATH", Version: "0.11.0"},
+		{Spec: spec, Path: "/opt/cass", Source: "$FLEET_CASS"},
+		{Spec: spec, Source: "config", Err: &companion.Error{Spec: spec, Err: companion.ErrOff}},
+		{Spec: spec, Err: &companion.Error{Spec: spec, Err: companion.ErrMissing}},
+	})
+	want := []doctorCheck{
+		{Name: "optional: cass", Level: levelOK, Detail: "/bin/cass 0.11.0"},
+		{Name: "optional: cass", Level: levelOK, Detail: "/opt/cass (from $FLEET_CASS)"},
+		{Name: "optional: cass", Level: levelInfo, Detail: "off by config: session search is off"},
+		{Name: "optional: cass", Level: levelInfo, Detail: "cass is not installed: session search is off", Fix: "install cass"},
+	}
+	if !reflect.DeepEqual(cs, want) {
+		t.Errorf("got %+v\nwant %+v", cs, want)
+	}
+	var buf bytes.Buffer
+	if err := writeDoctor(&buf, cs, false); err != nil {
+		t.Errorf("an optional tool must never fail doctor: %v", err)
 	}
 }
