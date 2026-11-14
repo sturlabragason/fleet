@@ -288,8 +288,8 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		if err := json.Unmarshal(req.Params, &p); err != nil {
 			return nil, &rpcError{-32602, "invalid params"}
 		}
-		if s.Agent == "" && s.F != nil && extOnCall != nil {
-			go extOnCall(s)
+		if s.Agent == "" && s.F != nil {
+			extOnCall(s)
 		}
 		s.mu.Lock()
 		s.progress = s.progressFor(p.Meta.ProgressToken)
@@ -314,7 +314,7 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		case s.Agent != "":
 			text += s.unreadSuffix()
 		case p.Name != "fleet_handoff" && p.Name != "fleet_admiral_profile":
-			text += s.contextWarning() + s.reportsSuffix() + callExt(extSuffix, s)
+			text += s.contextWarning() + s.reportsSuffix() + extSuffix(s)
 		}
 		if s.Reloaded && !s.noted {
 			s.noted = true

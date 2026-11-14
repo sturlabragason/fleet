@@ -423,9 +423,7 @@ func cmdUI(f *fleet.Fleet) error {
 	re := newUIReexec(f.Exe, "", probeBinary, p.Quit)
 	ctx, stop := context.WithCancel(context.Background())
 	go re.run(ctx, watch.StopEvery)
-	if extUI != nil {
-		go extUI(ctx, f)
-	}
+	runExtUI(ctx, f)
 	_, err := p.Run()
 	stop()
 	handOver := re.halt()

@@ -387,10 +387,7 @@ func (f *Fleet) syncAdmiralPanes() {
 		return
 	}
 	by := f.UnreadBy()
-	var extra map[string]string
-	if extAdmiralBadge != nil {
-		extra = extAdmiralBadge(f)
-	}
+	extra := extAdmiralBadge(f)
 	for _, p := range panes {
 		if p.Role != "sup" {
 			continue

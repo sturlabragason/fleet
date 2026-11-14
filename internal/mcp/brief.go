@@ -51,7 +51,7 @@ func (s *Server) brief() (string, error) {
 	}
 
 	reports := take(s.unreadReports(), s.unreadCount())
-	ext := callExt(extBrief, s)
+	ext := extBrief(s)
 	left -= len(ext)
 	agents, err := s.agentsBrief()
 	if err != nil {

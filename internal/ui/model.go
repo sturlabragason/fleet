@@ -61,7 +61,7 @@ type agentsMsg struct {
 	offline time.Time
 	adms    []AdmiralInfo
 	badgeBy string
-	ext     any // extPoll's result
+	ext     []any // extPoll's result
 	err     error
 }
 
@@ -118,11 +118,7 @@ func (m *Model) poll() tea.Cmd {
 		if ob, ok := be.(OfflineBackend); ok {
 			off = ob.OfflineSince()
 		}
-		var ext any
-		if extPoll != nil {
-			ext = extPoll(be)
-		}
-		return agentsMsg{ext: ext, offline: off, adms: adms, badgeBy: by, agents: as, onWall: be.OnWall(), pinned: be.Pinned(), teams: be.Teams(), target: be.Target(), supCtx: [2]string{l, c}, reports: be.Reports(), err: err}
+		return agentsMsg{ext: extPoll(be), offline: off, adms: adms, badgeBy: by, agents: as, onWall: be.OnWall(), pinned: be.Pinned(), teams: be.Teams(), target: be.Target(), supCtx: [2]string{l, c}, reports: be.Reports(), err: err}
 	}
 }
 
@@ -158,10 +154,8 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 			cmd = nil
 		}
 	}()
-	if extUpdate != nil {
-		if c, ok := extUpdate(m, msg); ok {
-			return m, c
-		}
+	if c, ok := extUpdate(m, msg); ok {
+		return m, c
 	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -178,9 +172,7 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 		m.reports = msg.reports
 		m.offline = msg.offline
 		m.adms, m.badgeBy = msg.adms, msg.badgeBy
-		if extApply != nil {
-			extApply(m, msg.ext)
-		}
+		extApply(m, msg.ext)
 		m.setAgents(msg.agents) // tiers need the wall and teams
 		return m, tea.Batch(pollLater(), m.syncSupCtx(msg.supCtx))
 	case pollMsg:
@@ -309,8 +301,8 @@ func (m *Model) key(k string) tea.Cmd {
 		m.sel = m.agents[j].Name
 		m.saveCursor()
 	}
-	if extViewOpen(m) {
-		return extView.Key(m, k)
+	if v := extView(m); v != nil {
+		return v.Key(m, k)
 	}
 	if m.help {
 		switch k {

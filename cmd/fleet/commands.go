@@ -300,10 +300,8 @@ func run(args []string) error {
 	if err := leaderScope(f, commandName(cmd), rest); err != nil {
 		return err
 	}
-	if extBefore != nil {
-		if err := extBefore(f.Home, commandName(cmd)); err != nil {
-			return err
-		}
+	if err := extBefore(f.Home, commandName(cmd)); err != nil {
+		return err
 	}
 	switch commandName(cmd) {
 	case "spawn":

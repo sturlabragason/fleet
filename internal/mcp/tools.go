@@ -200,15 +200,11 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 	if s.Admiral == Unknown && identityBound[name] {
 		return "", fmt.Errorf("admiral identity unknown: this MCP server could not tell which admiral it serves, so it refuses changes. Restart the admiral with fleet admiral restart --name <name>.")
 	}
-	if extGate != nil {
-		if err := extGate(s, name, a); err != nil {
-			return "", err
-		}
+	if err := extGate(s, name, a); err != nil {
+		return "", err
 	}
-	if extCall != nil {
-		if out, ok, err := extCall(s, name, a); ok {
-			return out, err
-		}
+	if out, ok, err := extCall(s, name, a); ok {
+		return out, err
 	}
 	switch name {
 	case "fleet_status":

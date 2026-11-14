@@ -9,10 +9,17 @@ import (
 // every tool's schema rides on every admiral request.
 const admiralToolBudget = 40
 
-// The admiral stays at a fixed tool budget. Extension tools append to
-// toolDefs in their own init, so a tagged build counts them here too.
+// The admiral stays at a fixed tool budget. ToolNames includes every
+// registered extension's tools, so a tagged build counts them here too; only
+// the public test-only example extension (build tag extexample) is left out.
 func TestAdmiralToolBudget(t *testing.T) {
-	if n := len(ToolNames()); n > admiralToolBudget {
+	n := len(ToolNames())
+	for _, e := range exts {
+		if e.Name == "example" {
+			n -= len(e.Tools)
+		}
+	}
+	if n > admiralToolBudget {
 		t.Errorf("the admiral has %d tools, over its budget of %d (ADR-126): merge the new verb into an existing tool with an `action` argument, or retire a tool; don't raise the budget", n, admiralToolBudget)
 	}
 }

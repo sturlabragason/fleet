@@ -4,6 +4,7 @@
 package keys
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -341,7 +342,44 @@ func markdown(noExt bool) string {
 	return b.String()
 }
 
-// ExtOverviewHint is what build-tagged extensions add to the overview hint
+// ExtOverviewHint is what registered extensions add to the overview hint
 // before "? all keys", e.g. " · i inbox"; empty in a default build. Tests
 // use it to expect the exact hint either way.
 var ExtOverviewHint string
+
+// Extension is the keys a feature compiled in with a build tag adds (DESIGN
+// §15 "Extensions", ADR-126). It calls Register from its own init().
+type Extension struct {
+	Name     string
+	Bindings []Binding
+}
+
+var extNames = map[string]bool{}
+
+// Register adds an extension's bindings, marked Ext. Each goes before its
+// group's "q" (quit stays last), or at the end of its group when the group
+// has none. A name registered twice panics.
+func Register(e Extension) {
+	if e.Name == "" || extNames[e.Name] {
+		panic("keys.Register: extension name empty or registered twice: " + e.Name)
+	}
+	extNames[e.Name] = true
+	for _, b := range e.Bindings {
+		b.Ext = true
+		at := len(Bindings)
+		for i, x := range Bindings {
+			if x.Group != b.Group {
+				continue
+			}
+			if x.Key == "q" {
+				at = i
+				break
+			}
+			at = i + 1
+		}
+		Bindings = slices.Insert(Bindings, at, b)
+		if h := b.Hints[ScopeOverview]; h != "" {
+			ExtOverviewHint += sep + h
+		}
+	}
+}

@@ -81,6 +81,24 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y tmux
       - run: go test -race ./...
 
+  # The public example extension (DESIGN §15 "Extensions", ADR-126): every
+  # extension seam compiled and tested, so a refactor that breaks one fails
+  # here before a downstream overlay finds it.
+  extexample:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install tmux
+        run: sudo apt-get update && sudo apt-get install -y tmux
+      - run: make build
+      - run: go vet -tags extexample ./...
+      - run: go test -tags extexample ./cmd/fleet/... ./internal/mcp/... ./internal/fleet/... ./internal/ui/... ./internal/keys/...
+
   # The portable Windows fleet.exe: build it like make build, smoke-test what
   # runs without tmux, keep it as an artifact.
   windows:

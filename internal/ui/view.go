@@ -35,8 +35,8 @@ func (m *Model) View() (out string) {
 // body is everything below the header: the help overlay, the tiers, or the
 // card grid and its overflow line.
 func (m *Model) body() []string {
-	if extViewOpen(m) {
-		return extView.Lines(m)
+	if v := extView(m); v != nil {
+		return v.Lines(m)
 	}
 	if m.help {
 		return strings.Split(m.helpOverlay(), "\n")
@@ -147,9 +147,7 @@ func (m *Model) header() string {
 	if by := strings.TrimSpace(m.badgeBy); by != "" && m.reports > 0 {
 		badge = "  " + by
 	}
-	if extBadge != nil {
-		badge += extBadge(m)
-	}
+	badge += extBadge(m)
 	if !m.offline.IsZero() { // steady text, no age ticking (ADR-110)
 		badge = "  " + offlineMark + " offline since " + m.offline.Format("15:04") + badge
 	}

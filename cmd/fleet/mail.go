@@ -280,10 +280,8 @@ func cmdMCP(f *fleet.Fleet, args []string) error {
 	if err != nil {
 		return err
 	}
-	if extMCP != nil {
-		if err := extMCP(f, resolveAdmiralName(*adm, os.Getenv, nil), *agent); err != nil {
-			return err
-		}
+	if err := extMCP(f, resolveAdmiralName(*adm, os.Getenv, nil), *agent); err != nil {
+		return err
 	}
 	// A done-check must never stall the MCP loop (ADR-43).
 	f.Async()
