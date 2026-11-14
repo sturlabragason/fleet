@@ -24,6 +24,9 @@ type extension struct {
 	MCP func(f *fleet.Fleet, admiral, agent string) error
 	// UI runs in the background while the overview is up.
 	UI func(ctx context.Context, f *fleet.Fleet)
+	// Tmux are extra tmux commands (a bind-key, an option) run after
+	// fleet's own when it configures its tmux server.
+	Tmux func(f *fleet.Fleet) [][]string
 }
 
 var (
@@ -95,4 +98,15 @@ func runExtUI(ctx context.Context, f *fleet.Fleet) {
 			go e.UI(ctx, f)
 		}
 	}
+}
+
+// extTmux is every extension's tmux commands, in registration order.
+func extTmux(f *fleet.Fleet) [][]string {
+	var out [][]string
+	for _, e := range exts {
+		if e.Tmux != nil {
+			out = append(out, e.Tmux(f)...)
+		}
+	}
+	return out
 }

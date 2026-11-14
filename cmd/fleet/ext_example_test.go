@@ -77,3 +77,16 @@ func TestExampleExtUI(t *testing.T) {
 	}
 	t.Fatal("UI did not run")
 }
+
+func TestExampleExtTmux(t *testing.T) {
+	f := &fleet.Fleet{Exe: "/bin/true"}
+	want := []string{"set-option", "-g", "@fleet_example", "/bin/true"}
+	if got := extTmux(f); len(got) != 1 || !slices.Equal(got[0], want) {
+		t.Fatalf("extTmux %v", got)
+	}
+	for _, c := range tmuxCommands(f) {
+		if slices.Equal(c, want) {
+			t.Fatal("tmuxCommands is not pure: it has the extension's command")
+		}
+	}
+}

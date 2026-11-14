@@ -1,6 +1,9 @@
 package mcp
 
-import "strings"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // Extension is what a feature compiled in with a build tag adds to the MCP
 // server (DESIGN §15 "Extensions", ADR-126). It calls Register from its own
@@ -24,6 +27,11 @@ type Extension struct {
 	Gate func(s *Server, name string, a args) error
 	// OnCall runs in the background on each admiral tool call.
 	OnCall func(s *Server)
+	// After runs after a tool call that succeeded, built-in or an
+	// extension's, on the admiral's server and on an agent's (s.Agent set);
+	// out is the result so far. What it returns is appended to the result,
+	// before Suffix.
+	After func(s *Server, name string, a args, out string) string
 	// Suffix is appended to the admiral's tool results, like the reports badge.
 	Suffix func(s *Server) string
 	// Brief is added to fleet_brief after the unread reports.
@@ -124,6 +132,26 @@ func extBrief(s *Server) string {
 		if e.Brief != nil {
 			b.WriteString(e.Brief(s))
 		}
+	}
+	return b.String()
+}
+
+// extAfter joins every extension's After note for a successful call.
+func extAfter(s *Server, name string, raw json.RawMessage, out string) string {
+	var a args
+	parsed := false
+	var b strings.Builder
+	for _, e := range exts {
+		if e.After == nil {
+			continue
+		}
+		if !parsed {
+			parsed = true
+			if len(raw) > 0 {
+				_ = json.Unmarshal(raw, &a)
+			}
+		}
+		b.WriteString(e.After(s, name, a, out))
 	}
 	return b.String()
 }

@@ -342,3 +342,22 @@ func TestIntegrations(t *testing.T) {
 		t.Errorf("env wins over config: %v", err)
 	}
 }
+
+func TestExtSections(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("FLEET_CONFIG", cfg)
+	if err := os.WriteFile(cfg, []byte("[ext.x]\npath = \"~/p\"\non = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	home, _ := os.UserHomeDir()
+	if e := p.Ext("x"); e.Value("path") != filepath.Join(home, "p") || e.Value("on") != "true" {
+		t.Errorf("ext x: %+v", e)
+	}
+	if e := p.Ext("y"); e.Value("path") != "" || len(p.IntegrationNames()) != 0 {
+		t.Errorf("unset ext or leak into integrations: %+v %v", e, p.IntegrationNames())
+	}
+}

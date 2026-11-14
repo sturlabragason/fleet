@@ -131,6 +131,7 @@ type Prefs struct {
 	squad        Squad
 	exec         Exec
 	integrations map[string]Integration
+	ext          map[string]Integration
 	recycle      Recycle
 	usage        map[string]conf.Value
 }
@@ -249,6 +250,12 @@ func Load() (*Prefs, error) {
 				p.integrations = map[string]Integration{}
 			}
 			p.integrations[n] = applyIntegration(sec)
+		}
+		if n, ok := strings.CutPrefix(name, "ext."); ok && n != "" {
+			if p.ext == nil {
+				p.ext = map[string]Integration{}
+			}
+			p.ext[n] = applyExt(sec)
 		}
 	}
 	return p, nil

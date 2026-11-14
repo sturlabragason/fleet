@@ -154,6 +154,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.act(w, r, s.keys)
 	case r.URL.Path == "/api/choose" && r.Method == http.MethodPost:
 		s.act(w, r, s.choose)
+	case strings.HasPrefix(r.URL.Path, "/x/") && (r.Method == http.MethodGet || r.Method == http.MethodHead):
+		s.extPage(w, r)
 	default:
 		http.NotFound(w, r)
 	}

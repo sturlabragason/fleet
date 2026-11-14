@@ -251,7 +251,9 @@ func TestApplyWallDisabledIsANoop(t *testing.T) {
 func TestTmuxBindingsMatchRegistry(t *testing.T) {
 	bound, chord := map[string]bool{}, map[string]bool{}
 	var statusRight, popup []string
-	for _, c := range tmuxCommands(&fleet.Fleet{Exe: "/opt/my fleet/fleet"}) {
+	// An extension's bindings come from its Tmux commands.
+	f := &fleet.Fleet{Exe: "/opt/my fleet/fleet"}
+	for _, c := range append(tmuxCommands(f), extTmux(f)...) {
 		if len(c) > 3 && c[0] == "bind-key" && c[1] == "-n" && strings.HasPrefix(c[2], "M-") {
 			bound[c[2]] = true
 			if c[2] == keys.HelpTmuxKey {

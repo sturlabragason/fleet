@@ -64,6 +64,23 @@ func applyIntegration(sec map[string]conf.Value) Integration {
 	return in
 }
 
+// Ext is an [ext.<name>] section (ADR-127): an extension's own settings,
+// every key in Values, path too. The zero value when it is unset.
+func (p *Prefs) Ext(name string) Integration {
+	if p == nil {
+		return Integration{}
+	}
+	return p.ext[name]
+}
+
+func applyExt(sec map[string]conf.Value) Integration {
+	in := Integration{Values: map[string]string{}}
+	for k, v := range sec {
+		in.Values[k] = strings.TrimSpace(fmt.Sprint(v))
+	}
+	return in
+}
+
 // The companion lookup reads config.toml on each call, so an edit applies
 // without a restart, as the other sections do.
 func init() {

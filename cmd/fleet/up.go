@@ -375,7 +375,7 @@ func ensureOverview(f *fleet.Fleet, target string) {
 // configure sets server options, key bindings, hooks and border polish, and
 // records which set it applied in chromeOption, for hotApply.
 func configure(f *fleet.Fleet) {
-	cmds := tmuxCommands(f)
+	cmds := append(tmuxCommands(f), extTmux(f)...)
 	for _, a := range cmds {
 		f.T.Run(a...)
 	}
@@ -409,7 +409,7 @@ func hotApply(f *fleet.Fleet) bool {
 		return false
 	}
 	rethemeWith(f, false)
-	cmds := tmuxCommands(f)
+	cmds := append(tmuxCommands(f), extTmux(f)...)
 	cur, _ := f.T.Run("show-options", "-gqv", chromeOption)
 	applied := strings.TrimSpace(cur) != chromeStamp(cmds)
 	if applied {

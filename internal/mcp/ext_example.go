@@ -60,6 +60,12 @@ func init() {
 				st.calls.Add(1)
 			}
 		},
+		After: func(s *Server, name string, a args, out string) string {
+			if exampleOf(s) != nil && name == "fleet_example" && a.Name == "after" {
+				return "\n[example after: " + out + "]"
+			}
+			return ""
+		},
 		Suffix: func(s *Server) string {
 			if exampleOf(s) != nil {
 				return "\n[example suffix]"

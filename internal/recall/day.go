@@ -32,7 +32,7 @@ var needsYou = map[string]bool{"waiting": true, "error": true, "stuck": true}
 
 // Day is the token-free digest (ADR-119): what waits on the user first,
 // then what got done since o.Since by area, what is still running, and
-// the sessions run outside fleet.
+// the sessions run outside fleet, then each extension's sections.
 func Day(ctx context.Context, o DayOpts) string {
 	if o.Now.IsZero() {
 		o.Now = time.Now()
@@ -41,9 +41,9 @@ func Day(ctx context.Context, o DayOpts) string {
 	for k, v := range o.Dirs {
 		dirs[k] = v
 	}
-	sessions, cassErr := cassSessions(ctx, o.Since)
+	sessions, cassErr := Sessions(ctx, o.Since)
 	for _, s := range sessions {
-		if n := worktreeAgent(s.Dir); n != "" && dirs[n] == "" {
+		if n := s.Agent; n != "" && dirs[n] == "" {
 			dirs[n] = s.Dir
 		}
 	}
@@ -102,23 +102,23 @@ func Day(ctx context.Context, o DayOpts) string {
 	writeAreas(&b, running)
 
 	b.WriteString("\n## Sessions outside fleet")
-	if cassErr != nil {
-		if cassErr == ErrNoCass {
-			b.WriteString("\n" + CassHint + "\n")
-		} else {
-			b.WriteString("\n" + cassErr.Error() + "\n")
+	switch {
+	case cassErr == ErrNoCass:
+		b.WriteString("\n" + CassHint + "\n")
+	case cassErr != nil:
+		b.WriteString("\n" + cassErr.Error() + "\n")
+	default:
+		other := map[string][]entry{}
+		for _, s := range sessions {
+			if s.Agent != "" || isFleetPrompt(s.Title) || s.Title == "" || s.Messages < minMessages || inTemp(s.Dir) {
+				continue
+			}
+			other[Area(s.Dir)] = append(other[Area(s.Dir)], entry{s.At, fmt.Sprintf("%s %s: %s", stamp(s.At, o.Now), s.Tool, clip(s.Title, 100))})
 		}
-		return b.String()
+		b.WriteString(" (cass)\n")
+		writeAreas(&b, other)
 	}
-	other := map[string][]entry{}
-	for _, s := range sessions {
-		if worktreeAgent(s.Dir) != "" || isFleetPrompt(s.Title) || s.Title == "" || s.messages < minMessages || inTemp(s.Dir) {
-			continue
-		}
-		other[Area(s.Dir)] = append(other[Area(s.Dir)], entry{s.At, fmt.Sprintf("%s %s: %s", stamp(s.At, o.Now), s.Tool, clip(s.Title, 100))})
-	}
-	b.WriteString(" (cass)\n")
-	writeAreas(&b, other)
+	b.WriteString(extDay(ctx, o))
 	return b.String()
 }
 
@@ -200,13 +200,18 @@ func writeAreas(b *strings.Builder, areas map[string][]entry) {
 	}
 }
 
-type session struct {
-	Hit
-	messages int
+// Session is one tool session cass indexed.
+type Session struct {
+	At                     time.Time
+	Tool, Dir, Title, Path string
+	Messages               int
+	// Agent is the fleet agent whose worktree Dir is, "" outside fleet.
+	Agent string
 }
 
-// cassSessions lists the sessions modified since t.
-func cassSessions(ctx context.Context, since time.Time) ([]session, error) {
+// Sessions lists the sessions cass indexed that were modified since since;
+// ErrNoCass when cass is missing or off.
+func Sessions(ctx context.Context, since time.Time) ([]Session, error) {
 	out, err := runCass(ctx, cassTimeout, "sessions", "--json", "--since", since.Format("2006-01-02"), "--limit", strconv.Itoa(1000))
 	if err != nil {
 		return nil, err
@@ -224,7 +229,7 @@ func cassSessions(ctx context.Context, since time.Time) ([]session, error) {
 	if err := json.Unmarshal(out, &res); err != nil {
 		return nil, fmt.Errorf("cass sessions: unreadable output: %v", err)
 	}
-	var hits []session
+	var hits []Session
 	for _, s := range res.Sessions {
 		t, _ := time.Parse(time.RFC3339, s.Modified)
 		if t.Before(since) {
@@ -237,7 +242,7 @@ func cassSessions(ctx context.Context, since time.Time) ([]session, error) {
 		if dir == "" {
 			dir = copilotCwd(s.Path)
 		}
-		hits = append(hits, session{Hit{Kind: "session", At: t.Local(), Tool: s.Agent, Dir: dir, Title: firstLine(s.Title), Path: s.Path}, s.Messages})
+		hits = append(hits, Session{At: t.Local(), Tool: s.Agent, Dir: dir, Title: firstLine(s.Title), Path: s.Path, Messages: s.Messages, Agent: worktreeAgent(dir)})
 	}
 	return hits, nil
 }

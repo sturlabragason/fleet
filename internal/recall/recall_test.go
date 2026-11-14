@@ -135,3 +135,24 @@ func TestDayWithoutCass(t *testing.T) {
 		t.Errorf("digest:\n%s", out)
 	}
 }
+
+func TestSessions(t *testing.T) {
+	fakeCass(t, "", `{"sessions":[
+{"path":"/s/1.jsonl","workspace":"/src/garden","agent":"claude_code","title":"Plan\nmore","modified":"2026-11-13T07:30:00Z","message_count":12},
+{"path":"/s/2.jsonl","workspace":"/src/ai-fleet.wt/survey/sub","agent":"copilot_cli","title":"x","modified":"2026-11-13T07:30:00Z","message_count":40},
+{"path":"/s/3.jsonl","workspace":"/src/old","agent":"copilot_cli","title":"y","modified":"2026-11-01T07:30:00Z","message_count":40}]}`)
+	ss, err := Sessions(context.Background(), time.Date(2026, 11, 12, 0, 0, 0, 0, time.Local))
+	if err != nil || len(ss) != 2 {
+		t.Fatalf("%v %+v", err, ss)
+	}
+	if s := ss[0]; s.Title != "Plan" || s.Messages != 12 || s.Agent != "" || s.Tool != "claude_code" || s.Dir != "/src/garden" {
+		t.Errorf("outside: %+v", s)
+	}
+	if ss[1].Agent != "survey" {
+		t.Errorf("agent: %+v", ss[1])
+	}
+	t.Setenv("FLEET_CASS", "off")
+	if _, err := Sessions(context.Background(), time.Now()); err != ErrNoCass {
+		t.Errorf("no cass: %v", err)
+	}
+}

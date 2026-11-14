@@ -66,3 +66,17 @@ func TestExampleExtBrief(t *testing.T) {
 		t.Fatalf("brief: %q", out)
 	}
 }
+
+func TestExampleExtAfter(t *testing.T) {
+	s, _, _ := memServer(t)
+	if out, _ := callText(t, s, "fleet_example", map[string]any{"name": "after"}); strings.Contains(out, "[example after") {
+		t.Fatal("after note on a server it is off for")
+	}
+	exampleOn(s)
+	if out, _ := callText(t, s, "fleet_example", map[string]any{"name": "after"}); !strings.HasPrefix(out, "example: after\n[example after: example: after]\n[example suffix]") {
+		t.Fatalf("after: %q", out)
+	}
+	if out, _ := callText(t, s, "fleet_example", map[string]any{"name": "example-refused"}); strings.Contains(out, "[example after") {
+		t.Fatalf("after note on a refused call: %q", out)
+	}
+}

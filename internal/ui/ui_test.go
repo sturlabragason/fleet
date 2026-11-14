@@ -500,8 +500,12 @@ func TestHelpOverlayScrollsToEveryKey(t *testing.T) {
 	if m.helpOff != end-1 {
 		t.Errorf("wheel up: offset %d, want %d", m.helpOff, end-1)
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
-	m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	// Page up until the offset stops moving: an extension's keys make the
+	// list longer, so the number of pages is not fixed.
+	for i, prev := 0, -1; i < 100 && m.helpOff != prev; i++ {
+		prev = m.helpOff
+		m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	}
 	if m.helpOff != 0 {
 		t.Errorf("PgUp: offset %d, want 0 (clamped)", m.helpOff)
 	}

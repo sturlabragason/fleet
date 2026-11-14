@@ -202,6 +202,12 @@ mode_args = { autopilot = "--allow-all --autopilot", plan = "--plan" }
 # [integrations.terminal]
 # path = "kitty --single-instance"
 
+# An extension compiled in with a build tag reads its own settings from
+# [ext.<name>] (ADR-127); a default build has none and ignores the section.
+# Keys are the extension's; a value starting with ~/ is under your home.
+# [ext.example]
+# dir = "~/notes"
+
 # The admiral's tool profile when nothing else picks one (DESIGN §6.10).
 # Order: fleet --admiral-profile > $FLEET_ADMIRAL_PROFILE > last choice
 # (Alt-P / fleet admiral profile NAME) > this > copilot.

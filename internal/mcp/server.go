@@ -309,6 +309,8 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		isErr := err != nil
 		if isErr {
 			text = err.Error()
+		} else {
+			text += extAfter(s, p.Name, p.Arguments, text)
 		}
 		switch {
 		case s.Agent != "":

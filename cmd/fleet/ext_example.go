@@ -75,6 +75,9 @@ func init() {
 			}
 			return nil
 		},
+		Tmux: func(f *fleet.Fleet) [][]string {
+			return [][]string{{"set-option", "-g", "@fleet_example", f.Exe}}
+		},
 		UI: func(ctx context.Context, f *fleet.Fleet) {
 			example.mu.Lock()
 			example.ui = append(example.ui, f)
