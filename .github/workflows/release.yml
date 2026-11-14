@@ -79,6 +79,15 @@ jobs:
           if git rev-parse -q --verify "refs/tags/$v" >/dev/null; then
             echo "::error::tag $v already exists"; exit 1
           fi
+          # A pushed tag of a Go module can be cached by the module proxy for good, so the
+          # private deny list must pass before the tag exists, never only after.
+          if [[ -z $PUBLIC_DENY ]]; then
+            echo "::error::secret PUBLIC_DENY is empty: a release needs the private deny list"; exit 1
+          fi
+          prev=$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD 2>/dev/null || true)
+          range=("${prev:+$prev..}HEAD")
+          [[ -n $(git rev-list "${range[@]}") ]] || range=(-n1 HEAD)
+          scripts/check-public.sh --no-emails "${range[@]}"
           echo "version=$v" >>"$GITHUB_OUTPUT"
           scripts/release-notes.sh HEAD "$v" >"$RUNNER_TEMP/notes.md"
           {

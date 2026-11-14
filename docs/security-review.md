@@ -240,6 +240,10 @@ repository secrets, so a clone without `.git/info/public-*` or a `--no-verify` p
 checked. `scripts/check-public.sh --gh` scans issue, PR, comment and release text on GitHub, which
 no git hook can see.
 
+Update, 2026-11-14: the release workflow fails when the `PUBLIC_DENY` secret is empty and runs the
+script on the commits since the previous tag before it tags (ADR-73). A tag pushed with a leak can
+be cached by the Go module proxy for good.
+
 ## 2. Threat model, stated plainly
 
 Who is the adversary, given the design?
