@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+
+	"github.com/sturlabragason/fleet/internal/tools"
 )
 
 // Spend is one agent's accumulated usage. A cached token is counted once, in
@@ -150,8 +152,8 @@ type parser struct {
 type Kind string
 
 const (
-	Copilot Kind = "copilot"
-	Claude  Kind = "claude"
+	Copilot Kind = tools.FamilyCopilot
+	Claude  Kind = tools.FamilyClaude
 	// ACP is fleet's own transcript of an ACP agent (~/.fleet/acp/<name>.jsonl),
 	// for a tool that keeps no usage log fleet can read (agy): one usage
 	// entry per turn, from the session/prompt response.

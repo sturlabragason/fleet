@@ -24,6 +24,9 @@ type Profile struct {
 	LaunchID []string // args to set a session id at launch, with {id}; empty = not supported
 	Resume   []string // args to resume, with {id}
 	Patterns string   // status pattern set name
+	// FamilyKey is the `family` key: which tool-private code the profile
+	// gets (ADR-126). Empty = the patterns value; read it through Family().
+	FamilyKey string
 	// SessionPath is a glob (with {id} and a leading ~) where the tool stores a
 	// session; used by adopt to check it exists. Empty = no check.
 	SessionPath string
@@ -296,6 +299,7 @@ resume = ["--resume", "{id}"]
 session_path = "~/.copilot/session-state/{id}"
 subagent_log = "~/.copilot/session-state/{id}/events.jsonl"
 patterns = "copilot"
+family = "copilot"
 peer_args = ["--additional-mcp-config", "{peer_mcp}"]
 plugin_args = ["--plugin-dir", "{plugin}"]
 plugin_mcp = true
@@ -317,6 +321,7 @@ resume = ["--resume", "{id}"]
 session_path = "~/.copilot/session-state/{id}"
 subagent_log = "~/.copilot/session-state/{id}/events.jsonl"
 patterns = "copilot"
+family = "copilot"
 peer_args = ["--additional-mcp-config", "{peer_mcp}"]
 plugin_args = ["--plugin-dir", "{plugin}"]
 plugin_mcp = true
@@ -341,6 +346,7 @@ user_mcp_off = ["--disallowedTools=mcp__{server}"]
 hook_args = ["--settings", "{hooks}"]
 plugin_args = ["--plugin-dir", "{plugin}"]
 patterns = "claude"
+family = "claude"
 acp_command = ["npx", "-y", "@agentclientprotocol/claude-agent-acp@` + ClaudeACPVersion + `"]
 acp_modes = { default = "default", auto = "bypassPermissions", bypass = "bypassPermissions", accept-edits = "acceptEdits", plan = "plan" }
 acp_env = { CLAUDE_CODE_EXECUTABLE = "{command_path}", ANTHROPIC_MODEL = "` + ClaudeModel + `" }
@@ -354,6 +360,7 @@ command = "agy"
 mode_args = { auto = "--dangerously-skip-permissions", accept-edits = "--mode accept-edits", plan = "--mode plan" }
 resume = ["--conversation", "{id}"]
 patterns = "agy"
+family = "agy"
 model_args = ["--model", "{model}"]
 acp = ["acp"]
 acp_mode_args = { auto = "--dangerously-skip-permissions" }
@@ -364,12 +371,14 @@ command = "vibe"
 mode_args = { auto = "--auto-approve", smart-approve = "--smart-approve", ask = "--agent ask" }
 resume = ["--resume", "{id}"]
 patterns = "vibe"
+family = "vibe"
 
 [fake]
 command = "{fleet}"
 args = ["fakeagent", "{name}"]
 mode_args = { auto = "" }
 patterns = "fake"
+family = "fake"
 ready = "fakeagent .+ ready"
 acp = ["--acp"]
 acp_mode_args = { auto = "" }
@@ -530,6 +539,9 @@ func apply(p *Profile, sec map[string]conf.Value) {
 	}
 	if v := conf.Str(sec, "patterns"); v != "" {
 		p.Patterns = v
+	}
+	if v := conf.Str(sec, "family"); v != "" {
+		p.FamilyKey = v
 	}
 	if v, ok := sec["session_path"]; ok {
 		p.SessionPath, _ = v.(string)

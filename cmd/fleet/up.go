@@ -76,7 +76,7 @@ func admiralLaunchOf(f *fleet.Fleet, adm, prof, resumeID, boot string) (supLaunc
 	// checkout: Copilot puts the cwd's git state in its prompt, so each
 	// merge in the repo cost a cold prompt-cache rewrite (ADR-93).
 	dir := admiralEnv("DIR")
-	if p.Patterns == "copilot" {
+	if p.Family() == tools.FamilyCopilot {
 		// Its own .mcp.json is its only fleet server; without it the
 		// admiral would start with no fleet tools at all, so fail instead.
 		if _, err := writeAdmiralMCP(f.Home, f.Exe, adm); err != nil {
@@ -86,7 +86,7 @@ func admiralLaunchOf(f *fleet.Fleet, adm, prof, resumeID, boot string) (supLaunc
 			dir = supervisor.DirOf(f.Home, adm)
 		}
 	}
-	if p.Patterns == "claude" {
+	if p.Family() == tools.FamilyClaude {
 		if err := writeAdmiralRules(f.Home, adm); err != nil {
 			return supLaunch{}, fmt.Errorf("admiral %s: write its rules: %w", adm, err)
 		}
@@ -125,7 +125,7 @@ func admiralLaunchOf(f *fleet.Fleet, adm, prof, resumeID, boot string) (supLaunc
 		tools.Launch{Resume: resumeID != "", Mode: admiralMode(p), Extra: admiralMCPArgsOf(p, f.Exe, f.Home, adm), Prompt: boot})
 	logx.For("up").Info("admiral", "profile", prof, "dir", dir, "argv", argv, "resume", resumeID != "")
 	sl := supLaunch{Cmd: tools.ShellCommand(argv), Dir: dir, Env: p.EnvList(), ID: id, Profile: prof}
-	if p.Patterns == "claude" {
+	if p.Family() == tools.FamilyClaude {
 		sl.Env = append(sl.Env, claudeAdmiralEnv...)
 	}
 	if adm != supervisor.Main {
@@ -180,7 +180,7 @@ func admiralMode(p tools.Profile) string {
 // the fleet MCP server instructions. Measured: ~8k input tokens per turn
 // instead of ~160k, and no reading of Go code or shelling out.
 func supervisorMCPArgs(p tools.Profile) []string {
-	if p.Patterns != "copilot" {
+	if p.Family() != tools.FamilyCopilot {
 		return nil
 	}
 	return append([]string{

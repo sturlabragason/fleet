@@ -158,6 +158,7 @@ mode = "accept-edits"
 command = "copilot"
 args = ["--model", "claude-opus-5"]
 patterns = "copilot"
+# family = "copilot"   # tool-side behaviour; defaults to patterns (ADR-126)
 mode = "autopilot"
 # mode_args / mode_keys are inline tables of SPACE-SEPARATED strings, not of
 # arrays: fleet's TOML subset types an inline table as string -> string and

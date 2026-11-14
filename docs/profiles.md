@@ -32,6 +32,7 @@ Each `[section]` is a profile. A section with a built-in name overrides only the
 | `acp_model_env` | The variable an `acp_command` adapter reads its model from (`ANTHROPIC_MODEL` on the built-in `claude`); fleet sets it to the pinned model. |
 | `prompt_args` | Arguments that carry the first prompt, with `{prompt}`, so the tool submits it itself instead of fleet pasting it |
 | `patterns` | Status pattern set: `copilot`, `claude`, `agy`, `vibe`, `fake` or your own. Defaults to the profile name. |
+| `family` | Which tool's fleet-side behaviour the profile gets: `copilot`, `claude`, `agy`, `vibe` or `fake`. It picks the admiral's MCP wiring, the spend parser, the context fill and Copilot's ACP session events. Defaults to the `patterns` value, so a new tool that behaves like Claude but needs its own status patterns sets `family = "claude"` with its own `patterns` (ADR-126). |
 | `acp`, `acp_mode_args` | Arguments that start the tool's ACP server instead of its TUI, and its starting modes under ACP. Only a profile with `acp` or `acp_command` can run over ACP (DESIGN §7d). |
 | `acp_command` | The whole argv under ACP, replacing `command`, `args` and the peer, extra and context args. The built-in `claude` runs the pinned claude-agent-acp adapter here (DESIGN §7d, ADR-76). |
 | `acp_env` | Extra env under ACP only. `{command_path}` is the profile's `command` found in `~/.local/bin` or on PATH. |

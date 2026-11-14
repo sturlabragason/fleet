@@ -379,3 +379,20 @@ func TestACPTranscript(t *testing.T) {
 		t.Fatalf("short %q", s)
 	}
 }
+
+// The spend parser follows the family, not the patterns (ADR-126).
+func TestSourceByFamily(t *testing.T) {
+	data := t.TempDir()
+	path := filepath.Join(data, "SID.jsonl")
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p := tools.Profile{Patterns: "mytool", FamilyKey: tools.FamilyClaude, SessionPath: filepath.Join(data, "{id}.jsonl")}
+	if got, k := Source(p, "SID"); got != path || k != Claude {
+		t.Errorf("source %q %q, want %q claude", got, k, path)
+	}
+	p.FamilyKey = ""
+	if got, _ := Source(p, "SID"); got != "" {
+		t.Errorf("no family: source %q", got)
+	}
+}

@@ -208,8 +208,12 @@ func commandPath(cmd string) (string, error) {
 }
 
 // copilotEvents: the Copilot CLI sends its own session events once asked
-// to, which tell a foreground turn from a subagent's.
-func copilotEvents(p tools.Profile) bool { return filepath.Base(p.Command) == "copilot" }
+// to, which tell a foreground turn from a subagent's. A profile that runs
+// copilot gets them whatever its family: it takes copilot's acp keys by its
+// command too (ADR-74 (i)).
+func copilotEvents(p tools.Profile) bool {
+	return p.Traits().SessionEvents || filepath.Base(p.Command) == "copilot"
+}
 
 // acpMode is the configured mode when the profile knows it under acp.
 func acpMode(name, profile string, p tools.Profile, mode string) string {

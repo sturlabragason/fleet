@@ -531,6 +531,18 @@ func TestAdmiralMCPConfigCarriesName(t *testing.T) {
 	}
 }
 
+// A profile with its own patterns and family = "claude" gets Claude's
+// admiral wiring (ADR-126).
+func TestAdmiralMCPArgsByFamily(t *testing.T) {
+	p := tools.Profile{Patterns: "mytool", FamilyKey: tools.FamilyClaude}
+	if got := admiralMCPArgsOf(p, "/opt/fleet", "", "main"); len(got) < 1 || got[0] != "--mcp-config" || !mcpCapable(p) {
+		t.Errorf("family claude: %v", got)
+	}
+	if p := (tools.Profile{Patterns: "claude", FamilyKey: tools.FamilyVibe}); admiralMCPArgsOf(p, "/opt/fleet", "", "main") != nil || mcpCapable(p) {
+		t.Errorf("family vibe with claude patterns got admiral MCP")
+	}
+}
+
 // A non-main copilot admiral starts in its own dir, whose .mcp.json is its
 // only fleet server; main keeps the shared dir.
 func TestCopilotAdmiralStartsInOwnDir(t *testing.T) {

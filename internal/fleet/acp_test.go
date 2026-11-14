@@ -777,3 +777,20 @@ func TestRefreshDuringACPParkKeepsParked(t *testing.T) {
 		t.Errorf("stale parked with a live pane: status %q pane %q, want it read fresh", got, a.PaneID)
 	}
 }
+
+// Copilot's session events follow the family, and still any profile that
+// runs copilot (ADR-126).
+func TestCopilotEventsByFamily(t *testing.T) {
+	for _, c := range []struct {
+		p    tools.Profile
+		want bool
+	}{
+		{tools.Profile{Command: "copilot", Patterns: "copilot-work"}, true},
+		{tools.Profile{Command: "/opt/bin/mycli", Patterns: "mycli", FamilyKey: tools.FamilyCopilot}, true},
+		{tools.Profile{Command: "claude", Patterns: "claude"}, false},
+	} {
+		if got := copilotEvents(c.p); got != c.want {
+			t.Errorf("%+v: %v, want %v", c.p, got, c.want)
+		}
+	}
+}

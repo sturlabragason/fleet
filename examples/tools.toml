@@ -17,6 +17,10 @@
 #   plugin_args, plugin_mcp: load fleet's per-agent plugin ({plugin}) with the
 #   status hooks and, for copilot, fleet-peer; inherited the same way (ADR-99).
 #   patterns   status pattern set: copilot, claude, agy, vibe or fake
+#   family     which tool's fleet-side code the profile gets (admiral MCP wiring,
+#              spend, context fill): copilot, claude, agy, vibe or fake. Defaults
+#              to patterns; set it when your own patterns name a tool that
+#              behaves like one of these (ADR-126).
 # Give every profile you define a mode_args "auto" key with that tool's
 # allow-all flag, or `mode = "auto"` in config.toml cannot reach it and the
 # agent keeps asking for permission (ADR-56).

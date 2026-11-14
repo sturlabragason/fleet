@@ -108,10 +108,10 @@ func admiralMCPArgs(p tools.Profile, exe string) []string {
 // FLEET_ADMIRAL_NAME and the pane tag back it up.
 func admiralMCPArgsOf(p tools.Profile, exe, home, adm string) []string {
 	mcpArgs := []string{"mcp", "--admiral", adm}
-	switch p.Patterns {
-	case "copilot":
+	switch p.Family() {
+	case tools.FamilyCopilot:
 		return supervisorMCPArgs(p)
-	case "claude":
+	case tools.FamilyClaude:
 		// --strict-mcp-config: fleet is its only MCP server, as for copilot.
 		// The rules go in as a system prompt file: Claude Code cuts MCP
 		// server instructions at about 4 KB (ADR-86).
@@ -165,7 +165,7 @@ func writeAdmiralMCP(home, exe, adm string) (string, error) {
 }
 
 // mcpCapable: the admiral gets fleet tools under this profile.
-func mcpCapable(p tools.Profile) bool { return p.Patterns == "copilot" || p.Patterns == "claude" }
+func mcpCapable(p tools.Profile) bool { return p.Traits().AdmiralMCP }
 
 // parseUpArgs parses `fleet up [--no-attach] [--admiral-profile NAME]
 // [--monitors 1|2]`. monitors is 0 when the flag is not given.
@@ -252,7 +252,7 @@ func cmdAdmiralProfile(f *fleet.Fleet, args []string) error {
 	case len(args) == 1 && !strings.HasPrefix(args[0], "-"):
 		name := args[0]
 		if p, ok := f.Profiles[name]; ok && !mcpCapable(p) {
-			fmt.Fprintf(os.Stderr, "fleet: warning: profile %s (patterns %s) gets no fleet MCP tools as admiral\n", name, p.Patterns)
+			fmt.Fprintf(os.Stderr, "fleet: warning: profile %s (family %s) gets no fleet MCP tools as admiral\n", name, p.Family())
 		}
 		return runSwapOf(f, adm, name)
 	}

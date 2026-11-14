@@ -224,7 +224,7 @@ func (f *Fleet) Info(name string) (string, error) {
 	}
 	kv("session", a.SessionID)
 	ctx := ""
-	if f.Profiles[a.Profile].Patterns == "copilot" {
+	if f.Profiles[a.Profile].Traits().ContextFill {
 		if used, max, ok := supervisor.Fill(supervisor.CopilotHome(), a.SessionID); ok {
 			ctx = strconv.Itoa(supervisor.Pct(used, max)) + "%"
 		}

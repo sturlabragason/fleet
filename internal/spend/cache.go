@@ -156,7 +156,7 @@ func Source(p tools.Profile, sessionID string) (string, Kind) {
 	if sessionID == "" {
 		return "", ""
 	}
-	switch Kind(p.Patterns) {
+	switch Kind(p.Family()) {
 	case Copilot:
 		return p.SubagentLogPath(sessionID), Copilot
 	case Claude:

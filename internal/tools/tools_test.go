@@ -1095,3 +1095,30 @@ func TestNativeBinary(t *testing.T) {
 		t.Errorf("native_binary key: %v %v", ps["copilot"].NativeBinary, err)
 	}
 }
+
+// The family key picks the tool-private code; unset, it is the patterns
+// value, so profiles written before the key behave as they did (ADR-126).
+func TestFamily(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "tools.toml"), []byte("[mine]\ncommand = \"foo\"\npatterns = \"mine\"\nfamily = \"claude\"\n"+
+		"[like]\ncommand = \"bar\"\npatterns = \"copilot\"\n[plain]\ncommand = \"baz\"\n"), 0o644)
+	ps, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{"mine": FamilyClaude, "like": FamilyCopilot, "plain": "plain",
+		"copilot": FamilyCopilot, "claude-copilot": FamilyCopilot, "claude": FamilyClaude, "agy": FamilyAgy, "vibe": FamilyVibe, "fake": FamilyFake} {
+		if got := ps[name].Family(); got != want {
+			t.Errorf("%s: family %q, want %q", name, got, want)
+		}
+	}
+	if m := ps["mine"]; m.Patterns != "mine" || !m.Traits().AdmiralMCP || m.Traits().SessionEvents {
+		t.Errorf("mine: patterns %q traits %+v", m.Patterns, m.Traits())
+	}
+	if tr := ps["like"].Traits(); !tr.SessionEvents || !tr.ContextFill {
+		t.Errorf("like: traits %+v", tr)
+	}
+	if tr := ps["plain"].Traits(); tr != (Traits{}) {
+		t.Errorf("plain: traits %+v", tr)
+	}
+}
