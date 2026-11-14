@@ -62,6 +62,27 @@ flowchart TB
 | `internal/conf` | Small TOML-subset parser for the data files |
 | `internal/fake` | Fake agent state machine: working → waiting / error / idle |
 | `internal/logx` | slog to `~/.fleet/logs/fleet.log` with a `component` attribute |
+| `internal/acp` | Client for the Agent Client Protocol (JSON-RPC 2.0 over stdio), ADR-74 |
+| `internal/acphost` | `fleet acp-host`: runs one ACP agent in its pane and draws its conversation, ADR-76 |
+| `internal/adr` | Hands out ADR numbers atomically to parallel agents |
+| `internal/companion` | The contract for companion CLIs fleet calls (cass, gh, rsync, ssh, clipboard, terminal): lookup, `off`, version floor, timeout, install hint, doctor line (ADR-126) |
+| `internal/recall` | `fleet recall` and `fleet day`; the cass adapter (ADR-119) |
+| `internal/summary` | Short summaries of an agent's screen through a model CLI (ADR-40) |
+| `internal/spend` | What an agent has cost, from its tool's session files (ADR-46) |
+| `internal/usage` | The status-line usage bar |
+| `internal/trust` | Pre-marks a directory trusted in an agent tool's own config (ADR-47) |
+| `internal/routes` | The user's request routes (ADR-120) |
+| `internal/rexec` | `fleet exec`: rsync a worktree to a build host and run a command there over ssh (ADR-107) |
+| `internal/update` | Self-update from GitHub releases, checksum and attestation (ADR-103) |
+| `internal/watch` | The background watcher that keeps status fresh and does housekeeping |
+| `internal/web` | `fleet web`, the browser front end (ADR-66) |
+| `internal/park` | Which agents may be parked, and in what order |
+| `internal/proc` | Finds and stops process trees through `/proc` (ADR-122) |
+| `internal/netwatch` | Whether the model APIs are reachable |
+| `internal/jsonx` | Keeps unknown JSON keys across a read-modify-write (ADR-62) |
+| `internal/legacy` | Paths renamed by ADR-26, kept working |
+| `internal/sysx` | The few OS calls that differ between Unix systems |
+| `internal/testenv` | Fails a test run that leaves tmux servers or processes behind (ADR-83) |
 
 ## Status loop
 

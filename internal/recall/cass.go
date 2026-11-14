@@ -5,13 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/companion"
 	"github.com/sturlabragason/fleet/internal/sessions"
 )
 
@@ -35,38 +34,31 @@ const cassTimeout = 20 * time.Second
 // refreshTimeout bounds `fleet recall --refresh`'s incremental index.
 const refreshTimeout = 5 * time.Minute
 
-// CassPath is the cass binary: $FLEET_CASS when set ("off" turns session
-// search off), else cass on PATH.
+// cass is the companion Spec (ADR-126): $FLEET_CASS, then
+// [integrations.cass] path, then PATH; "off" turns session search off.
+var cass = companion.Register(companion.Spec{
+	Name:    "cass",
+	Env:     []string{"FLEET_CASS"},
+	Version: []string{"--version"},
+	Feature: "session search (fleet recall, fleet day)",
+	Hint:    "install cass from https://github.com/Dicklesworthstone/coding_agent_session_search/releases, then run `cass index` once",
+})
+
+// CassPath is the cass binary, or ErrNoCass when it is missing or off.
 func CassPath() (string, error) {
-	if p := os.Getenv("FLEET_CASS"); p != "" {
-		if p == "off" {
-			return "", ErrNoCass
-		}
-		return p, nil
-	}
-	p, err := exec.LookPath("cass")
+	t, err := companion.Find(cass)
 	if err != nil {
 		return "", ErrNoCass
 	}
-	return p, nil
+	return t.Path, nil
 }
 
 func runCass(ctx context.Context, timeout time.Duration, args ...string) ([]byte, error) {
-	bin, err := CassPath()
+	t, err := companion.Find(cass)
 	if err != nil {
-		return nil, err
+		return nil, ErrNoCass
 	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, bin, args...)
-	cmd.WaitDelay = 2 * time.Second
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return out, fmt.Errorf("cass %s: %v %s", args[0], err, firstLine(stderr.String()))
-	}
-	return out, nil
+	return t.Run(ctx, companion.Opts{Timeout: timeout}, args...)
 }
 
 type cassHit struct {
@@ -147,25 +139,12 @@ func IndexAge(ctx context.Context) (time.Duration, bool) {
 
 // Refresh runs an incremental `cass index` at low CPU and IO priority.
 func Refresh(ctx context.Context) error {
-	bin, err := CassPath()
+	t, err := companion.Find(cass)
 	if err != nil {
-		return err
+		return ErrNoCass
 	}
-	ctx, cancel := context.WithTimeout(ctx, refreshTimeout)
-	defer cancel()
-	argv := []string{bin, "index", "--json", "--no-progress-events"}
-	if p, err := exec.LookPath("ionice"); err == nil {
-		argv = append([]string{p, "-c3"}, argv...)
-	}
-	if p, err := exec.LookPath("nice"); err == nil {
-		argv = append([]string{p, "-n", "19"}, argv...)
-	}
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	cmd.WaitDelay = 2 * time.Second
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("cass index: %v %s", err, firstLine(string(out)))
-	}
-	return nil
+	_, err = t.Run(ctx, companion.Opts{Timeout: refreshTimeout, Low: true}, "index", "--json", "--no-progress-events")
+	return err
 }
 
 // parseCassTime reads created_at: epoch milliseconds or an RFC 3339 string.
