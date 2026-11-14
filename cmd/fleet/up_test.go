@@ -363,6 +363,9 @@ func TestCopyCommand(t *testing.T) {
 		want string
 	}{
 		{"wayland", env("WAYLAND_DISPLAY", "wayland-0", "DISPLAY", ":0"), look("wl-copy", "xclip"), "linux", "wl-copy"},
+		{"gnome wayland prefers xclip", env("WAYLAND_DISPLAY", "wayland-0", "DISPLAY", ":0", "XDG_CURRENT_DESKTOP", "ubuntu:GNOME"), look("wl-copy", "xclip"), "linux", "xclip -selection clipboard -in"},
+		{"gnome wayland without xclip", env("WAYLAND_DISPLAY", "wayland-0", "DISPLAY", ":0", "XDG_CURRENT_DESKTOP", "GNOME"), look("wl-copy", "xsel"), "linux", "wl-copy"},
+		{"gnome wayland without Xwayland", env("WAYLAND_DISPLAY", "wayland-0", "XDG_CURRENT_DESKTOP", "GNOME"), look("wl-copy", "xclip"), "linux", "wl-copy"},
 		{"wayland without wl-copy falls back to X", env("WAYLAND_DISPLAY", "wayland-0", "DISPLAY", ":0"), look("xclip"), "linux", "xclip -selection clipboard -in"},
 		{"x11 xsel", env("DISPLAY", ":0"), look("xsel", "wl-copy"), "linux", "xsel --clipboard --input"},
 		{"macos", env(), look("pbcopy"), "darwin", "pbcopy"},
