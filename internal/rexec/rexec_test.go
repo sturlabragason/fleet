@@ -1,7 +1,9 @@
 package rexec
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -36,5 +38,23 @@ func TestLineThroughAShell(t *testing.T) {
 		if err != nil || string(out) != c.want {
 			t.Errorf("%q: %q %v, want %q", c.cmd, out, err, c.want)
 		}
+	}
+}
+
+func TestResolve(t *testing.T) {
+	dir := t.TempDir()
+	for _, b := range []string{"rsync", "ssh"} {
+		if err := os.WriteFile(filepath.Join(dir, b), []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", dir)
+	p, err := Make("h", "", "/w", "/w", []string{"true"}).Resolve()
+	if err != nil || p.Sync[0] != filepath.Join(dir, "rsync") || p.Run[0] != filepath.Join(dir, "ssh") || p.Run[1] != "-T" {
+		t.Fatalf("got %v %v", p, err)
+	}
+	os.Remove(filepath.Join(dir, "ssh"))
+	if _, err := Make("h", "", "/w", "/w", []string{"true"}).Resolve(); err == nil || !strings.Contains(err.Error(), "ssh is not installed") {
+		t.Errorf("missing ssh: %v", err)
 	}
 }

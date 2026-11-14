@@ -46,7 +46,10 @@ func cmdExec(args []string) error {
 	if err != nil {
 		return fmt.Errorf("fleet exec: not in a git worktree: %w", err)
 	}
-	plan := rexec.Make(cfg.Host, cfg.Root, strings.TrimSpace(string(out)), dir, cmd)
+	plan, err := rexec.Make(cfg.Host, cfg.Root, strings.TrimSpace(string(out)), dir, cmd).Resolve()
+	if err != nil {
+		return fmt.Errorf("fleet exec: %w", err)
+	}
 	sync := exec.Command(plan.Sync[0], plan.Sync[1:]...)
 	sync.Stdout, sync.Stderr = os.Stderr, os.Stderr
 	if err := sync.Run(); err != nil {

@@ -8,12 +8,14 @@ package main
 // the one client looking at it.
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/sturlabragason/fleet/internal/companion"
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/sysx"
@@ -161,6 +163,25 @@ var knownTerminals = []struct {
 	{"xterm", []string{"-e"}},
 }
 
+// terminalSpec is the terminal emulator as a companion (ADR-126):
+// FLEET_TERMINAL, then [integrations.terminal] path (each its words, then
+// the command), then $TERMINAL, then the first known emulator on PATH.
+var terminalSpec = companion.Register(companion.Spec{
+	Name:    "terminal",
+	Env:     []string{"FLEET_TERMINAL"},
+	Bins:    knownTerminalNames(),
+	Feature: "opening the wall on a second monitor (fleet up --monitors 2)",
+	Hint:    "set FLEET_TERMINAL or [integrations.terminal] path to your terminal and the flag that runs a command",
+})
+
+func knownTerminalNames() []string {
+	var out []string
+	for _, t := range knownTerminals {
+		out = append(out, t.name)
+	}
+	return out
+}
+
 // terminalArgv is the command that opens a terminal window running cmd:
 // FLEET_TERMINAL (its words, then cmd), else $TERMINAL (a known emulator's
 // args, or -e), else the first known emulator on PATH. ok is false when
@@ -188,9 +209,21 @@ func terminalArgv(override, termEnv string, look func(string) (string, error), c
 // openWallTerminal opens a new terminal window running `fleet wall attach`.
 // It returns the command it ran, or an error saying what to run by hand.
 func openWallTerminal(f *fleet.Fleet) (string, error) {
-	argv, ok := terminalArgv(os.Getenv("FLEET_TERMINAL"), os.Getenv("TERMINAL"), exec.LookPath, []string{f.Exe, "wall", "attach"})
-	if !ok {
-		return "", fmt.Errorf("no terminal found (set FLEET_TERMINAL)")
+	cmd := []string{f.Exe, "wall", "attach"}
+	t, err := companion.Find(terminalSpec)
+	var argv []string
+	switch {
+	case errors.Is(err, companion.ErrOff):
+		return "", fmt.Errorf("no terminal: off by %s", t.Source)
+	case err != nil && t.Source != "":
+		return "", fmt.Errorf("terminal %s (from %s) not found", t.Path, t.Source)
+	case err == nil && t.Source != "PATH":
+		argv = t.Argv(cmd...)
+	default:
+		var ok bool
+		if argv, ok = terminalArgv("", os.Getenv("TERMINAL"), exec.LookPath, cmd); !ok {
+			return "", fmt.Errorf("no terminal found (set FLEET_TERMINAL or [integrations.terminal] path)")
+		}
 	}
 	c := exec.Command(argv[0], argv[1:]...)
 	sysx.Detach(c)

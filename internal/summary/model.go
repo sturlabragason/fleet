@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/companion"
 	"github.com/sturlabragason/fleet/internal/sysx"
 )
 
@@ -26,6 +27,15 @@ const DefaultModel = "claude-haiku-5.5"
 
 // DefaultCommand is the CLI the summariser shells out to.
 const DefaultCommand = "copilot"
+
+// CLISpec is the summary CLI as a companion (ADR-126); [summary] command
+// replaces its binary name.
+var CLISpec = companion.Register(companion.Spec{
+	Name:    "summary",
+	Bins:    []string{DefaultCommand},
+	Feature: "model summaries of agent screens (fleet peek, the admiral)",
+	Hint:    "install the GitHub Copilot CLI, or set [summary] command to another model CLI",
+})
 
 // DefaultTimeout bounds one model call. A summary that is late is useless:
 // peek returns raw lines instead.
@@ -67,9 +77,15 @@ func (c *CLI) Summarize(ctx context.Context, prompt string) (string, error) {
 	if cmd == "" {
 		cmd = DefaultCommand
 	}
-	if _, err := exec.LookPath(cmd); err != nil {
-		return "", fmt.Errorf("summary: %s not installed", cmd)
+	spec := CLISpec
+	if cmd != DefaultCommand {
+		spec.Bins = []string{cmd}
 	}
+	tool, err := companion.Find(spec)
+	if err != nil {
+		return "", fmt.Errorf("summary: %w", err)
+	}
+	cmd = tool.Path
 	args := c.Args
 	if args == nil {
 		args = DefaultArgs()
@@ -82,7 +98,7 @@ func (c *CLI) Summarize(ctx context.Context, prompt string) (string, error) {
 	defer cancel()
 
 	onStdin := true
-	out := make([]string, 0, len(args))
+	out := append([]string{}, tool.Args...)
 	for _, a := range args {
 		if strings.Contains(a, "{prompt}") {
 			onStdin = false

@@ -62,7 +62,8 @@ func (e *Error) Unwrap() error { return e.Err }
 type Tool struct {
 	Spec   Spec
 	Path   string
-	Source string // where the path came from: "$FLEET_CASS", "config", "PATH"
+	Args   []string // words after the binary in an override ("kitty --single-instance")
+	Source string   // where the path came from: "$FLEET_CASS", "config", "PATH"
 }
 
 // Config is the [integrations.<name>] path lookup ("" = not set, "auto" =
@@ -145,14 +146,26 @@ func locate(s Spec) (Tool, error) {
 	return Tool{Spec: s}, &Error{Spec: s, Err: ErrMissing}
 }
 
-// resolved accepts an explicit path or bare name; one that cannot be found
-// is missing rather than an exec error later.
+// resolved accepts an explicit path or bare name, optionally followed by
+// arguments; one that cannot be found is missing rather than an exec error
+// later. A value that names a file as a whole is a path, spaces and all.
 func resolved(s Spec, v, src string) (Tool, error) {
-	p, err := LookPath(v)
-	if err != nil {
-		return Tool{Spec: s, Path: v, Source: src}, &Error{Spec: s, Err: ErrMissing}
+	if p, err := LookPath(strings.TrimSpace(v)); err == nil {
+		return Tool{Spec: s, Path: p, Source: src}, nil
 	}
-	return Tool{Spec: s, Path: p, Source: src}, nil
+	w := strings.Fields(v)
+	t := Tool{Spec: s, Path: w[0], Args: w[1:], Source: src}
+	p, err := LookPath(w[0])
+	if err != nil {
+		return t, &Error{Spec: s, Err: ErrMissing}
+	}
+	t.Path = p
+	return t, nil
+}
+
+// Argv is the tool's path, its override arguments, then args.
+func (t Tool) Argv(args ...string) []string {
+	return append(append([]string{t.Path}, t.Args...), args...)
 }
 
 // Opts tunes one call.
@@ -172,7 +185,7 @@ var Runner = execRun
 // Run runs the tool with no stdin and a timeout; the error names the tool
 // and subcommand and carries the first stderr line.
 func (t Tool) Run(ctx context.Context, o Opts, args ...string) ([]byte, error) {
-	out, err := Runner(ctx, t.Path, args, o)
+	out, err := Runner(ctx, t.Path, append(append([]string(nil), t.Args...), args...), o)
 	if err != nil {
 		return out, fmt.Errorf("%s%s: %w", t.Spec.Name, sub(args), err)
 	}

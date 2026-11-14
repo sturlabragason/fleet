@@ -8,8 +8,11 @@ package rexec
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"path"
 	"path/filepath"
+
+	"github.com/sturlabragason/fleet/internal/companion"
 	"strings"
 )
 
@@ -33,6 +36,38 @@ func RemoteDir(root, top string) string {
 	}
 	sum := sha256.Sum256([]byte(top))
 	return path.Join(root, filepath.Base(top)+"-"+hex.EncodeToString(sum[:4]))
+}
+
+// RSync and SSH are the companions `fleet exec` needs for a remote host
+// (ADR-126).
+var (
+	RSync = companion.Register(companion.Spec{
+		Name:    "rsync",
+		Version: []string{"--version"},
+		Feature: "fleet exec on a build host ([exec] host)",
+		Hint:    "install rsync with the system package manager",
+	})
+	SSH = companion.Register(companion.Spec{
+		Name:    "ssh",
+		Feature: "fleet exec on a build host ([exec] host)",
+		Hint:    "install the OpenSSH client with the system package manager",
+	})
+)
+
+// Resolve swaps the plan's bare rsync and ssh for the companions found,
+// or says which one is missing.
+func (p Plan) Resolve() (Plan, error) {
+	r, err := companion.Find(RSync)
+	if err != nil {
+		return p, fmt.Errorf("%w (%s)", err, RSync.Hint)
+	}
+	s, err := companion.Find(SSH)
+	if err != nil {
+		return p, fmt.Errorf("%w (%s)", err, SSH.Hint)
+	}
+	p.Sync = r.Argv(p.Sync[1:]...)
+	p.Run = s.Argv(p.Run[1:]...)
+	return p, nil
 }
 
 // Make builds the plan for running cmd in dir, which lies inside the

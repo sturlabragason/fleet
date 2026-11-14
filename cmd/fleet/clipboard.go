@@ -1,9 +1,13 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"runtime"
+
+	"github.com/sturlabragason/fleet/internal/companion"
+	"github.com/sturlabragason/fleet/internal/tools"
 )
 
 // copyCommand picks the program tmux's copy-pipe sends a copy-mode selection
@@ -30,4 +34,22 @@ func copyCommand(getenv func(string) string, lookPath func(string) (string, erro
 	return ""
 }
 
-func hostCopyCommand() string { return copyCommand(os.Getenv, exec.LookPath, runtime.GOOS) }
+// clipboardSpec is the clipboard as a companion (ADR-126): [integrations.clipboard]
+// path = "off" stops fleet setting copy-pipe, a path makes it pipe there.
+var clipboardSpec = companion.Register(companion.Spec{
+	Name:    "clipboard",
+	Bins:    []string{"pbcopy", "wl-copy", "xclip", "xsel"},
+	Feature: "copying a tmux selection to the system clipboard",
+	Hint:    "install wl-clipboard (Wayland) or xclip (X11)",
+})
+
+func hostCopyCommand() string {
+	t, err := companion.Find(clipboardSpec)
+	switch {
+	case errors.Is(err, companion.ErrOff):
+		return ""
+	case err == nil && t.Source != "PATH":
+		return tools.ShellCommand(t.Argv())
+	}
+	return copyCommand(os.Getenv, exec.LookPath, runtime.GOOS)
+}

@@ -149,3 +149,24 @@ func TestRegistered(t *testing.T) {
 		t.Errorf("registered: %s", j)
 	}
 }
+
+func TestOverrideWithArgs(t *testing.T) {
+	b := fakeBin(t, "term")
+	t.Setenv("FLEET_T", b+" --one -x")
+	tool, err := Find(Spec{Name: "t", Env: []string{"FLEET_T"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(tool.Argv("run", "me"), " "); got != b+" --one -x run me" {
+		t.Errorf("argv: %s", got)
+	}
+}
+
+func TestOverridePathWithSpaces(t *testing.T) {
+	b := fakeBin(t, "my tool")
+	t.Setenv("FLEET_T", b)
+	tool, err := Find(Spec{Name: "t", Env: []string{"FLEET_T"}})
+	if err != nil || tool.Path != b || len(tool.Args) != 0 {
+		t.Fatalf("got %+v %v", tool, err)
+	}
+}
