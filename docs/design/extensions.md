@@ -3,7 +3,7 @@
 Design review, written 2026-11-14 on branch `fleet/arch-extensions`. It
 maps what exists today, names the problems, compares how other tools do extensions, and
 proposes one extension model with a migration path. The ADR at the end is ADR-126 in DESIGN.md §14.
-M1 to M10 are built (section 5); M11 waits for a user.
+M1 to M5 and M7 to M10 are built (section 5); M6 is left to an extension, and M11 waits for a user.
 
 Line references are to commit `4034546` (local main on 2026-11-14). Counts were measured on that
 commit: MCP tool counts by marshalling `toolDefs`, `agentToolDefs` and `squadToolDefs` in a

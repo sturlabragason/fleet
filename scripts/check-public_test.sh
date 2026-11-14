@@ -100,13 +100,15 @@ real=${CHECK_PUBLIC_REAL_DENY:-$(git -C "$src" rev-parse --path-format=absolute 
 leaked=06bf7740131c
 if [[ -s $real ]] && git -C "$src" cat-file -e "$leaked^{commit}" 2>/dev/null; then
   real_repo() { repo; cp "$real" "$d/.git/info/public-deny"; cp "$src/scripts/public-allow" "$d/scripts/"; }
-  for at in docs/design/extensions.md:{20,29,30,34,61,62,113,117,120,127,128,159,160,169,184,185,196,234,263,294,315,316,340,351,362,365,375,376,378,388,389,391,420} \
-    CHANGELOG.md:28 DESIGN.md:{1642,1647,2074,2076,2080} internal/whatsnew/version.go:10 internal/whatsnew/whatsnew_test.go:242 .github/workflows/ci.yml:86; do
+  for at in docs/design/extensions.md:{20,29,30,34,61,62,113,117,120,127,128,159,160,169,184,185,196,228,234,261,263,294,297,315,316,317,340,351,362,365,375,376,378,388,389,391,400,412,420} \
+    CHANGELOG.md:28 DESIGN.md:{1642,1647,2074,2076,2080} internal/whatsnew/version.go:10 internal/whatsnew/whatsnew_test.go:242 .github/workflows/ci.yml:86 \
+    internal/prefs/prefs_test.go:317 internal/prefs/integrations.go:16; do
     real_repo; commit "$d" a.txt "$(git -C "$src" show "$leaked:${at%:*}" | sed -n "${at##*:}p")"
     expect fail "private deny list catches $at at $leaked" "$d" main~1..main
   done
   real_repo
-  for f in docs/design/extensions.md CHANGELOG.md DESIGN.md internal/whatsnew/version.go internal/whatsnew/whatsnew_test.go .github/workflows/ci.yml; do
+  for f in docs/design/extensions.md CHANGELOG.md DESIGN.md internal/whatsnew/version.go internal/whatsnew/whatsnew_test.go .github/workflows/ci.yml \
+    internal/prefs/prefs_test.go internal/prefs/integrations.go; do
     mkdir -p "$d/$(dirname "$f")"; cp "$src/$f" "$d/$f"
   done
   git -C "$d" add -A && git -C "$d" commit -q -m scrubbed >/dev/null
