@@ -117,21 +117,22 @@ const DefaultMaxWorking = 4
 
 // Prefs is a loaded config file.
 type Prefs struct {
-	Path       string // file it came from (may not exist)
-	defaults   Spawn
-	profiles   map[string]map[string]conf.Value
-	maxWorking int
-	theme      string
-	profile    string
-	admiral    string
-	admiralMax int
-	agentMail  string
-	summary    Summary
-	memory     Memory
-	squad      Squad
-	exec       Exec
-	recycle    Recycle
-	usage      map[string]conf.Value
+	Path         string // file it came from (may not exist)
+	defaults     Spawn
+	profiles     map[string]map[string]conf.Value
+	maxWorking   int
+	theme        string
+	profile      string
+	admiral      string
+	admiralMax   int
+	agentMail    string
+	summary      Summary
+	memory       Memory
+	squad        Squad
+	exec         Exec
+	integrations map[string]Integration
+	recycle      Recycle
+	usage        map[string]conf.Value
 }
 
 // AdmiralProfile is [admiral] profile: the admiral's tool profile when no
@@ -242,6 +243,12 @@ func Load() (*Prefs, error) {
 	for name, sec := range d {
 		if n, ok := strings.CutPrefix(name, "profile."); ok && n != "" {
 			p.profiles[n] = sec
+		}
+		if n, ok := strings.CutPrefix(name, "integrations."); ok && n != "" {
+			if p.integrations == nil {
+				p.integrations = map[string]Integration{}
+			}
+			p.integrations[n] = applyIntegration(sec)
 		}
 	}
 	return p, nil

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/sturlabragason/fleet/internal/companion"
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/prefs"
 )
@@ -19,8 +20,9 @@ import (
 type configExplain struct {
 	Profile  string          `json:"profile"`
 	Config   string          `json:"config"`
-	Settings []prefs.Setting `json:"settings"`
-	Env      []string        `json:"env"`
+	Settings     []prefs.Setting `json:"settings"`
+	Integrations []prefs.Setting `json:"integrations"`
+	Env          []string        `json:"env"`
 }
 
 func cmdConfig(f *fleet.Fleet, args []string) error {
@@ -45,6 +47,7 @@ func cmdConfig(f *fleet.Fleet, args []string) error {
 	}
 	out := configExplain{Profile: profile, Config: prefs.Path(), Env: fleetEnv(os.Environ())}
 	out.Settings = append([]prefs.Setting{f.ExplainDriver(profile)}, f.Prefs.Explain(profile)...)
+	out.Integrations = explainIntegrations(f.Prefs)
 	if *asJSON {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
@@ -52,6 +55,10 @@ func cmdConfig(f *fleet.Fleet, args []string) error {
 	}
 	fmt.Printf("profile %s, config %s\n", out.Profile, out.Config)
 	for _, s := range out.Settings {
+		fmt.Printf("  %-16s %-24s %s\n", s.Key, s.Value, s.Source)
+	}
+	fmt.Println("integrations:")
+	for _, s := range out.Integrations {
 		fmt.Printf("  %-16s %-24s %s\n", s.Key, s.Value, s.Source)
 	}
 	if len(out.Env) > 0 {
@@ -88,5 +95,47 @@ func fleetEnv(env []string) []string {
 		out = append(out, k+"="+v)
 	}
 	sort.Strings(out)
+	return out
+}
+
+// explainIntegrations is one row per companion (ADR-126): the binary it
+// resolves to and where that came from (an env variable, [integrations.<name>]
+// or PATH), then the adapter keys each configured section sets. Values of
+// credential-looking keys are hidden.
+func explainIntegrations(p *prefs.Prefs) []prefs.Setting {
+	out := []prefs.Setting{}
+	for _, sp := range companion.Registered() {
+		t, err := companion.Find(sp)
+		val, src := t.Path, t.Source
+		var e *companion.Error
+		switch {
+		case errors.As(err, &e) && e.Err == companion.ErrOff:
+			val = "off"
+		case err != nil:
+			val = "(" + err.Error() + ")"
+		}
+		if src == "config" {
+			src = "[integrations." + sp.Name + "]"
+		}
+		if src == "" {
+			src = "PATH"
+		}
+		out = append(out, prefs.Setting{Key: sp.Name, Value: val, Source: src})
+	}
+	for _, n := range p.IntegrationNames() {
+		in := p.Integration(n)
+		keys := make([]string, 0, len(in.Values))
+		for k := range in.Values {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			v := in.Values[k]
+			if secretName(strings.ToUpper(k)) {
+				v = "(set)"
+			}
+			out = append(out, prefs.Setting{Key: n + "." + k, Value: v, Source: "[integrations." + n + "]"})
+		}
+	}
 	return out
 }

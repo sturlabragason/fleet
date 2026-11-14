@@ -1,6 +1,7 @@
 package prefs
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -8,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/companion"
 	"github.com/sturlabragason/fleet/internal/status"
 )
 
@@ -301,5 +303,42 @@ func TestExplain(t *testing.T) {
 	}
 	if got := p.Explain("y")[0]; got.Value+" "+got.Source != "auto [defaults]" {
 		t.Errorf("y mode: %+v", got)
+	}
+}
+
+func TestIntegrations(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.toml")
+	t.Setenv("FLEET_CONFIG", cfg)
+	bin := filepath.Join(dir, "cass")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "[integrations.cass]\npath = \"" + bin + "\"\n\n[integrations.tracker]\npath = \"off\"\ndata = \"~/.tracker\"\n"
+	if err := os.WriteFile(cfg, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	home, _ := os.UserHomeDir()
+	if in := p.Integration("tracker"); in.Path != "off" || in.Value("data") != filepath.Join(home, ".tracker") {
+		t.Errorf("tracker: %+v", in)
+	}
+	if got := p.IntegrationNames(); len(got) != 2 || got[0] != "cass" {
+		t.Errorf("names: %v", got)
+	}
+	t.Setenv("FLEET_CASS", "")
+	tool, err := companion.Find(companion.Spec{Name: "cass", Env: []string{"FLEET_CASS"}})
+	if err != nil || tool.Path != bin || tool.Source != "config" {
+		t.Errorf("config path: %+v %v", tool, err)
+	}
+	if _, err := companion.Find(companion.Spec{Name: "tracker"}); !errors.Is(err, companion.ErrOff) {
+		t.Errorf("config off: %v", err)
+	}
+	t.Setenv("FLEET_CASS", "off")
+	if _, err := companion.Find(companion.Spec{Name: "cass", Env: []string{"FLEET_CASS"}}); !errors.Is(err, companion.ErrOff) {
+		t.Errorf("env wins over config: %v", err)
 	}
 }

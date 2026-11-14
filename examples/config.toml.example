@@ -192,6 +192,16 @@ mode_args = { autopilot = "--allow-all --autopilot", plan = "--plan" }
 # host = "buildbox"      # user@host or a ~/.ssh/config alias
 # root = "fleet-exec"    # remote dir, under the remote home, for worktree copies
 
+# Companion CLIs fleet calls (ADR-126): cass, gh, rsync, ssh, summary,
+# clipboard, terminal. `fleet doctor` lists each with what is off without it;
+# fleet never installs one. Lookup: the tool's env variable (FLEET_CASS,
+# FLEET_TERMINAL) > path here > PATH. path = "auto" (default), "off", or a
+# binary, optionally with arguments. Other keys belong to the adapter.
+# [integrations.cass]
+# path = "off"           # switch session search off
+# [integrations.terminal]
+# path = "kitty --single-instance"
+
 # The admiral's tool profile when nothing else picks one (DESIGN §6.10).
 # Order: fleet --admiral-profile > $FLEET_ADMIRAL_PROFILE > last choice
 # (Alt-P / fleet admiral profile NAME) > this > copilot.
