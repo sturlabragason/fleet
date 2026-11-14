@@ -116,7 +116,7 @@ type InitializeResult struct {
 type AgentCapabilities struct {
 	LoadSession         bool                `json:"loadSession"`
 	SessionCapabilities SessionCapabilities `json:"sessionCapabilities"`
-	PromptCapabilities  PromptCapabilities  `json:"promptCapabilities"`
+	PromptCapabilities  PromptCapabilities  `json:"promptCapabilities,omitzero"`
 }
 
 // PromptCapabilities says which content blocks a prompt may hold besides
