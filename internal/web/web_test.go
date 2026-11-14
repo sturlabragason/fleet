@@ -185,7 +185,7 @@ func TestEventsPushTheBoard(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	line, _ := bufio.NewReader(resp.Body).ReadString('\n')
-	if !strings.HasPrefix(line, "data: ") || !strings.Contains(line, `"name":"c1"`) || !strings.Contains(line, `"stale":true`) {
+	if !strings.HasPrefix(line, `data: {"schema":1,`) || !strings.Contains(line, `"name":"c1"`) || !strings.Contains(line, `"stale":true`) {
 		t.Errorf("first event: %q", line)
 	}
 }

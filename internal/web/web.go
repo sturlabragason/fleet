@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/status"
@@ -189,14 +190,15 @@ type Tile struct {
 }
 
 // View is what /events pushes: every agent, and whether the watcher that
-// keeps the board fresh is down.
+// keeps the board fresh is down. Schema is board.Schema (ADR-126).
 type View struct {
+	Schema int    `json:"schema"`
 	Agents []Tile `json:"agents"`
 	Stale  bool   `json:"stale"`
 }
 
 func (s *Server) view() View {
-	v := View{Agents: []Tile{}}
+	v := View{Schema: board.Schema, Agents: []Tile{}}
 	for _, a := range s.F.Store.Load().Sorted() {
 		t := Tile{Name: a.Name, Status: a.Status, Since: a.StatusSince, Line: a.LastLine,
 			Profile: a.Profile, Goal: a.Goal, Admiral: a.Admiral}

@@ -173,6 +173,24 @@ func TestUnknownKeysSurviveARoundTrip(t *testing.T) {
 	}
 }
 
+// A board.json from before the schema key reads as schema 0 with its agents
+// intact, and the next write stamps the current schema (ADR-126).
+func TestSchemaStampedOnWrite(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "board.json"), []byte(`{"agents":{"a1":{"name":"a1","status":"idle"}}}`), 0o644)
+	s := NewStore(dir)
+	if b := s.Load(); b.Schema != 0 || b.Agents["a1"] == nil {
+		t.Fatalf("old board: schema=%d agents=%v", b.Schema, b.Agents)
+	}
+	if err := s.Update(func(b *Board) error { b.Agents["a1"].Status = "working"; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, "board.json"))
+	if !strings.Contains(string(raw), `"schema": 1`) || s.Load().Schema != Schema {
+		t.Fatalf("schema not stamped: %s", raw)
+	}
+}
+
 // ADR-58 covered only Agent. A newer fleet's key at the top of the board or
 // inside a card, check, report, worktree, exit or baseline must survive an
 // older one's write too (ADR-62).

@@ -354,8 +354,19 @@ type Report struct {
 	extra   jsonx.Extra
 }
 
+// Schema is the shape version of fleet's JSON outputs: board.json, `fleet ls
+// --json` and the `fleet web` event stream (ADR-126). An added key keeps it; a
+// renamed or removed key bumps it, and a consumer refuses a number it does not
+// know. It is the one constant for all three.
+const Schema = 1
+
 // Board is the whole file.
 type Board struct {
+	// Schema is the Schema of the build that last wrote the file. 0 is a
+	// board.json from before the key existed, whose shape is schema 1. An
+	// older build writes its own, lower number over a newer one's: the keys
+	// it maintains have its shape, so a newer reader can tell and migrate.
+	Schema int               `json:"schema"`
 	Agents map[string]*Agent `json:"agents"`
 	// LegacyClosed is the "closed" key of a board.json written before
 	// ADR-113, or by an older build still running. The records now live in
@@ -477,6 +488,7 @@ func (s *Store) Update(fn func(*Board) error) error {
 	if err != nil {
 		return err
 	}
+	b.Schema = Schema
 	data, err := json.MarshalIndent(b, "", "  ")
 	if err != nil {
 		return err

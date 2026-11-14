@@ -80,6 +80,7 @@ var usage = `usage:
   fleet sessions [--all] [--json] [-n 20] [words...]
                                             list copilot/claude sessions to adopt, newest first
   fleet ls [--json]                         the agents; DRIVER is acp or tmux
+                                            (--json: an array, each agent with "schema": 1)
   fleet info <name>                         one agent's facts, as fleet_info: driver (and ACP server),
                                             the fleet version that started it, status, git, session, spend
   fleet spend [--today] [--json]            what each agent has cost so far and the fleet total, read from
@@ -709,20 +710,25 @@ func cmdLs(f *fleet.Fleet, args []string) error {
 	return writeLs(os.Stdout, as, f.Teams.ByAgent(), len(args) > 0 && args[0] == "--json")
 }
 
-// lsAgent adds team fields to the JSON of an agent without touching board.Agent.
+// lsAgent adds the schema and team fields to the JSON of an agent without
+// touching board.Agent. `fleet ls --json` stays a bare array, which scripts
+// already parse, so the schema number (ADR-126) rides on each element.
 type lsAgent struct {
 	*board.Agent
 	Team      string `json:"team,omitempty"`
 	TeamColor string `json:"team_color,omitempty"`
 }
 
-// MarshalJSON splices the team fields onto the agent's own JSON. board.Agent
+// MarshalJSON splices the extra fields onto the agent's own JSON. board.Agent
 // marshals itself (ADR-58), and an embedded type's marshaller would otherwise
-// be promoted and swallow these two fields.
+// be promoted and swallow them.
 func (l lsAgent) MarshalJSON() ([]byte, error) {
 	b, err := json.Marshal(l.Agent)
 	if err != nil {
 		return nil, err
+	}
+	if len(b) < 2 || b[0] != '{' || b[len(b)-1] != '}' {
+		return b, nil
 	}
 	var extra []byte
 	for _, kv := range [][2]string{{"team", l.Team}, {"team_color", l.TeamColor}} {
@@ -735,10 +741,11 @@ func (l lsAgent) MarshalJSON() ([]byte, error) {
 		}
 		extra = append(append(extra, `,"`+kv[0]+`":`...), v...)
 	}
-	if len(extra) == 0 || len(b) < 2 || b[len(b)-1] != '}' {
-		return b, nil
+	out := fmt.Appendf(nil, `{"schema":%d`, board.Schema)
+	if len(b) > 2 {
+		out = append(append(out, ','), b[1:len(b)-1]...)
 	}
-	return append(append(b[:len(b)-1:len(b)-1], extra...), '}'), nil
+	return append(append(out, extra...), '}'), nil
 }
 
 // writeLs prints the agent table. The TEAM column appears only when a listed
@@ -747,9 +754,6 @@ func writeLs(out io.Writer, as []*board.Agent, teams map[string]team.Info, asJSO
 	if asJSON {
 		e := json.NewEncoder(out)
 		e.SetIndent("", "  ")
-		if len(teams) == 0 {
-			return e.Encode(as)
-		}
 		ls := make([]lsAgent, len(as))
 		for i, a := range as {
 			ls[i] = lsAgent{Agent: a, Team: teams[a.Name].Team, TeamColor: teams[a.Name].Color}
