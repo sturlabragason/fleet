@@ -166,15 +166,3 @@ func short(s string) string {
 }
 
 func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
-
-// routesBrief is fleet_brief's route index: names and one-line triggers.
-func (s *Server) routesBrief() string {
-	rs, err := routes.Load(s.F.Home)
-	if err != nil {
-		return "## Routes\n" + err.Error() + "\n\n"
-	}
-	if len(rs) == 0 {
-		return ""
-	}
-	return "## Routes (match the request here before asking where; fleet_spawn route=NAME, fleet_route show NAME)\n" + routes.Index(rs) + "\n"
-}

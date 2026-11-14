@@ -94,7 +94,7 @@ var toolDefs = []tool{
 	{"fleet_note", "Save one line to the decisions log: a user decision, preference or promise, or a RAID entry starting risk:, assumption:, issue: or decision:. Survives an admiral reset. pin=true for a standing user rule: fleet_brief always shows pinned notes, not just the last 30.", obj([]string{"text"}, map[string]any{
 		"text": str("the note, one line"), "agent": str("optional agent the note is about"),
 		"pin": map[string]any{"type": "boolean", "description": "a standing rule, always shown in fleet_brief"}})},
-	{"fleet_brief", "Start-of-session brief: the last handoff, pinned notes, the request routes, recent notes and the agent table. Call first in a fresh session.", obj(nil, map[string]any{})},
+	{"fleet_brief", "Start-of-session brief, kept under 12 KB: the last handoff and pinned notes in full, unread report headlines, the agents, the request routes and the recent notes that fit. Each cut section names the tool with the rest. Call first in a fresh session.", obj(nil, map[string]any{})},
 	{"fleet_access", "List agent-to-agent access: the agent_mail policy, then every explicit pair with its state (pending, granted, denied), who asked, who decided and why. limit=N adds the last N messages between agents.", obj(nil, map[string]any{
 		"limit": map[string]any{"type": "integer", "description": "also show the last N agent-to-agent messages"}})},
 	{"fleet_access_decide", "Grant, deny or revoke access between two agents. Ask the user first; set confirmed=true only after an explicit yes.", obj([]string{"a", "b", "action", "confirmed"}, map[string]any{
@@ -559,36 +559,6 @@ func (s *Server) sessions(query string, limit int) (string, error) {
 		}
 		fmt.Fprintf(&b, "%s | %s | %s | %s | %s | %s\n", x.ID, sessions.Age(time.Since(x.Updated)), x.Profile, x.Dir, sessions.OneLine(x.Title, 80), strings.Join(flags, ", "))
 	}
-	return b.String(), nil
-}
-
-// brief is the handoff, every pinned note, the last 30 other notes and the
-// status table.
-func (s *Server) brief() (string, error) {
-	var b strings.Builder
-	if h, at, ok := supervisor.ReadHandoffOf(s.F.Home, s.Me()); ok {
-		fmt.Fprintf(&b, "## Handoff (%s)\n%s\n\n", at.Format("2006-01-02 15:04"), h)
-	} else {
-		b.WriteString("## Handoff\nnone\n\n")
-	}
-	pinned := supervisor.Pinned(s.F.Home)
-	if len(pinned) > 0 {
-		b.WriteString("## Pinned\n" + strings.Join(pinned, "\n") + "\n\n")
-	}
-	b.WriteString(s.routesBrief())
-	b.WriteString("## Notes\n")
-	if notes := unpinned(supervisor.TailNotes(s.F.Home, 30), pinned); len(notes) > 0 {
-		b.WriteString(strings.Join(notes, "\n") + "\n\n")
-	} else {
-		b.WriteString("none\n\n")
-	}
-	b.WriteString(s.unreadReports())
-	b.WriteString(callExt(extBrief, s))
-	st, err := s.status()
-	if err != nil {
-		return "", err
-	}
-	b.WriteString("## Agents\n" + st)
 	return b.String(), nil
 }
 

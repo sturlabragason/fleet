@@ -164,3 +164,57 @@ func TestResetShellUsesAdmiral(t *testing.T) {
 		t.Errorf("%q", got)
 	}
 }
+
+// A large state still gives a brief under briefBudget with the handoff and
+// every pinned note whole; cut sections name the tool with the rest.
+func TestBriefStaysUnderBudget(t *testing.T) {
+	s, _, _ := memServer(t)
+	home := s.F.Home
+	handoff := "HANDOFF-START " + strings.Repeat("plan ", 780) + "HANDOFF-END"
+	if err := supervisor.WriteHandoffOf(home, s.Me(), handoff); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 80; i++ {
+		callText(t, s, "fleet_route", map[string]any{"action": "set", "name": fmt.Sprintf("route%02d", i), "fields": map[string]any{
+			"triggers": []any{strings.Repeat("a long trigger phrase ", 5)}, "dir": home}})
+	}
+	for i := 0; i < 8; i++ {
+		callText(t, s, "fleet_note", map[string]any{"text": fmt.Sprintf("PIN-%d %s", i, strings.Repeat("rule ", 50)+"end"), "pin": true})
+	}
+	for i := 0; i < 200; i++ {
+		callText(t, s, "fleet_note", map[string]any{"text": fmt.Sprintf("note-%03d %s", i, strings.Repeat("x", 300))})
+	}
+	out, err := s.brief()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) > briefBudget {
+		t.Errorf("brief is %d bytes, budget %d", len(out), briefBudget)
+	}
+	if !strings.HasPrefix(out, "## Handoff (") || !strings.Contains(out, handoff+"\n") {
+		t.Error("handoff not whole and first")
+	}
+	for i := 0; i < 8; i++ {
+		if !strings.Contains(out, fmt.Sprintf("PIN-%d %s\n", i, strings.Repeat("rule ", 50)+"end")) {
+			t.Errorf("pinned note %d cut", i)
+		}
+	}
+	for _, want := range []string{"note-199 ", "fleet_recall", "fleet_route list"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("brief missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "note-150 ") {
+		t.Error("older notes should have been cut")
+	}
+
+	// Pinned notes over half the budget are still shown whole, with a warning.
+	for i := 0; i < 30; i++ {
+		callText(t, s, "fleet_note", map[string]any{"text": fmt.Sprintf("BIG-%d %s", i, strings.Repeat("y", 300)), "pin": true})
+	}
+	out, _ = s.brief()
+	if !strings.Contains(out, "BIG-0 ") || !strings.Contains(out, "BIG-29 ") || !strings.Contains(out, "ask the user which rules to retire") ||
+		!strings.Contains(out, "## Unread reports\nnone\n") || !strings.Contains(out, "## Agents\nno agents\n") {
+		t.Errorf("big pinned brief:\n%s", out)
+	}
+}
