@@ -188,11 +188,19 @@ patterns = "copilot"
 	}
 	s := New(f, wall.New(tc, fleet.Session))
 	s.Fill = func() (int, int, bool) { return 0, 0, false }
-	time.Sleep(400 * time.Millisecond)
 	call := func(tool string, a map[string]any) (string, bool) { return callText(t, s, tool, a) }
 
-	st, _ := call("fleet_status", nil)
-	if !strings.Contains(st, "Do you want to allow this? [1 Yes | 2 Yes, and add these directorie… | 3 No, and tell Copilot what to …]") {
+	// The fakes' screens settle at their own pace on a loaded runner: poll
+	// rather than sleep a fixed time.
+	const menu = "Do you want to allow this? [1 Yes | 2 Yes, and add these directorie… | 3 No, and tell Copilot what to …]"
+	var st string
+	for end := time.Now().Add(10 * time.Second); ; time.Sleep(100 * time.Millisecond) {
+		st, _ = call("fleet_status", nil)
+		if strings.Contains(st, menu) && strings.Contains(st, "Approve? [y/n]") || time.Now().After(end) {
+			break
+		}
+	}
+	if !strings.Contains(st, menu) {
 		t.Errorf("status menu: %q", st)
 	}
 	// a1 is on its [y/n] prompt: plain text would answer it, so it needs confirmed.
