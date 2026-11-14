@@ -312,9 +312,10 @@ func Register(e Extension)
 
 Public CI builds and tests a small example extension under a test-only tag
 (`go vet -tags extexample ./...` plus one test per seam), so a public refactor that breaks a
-seam fails on the public side first. overlay features that need a companion tool (tracker with
-task tracker) use the public companion contract; pro decides only whether a feature is compiled
-in, not how a tool is reached.
+seam fails on the public side first. overlay features that need a companion tool use the public companion contract; pro
+decides only whether a feature is compiled in, not how a tool is reached. The task tracker
+adapter itself is in the overlay (section 7, decision 1): an adapter file in the overlay on the public
+helper.
 
 ### 4.6 The admiral's tool budget
 
@@ -369,7 +370,7 @@ M1 to M5 are one commit each and unblock M6. M7 to M10 are independent of M6 and
 
 | Integration | Tier | Notes |
 |---|---|---|
-| task tracker | companion (M6) | reads `tracker export`, writes `tracker add` and `task <uuid> modify` with fleet attributes; `TRACKER_DATA` from config; the first new adapter |
+| task tracker | overlay companion (M6) | reads `tracker export`, writes `tracker add` and `task <uuid> modify` with fleet attributes; `TRACKER_DATA` from config; the first new adapter |
 | time tracker | companion, read-only | task tracker's own on-modify hook drives it; fleet reads `timetrack export` for display only |
 | cass | companion (M2) | already one file; moves onto the helper |
 | syncall, a sync tool | the user's own setup | they sync into task tracker on the user's schedule; fleet never runs them |
@@ -410,17 +411,18 @@ change between tool versions, so each adapter carries fixtures per version and a
 registry is a Go API that must stay stable for the overlay. Grouped tools with an action enum
 are slightly harder for the model than one tool per verb.
 
-## 7. Open questions
+## 7. Decisions on the open questions (2026-11-14)
 
-1. **Is the task tracker adapter public or pro?** Suggested default: the adapter is public
-   (task tracker is MIT, and the contract is the point); tracker's thread logic that uses it
-   is pro.
-2. **Does an integration ever get its own admiral tool?** Suggested default: only grouped (one
-   tool, an `action` enum), and only when `fleet_recall` or `fleet_brief` cannot carry it.
-3. **Environment over config, or config over environment?** Suggested default: environment
-   first, as `FLEET_CONFIG` and `FLEET_CASS` work today, so tests can pin it.
-4. **May fleet ever install a companion?** Suggested default: no; it prints the hint.
-5. **`family` explicit now, or keep inferring from `patterns`?** Suggested default: an explicit
-   key that defaults to `patterns`, so nothing breaks.
-6. **When do PATH plugins get built?** Suggested default: not until a third party asks; M7
-   (schema) is the only prerequisite worth doing now.
+Answered by the user on 2026-11-14; 2, 5 and 6 take the suggested default.
+
+1. **The task tracker adapter is pro.** It lives in the overlay, built on the public
+   companion helper. The helper, cass and every other existing adapter stay public.
+2. **An integration gets at most one admiral tool, with an `action` argument**, and only when
+   `fleet_recall` or `fleet_brief` cannot carry what it needs.
+3. **The environment wins over config**, then PATH, as `FLEET_CONFIG` and `FLEET_CASS` work
+   today, so tests can pin a tool.
+4. **Fleet never installs a companion.** It prints the one-line install hint.
+5. **Profiles get an explicit `family` key** that defaults to the `patterns` value, so no
+   existing profile changes.
+6. **No `fleet-<name>` PATH plugins until someone asks for one.** Only the `schema` number on
+   fleet's JSON (M7) is done now, since it is the one prerequisite.
