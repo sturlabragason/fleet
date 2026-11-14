@@ -20,8 +20,6 @@ var routeToolDef = tool{"fleet_route", "Request routes: where and how a recurrin
 	"reason": str("for set: why, in the user's words (kept on the route as learned_from and in the decisions log)"),
 })}
 
-func init() { toolDefs = append(toolDefs, routeToolDef) }
-
 func (s *Server) route(a args) (string, error) {
 	home := s.F.Home
 	switch a.Action {

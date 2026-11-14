@@ -64,6 +64,7 @@ func TestExtensionsCompose(t *testing.T) {
 	for _, e := range []Extension{
 		{Name: "a"},
 		{Name: "c", Tools: []tool{{Name: "fleet_status"}}, Call: call},
+		{Name: "w", Tools: []tool{{Name: "fleet_wait"}}, Call: call}, // a built-in from another file
 		{Name: "d", Tools: []tool{{Name: "fleet_d"}}},
 		{Name: "e", Parity: map[string]string{"spawn": "fleet_spawn"}},
 	} {

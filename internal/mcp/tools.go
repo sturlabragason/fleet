@@ -3,6 +3,7 @@ package mcp
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -39,7 +40,12 @@ func strList(desc string) map[string]any {
 
 var confirmedProp = map[string]any{"type": "boolean", "description": "true only after the user explicitly said yes in chat"}
 
-var toolDefs = []tool{
+// toolDefs are the admiral's tools. The built-in ones are all in this
+// initializer, which runs before any init(), so an extension's Register sees
+// every one of them; extension tools follow.
+var toolDefs = slices.Concat(baseToolDefs, cliToolDefs, []tool{instructionsToolDef, routeToolDef}, admiralToolDefs, []tool{waitToolDef})
+
+var baseToolDefs = []tool{
 	{"fleet_status", "List all agents: name, team, profile, driver (acp or tmux), status, running subagents, on_wall, age, spend so far, what it waits for. Ends with the fleet-wide spend. Start here.", obj(nil, map[string]any{})},
 	{"fleet_peek", "Show the last N lines (default 20, max 80) of one agent's screen, without box borders and blank runs (raw=true: as captured). last_message=true returns the agent's last reply from its session log instead. summary=true returns about 5 lines from a cheap model (what it is doing, what it waits for, any error) and costs a model call, so prefer it over long screens and don't poll it.", obj([]string{"name"}, map[string]any{
 		"name": str("agent name"), "lines": map[string]any{"type": "integer", "description": "lines to return (default 20, max 80)"},
@@ -106,8 +112,6 @@ var toolDefs = []tool{
 		"profile": str("tool profile, see fleet_profiles"), "summary": str("optional handoff for the next admiral")})},
 	adrToolDef,
 }
-
-func init() { toolDefs = append(toolDefs, admiralToolDefs...) }
 
 type args struct {
 	Name, Text, Answer, Profile, Dir, Prompt, Action, Preset, Agent, Query string

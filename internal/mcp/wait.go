@@ -38,7 +38,6 @@ var waitToolDef = tool{"fleet_wait", "Block until a new report or message arrive
 	"timeout_s": map[string]any{"type": "integer", "description": "seconds to wait (default 300, max 600)"}})}
 
 func init() {
-	toolDefs = append(toolDefs, waitToolDef)
 	agentToolDefs = append(agentToolDefs, waitToolDef)
 	identityBound["fleet_wait"] = true
 }

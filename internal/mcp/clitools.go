@@ -44,8 +44,6 @@ var cliToolDefs = []tool{
 		"limit": map[string]any{"type": "integer", "description": "hits per section (default 10)"}})},
 }
 
-func init() { toolDefs = append(toolDefs, cliToolDefs...) }
-
 // cliTimeout bounds one CLI-backed call; a git walk over many worktrees or a
 // push to origin may take a while, but never block the MCP loop for good.
 const cliTimeout = 2 * time.Minute

@@ -69,5 +69,3 @@ func (s *Server) currentInstructions() string {
 	text := s.rulesText()
 	return fmt.Sprintf("instructions %s\n\n%s", instructionsHash(text), text)
 }
-
-func init() { toolDefs = append(toolDefs, instructionsToolDef) }
