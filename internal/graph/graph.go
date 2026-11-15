@@ -223,14 +223,6 @@ func writeStamp(out string, st Stamp) error {
 	return os.Rename(tmp, filepath.Join(out, stampFile))
 }
 
-// Line is the one playbook line that hands the graph to an agent.
-func Line(st Stamp) string {
-	return fmt.Sprintf("A code graph of this repo, built from `main` at %s, is at `$GRAPHIFY_OUT`: "+
-		"try `graphify affected <file>`, `graphify path \"A\" \"B\"` or `graphify explain \"X\"` before a wide search. "+
-		"`fleet touching --graph <files>` also lists worktrees changing code yours calls or is called by. "+
-		"It does not show your own edits; don't rebuild it.", st.BuiltAt.Local().Format("2006-01-02 15:04"))
-}
-
 // BuildMode is [integrations.graphify] build: "merge" (default) or "manual".
 func BuildMode(p *prefs.Prefs) string {
 	switch v := strings.TrimSpace(p.Integration("graphify").Values["build"]); v {

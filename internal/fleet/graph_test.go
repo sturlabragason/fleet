@@ -13,8 +13,8 @@ import (
 	"github.com/sturlabragason/fleet/internal/tmux"
 )
 
-// A repo with a built code graph hands it to the agent: GRAPHIFY_OUT in the
-// pane env and one line in the playbook; without a graph, neither (DESIGN §6.15).
+// A repo with a built code graph hands it to the agent as GRAPHIFY_OUT in the
+// pane env, without a playbook line (ADR-141); without a graph, no env (DESIGN §6.15).
 func TestSpawnCodeGraph(t *testing.T) {
 	home := t.TempDir()
 	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
@@ -64,7 +64,7 @@ patterns = "fake"
 	if env != out {
 		t.Errorf("GRAPHIFY_OUT = %q, want %q", env, out)
 	}
-	if !strings.Contains(prompt, "A code graph of this repo") || !strings.Contains(prompt, "$GRAPHIFY_OUT") {
-		t.Errorf("playbook lacks the graph line:\n%.300q", prompt)
+	if strings.Contains(prompt, "GRAPHIFY_OUT") {
+		t.Errorf("playbook names the graph; ADR-141 dropped that line:\n%.300q", prompt)
 	}
 }

@@ -256,13 +256,6 @@ func TestBuildMode(t *testing.T) {
 	}
 }
 
-func TestLine(t *testing.T) {
-	l := Line(Stamp{BuiltAt: time.Date(2026, 1, 2, 3, 4, 0, 0, time.Local)})
-	if !strings.Contains(l, "2026-01-02 03:04") || !strings.Contains(l, "$GRAPHIFY_OUT") || !strings.Contains(l, "touching --graph") || strings.Contains(l, "\n") {
-		t.Errorf("line = %q", l)
-	}
-}
-
 func TestBuildRerunCapDropsMarker(t *testing.T) {
 	home := t.TempDir()
 	root := "/r/x"

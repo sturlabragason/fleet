@@ -404,9 +404,6 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 		if lead != "" {
 			text = strings.TrimRight(text, "\n") + "\n\n" + lead
 		}
-		if st, _, ok := graph.Find(f.Home, dir); ok {
-			text = strings.TrimRight(text, "\n") + "\n\n" + graph.Line(st)
-		}
 		full = playbook.Compose(text, prompt)
 		logx.For("fleet").Info("playbook", "agent", name, "effort", lvl, "sources", src, "bytes", len(full)-len(prompt))
 	case lead != "" && prompt != "":
