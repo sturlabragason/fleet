@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"sort"
 	"testing"
+	"time"
 )
 
 func TestOwnLeavesOutWorkBelowAShell(t *testing.T) {
@@ -44,13 +45,23 @@ func TestScanFindsTaggedProcesses(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { cmd.Process.Kill(); cmd.Wait() }()
-	for _, i := range Scan("FLEET_TEST_OWNER") {
-		if i.PID == cmd.Process.Pid {
-			if i.Owner != "a@home" || i.PPID != os.Getpid() || i.Comm != "sleep" || i.RSS == 0 {
-				t.Fatalf("scanned %+v", i)
+	// A child scanned in the instant after exec can still show RSS 0 (seen in CI), so retry briefly.
+	var last *Info
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		for _, i := range Scan("FLEET_TEST_OWNER") {
+			if i.PID == cmd.Process.Pid {
+				i := i
+				last = &i
 			}
-			return
+		}
+		if last != nil && last.Comm == "sleep" && last.RSS != 0 {
+			break
 		}
 	}
-	t.Fatal("tagged child not scanned")
+	if last == nil {
+		t.Fatal("tagged child not scanned")
+	}
+	if last.Owner != "a@home" || last.PPID != os.Getpid() || last.Comm != "sleep" || last.RSS == 0 {
+		t.Fatalf("scanned %+v", *last)
+	}
 }
