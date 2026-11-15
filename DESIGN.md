@@ -2284,3 +2284,11 @@ The run stopped early by its own rule (no graphify call in the first 12 runs of 
 **Rejected.** Blocking on inotify instead of the 1 s pass: stuck and no-report timers, wake retries and the 3 s snapshot freshness the overview relies on are time-driven, and pane output gives no file event. A longer interval when nothing changed: same reasons, and idle detection would slow down. Caching the parsed board between passes: callers hold pointers into Refresh's result, and a deep copy costs about as much as the parse.
 
 **Trade-offs.** A tmux without `pane_output_generation` expands it to empty, and the watcher captures every pass as before. The option values are as old as the pass's snapshot; a write by another process between the snapshot and the sync is corrected on the next pass, as before.
+
+**ADR-144: a spawn without a profile gets claude-copilot, whatever tool the admiral runs** (§6; amends fleet#31 (d)) — accepted 2026-11-15.
+
+**Context.** With `[defaults] profile` unset, every `fleet_spawn` had to name a profile, and the admiral instructions said to state one. An admiral on a Claude profile (a second admiral on `claude-personal`) then picked its own profile, so its agents ran plain Claude over tmux instead of Copilot over ACP like the main admiral's.
+
+**Decision.** `Fleet.DefaultProfile` is `[defaults] profile`, else the built-in `claude-copilot` when it is defined, for `fleet_spawn`, `fleet_squad_spawn` and `fleet config explain`. An explicit `profile` on the call wins; `[defaults] profile` is the user's override. The admiral instructions say to leave `profile` out unless the user or task needs a tool, and never to pick their own profile because they run on it.
+
+**Rejected.** Defaulting to the admiral's own profile: that is the bug. A per-admiral `[admiral.<name>] profile` key: nobody asked for different defaults per admiral, and `[defaults] profile` covers the global case.

@@ -38,7 +38,7 @@ func cmdConfig(f *fleet.Fleet, args []string) error {
 	if fs.NArg() > 1 {
 		return errors.New(usage)
 	}
-	profile := f.Prefs.DefaultProfile()
+	profile := f.DefaultProfile()
 	if fs.NArg() == 1 {
 		profile = fs.Arg(0)
 	}

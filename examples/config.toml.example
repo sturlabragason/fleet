@@ -15,7 +15,7 @@
 # agents keep running.
 # theme = "catppuccin"
 # Tool profile for fleet_spawn and fleet_squad_spawn calls that name none
-# (see `fleet profiles`). Unset: every spawn call must name a profile.
+# (see `fleet profiles`). Unset: claude-copilot, whatever tool the admiral runs.
 # Re-read on every spawn. The spawn reply always names the profile and model.
 # profile = "claude-copilot"
 # Starting mode, looked up in the profile's mode_args / mode_keys.

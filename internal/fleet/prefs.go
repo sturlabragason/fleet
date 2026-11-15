@@ -26,6 +26,18 @@ func (f *Fleet) MaxWorking() int { return f.livePrefs().MaxWorking() }
 // MemPrefs is the current [memory] section: the RAM guard settings.
 func (f *Fleet) MemPrefs() prefs.Memory { return f.livePrefs().Memory() }
 
-// DefaultProfile is the current [defaults] profile: what a spawn tool uses
-// when the call names no profile ("" = none set).
-func (f *Fleet) DefaultProfile() string { return f.livePrefs().DefaultProfile() }
+// FallbackProfile is the spawn default when [defaults] profile is unset:
+// a Copilot-driven profile, whatever tool the admiral itself runs (ADR-144).
+const FallbackProfile = "claude-copilot"
+
+// DefaultProfile is what a spawn tool uses when the call names no profile:
+// [defaults] profile, else FallbackProfile if it is defined ("" = neither).
+func (f *Fleet) DefaultProfile() string {
+	if p := f.livePrefs().DefaultProfile(); p != "" {
+		return p
+	}
+	if _, ok := f.Profiles[FallbackProfile]; ok {
+		return FallbackProfile
+	}
+	return ""
+}

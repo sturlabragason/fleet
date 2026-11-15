@@ -184,7 +184,7 @@ var usage = `usage:
                                             agent on each. --prune deletes the merged ones (by ancestry or
                                             equal patch) no live, parked or recently closed agent is on
   fleet config explain [--json] [profile]   the settings a spawn of profile gets (default: [defaults]
-                                            profile), each with the layer that set it: --driver,
+                                            profile, else claude-copilot), each with the layer that set it: --driver,
                                             [profile.<name>], [defaults], the tool profile or built-in;
                                             and the FLEET_* variables set here
   fleet adr claim [--for AGENT] [-C dir]    take the next free ADR number for DESIGN.md §14 and print it;

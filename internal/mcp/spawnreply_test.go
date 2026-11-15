@@ -58,9 +58,16 @@ func TestSpawnDefaultProfileAndQueuedReply(t *testing.T) {
 	}
 }
 
-func TestSpawnWithoutProfileOrDefaultNamesTheFix(t *testing.T) {
+// With no [defaults] profile a spawn takes claude-copilot, whatever tool the
+// admiral runs; with neither, the error names the fix (ADR-144).
+func TestSpawnWithoutDefaultTakesCopilot(t *testing.T) {
 	f, s := spawnHome(t, "")
 	msg, isErr := callText(t, s, "fleet_spawn", map[string]any{"name": "x", "dir": f.Home})
+	if isErr || !strings.HasPrefix(msg, "queued x (claude-copilot,") {
+		t.Fatalf("reply %q (isErr=%v)", msg, isErr)
+	}
+	delete(f.Profiles, fleet.FallbackProfile)
+	msg, isErr = callText(t, s, "fleet_spawn", map[string]any{"name": "y", "dir": f.Home})
 	if !isErr || !strings.Contains(msg, "[defaults] profile") || !strings.Contains(msg, "fleet_profiles") {
 		t.Fatalf("reply %q (isErr=%v)", msg, isErr)
 	}

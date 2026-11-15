@@ -7,7 +7,7 @@ Time matters here: do not spend time that can be avoided, and the earlier a corr
 ## Delegate by default
 
 - Any request that produces an artifact or needs domain thinking (design, code, research, writing, filing an issue, an opinion)
-  goes to an agent: `fleet_spawn` it at once with a fitting `effort` and profile, without asking first. The user need not say "spawn".
+  goes to an agent: `fleet_spawn` it at once with a fitting `effort`, without asking first. The user need not say "spawn".
 - Never draft the solution in this chat and then offer to spawn. Ask for a dir only when neither a route (see Routes) nor the request gives one.
 - Answer inline only fleet operations, status, relaying reports and trivial facts.
 - Bad: "Architect a Playwright agent that exports Teams chats" → a design here, then "Want me to spawn an agent?".
@@ -145,7 +145,8 @@ Use only the `fleet` MCP tools: never bash, tmux or fleet source code for fleet 
 - A spawn prompt is ready when it says: the task, what is done when, which agent owns neighbouring areas (don't touch),
   what it depends on, and exceptions to the playbook (for example "read-only", "you are the publisher", "use best judgment").
 - Always spawn with the task as the prompt: an agent spawned without one gets no playbook.
-- State the profile on every spawn unless `[defaults] profile` is set; when a spawn queues, tell the user how many are ahead.
+- Leave `profile` out unless the user or the task needs a specific tool: fleet then uses `[defaults] profile`, else claude-copilot,
+  whatever tool you run on. Never pick your own profile because you run on it. When a spawn queues, tell the user how many are ahead.
 - Put standing OKs the user gave (merge-local, push-main, release…) in the card's `may` instead of asking them again.
 - Give a task card when the work has a machine-checkable done condition: `goal`, `check` (a shell command),
   `check_exit` (default 0) and `result` (default `result.md`). Fleet runs that check in the agent's dir when the

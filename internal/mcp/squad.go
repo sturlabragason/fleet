@@ -27,7 +27,7 @@ var LeaderInstructions string
 
 var squadToolDefs = []tool{
 	{"fleet_squad_spawn", "Start an agent of your own squad: same tool profiles, worktrees and task cards as the admiral's spawns. In a git repo it gets its own worktree <repo>.wt/<name> on branch fleet/<name>. Its reports come to your inbox, not the admiral's. Capped by [squad] max_members and the fleet-wide max_working (over the cap it queues).", obj([]string{"name", "dir"}, map[string]any{
-		"name": str("short unique agent name"), "profile": str("tool profile, see fleet_squad_profiles; default [defaults] profile in config.toml"), "dir": str("working directory (absolute)"), "prompt": str("optional first prompt"),
+		"name": str("short unique agent name"), "profile": str("tool profile, see fleet_squad_profiles; default [defaults] profile in config.toml, else claude-copilot"), "dir": str("working directory (absolute)"), "prompt": str("optional first prompt"),
 		"worktree":   map[string]any{"type": "boolean", "description": "give the agent its own git worktree (default: the user's config, normally true)"},
 		"goal":       str("task card: the goal in one line"),
 		"check":      str("task card: done-check shell command, run in the agent's dir when it reports done"),
