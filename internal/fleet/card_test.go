@@ -54,9 +54,23 @@ func TestCardPromptTellsGoalCheckAndResult(t *testing.T) {
 	if strings.Contains(p, "Permissions") {
 		t.Fatal("permissions line without may")
 	}
-	p = CardPrompt(NormalizeCard(&board.Card{May: []string{"merge-local", "push-main"}}))
-	if !strings.Contains(p, "Permissions: you may merge-local, push-main without asking. Ask before anything else public or irreversible.") {
+	p = CardPrompt(NormalizeCard(&board.Card{May: []string{"deploy", "file issues"}}))
+	if !strings.Contains(p, "Permissions: you may deploy, file issues without asking. Ask before anything else public or irreversible.") {
 		t.Fatalf("no permissions line:\n%s", p)
+	}
+}
+
+// ADR-129: merge-local, push-main and release are gated by green CI and the
+// pre-merge checks, not by asking the user.
+func TestCardPromptGatesMergeOnCI(t *testing.T) {
+	p := CardPrompt(NormalizeCard(&board.Card{May: []string{"merge-local", "push-main", "release"}}))
+	for _, want := range []string{"Permissions: you may merge-local, push-main, release without asking.", "green CI on your branch head", "pre-merge checks", "once per batch", "lock"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("gated permissions line lacks %q:\n%s", want, p)
+		}
+	}
+	if strings.Contains(p, "without asking. Ask before anything else") {
+		t.Errorf("gated card still reads as ask-first:\n%s", p)
 	}
 }
 

@@ -375,3 +375,19 @@ func TestProAndStandardPushOnlyTheirBranch(t *testing.T) {
 		t.Error("light must push nothing")
 	}
 }
+
+// ADR-129: a card `may` of push-main or release lets a worker push main once
+// CI is green; without it, the old rules hold.
+func TestPlaybookGatesMergeOnCI(t *testing.T) {
+	for _, l := range []Level{Standard, Pro} {
+		txt := Text(l)
+		for _, gone := range []string{"Merge only if the task says to", "One designated publisher pushes main"} {
+			if strings.Contains(txt, gone) {
+				t.Errorf("%s playbook still says %q", l, gone)
+			}
+		}
+		if !strings.Contains(txt, "`push-main`") || !strings.Contains(txt, "CI is green") {
+			t.Errorf("%s playbook doesn't name the card permission and its CI gate", l)
+		}
+	}
+}

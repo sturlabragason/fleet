@@ -119,3 +119,16 @@ func TestRulesInPromptSendsPointer(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+// ADR-129: a card `may` covering the step replaces the user's OK; CI and
+// `fleet merge`'s checks are the gate. Infra and external trackers still ask.
+func TestInstructionsGatesMergeOnCI(t *testing.T) {
+	if strings.Contains(Instructions, "Ask before telling any agent to merge") {
+		t.Error("admiral instructions still ask before every merge")
+	}
+	for _, want := range []string{"green CI", "one publisher", "infrastructure", "tracker"} {
+		if !strings.Contains(Instructions, want) {
+			t.Errorf("admiral instructions lack %q", want)
+		}
+	}
+}
