@@ -62,6 +62,7 @@ func TestSpawnDefaultProfileAndQueuedReply(t *testing.T) {
 // admiral runs; with neither, the error names the fix (ADR-144).
 func TestSpawnWithoutDefaultTakesCopilot(t *testing.T) {
 	f, s := spawnHome(t, "")
+	f.Profiles[fleet.FallbackProfile] = f.Profiles["m"] // CI has no copilot binary
 	msg, isErr := callText(t, s, "fleet_spawn", map[string]any{"name": "x", "dir": f.Home})
 	if isErr || !strings.HasPrefix(msg, "queued x (claude-copilot,") {
 		t.Fatalf("reply %q (isErr=%v)", msg, isErr)
