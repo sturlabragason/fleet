@@ -68,7 +68,11 @@ type Orphan struct {
 	// Spared: a daemon some command of the agent started (a browser, an
 	// ssh master) that the reaper leaves alone unless it is over agent_max.
 	Spared bool
-	proc   proc.Info
+	// Docs: the documents a LibreOffice process has open (fleet doctor
+	// only). It holds the user's own documents too, so it is never a
+	// process to kill blind.
+	Docs []string
+	proc proc.Info
 }
 
 // paneRoots maps each agent with a live pane to that pane's pid. ok is
@@ -121,6 +125,9 @@ func (f *Fleet) Orphans() ([]Orphan, error) {
 	orph := f.orphans(scanProcs(), roots)
 	for i := range orph {
 		orph[i].Mem += proc.Swap(orph[i].PID)
+		if proc.Office(orph[i].Comm) {
+			orph[i].Docs = proc.Docs(orph[i].PID)
+		}
 	}
 	return orph, nil
 }

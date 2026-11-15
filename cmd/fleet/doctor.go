@@ -24,6 +24,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/park"
 	"github.com/sturlabragason/fleet/internal/prefs"
+	"github.com/sturlabragason/fleet/internal/proc"
 	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/tools"
 	"github.com/sturlabragason/fleet/internal/watch"
@@ -287,7 +288,8 @@ func checkWatcher(home string, now time.Time) doctorCheck {
 }
 
 // checkOrphans warns about agent processes that outlived their agent's
-// pane (ADR-122, #48). The watcher kills them on its next pass.
+// pane (ADR-122, #48), with the documents a LibreOffice one holds (ADR-139).
+// It only reports: the watcher reaps what is safe to reap.
 func checkOrphans(list func() ([]fleet.Orphan, error)) doctorCheck {
 	c := doctorCheck{Name: "orphans"}
 	orph, err := list()
@@ -298,18 +300,33 @@ func checkOrphans(list func() ([]fleet.Orphan, error)) doctorCheck {
 		c.Level, c.Detail = levelOK, "no agent processes outlived their pane"
 	default:
 		var mem uint64
-		var ps []string
+		var ps, kill, office []string
 		for _, o := range orph {
 			mem += o.Mem
 			left := ""
 			if o.Spared {
 				left = ", a daemon left alone"
 			}
+			if len(o.Docs) > 0 {
+				left += ", documents open: " + strings.Join(o.Docs, ", ")
+			}
 			ps = append(ps, fmt.Sprintf("%s pid %d (%s, %s%s)", o.Agent, o.PID, o.Comm, park.Bytes(o.Mem), left))
+			if proc.Office(o.Comm) {
+				office = append(office, strconv.Itoa(o.PID))
+			} else {
+				kill = append(kill, strconv.Itoa(o.PID))
+			}
 		}
 		c.Level = levelWarn
 		c.Detail = fmt.Sprintf("%d leftover agent process(es), %s: %s", len(orph), park.Bytes(mem), strings.Join(ps, "; "))
-		c.Fix = "the watcher kills them within a few minutes (fleet up starts it); or kill the pids yourself"
+		var fix []string
+		if len(kill) > 0 {
+			fix = append(fix, "the watcher reaps non-daemons within a few minutes (fleet up starts it); or kill "+strings.Join(kill, " "))
+		}
+		if len(office) > 0 {
+			fix = append(fix, "LibreOffice (pid "+strings.Join(office, ", ")+") runs every open document in one process: close the documents first, then quit it")
+		}
+		c.Fix = strings.Join(fix, "; ")
 	}
 	return c
 }

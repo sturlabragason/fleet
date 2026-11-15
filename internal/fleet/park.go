@@ -1,6 +1,7 @@
 package fleet
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/acphost"
 	"github.com/sturlabragason/fleet/internal/board"
+	"github.com/sturlabragason/fleet/internal/cgroup"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/park"
 	"github.com/sturlabragason/fleet/internal/playbook"
@@ -159,10 +161,13 @@ const treeGrace = 2 * time.Second
 func (f *Fleet) KillPane(pane string) error {
 	var tree []proc.Proc
 	// A dead pane's pid may already belong to another process.
-	if out, err := f.T.Run("display-message", "-p", "-t", pane, "#{pane_dead} #{pane_pid}"); err == nil {
-		if dead, p, _ := strings.Cut(strings.TrimSpace(out), " "); dead == "0" {
-			if pid, err := strconv.Atoi(p); err == nil {
+	if out, err := f.T.Run("display-message", "-p", "-t", pane, "#{pane_dead} #{pane_pid} #{pid}"); err == nil {
+		if fs := strings.Fields(out); len(fs) == 3 && fs[0] == "0" {
+			if pid, err := strconv.Atoi(fs[1]); err == nil {
 				tree = proc.Tree(pid)
+				if server, err := strconv.Atoi(fs[2]); err == nil {
+					reclaimCache(pane, pid, server)
+				}
 			}
 		}
 	}
@@ -171,6 +176,36 @@ func (f *Fleet) KillPane(pane string) error {
 	}
 	proc.Kill(tree, treeGrace)
 	return nil
+}
+
+// reclaimWait bounds how long a close or park waits for the kernel to drop
+// the pane's page cache.
+const reclaimWait = time.Second
+
+// reclaimCache drops the page cache charged to the pane's own cgroup v2
+// scope before the pane goes, so it does not linger in a dying cgroup and
+// count against the parent slice's MemoryHigh (ADR-139). A pane in the
+// tmux server's cgroup (tmux without per-pane scopes) is skipped: that
+// cache is every pane's. Best effort: failures are logged at debug.
+func reclaimCache(pane string, pid, server int) {
+	log := logx.For("cgroup")
+	dir, err := cgroup.Of(pid)
+	if err != nil {
+		log.Debug("reclaim: no scope", "pane", pane, "pid", pid, "err", err)
+		return
+	}
+	if sd, err := cgroup.Of(server); err != nil || sd == dir {
+		log.Debug("reclaim: pane shares the tmux server's cgroup", "pane", pane, "cgroup", dir)
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.TODO(), reclaimWait) // TODO: KillPane takes no ctx yet
+	defer cancel()
+	n, err := cgroup.ReclaimCache(ctx, dir)
+	if err != nil {
+		log.Debug("reclaim: failed", "pane", pane, "cgroup", dir, "bytes", n, "err", err)
+		return
+	}
+	log.Debug("reclaim: dropped page cache", "pane", pane, "cgroup", dir, "bytes", n)
 }
 
 // Wake resumes a parked agent where it stopped: the profile's resume

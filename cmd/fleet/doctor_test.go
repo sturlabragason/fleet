@@ -161,6 +161,13 @@ func TestCheckOrphans(t *testing.T) {
 	if c.Level != levelWarn || !strings.Contains(c.Detail, "a1 pid 42 (node") || c.Fix == "" {
 		t.Errorf("one orphan: %+v", c)
 	}
+	c = checkOrphans(func() ([]fleet.Orphan, error) {
+		return []fleet.Orphan{{Agent: "deck", PID: 7, Comm: "soffice.bin", Mem: 2 << 30, Spared: true, Docs: []string{"/w/a.pptx", "/w/b.odp"}}}, nil
+	})
+	if !strings.Contains(c.Detail, "documents open: /w/a.pptx, /w/b.odp") || strings.Contains(c.Fix, "kill") ||
+		!strings.Contains(c.Fix, "close the documents first") {
+		t.Errorf("LibreOffice orphan: %+v", c)
+	}
 }
 
 func TestCheckCompanions(t *testing.T) {
