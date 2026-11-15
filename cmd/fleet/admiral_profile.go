@@ -310,6 +310,8 @@ func swapAdmiral(f *fleet.Fleet, name string) (string, error) {
 // swapAdmiralOf is swapAdmiral for admiral adm.
 func swapAdmiralOf(f *fleet.Fleet, adm, name string) (string, error) {
 	log := logx.For("admiral")
+	draft, pending := holdForDraft(f, adm)
+	defer restoreDraft(f, adm, draft, pending)
 	unlock, err := supervisor.LockOf(f.Home, adm)
 	if err != nil {
 		return "", err

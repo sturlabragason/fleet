@@ -110,17 +110,54 @@ func (f *Fleet) SendBlocker(name string, submit bool) string {
 		return fmt.Sprintf("%s is interactive and the user has its pane open", name)
 	}
 	if submit && !a.ACP() {
-		set := f.setOf(name)
-		if screen, err := f.T.Capture(pane, 0); err == nil {
-			// A pending-paste marker is fleet's own unsubmitted send, which
-			// keys=["Enter"] is meant to submit.
-			_, ours := set.Unsubmitted(screen)
-			if in, ok := set.InputBox(screen); ok && !ours && strings.TrimSpace(in) != "" {
-				return fmt.Sprintf("%s's input box holds unsubmitted text (%q)", name, status.Cut(in, 40))
-			}
+		if in := f.draftIn(name, pane); in != "" {
+			return fmt.Sprintf("%s's input box holds unsubmitted text (%q)", name, status.Cut(in, 40))
 		}
 	}
 	return ""
+}
+
+// draftIn returns the user's unsubmitted text in agent name's input box ("" =
+// empty or unreadable). A pending-paste marker is fleet's own unsubmitted
+// send, which keys=["Enter"] is meant to submit.
+func (f *Fleet) draftIn(name, pane string) string {
+	set := f.setOf(name)
+	screen, err := f.T.Capture(pane, 0)
+	if err != nil {
+		return ""
+	}
+	if _, ours := set.Unsubmitted(screen); ours {
+		return ""
+	}
+	in, _ := set.InputBox(screen)
+	return strings.TrimSpace(in)
+}
+
+// AdmiralDraft returns the text the user left unsubmitted in admiral name's
+// input box ("" = none): what replacing the admiral would lose. A fleet wake
+// line not yet submitted is fleet's own.
+func (f *Fleet) AdmiralDraft(name string) string {
+	in := strings.TrimSpace(f.admiralView(name).Input)
+	if strings.HasPrefix(in, "[fleet]") {
+		return ""
+	}
+	return in
+}
+
+// RestoreAdmiralDraft types text, without Enter, into admiral name's input
+// box once the box shows and is empty, polling every `every` for up to wait.
+// It reports whether the text was typed.
+func (f *Fleet) RestoreAdmiralDraft(name, text string, wait, every time.Duration) bool {
+	end := time.Now().Add(wait)
+	for {
+		if v := f.admiralView(name); v.Pane != "" && v.Box && strings.TrimSpace(v.Input) == "" {
+			return f.typeText(v.Pane, text) == nil
+		}
+		if time.Now().After(end) {
+			return false
+		}
+		time.Sleep(every)
+	}
 }
 
 // UserError is the refusal for a SendBlocker reason.

@@ -99,6 +99,11 @@ func (f *Fleet) park(name, reason string, force bool) error {
 	case w != "":
 		return fmt.Errorf("can't park %s: it is on a prompt (%s)", name, status.Cut(w, 60))
 	}
+	if !force && pane != "" && !a.ACP() {
+		if d := f.draftIn(name, pane); d != "" {
+			return fmt.Errorf("can't park %s: its input box holds unsubmitted text (%q)", name, status.Cut(d, 40))
+		}
+	}
 	line := "parked · fleet wake " + name
 	if reason != "" {
 		line = "parked (" + reason + ") · fleet wake " + name

@@ -677,3 +677,26 @@ func TestQueuedBeforeUpgradeStartsOnTmux(t *testing.T) {
 		t.Fatalf("queued tmux spawn started on acp: %+v", a)
 	}
 }
+
+func TestParkRefusesUnsubmittedText(t *testing.T) {
+	f, _ := parkFleet(t, "")
+	f.FreeMem = func() (uint64, error) { return 64 << 30, nil }
+	if _, err := f.Spawn("ty1", "res", f.Home, ""); err != nil {
+		t.Fatal(err)
+	}
+	pane := waitPane(t, f, "ty1")
+	// The user typed into the idle agent's box and has not pressed Enter:
+	// parking would kill the pane and the text with it.
+	f.T.Paste(pane, "> half a thought", false)
+	setState(t, f, "ty1", "idle", time.Now())
+	var err error
+	for range 30 {
+		if err = f.Park("ty1", ""); err != nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if err == nil || !strings.Contains(err.Error(), "unsubmitted text") {
+		t.Fatalf("parked over the user's typed text: %v", err)
+	}
+}

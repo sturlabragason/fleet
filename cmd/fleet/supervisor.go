@@ -182,6 +182,8 @@ func resetSupervisor(f *fleet.Fleet, handoff bool) (int, error) {
 // resetSupervisorOf is resetSupervisor for admiral adm.
 func resetSupervisorOf(f *fleet.Fleet, adm string, handoff bool) (int, error) {
 	log := logx.For("admiral")
+	draft, pending := holdForDraft(f, adm)
+	defer restoreDraft(f, adm, draft, pending)
 	unlock, err := supervisor.LockOf(f.Home, adm)
 	if err != nil {
 		return 0, err
