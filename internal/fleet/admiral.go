@@ -14,6 +14,8 @@ import (
 	"github.com/sturlabragason/fleet/internal/mail"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/supervisor"
+
+	"github.com/sturlabragason/fleet/internal/tmux"
 )
 
 // Several admirals on one fleet (DESIGN §6.12, ADR-64). The board's
@@ -372,16 +374,26 @@ func (f *Fleet) MailRevoke(me, other string) error {
 	return nil
 }
 
+// oneLine keeps an option value to one snapshot field: no tab, no newline.
+func oneLine(s string) string { return strings.NewReplacer("\t", " ", "\n", " ").Replace(s) }
+
 // MultiOption is the global tmux option that is "1" while the fleet has more
 // than one admiral: borders and the badge only name admirals then.
 const MultiOption = "@fleet_multi"
 
 // syncAdmiralPanes tags every admiral pane with its name, colour and unread
 // report count for the pane border (DESIGN §6.12). Only changes reach tmux.
-func (f *Fleet) syncAdmiralPanes() {
-	panes, err := f.T.ListPanes(Session + ":main")
-	if err != nil {
-		return
+// snap, when not nil, is this pass's tmux snapshot: the panes and their
+// current values come from it.
+func (f *Fleet) syncAdmiralPanes(snap *tmux.Snapshot) {
+	var panes []tmux.PaneInfo
+	if snap != nil {
+		panes = snap.PanesOf(Session + ":main")
+	} else {
+		var err error
+		if panes, err = f.T.ListPanes(Session + ":main"); err != nil {
+			return
+		}
 	}
 	by := f.UnreadBy()
 	extra := extAdmiralBadge(f)
@@ -397,13 +409,17 @@ func (f *Fleet) syncAdmiralPanes() {
 			"@fleet_admiral_name":   name,
 			"@fleet_admiral_color":  theme.AdmiralColor(supervisor.Slot(f.Home, name)),
 			"@fleet_admiral_unread": "",
-			"@fleet_admiral_ext":    extra[name],
+			"@fleet_admiral_ext":    oneLine(extra[name]),
 		}
 		if by[name] > 0 {
 			want["@fleet_admiral_unread"] = fmt.Sprint(by[name])
 		}
 		for k, v := range want {
-			if f.T.PaneOption(p.ID, k) == v {
+			have, ok := snap.PaneOption(p.ID, k)
+			if !ok {
+				have = f.T.PaneOption(p.ID, k)
+			}
+			if have == v {
 				continue
 			}
 			if v == "" {

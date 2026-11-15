@@ -36,6 +36,7 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 	dead := map[string]bool{}
 	onWall := map[string]bool{}
 	ids := map[string]string{}
+	capKeys := map[string]string{}
 	var agentPanes []tmux.PaneInfo
 	tagged := map[string]string{}
 	taggedNR := map[string]string{}
@@ -48,11 +49,15 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 				deadPanes[p.Agent] = p
 			}
 			ids[p.Agent] = p.ID
+			capKeys[p.Agent] = capKey(p)
 			onWall[p.Agent] = !strings.HasPrefix(p.Window, WindowPrefix)
 			agentPanes = append(agentPanes, p)
 			tagged[p.Agent] = p.Status
 			taggedNR[p.Agent] = p.NoReport
 		}
+	}
+	if perr == nil {
+		f.caps.keep(panes)
 	}
 	now := time.Now()
 	var out []*board.Agent
@@ -88,7 +93,7 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 			if !a.ACP() && f.skipCapture(a, byAgent[a.Name] && !dead[a.Name], onWall[a.Name], now) {
 				next = a.Status
 			} else {
-				next = f.classify(a, byAgent[a.Name], dead[a.Name], ids[a.Name], now)
+				next = f.classify(a, byAgent[a.Name], dead[a.Name], ids[a.Name], capKeys[a.Name], now)
 			}
 			if byAgent[a.Name] && (next == string(status.Error) || next == string(status.Stuck)) {
 				switch {
@@ -165,7 +170,7 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 	}
 	if f.Housekeeping && perr == nil {
 		if !off { // wakes, closes and hints wait for the network (ADR-110)
-			f.DeliverWake()
+			f.deliverWake(leadersOf(out), snap)
 			f.sweepDone(out, now)
 			f.checkRecycle(out, now)
 			f.resurface(out, now)
@@ -250,7 +255,7 @@ func (f *Fleet) syncTeams(panes []tmux.PaneInfo) {
 	}
 }
 
-func (f *Fleet) classify(a *board.Agent, alive, dead bool, pane string, now time.Time) string {
+func (f *Fleet) classify(a *board.Agent, alive, dead bool, pane, ck string, now time.Time) string {
 	if !alive {
 		a.Stuck = nil // nothing to grind on without a pane
 		if pending(a.Status) {
@@ -266,7 +271,7 @@ func (f *Fleet) classify(a *board.Agent, alive, dead bool, pane string, now time
 		return f.classifyACP(a, dead, pane, now)
 	}
 	a.PaneID = pane
-	text, err := f.T.Capture(pane, 0)
+	text, err := f.capture(pane, ck)
 	if err != nil {
 		return string(status.Unknown)
 	}

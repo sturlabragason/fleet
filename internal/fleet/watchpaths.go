@@ -22,11 +22,13 @@ import (
 //     on every turn, tool call and subagent.
 //
 // Resolved session globs are cached: the directory a tool files a session
-// under does not change while the agent runs.
-func (f *Fleet) WatchPaths() []string {
+// under does not change while the agent runs. agents is the board the last
+// Refresh returned, so the watcher does not parse board.json again for it
+// (ADR-138).
+func (f *Fleet) WatchPaths(agents []*board.Agent) []string {
 	out := []string{status.StateDir(f.Home), status.SubsDir(f.Home)}
 	seen := map[string]bool{}
-	for _, a := range f.Store.Load().Agents {
+	for _, a := range agents {
 		for _, p := range f.sessionLogs(a) {
 			if p != "" && !seen[p] {
 				seen[p] = true

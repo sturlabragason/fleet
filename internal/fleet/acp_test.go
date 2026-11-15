@@ -769,11 +769,11 @@ func TestRefreshDuringACPParkKeepsParked(t *testing.T) {
 	status.WriteState(status.StateDir(home), "p1", status.State{Status: status.Idle, At: time.Now(), Event: "acp:end_turn"})
 	now := time.Now()
 	a := &board.Agent{Name: "p1", Driver: board.DriverACP, Status: string(status.Parked), StatusSince: now.Add(-time.Second), SessionID: "S1"}
-	if got := f.classify(a, true, false, "%9", now); got != string(status.Parked) || a.PaneID != "" {
+	if got := f.classify(a, true, false, "%9", "", now); got != string(status.Parked) || a.PaneID != "" {
 		t.Errorf("mid-park refresh: status %q pane %q, want parked and no pane", got, a.PaneID)
 	}
 	a.StatusSince = now.Add(-ACPStopWait - parkSettle - time.Second)
-	if got := f.classify(a, true, false, "%9", now); got == string(status.Parked) || a.PaneID != "%9" {
+	if got := f.classify(a, true, false, "%9", "", now); got == string(status.Parked) || a.PaneID != "%9" {
 		t.Errorf("stale parked with a live pane: status %q pane %q, want it read fresh", got, a.PaneID)
 	}
 }

@@ -126,6 +126,7 @@ type Fleet struct {
 	wakeMu      sync.Mutex
 	wakeWarn    time.Time
 	lastCap     map[string]time.Time
+	caps        capCache
 	lastRecycle time.Time         // last recycle check (ADR-71)
 	globs       map[string]string // agent -> resolved session log (WatchPaths)
 	globMu      sync.Mutex

@@ -147,9 +147,12 @@ type PaneInfo struct {
 	DeadSignal             string // #{pane_dead_signal}: signal number, "" if none
 	Admiral                string // @fleet_admiral: which admiral an @role=sup pane is ("" = main)
 	NoReport               string // @fleet_noreport: "1" idle mid-task with no report, "user" the same for the user's agent (ADR-68)
+	// OutputGen is #{pane_output_generation}, which moves on
+	// every write to the pane; "" on an older tmux without it (ADR-138).
+	OutputGen string
 }
 
-const paneFmt = "#{pane_id}\t#{session_name}\t#{window_id}\t#{window_name}\t#{@fleet_agent}\t#{pane_dead}\t#{pane_current_command}\t#{pane_width}\t#{pane_height}\t#{@fleet_used}\t#{@role}\t#{@fleet_status}\t#{@fleet_status_since}\t#{@fleet_pin}\t#{pane_last}\t#{@fleet_team}\t#{@fleet_team_color}\t#{pane_dead_status}\t#{pane_dead_signal}\t#{@fleet_admiral}\t#{@fleet_noreport}"
+const paneFmt = "#{pane_id}\t#{session_name}\t#{window_id}\t#{window_name}\t#{@fleet_agent}\t#{pane_dead}\t#{pane_current_command}\t#{pane_width}\t#{pane_height}\t#{@fleet_used}\t#{@role}\t#{@fleet_status}\t#{@fleet_status_since}\t#{@fleet_pin}\t#{pane_last}\t#{@fleet_team}\t#{@fleet_team_color}\t#{pane_dead_status}\t#{pane_dead_signal}\t#{@fleet_admiral}\t#{@fleet_noreport}\t#{pane_output_generation}"
 
 // ListPanes lists panes; target "" means all (-a), otherwise -t target (a window).
 func (c *Client) ListPanes(target string) ([]PaneInfo, error) {
@@ -212,6 +215,9 @@ func parsePane(f []string) (PaneInfo, bool) {
 	}
 	if len(f) > 20 {
 		p.NoReport = f[20]
+	}
+	if len(f) > 21 {
+		p.OutputGen = f[21]
 	}
 	return p, true
 }

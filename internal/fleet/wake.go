@@ -15,6 +15,8 @@ import (
 	"github.com/sturlabragason/fleet/internal/mail"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/sysx"
+
+	"github.com/sturlabragason/fleet/internal/tmux"
 )
 
 // Report wakes (DESIGN §6.7, ADR-36). A report is always on disk and on the
@@ -288,12 +290,17 @@ const WakeMaxTries = 3
 // could not be typed is retried on the next poll (the watcher polls,
 // DESIGN §7c) instead of being lost (ADR-51). The resident poll that
 // calls it is the watcher's while one is live, the overview's otherwise.
-func (f *Fleet) DeliverWake() {
+func (f *Fleet) DeliverWake() { f.deliverWake(f.Leaders(), nil) }
+
+// deliverWake is DeliverWake for what Refresh already has: the leaders from
+// the board it just wrote and its tmux snapshot (nil: read tmux), so a pass
+// neither parses the board again nor asks tmux for each option (ADR-138).
+func (f *Fleet) deliverWake(leaders []string, snap *tmux.Snapshot) {
 	for _, box := range f.AdmiralBoxes() {
-		f.DeliverWakeTo(box)
+		f.deliverWakeTo(box, snap)
 	}
-	for _, l := range f.Leaders() {
-		f.DeliverWakeTo(l)
+	for _, l := range leaders {
+		f.deliverWakeTo(l, snap)
 	}
 	extWake(f)
 }
@@ -301,10 +308,12 @@ func (f *Fleet) DeliverWake() {
 // DeliverWakeTo delivers one box's queue: the admiral's, or a leader's
 // (ADR-53). Everything below is the same for both; only the badge is the
 // admiral's alone.
-func (f *Fleet) DeliverWakeTo(box string) {
+func (f *Fleet) DeliverWakeTo(box string) { f.deliverWakeTo(box, nil) }
+
+func (f *Fleet) deliverWakeTo(box string, snap *tmux.Snapshot) {
 	unread := f.unreadFor(box)
 	if box == mail.Admiral {
-		f.syncBadge()
+		f.syncBadge(snap)
 	}
 	if off, _ := f.Offline(); off {
 		// The admiral can't take a turn offline; the queue waits and its
@@ -619,27 +628,35 @@ func Badge(ms []mail.Msg) string {
 }
 
 // syncBadge sets the tmux badge option to the admiral's unread reports,
-// and starts the usage bar's pass (same single writer, ADR-97).
-func (f *Fleet) syncBadge() {
+// and starts the usage bar's pass (same single writer, ADR-97). snap, when
+// not nil, is this pass's tmux snapshot: the current values are read from it.
+func (f *Fleet) syncBadge(snap *tmux.Snapshot) {
 	f.syncUsage(time.Now())
 	var all []mail.Msg
 	for _, box := range f.AdmiralBoxes() {
 		all = append(all, f.Mail().Peek(box)...)
 	}
-	changed := f.setOpt(BadgeOption, Badge(all))
+	changed := f.setOptIn(snap, BadgeOption, Badge(all))
 	multi := ""
 	if len(f.AdmiralNames()) > 1 {
 		multi = "1"
 	}
-	f.syncAdmiralPanes()
-	if f.setOpt(BadgeByOption, f.BadgeBy()) || f.setOpt(MultiOption, multi) || changed {
+	f.syncAdmiralPanes(snap)
+	if f.setOptIn(snap, BadgeByOption, f.BadgeBy()) || f.setOptIn(snap, MultiOption, multi) || changed {
 		f.T.Run("refresh-client", "-S")
 	}
 }
 
 // setOpt sets a global tmux option, or unsets it for "", and reports a change.
-func (f *Fleet) setOpt(name, want string) bool {
-	have, _ := f.T.Run("show-options", "-gqv", name)
+func (f *Fleet) setOpt(name, want string) bool { return f.setOptIn(nil, name, want) }
+
+// setOptIn is setOpt comparing against snap's value when it carries the
+// option, so only a change runs tmux.
+func (f *Fleet) setOptIn(snap *tmux.Snapshot, name, want string) bool {
+	have, ok := snap.Global(name)
+	if !ok {
+		have, _ = f.T.Run("show-options", "-gqv", name)
+	}
 	if strings.TrimSpace(have) == strings.TrimSpace(want) {
 		return false
 	}

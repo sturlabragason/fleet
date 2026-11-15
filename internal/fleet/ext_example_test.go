@@ -24,7 +24,7 @@ func TestExampleExtAdmiralBadge(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.T.SetPaneOption(pane, "@role", "sup")
-	f.syncAdmiralPanes()
+	f.syncAdmiralPanes(nil)
 	for i := 0; i < 20 && f.T.PaneOption(pane, "@fleet_admiral_ext") == ""; i++ {
 		time.Sleep(25 * time.Millisecond)
 	}

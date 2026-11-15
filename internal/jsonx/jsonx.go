@@ -33,11 +33,17 @@ func Unmarshal[T any](data []byte, v *T) (Extra, error) {
 	if err := json.Unmarshal(data, v); err != nil {
 		return nil, err
 	}
+	known := knownKeys(reflect.TypeFor[T]())
+	// Nearly every object has only known keys: a scan of its top-level
+	// keys settles that without decoding every value a second time, which
+	// cost the watcher a whole board.json parse a pass (ADR-138).
+	if onlyKnown(data, known) {
+		return nil, nil
+	}
 	var all map[string]json.RawMessage
 	if json.Unmarshal(data, &all) != nil {
 		return nil, nil //nolint:nilerr // v decoded; without an object there are no extra keys to keep
 	}
-	known := knownKeys(reflect.TypeFor[T]())
 	for k := range all {
 		if known[strings.ToLower(k)] {
 			delete(all, k)
@@ -107,4 +113,104 @@ func knownKeys(t reflect.Type) map[string]bool {
 	}
 	cache.Store(t, m)
 	return m
+}
+
+// onlyKnown reports whether data is a JSON object whose top-level keys are
+// all in known (lower-cased). data has already decoded, so it is valid; any
+// shape this scan does not expect answers false and leaves the decision to
+// the full decode.
+func onlyKnown(data []byte, known map[string]bool) bool {
+	i := skipSpace(data, 0)
+	if i >= len(data) || data[i] != '{' {
+		return false
+	}
+	for i++; ; {
+		i = skipSpace(data, i)
+		if i >= len(data) {
+			return false
+		}
+		switch data[i] {
+		case '}':
+			return true
+		case ',':
+			i++
+			continue
+		case '"':
+		default:
+			return false
+		}
+		end := endString(data, i)
+		if end < 0 {
+			return false
+		}
+		key := string(data[i+1 : end-1])
+		if strings.IndexByte(key, '\\') >= 0 && json.Unmarshal(data[i:end], &key) != nil {
+			return false
+		}
+		if !known[strings.ToLower(key)] {
+			return false
+		}
+		i = skipSpace(data, end)
+		if i >= len(data) || data[i] != ':' {
+			return false
+		}
+		if i = skipValue(data, skipSpace(data, i+1)); i < 0 {
+			return false
+		}
+	}
+}
+
+func skipSpace(data []byte, i int) int {
+	for i < len(data) && (data[i] == ' ' || data[i] == '\t' || data[i] == '\n' || data[i] == '\r') {
+		i++
+	}
+	return i
+}
+
+// endString is the index just past the string that opens at data[i], -1 if
+// it does not close.
+func endString(data []byte, i int) int {
+	for j := i + 1; j < len(data); j++ {
+		switch data[j] {
+		case '\\':
+			j++
+		case '"':
+			return j + 1
+		}
+	}
+	return -1
+}
+
+// skipValue is the index just past the value that starts at data[i], -1 on
+// a shape it does not know.
+func skipValue(data []byte, i int) int {
+	if i >= len(data) {
+		return -1
+	}
+	switch data[i] {
+	case '"':
+		return endString(data, i)
+	case '{', '[':
+		depth := 0
+		for ; i < len(data); i++ {
+			switch data[i] {
+			case '"':
+				if i = endString(data, i); i < 0 {
+					return -1
+				}
+				i--
+			case '{', '[':
+				depth++
+			case '}', ']':
+				if depth--; depth == 0 {
+					return i + 1
+				}
+			}
+		}
+		return -1
+	}
+	for i < len(data) && !strings.ContainsRune(",}] \t\n\r", rune(data[i])) {
+		i++
+	}
+	return i
 }

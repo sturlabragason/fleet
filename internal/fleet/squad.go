@@ -134,9 +134,12 @@ func (f *Fleet) ReportsTo(name string) string {
 
 // Leaders lists the live leaders on the board, sorted by name. The wake
 // loop uses it: every leader has a mailbox of its own to deliver.
-func (f *Fleet) Leaders() []string {
+func (f *Fleet) Leaders() []string { return leadersOf(f.Store.Load().Sorted()) }
+
+// leadersOf is the names of the leaders among agents, in their order.
+func leadersOf(agents []*board.Agent) []string {
 	var out []string
-	for _, a := range f.Store.Load().Sorted() {
+	for _, a := range agents {
 		if a.Leader {
 			out = append(out, a.Name)
 		}

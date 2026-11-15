@@ -22,6 +22,9 @@ func TestSnapshotPanesAndWindowOptions(t *testing.T) {
 	c.SetPaneOption(ag, "@fleet_pin", "1")
 	c.Run("set-option", "-w", "-t", "f:main", "@fleet_wall", "6")
 	c.Run("set-option", "-w", "-t", "f:main", "@fleet_target", sup)
+	c.Run("set-option", "-g", "@fleet_reports", "2 reports: a1")
+	// A newline in a value stays in its field instead of splitting the row.
+	c.SetPaneOption(sup, "@fleet_admiral_ext", "x\ny")
 
 	execs := 0
 	c.OnRun = func([]string) { execs++ }
@@ -52,6 +55,21 @@ func TestSnapshotPanesAndWindowOptions(t *testing.T) {
 	}
 	if p := s.PanesOf("f:ag-a1"); len(p) != 1 || p[0].Agent != "a1" || !p[0].Pin {
 		t.Errorf("agent pane %+v", p)
+	}
+	if v, ok := s.Global("@fleet_reports"); !ok || v != "2 reports: a1" {
+		t.Errorf("global @fleet_reports %q %v", v, ok)
+	}
+	if v, ok := s.Global("@fleet_multi"); !ok || v != "" {
+		t.Errorf("unset global: %q %v", v, ok)
+	}
+	if v, ok := s.PaneOption(sup, "@fleet_admiral_ext"); !ok || v != "x\ny" {
+		t.Errorf("sup pane @fleet_admiral_ext %q %v", v, ok)
+	}
+	if v, ok := s.PaneOption(ag, "@fleet_admiral_name"); !ok || v != "" {
+		t.Errorf("unset pane option: %q %v", v, ok)
+	}
+	if _, ok := s.PaneOption(ag, "@fleet_status"); ok {
+		t.Error("a key the snapshot does not carry reads as known")
 	}
 }
 

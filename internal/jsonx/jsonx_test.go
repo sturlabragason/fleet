@@ -70,3 +70,38 @@ func TestNoExtraIsPlainMarshal(t *testing.T) {
 		t.Fatalf("got %s want %s", got, want)
 	}
 }
+
+// The key scan that skips the second decode must agree with it: unknown keys
+// are kept wherever they sit, and strings that look like JSON structure do
+// not throw it off.
+func TestUnknownKeysFoundByScan(t *testing.T) {
+	tests := []struct {
+		name, in string
+		extra    []string
+	}{
+		{"known only", `{"a":"x","Plain":1}`, nil},
+		{"spaced", " {\n \"a\" : \"x\" ,\t\"plain\":2 }\n", nil},
+		{"unknown last", `{"a":"x","new":1}`, []string{"new"}},
+		{"unknown after nested", `{"a":"x","Plain":1,"deep":{"a":[1,{"b":"}"}]},"z":null}`, []string{"deep", "z"}},
+		{"braces and quotes in strings", `{"a":"{\"}[\\","Plain":0}`, nil},
+		{"escaped known key", `{"\u0061":"x"}`, nil},
+		{"escaped unknown key", `{"\u0062":"x"}`, []string{"b"}},
+		{"empty", `{}`, nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var v inner
+			if err := json.Unmarshal([]byte(tc.in), &v); err != nil {
+				t.Fatal(err)
+			}
+			if len(v.extra) != len(tc.extra) {
+				t.Fatalf("extra = %v, want keys %v", v.extra, tc.extra)
+			}
+			for _, k := range tc.extra {
+				if _, ok := v.extra[k]; !ok {
+					t.Fatalf("extra = %v, want key %q", v.extra, k)
+				}
+			}
+		})
+	}
+}

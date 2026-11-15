@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime/pprof"
 	"strings"
 	"syscall"
 	"time"
@@ -80,10 +81,19 @@ func cmdWatch(f *fleet.Fleet, args []string) error {
 			logx.For("watch").Warn("snapshot", "err", err)
 		}
 	}
+	// The agents of the last good refresh name the session logs to watch,
+	// so the board is parsed once a pass, not again for this (ADR-138).
+	var agents []*board.Agent
 	w := &watch.Watcher{
-		Home:     f.Home,
-		Refresh:  func() error { _, err := f.Refresh(); return err },
-		Paths:    f.WatchPaths,
+		Home: f.Home,
+		Refresh: func() error {
+			a, err := f.Refresh()
+			if err == nil {
+				agents = a
+			}
+			return err
+		},
+		Paths:    func() []string { return f.WatchPaths(agents) },
 		Stop:     func() bool { return !f.T.HasSession(fleet.Session) },
 		Interval: *interval,
 		Tick:     *tick,
@@ -98,11 +108,36 @@ func cmdWatch(f *fleet.Fleet, args []string) error {
 	hotApply(f)
 	// A release install upgrades itself; the swap above re-execs us (ADR-114).
 	startUpdater(ctx, f)
+	defer startCPUProfile()()
 	err := w.Run(ctx)
 	if err == nil {
 		watch.DropSnapshot(f.Home)
 	}
 	return err
+}
+
+// startCPUProfile writes a CPU profile of this watcher to $FLEET_CPUPROFILE
+// until the returned stop runs (ADR-138); with the variable unset it does
+// nothing.
+func startCPUProfile() func() {
+	path := os.Getenv("FLEET_CPUPROFILE")
+	if path == "" {
+		return func() {}
+	}
+	fh, err := os.Create(path)
+	if err != nil {
+		logx.For("watch").Warn("cpu profile", "err", err)
+		return func() {}
+	}
+	if err := pprof.StartCPUProfile(fh); err != nil {
+		logx.For("watch").Warn("cpu profile", "err", err)
+		_ = fh.Close()
+		return func() {}
+	}
+	return func() {
+		pprof.StopCPUProfile()
+		_ = fh.Close()
+	}
 }
 
 // reexecWatcher replaces the watcher with the binary at exe, same pid and
