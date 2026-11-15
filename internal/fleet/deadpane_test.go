@@ -72,6 +72,7 @@ func poll(t *testing.T, f *Fleet, ok func() bool) {
 		f.Refresh()
 		f.dead.run.Lock()
 		f.dead.run.Unlock()
+		f.admWatch.jobs.Wait()
 		if ok() {
 			return
 		}

@@ -3,7 +3,6 @@ package fleet
 import (
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestAdmiralPaneExitReportedOnce(t *testing.T) {
@@ -17,8 +16,7 @@ func TestAdmiralPaneExitReportedOnce(t *testing.T) {
 	f.T.SetPaneOption(pane, "@fleet_admiral", "ops")
 	poll(t, f, func() bool { return len(reports(t, f)) > 0 })
 	for i := 0; i < 3; i++ {
-		f.Refresh()
-		time.Sleep(50 * time.Millisecond)
+		poll(t, f, func() bool { return true })
 	}
 	ms := reports(t, f)
 	if len(ms) != 1 || ms[0].From != "ops" || !strings.Contains(ms[0].Text, "admiral ops's pane exited (exit 3)") {

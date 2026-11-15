@@ -22,6 +22,9 @@ const exitToldOpt = "@fleet_exit_told"
 type admiralWatch struct {
 	mu       sync.Mutex
 	followed map[string]time.Time
+	// jobs counts the exit reports and follows still running, so a caller
+	// can wait for a whole report (mail and wake) rather than part of it.
+	jobs sync.WaitGroup
 }
 
 // watchAdmirals runs in the resident poll: it reports an admiral pane that
@@ -38,12 +41,20 @@ func (f *Fleet) watchAdmirals(panes []tmux.PaneInfo, now time.Time) {
 		}
 		if p.Dead {
 			if f.T.PaneOption(p.ID, exitToldOpt) == "" {
-				go f.admiralExited(name, p)
+				f.admWatch.jobs.Add(1)
+				go func() {
+					defer f.admWatch.jobs.Done()
+					f.admiralExited(name, p)
+				}()
 			}
 			continue
 		}
 		if f.followDue(name, now) {
-			go f.followAdmiral(name)
+			f.admWatch.jobs.Add(1)
+			go func() {
+				defer f.admWatch.jobs.Done()
+				f.followAdmiral(name)
+			}()
 		}
 	}
 }
