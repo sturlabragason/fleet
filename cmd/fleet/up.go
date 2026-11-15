@@ -37,7 +37,7 @@ type supLaunch struct {
 }
 
 // supervisorCmd builds the admiral command for profile ("": resolved by
-// resolveAdmiral, DESIGN §6.10). A non-empty boot prompt goes through the
+// resolveAdmiralOf, DESIGN §6.10). A non-empty boot prompt goes through the
 // profile's prompt_args (copilot -i, claude positional), else into Paste.
 func supervisorCmd(f *fleet.Fleet, prof, boot string) (supLaunch, error) {
 	return supervisorCmdOf(f, supervisor.Main, prof, boot)

@@ -113,11 +113,8 @@ func (f *Fleet) parkIdle(as []*board.Agent, now time.Time, m prefs.Memory) {
 // guardName is the sender of the guard's reports to the admiral.
 const guardName = "fleet"
 
-// tellAdmiral posts a report from fleet itself to the admiral's inbox and
-// nudges the pane, so an auto-park is never silent (DESIGN §6.7).
-func (f *Fleet) tellAdmiral(text string) { f.tellAdmiralBox(mail.Admiral, text) }
-
-// tellAdmiralBox is tellAdmiral to one admiral's mailbox (DESIGN §6.12).
+// tellAdmiralBox posts a report from fleet itself to one admiral's inbox
+// and nudges the pane, so an auto-park is never silent (DESIGN §6.7, §6.12).
 func (f *Fleet) tellAdmiralBox(box, text string) {
 	m, err := f.Mail().ReportTo(guardName, box, "progress", text)
 	if err != nil {

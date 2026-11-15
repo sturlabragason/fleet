@@ -47,9 +47,6 @@ func DirOf(home, name string) string {
 	return filepath.Join(home, "admirals", name)
 }
 
-// mkdir creates Dir(home) (and the legacy symlink) and returns it.
-func mkdir(home string) (string, error) { return mkdirOf(home, Main) }
-
 func mkdirOf(home, name string) (string, error) {
 	if isMain(name) {
 		return legacy.MkdirAll(filepath.Join(home, "admiral"), filepath.Join(home, "supervisor"))

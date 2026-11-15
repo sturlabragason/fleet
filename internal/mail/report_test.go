@@ -83,9 +83,6 @@ func TestAdmiralIsReserved(t *testing.T) {
 			t.Fatalf("checkBox(%q): %v", n, err)
 		}
 	}
-	if Supervisor != Admiral {
-		t.Fatal("deprecated Supervisor must alias Admiral")
-	}
 }
 
 // An old binary still writes reports into mail/supervisor/inbox.jsonl; after

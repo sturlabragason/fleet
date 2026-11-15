@@ -47,11 +47,6 @@ func IsAdmiralBox(box string) bool {
 // maps to the admiral's mailbox.
 const LegacySupervisor = "supervisor"
 
-// Supervisor is the admiral's mailbox.
-//
-// Deprecated: use Admiral (ADR-26).
-const Supervisor = Admiral
-
 // KindReport is a report from an agent to the admiral.
 const KindReport = "report"
 

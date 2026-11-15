@@ -16,7 +16,7 @@ import (
 const followEvery = 15 * time.Second
 
 // exitToldOpt marks an admiral pane whose exit was reported; every respawn
-// of the pane (setAdmiralPaneOpts, fleet up) clears it.
+// of the pane (setAdmiralPaneOptsOf, fleet up) clears it.
 const exitToldOpt = "@fleet_exit_told"
 
 type admiralWatch struct {

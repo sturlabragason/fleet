@@ -136,7 +136,7 @@ func TestWakeEnterGuard(t *testing.T) {
 	}
 	// Typed after the paste: fleet's line is removed and the user's
 	// characters typed again; still no Enter.
-	f.Mail().Inbox(mail.Supervisor, false, 0)
+	f.Mail().Inbox(mail.Admiral, false, 0)
 	a.box, a.beforeTyp = "", nil
 	f.TypeText = func(pane, text string) error { a.mu.Lock(); a.box += text + " -- abc"; a.mu.Unlock(); return nil }
 	f.Report("b", "done", "y")
@@ -144,7 +144,7 @@ func TestWakeEnterGuard(t *testing.T) {
 		t.Fatalf("typed after: box %q submitted %q", a.box, a.submitted)
 	}
 	// The box never shows more than the start of the line: removed.
-	f.Mail().Inbox(mail.Supervisor, false, 0)
+	f.Mail().Inbox(mail.Admiral, false, 0)
 	a.box = ""
 	f.TypeText = func(pane, text string) error { a.mu.Lock(); a.box += text; a.mu.Unlock(); return nil }
 	f.SupPane = func() AdmiralView {
@@ -250,7 +250,7 @@ func TestBadge(t *testing.T) {
 	if strings.TrimSpace(got) != "3 reports: a, b" {
 		t.Fatalf("badge %q", got)
 	}
-	f.Mail().Inbox(mail.Supervisor, false, 0)
+	f.Mail().Inbox(mail.Admiral, false, 0)
 	f.DeliverWake()
 	if got, _ := f.T.Run("show-options", "-gqv", BadgeOption); strings.TrimSpace(got) != "" {
 		t.Fatalf("badge after read %q", got)
@@ -335,11 +335,11 @@ func TestWakeGivesUpAfterMaxTries(t *testing.T) {
 func TestWakeOneTyperAtATime(t *testing.T) {
 	f, pasted := mailFleet(t)
 	a := fakeAdm(f, pasted, ptr(true))
-	release, ok := f.lockWake(mail.Supervisor)
+	release, ok := f.lockWake(mail.Admiral)
 	if !ok {
 		t.Fatal("lock not taken")
 	}
-	if _, held := f.lockWake(mail.Supervisor); held {
+	if _, held := f.lockWake(mail.Admiral); held {
 		release()
 		t.Fatal("lock taken twice")
 	}
@@ -385,12 +385,12 @@ func TestParseWakeFormats(t *testing.T) {
 func TestWakeTriesPersistAcrossProcesses(t *testing.T) {
 	f, _ := mailFleet(t)
 	es := []wakeEntry{{id: "001", from: "a", state: "done", tries: 2, line: "x"}}
-	f.writeTries(mail.Supervisor, es)
-	if got := f.readTries(mail.Supervisor)["001"]; got != 2 {
+	f.writeTries(mail.Admiral, es)
+	if got := f.readTries(mail.Admiral)["001"]; got != 2 {
 		t.Fatalf("tries = %d, want 2", got)
 	}
-	f.writeTries(mail.Supervisor, nil)
-	if _, err := os.Stat(f.triesPath(mail.Supervisor)); !os.IsNotExist(err) {
+	f.writeTries(mail.Admiral, nil)
+	if _, err := os.Stat(f.triesPath(mail.Admiral)); !os.IsNotExist(err) {
 		t.Fatalf("counter file outlived the queue: %v", err)
 	}
 }
@@ -490,7 +490,7 @@ func TestWakeEnterDroppedIsPressedAgain(t *testing.T) {
 	}
 	// Enter never takes: the line is taken back so the box reads empty,
 	// and the report stays queued for the next poll.
-	f.Mail().Inbox(mail.Supervisor, false, 0)
+	f.Mail().Inbox(mail.Admiral, false, 0)
 	a.dropEnter = 100
 	f.Report("b", "done", "y")
 	if a.box != "" || len(a.submitted) != 1 {
@@ -511,8 +511,8 @@ func TestWakeLeftInBoxIsResubmitted(t *testing.T) {
 	a := fakeAdm(f, pasted, ptr(true))
 	stale := "[fleet] 3 new reports: a (question), b (done), c (done). Full text: call fleet_reports."
 	a.box = stale
-	os.MkdirAll(filepath.Dir(f.typedPath(mail.Supervisor)), 0o755)
-	f.recordTyped(mail.Supervisor, stale, "", nil)
+	os.MkdirAll(filepath.Dir(f.typedPath(mail.Admiral)), 0o755)
+	f.recordTyped(mail.Admiral, stale, "", nil)
 	f.DeliverWake()
 	if len(a.submitted) != 1 || a.submitted[0] != stale || a.box != "" {
 		t.Fatalf("stale wake: box %q submitted %q", a.box, a.submitted)
@@ -535,13 +535,13 @@ func TestWakeLeftInBoxRequeuedWhenEnterFails(t *testing.T) {
 	busy := ptr(false)
 	a := fakeAdm(f, pasted, busy)
 	f.Report("a", "done", "x") // queued: the admiral is busy
-	es := f.takeWake(mail.Supervisor)
-	prev, ok, err := f.Mail().ClaimWakeUpTo(mail.Supervisor, newestID(es))
+	es := f.takeWake(mail.Admiral)
+	prev, ok, err := f.Mail().ClaimWakeUpTo(mail.Admiral, newestID(es))
 	if err != nil || !ok || len(es) != 1 {
 		t.Fatalf("setup: es %d ok %v err %v", len(es), ok, err)
 	}
-	line := wakeLineTo(mail.Supervisor, es)
-	f.recordTyped(mail.Supervisor, line, prev, es)
+	line := wakeLineTo(mail.Admiral, es)
+	f.recordTyped(mail.Admiral, line, prev, es)
 	// The dead process got only part way through taking it back.
 	a.box, a.dropEnter, *busy = string([]rune(line)[:20]), 100, true
 	f.DeliverWake()

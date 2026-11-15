@@ -338,11 +338,3 @@ func (f *Fleet) SameSquad(a, b string) bool {
 	}
 	return false
 }
-
-// boxOf turns a leader name into a mailbox name; "" is the admiral's.
-func boxOf(leader string) string {
-	if leader == "" {
-		return mail.Supervisor
-	}
-	return leader
-}

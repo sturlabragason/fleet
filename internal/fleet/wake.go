@@ -52,13 +52,6 @@ var wakeNow = time.Now
 // BadgeOption is the tmux user option the status line shows (`fleet up`).
 const BadgeOption = "@fleet_reports"
 
-// wakeSupervisor queues a report for the admiral pane and tries to deliver
-// it now. Queued reports are coalesced into one line (WakeLine).
-// id is the report's mail id: an entry is typed only while it is unread.
-func (f *Fleet) wakeSupervisor(id, from, state, line string) {
-	f.wakeBox(mail.Supervisor, id, from, state, line)
-}
-
 // wakeBox is the same for any inbox that has a pane behind it: the admiral,
 // or a leader whose squad member reported (ADR-53). One queue, one try
 // counter and one lock per box, all under mail/<box>/.
@@ -233,11 +226,9 @@ func (f *Fleet) lockWake(box string) (release func(), ok bool) {
 	}, true
 }
 
-// WakeLine is the one line typed for a batch of queued reports: the report
-// line itself for one, else "[fleet] N new reports: a (done), b (blocked)…".
-func WakeLine(es []wakeEntry) string { return wakeLineTo(mail.Supervisor, es) }
-
-// wakeLineTo is WakeLine for one mailbox: a leader reads its squad's
+// wakeLineTo is the one line typed for a batch of queued reports in box: the
+// report line itself for one, else "[fleet] N new reports: a (done), b
+// (blocked)…". A leader reads its squad's
 // reports with fleet_squad_reports, not fleet_reports (ADR-53).
 func wakeLineTo(box string, es []wakeEntry) string {
 	if len(es) == 1 {
@@ -293,7 +284,7 @@ func (f *Fleet) DeliverWake() {
 // admiral's alone.
 func (f *Fleet) DeliverWakeTo(box string) {
 	unread := f.unreadFor(box)
-	if box == mail.Supervisor {
+	if box == mail.Admiral {
 		f.syncBadge()
 	}
 	if off, _ := f.Offline(); off {

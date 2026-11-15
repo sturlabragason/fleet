@@ -82,7 +82,7 @@ func poll(t *testing.T, f *Fleet, ok func() bool) {
 
 func reports(t *testing.T, f *Fleet) []mail.Msg {
 	t.Helper()
-	ms, err := f.Mail().Inbox(mail.Supervisor, true, 0)
+	ms, err := f.Mail().Inbox(mail.Admiral, true, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

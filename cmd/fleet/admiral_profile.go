@@ -61,12 +61,9 @@ func resolveAdmiralProfile(explicit string, profiles map[string]tools.Profile, e
 	return "copilot", warns, nil
 }
 
-// resolveAdmiral is resolveAdmiralProfile with no flag, from this fleet's
-// env, last choice and config. Warnings go to the log and the status line.
-func resolveAdmiral(f *fleet.Fleet) string { return resolveAdmiralOf(f, supervisor.Main) }
-
-// resolveAdmiralOf is resolveAdmiral for one admiral: its own last choice or
-// registry profile; main also reads the env and config.
+// resolveAdmiralOf is resolveAdmiralProfile with no flag, for one admiral:
+// its own last choice or registry profile; main also reads the env and
+// config. Warnings go to the log and the status line.
 func resolveAdmiralOf(f *fleet.Fleet, adm string) string {
 	if adm != supervisor.Main {
 		if a, ok := supervisor.Find(f.Home, adm); ok && a.Profile != "" {
@@ -408,15 +405,11 @@ func capturedTail(f *fleet.Fleet, pane string) string {
 	return paneTail(out, swapTailLines)
 }
 
-// startAdmiral respawns pane with sl and waits out the start window. If the
-// new admiral dies, the old one is restored (see restoreAdmiral) and an error
-// returned. resumeOK says a resume of the old session may be tried; it is false
-// when sl itself was that resume. fallback, if set, is written as the handoff
-// before a fresh old-profile admiral starts.
-func startAdmiral(f *fleet.Fleet, pane string, sl supLaunch, old supervisor.Session, oldName string, resumeOK bool, fallback string) error {
-	return startAdmiralOf(f, supervisor.Main, pane, sl, old, oldName, resumeOK, fallback)
-}
-
+// startAdmiralOf respawns admiral adm's pane with sl and waits out the start
+// window. If the new admiral dies, the old one is restored (restoreAdmiralOf)
+// and an error returned. resumeOK says a resume of the old session may be
+// tried; it is false when sl itself was that resume. fallback, if set, is
+// written as the handoff before a fresh old-profile admiral starts.
 func startAdmiralOf(f *fleet.Fleet, adm, pane string, sl supLaunch, old supervisor.Session, oldName string, resumeOK bool, fallback string) error {
 	if err := respawnAdmiral(f, pane, sl); err != nil {
 		return err
@@ -438,14 +431,10 @@ func startAdmiralOf(f *fleet.Fleet, adm, pane string, sl supLaunch, old supervis
 	return err
 }
 
-// restoreAdmiral brings back the old admiral: first a resume of its session
+// restoreAdmiralOf brings back the old admiral: first a resume of its session
 // when allowed and the profile can, and if that dies too (or was not
 // possible) a fresh old-profile admiral with the boot prompt, saved in
 // session.json as a new generation. The persisted choice is left alone.
-func restoreAdmiral(f *fleet.Fleet, pane string, old supervisor.Session, oldName string, resumeOK bool, fallback string) error {
-	return restoreAdmiralOf(f, supervisor.Main, pane, old, oldName, resumeOK, fallback)
-}
-
 func restoreAdmiralOf(f *fleet.Fleet, adm, pane string, old supervisor.Session, oldName string, resumeOK bool, fallback string) error {
 	log := logx.For("admiral")
 	p, ok := f.Profiles[oldName]
@@ -505,12 +494,8 @@ func respawnAdmiral(f *fleet.Fleet, pane string, sl supLaunch) error {
 	return err
 }
 
-// setAdmiralPaneOpts tags the admiral pane and clears the old context meter.
-func setAdmiralPaneOpts(f *fleet.Fleet, pane, prof string) {
-	setAdmiralPaneOptsOf(f, supervisor.Main, pane, prof)
-}
-
-// setAdmiralPaneOptsOf also tags a non-main admiral's pane (@fleet_admiral)
+// setAdmiralPaneOptsOf tags the admiral pane and clears the old context
+// meter. It also tags a non-main admiral's pane (@fleet_admiral)
 // and sets the name and colour its border shows once there are several.
 func setAdmiralPaneOptsOf(f *fleet.Fleet, adm, pane, prof string) {
 	f.T.SetPaneOption(pane, "@role", "sup")

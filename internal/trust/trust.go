@@ -44,9 +44,6 @@ var markers = map[string]marker{
 	"vibe":    markVibe,
 }
 
-// Tools lists the tool commands with a trust store, for docs and messages.
-func Tools() []string { return []string{"claude", "copilot", "vibe"} }
-
 // Mark marks dir trusted for the tool that command runs. env is the agent's
 // environment (a profile's own CLAUDE_CONFIG_DIR or VIBE_HOME wins over the
 // process environment); nil falls back to os.Getenv. dir must be absolute.

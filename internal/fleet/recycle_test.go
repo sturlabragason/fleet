@@ -45,7 +45,7 @@ func TestRecycleTellsOwnerOnce(t *testing.T) {
 		return nil
 	})
 	hints := func() (n int, text string) {
-		for _, m := range f.Mail().Peek(mail.Supervisor) {
+		for _, m := range f.Mail().Peek(mail.Admiral) {
 			if strings.Contains(m.Text, "recycle:") {
 				n++
 				text = m.Text
@@ -70,7 +70,7 @@ func TestRecycleTellsOwnerOnce(t *testing.T) {
 	if f.Store.Load().Agents["a1"].RecycleTold.IsZero() {
 		t.Fatal("a1 not marked told")
 	}
-	b, _ := os.ReadFile(f.wakePath(mail.Supervisor))
+	b, _ := os.ReadFile(f.wakePath(mail.Admiral))
 	if !strings.Contains(string(b), "hand over to a fresh agent") {
 		t.Errorf("wake line: %q", b)
 	}

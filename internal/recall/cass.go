@@ -44,15 +44,6 @@ var cass = companion.Register(companion.Spec{
 	Hint:    "install cass from https://github.com/Dicklesworthstone/coding_agent_session_search/releases, then run `cass index` once",
 })
 
-// CassPath is the cass binary, or ErrNoCass when it is missing or off.
-func CassPath() (string, error) {
-	t, err := companion.Find(cass)
-	if err != nil {
-		return "", ErrNoCass
-	}
-	return t.Path, nil
-}
-
 func runCass(ctx context.Context, timeout time.Duration, args ...string) ([]byte, error) {
 	t, err := companion.Find(cass)
 	if err != nil {

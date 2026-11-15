@@ -56,7 +56,7 @@ patterns = "fake"
 	notes := func() int {
 		time.Sleep(100 * time.Millisecond) // the note is sent off the Refresh goroutine
 		n := 0
-		for _, m := range f.Mail().Peek(mail.Supervisor) {
+		for _, m := range f.Mail().Peek(mail.Admiral) {
 			if strings.Contains(m.Text, "no report:") {
 				n++
 			}
@@ -83,7 +83,7 @@ patterns = "fake"
 	if n := notes(); n != 1 {
 		t.Fatalf("got %d no-report notes, want 1", n)
 	}
-	b, _ := os.ReadFile(f.wakePath(mail.Supervisor))
+	b, _ := os.ReadFile(f.wakePath(mail.Admiral))
 	if !strings.Contains(string(b), "a1 stopped mid-task without a report") {
 		t.Errorf("wake line: %q", b)
 	}
@@ -174,12 +174,12 @@ patterns = "fake"
 		t.Errorf("@fleet_noreport = %q, want user", got)
 	}
 	time.Sleep(100 * time.Millisecond)
-	for _, m := range f.Mail().Peek(mail.Supervisor) {
+	for _, m := range f.Mail().Peek(mail.Admiral) {
 		if strings.Contains(m.Text, "no report:") {
 			t.Fatalf("the admiral was told about the user's agent: %q", m.Text)
 		}
 	}
-	if _, err := os.Stat(f.wakePath(mail.Supervisor)); err == nil {
+	if _, err := os.Stat(f.wakePath(mail.Admiral)); err == nil {
 		t.Error("a wake line was queued for the user's agent")
 	}
 
@@ -288,7 +288,7 @@ patterns = "fake"
 		t.Fatal("the patterns never read the pane as idle; the test proves nothing")
 	}
 	time.Sleep(100 * time.Millisecond)
-	for _, m := range f.Mail().Peek(mail.Supervisor) {
+	for _, m := range f.Mail().Peek(mail.Admiral) {
 		if strings.Contains(m.Text, "no report:") {
 			t.Fatalf("owner told: %q", m.Text)
 		}

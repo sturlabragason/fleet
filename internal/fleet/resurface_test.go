@@ -49,7 +49,7 @@ func TestResurfaceWakesOwnerOncePerAsk(t *testing.T) {
 			pass()
 			pass()
 			var got []string
-			for _, m := range f.Mail().Peek(mail.Supervisor) {
+			for _, m := range f.Mail().Peek(mail.Admiral) {
 				if strings.HasPrefix(m.Text, "question: resurface: ") {
 					got = append(got, m.Text)
 				}

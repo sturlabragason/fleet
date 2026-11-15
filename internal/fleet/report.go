@@ -236,7 +236,7 @@ const wakeHeadline = 100
 // ReportLine is the line typed into an idle admiral pane: a short headline
 // and where the full text is (fleet_reports keeps it after the agent closes).
 func ReportLine(from, state, summary string) string {
-	return ReportLineTo(mail.Supervisor, from, state, summary)
+	return ReportLineTo(mail.Admiral, from, state, summary)
 }
 
 // ReportLineTo is ReportLine for one mailbox. A leader has no fleet_reports

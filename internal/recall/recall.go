@@ -275,14 +275,6 @@ func clip(s string, n int) string {
 	return s
 }
 
-// tilde shortens a path under $HOME.
-func tilde(p string) string {
-	if home, _ := os.UserHomeDir(); home != "" && strings.HasPrefix(p, home+"/") {
-		return "~" + p[len(home):]
-	}
-	return p
-}
-
 // Format renders r as text for the terminal and the admiral.
 func (r Result) Format() string {
 	var b strings.Builder

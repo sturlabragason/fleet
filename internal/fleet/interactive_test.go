@@ -61,13 +61,13 @@ func TestPaneWithUserIsNotAutoClosed(t *testing.T) {
 	if note, _ := f.Report("a", "done", "x"); !strings.HasPrefix(note, "not auto-closed: interactive") || len(*closed) != 0 {
 		t.Fatalf("focused: note %q closed %v", note, *closed)
 	}
-	f.Mail().Inbox(mail.Supervisor, false, 0)
+	f.Mail().Inbox(mail.Admiral, false, 0)
 	userIn(f, "%999", time.Now()) // the user moved on to another pane...
 	f.Store.Update(func(b *board.Board) error { b.Agents["a"].UserAt = time.Now().Add(-time.Minute); return nil })
 	if note, _ := f.Report("a", "done", "y"); !strings.HasPrefix(note, "not auto-closed: interactive") || len(*closed) != 0 {
 		t.Fatalf("typed a minute ago: note %q closed %v", note, *closed)
 	}
-	f.Mail().Inbox(mail.Supervisor, false, 0)
+	f.Mail().Inbox(mail.Admiral, false, 0)
 	// ...and long enough ago that the pane is fleet's again.
 	f.Store.Update(func(b *board.Board) error {
 		b.Agents["a"].UserAt = time.Now().Add(-board.UserHold - time.Minute)

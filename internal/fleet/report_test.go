@@ -24,7 +24,7 @@ func TestReportWakesIdleSupervisorOncePerReport(t *testing.T) {
 	if len(*pasted) != 0 {
 		t.Fatalf("woke a working admiral: %q", *pasted)
 	}
-	f.Mail().Inbox(mail.Supervisor, false, 0)
+	f.Mail().Inbox(mail.Admiral, false, 0)
 	idle = true
 	if _, err := f.Report("a", "progress", "halfway"); err != nil {
 		t.Fatal(err)
@@ -32,7 +32,7 @@ func TestReportWakesIdleSupervisorOncePerReport(t *testing.T) {
 	if len(*pasted) != 0 {
 		t.Fatalf("progress woke the admiral: %q", *pasted)
 	}
-	f.Mail().Inbox(mail.Supervisor, false, 0)
+	f.Mail().Inbox(mail.Admiral, false, 0)
 	f.Report("a", "blocked", "need creds")
 	if want := "%sup " + ReportLine("a", "blocked", "need creds"); len(*pasted) != 1 || (*pasted)[0] != want {
 		t.Fatalf("pasted %q, want one %q", *pasted, want)
@@ -43,7 +43,7 @@ func TestReportWakesIdleSupervisorOncePerReport(t *testing.T) {
 	if want := "%sup " + ReportLine("b", "question", "which db?"); len(*pasted) != 2 || (*pasted)[1] != want {
 		t.Fatalf("second report did not wake: %q", *pasted)
 	}
-	f.Mail().Inbox(mail.Supervisor, false, 0)
+	f.Mail().Inbox(mail.Admiral, false, 0)
 	f.Report("b", "question", "which db?")
 	if len(*pasted) != 3 {
 		t.Fatalf("new batch did not wake: %q", *pasted)
@@ -145,7 +145,7 @@ func TestAutoCloseDone(t *testing.T) {
 		t.Fatalf("prefs: %v", err)
 	}
 	f.Prefs = pr
-	f.Mail().Inbox(mail.Supervisor, false, 0)
+	f.Mail().Inbox(mail.Admiral, false, 0)
 	if note, _ := f.Report("b", "done", "y"); note != "not auto-closed: uncommitted changes" || len(closed) != 0 {
 		t.Fatalf("dirty: note %q closed %v", note, closed)
 	}
@@ -196,7 +196,7 @@ func TestLongReportSurvivesClose(t *testing.T) {
 	if err := f.Close("a"); err != nil {
 		t.Fatal(err)
 	}
-	ms, err := f.Mail().Inbox(mail.Supervisor, false, 0)
+	ms, err := f.Mail().Inbox(mail.Admiral, false, 0)
 	if err != nil || len(ms) != 1 || ms[0].Text != "done: "+strings.TrimSpace(strings.ReplaceAll(full, " \n", "\n"))+"[2J" {
 		t.Fatalf("full text lost: %+v %v", ms, err)
 	}
@@ -293,7 +293,7 @@ func TestAutoCloseReadOnlyAndNonGit(t *testing.T) {
 		t.Fatalf("pre-existing dirt: %q %v", note, closed)
 	}
 	os.WriteFile(filepath.Join(dir, "g"), []byte("mine"), 0o644)
-	f.Mail().Inbox(mail.Supervisor, false, 0)
+	f.Mail().Inbox(mail.Admiral, false, 0)
 	note, _ := f.Report("c", "done", "again")
 	if note != "not auto-closed: uncommitted changes by the agent: g" || len(closed) != 2 {
 		t.Fatalf("own change: %q %v", note, closed)
@@ -324,7 +324,7 @@ func TestWakeQueuedWhileAdmiralBusy(t *testing.T) {
 	// Read before the admiral went idle: nothing stale is typed.
 	idle = false
 	f.Report("a", "done", "second")
-	f.Mail().Inbox(mail.Supervisor, false, 0)
+	f.Mail().Inbox(mail.Admiral, false, 0)
 	idle = true
 	f.DeliverWake()
 	if len(*pasted) != 1 {
