@@ -198,12 +198,6 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 			return "", fmt.Errorf("bad arguments: %w", err)
 		}
 	}
-	need := func(v, field string) error {
-		if v == "" {
-			return fmt.Errorf("%s is required", field)
-		}
-		return nil
-	}
 	if s.Admiral == Unknown && identityBound[name] {
 		return "", fmt.Errorf("admiral identity unknown: this MCP server could not tell which admiral it serves, so it refuses changes. Restart the admiral with fleet admiral restart --name <name>.")
 	}
@@ -213,212 +207,253 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 	if out, ok, err := extCall(s, name, a); ok {
 		return out, err
 	}
-	switch name {
-	case "fleet_status":
-		st, err := s.status()
-		if off, since := s.F.Offline(); off {
-			st = fleet.OfflineNote(since) + "\n" + st
-		}
-		return s.admiralHeader() + "\n" + st, err
-	case "fleet_peek":
-		return s.peek(a)
-	case "fleet_send":
-		return s.send(a)
-	case "fleet_answer":
-		return s.answer(a)
-	case "fleet_info":
-		return s.info(a)
-	case "fleet_spawn":
-		var set struct{ Interactive *bool }
-		_ = json.Unmarshal(raw, &set)
-		a.interactiveSet = set.Interactive != nil
-		via, err := s.applyRoute(&a)
-		if err != nil {
-			return "", err
-		}
-		for f, v := range map[string]string{"name": a.Name, "dir": a.Dir} {
-			if err := need(v, f); err != nil {
-				return "", err
-			}
-		}
-		prof, err := s.spawnProfile(a.Profile, "fleet_profiles")
-		if err != nil {
-			return "", err
-		}
-		ag, err := s.F.SpawnWith(fleet.SpawnOpts{Worktree: a.Worktree, Card: a.card(), Role: fleet.Role{Leader: a.Leader, Interactive: a.Interactive, Admiral: s.Me()}, Effort: a.Effort, Driver: a.Driver, Model: a.Model}, a.Name, prof, a.Dir, a.Prompt)
-		if err != nil {
-			return "", err
-		}
-		if ag.Status == string(status.Queued) {
-			return s.queuedReply(ag) + cardNote(ag), nil
-		}
-		if w := ag.Worktree; w != nil {
-			return fmt.Sprintf("spawned %s (%s) in its own worktree %s on branch %s (of %s)", ag.Name, s.spawnLabel(ag), w.Path, w.Branch, w.Repo) + cardNote(ag) + leaderNote(ag) + via, nil
-		}
-		return fmt.Sprintf("spawned %s (%s) in %s%s", ag.Name, s.spawnLabel(ag), ag.Dir, s.dirNote(ag.Dir)) + cardNote(ag) + leaderNote(ag) + via, nil
-	case "fleet_sessions":
-		return s.sessions(a.Query, a.Limit)
-	case "fleet_adopt":
-		o := fleet.AdoptOpts{Profile: a.Profile, Dir: a.Dir, Name: a.Name, Admiral: s.Me(), Driver: a.Driver}
-		id, q := strings.TrimSpace(a.SessionID), strings.TrimSpace(a.Query)
-		var res sessions.Session
-		switch {
-		case (id == "") == (q == ""):
-			return "", fmt.Errorf("pass exactly one of session_id or query")
-		case q != "":
-			r, err := s.F.ResolveWords(a.Profile, strings.Fields(q))
-			if err != nil {
-				return "", err
-			}
-			res = r
-		default:
-			r, ok, err := s.F.ResolveID(a.Profile, id)
-			if err != nil {
-				return "", err
-			}
-			if !ok && a.Profile == "" {
-				return "", fmt.Errorf("no session %s; try fleet_sessions", id)
-			}
-			res = r
-			if !ok { // not in the store: Adopt reports it
-				res = sessions.Session{ID: id, Profile: a.Profile}
-			}
-		}
-		ag, err := s.F.AdoptResolved(o, res)
-		if err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("adopted %s (%s) session %s in %s%s", ag.Name, ag.Profile, ag.SessionID, ag.Dir, s.dirNote(ag.Dir)), nil
-	case "fleet_profiles":
-		return s.profiles(a.Profile)
-	case "fleet_close":
-		return s.close(a)
-	case "fleet_park":
-		if err := need(a.Name, "name"); err != nil {
-			return "", err
-		}
-		if err := s.scope(a.Name); err != nil {
-			return "", err
-		}
-		switch a.Action {
-		case "wake":
-			ag, err := s.F.Wake(a.Name, a.Force)
-			if err != nil {
-				return "", err
-			}
-			return fmt.Sprintf("woke %s (%s), session %s, in %s", ag.Name, ag.Profile, ag.SessionID, ag.Dir), nil
-		case "", "park":
-			if err := s.F.Park(a.Name, ""); err != nil {
-				return "", err
-			}
-			return fmt.Sprintf("parked %s; fleet_park name=%s action=wake resumes it", a.Name, a.Name), nil
-		}
-		return "", fmt.Errorf("action must be park or wake")
-	case "fleet_handover", "fleet_handover_request", "fleet_admirals", "fleet_msg_send", "fleet_inbox", "fleet_access_request", "fleet_access_respond", "fleet_access_revoke":
-		return s.admiralCall(name, a)
-	case "fleet_takeover", "fleet_touching", "fleet_worktrees", "fleet_branches", "fleet_admiral_add", "fleet_admiral_close", "fleet_changes", "fleet_recall":
-		return s.cliCall(name, a)
-	case "fleet_wall":
-		switch a.Action {
-		case "preset":
-			return "wall preset " + a.Preset, s.W.SetPreset(a.Preset)
-		case "show", "hide":
-			p, err := s.F.Pane(a.Name)
-			if err != nil {
-				return "", err
-			}
-			if a.Action == "show" {
-				ok, err := s.W.Show(p)
-				if err != nil || !ok {
-					return wall.FullMsg, err
-				}
-				return a.Name + " on wall", nil
-			}
-			return a.Name + " off wall", s.W.Hide(p)
-		case "hide_all":
-			n, err := s.W.HideAll()
-			return wall.HiddenAllMsg(n), err
-		case "restore":
-			n, err := s.W.Restore()
-			return wall.RestoredMsg(n), err
-		case "admiral_hide":
-			return wall.AdmiralMsg(a.Name, false), s.W.HideAdmiral(a.Name)
-		case "admiral_show":
-			shown, err := s.W.ShowAdmiral(a.Name)
-			if err != nil {
-				return "", err
-			}
-			if !shown {
-				return wall.NoRoomMsg, nil
-			}
-			return wall.AdmiralMsg(a.Name, true), nil
-		}
-		return "", fmt.Errorf("action must be show, hide, preset, hide_all, restore, admiral_show or admiral_hide")
-	case "fleet_team":
-		return s.team(a)
-	case "fleet_adr":
-		return s.adrCmd(a.Action, a.Agent, a.Dir, a.Number)
-	case "fleet_note":
-		if err := need(strings.TrimSpace(a.Text), "text"); err != nil {
-			return "", err
-		}
-		if err := checkRule(a.Rule, a.Text); err != nil {
-			return "", err // refused before anything is logged
-		}
-		out, err := "noted", error(nil)
-		if a.Pin {
-			out, err = "pinned", supervisor.AppendPinnedBy(s.F.Home, s.Me(), a.Agent, a.Text)
-		} else {
-			err = supervisor.AppendNoteBy(s.F.Home, s.Me(), a.Agent, a.Text)
-		}
-		if err != nil || !a.Rule {
-			return out, err
-		}
-		return ruleNote(out, s.F.Home, a.Text)
-	case "fleet_route":
-		return s.route(a)
-	case "fleet_brief":
-		br, err := s.brief()
-		return s.admiralHeader() + "\n" + br, err
-	case "fleet_admiral_profile":
-		return s.admiralProfile(a.Profile, a.Summary.Text)
-	case "fleet_reports":
-		return s.reports(a.Name, a.All, a.Limit)
-	case "fleet_wait":
-		return s.wait(s.box(), waitReadAdmiral, a, nil)
-	case "fleet_access":
-		out := PolicyLine(s.F.MailPolicy()) + "\n" + RenderPairs(s.F.Mail().All())
-		if a.Limit > 0 {
-			out = strings.TrimRight(out, "\n") + "\n\n" + RenderLog(s.F.Mail().Log(a.Limit))
-		}
-		return out, nil
-	case "fleet_access_decide":
-		if a.Action != "grant" && a.Action != "deny" && a.Action != "revoke" {
-			return "", fmt.Errorf("action must be grant, deny or revoke")
-		}
-		if !a.Confirmed {
-			return "", fmt.Errorf("not confirmed: ask the user, then call again with confirmed=true")
-		}
-		if err := s.scope(a.A, a.B); err != nil {
-			return "", err
-		}
-		if err := s.F.AccessDecide(a.A, a.B, a.Action); err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("%s: %s and %s", a.Action, a.A, a.B), nil
-	case "fleet_handoff":
-		if err := need(strings.TrimSpace(a.Summary.Text), "summary"); err != nil {
-			return "", err
-		}
-		if err := supervisor.WriteHandoffOf(s.F.Home, s.Me(), a.Summary.Text); err != nil {
-			return "", err
-		}
-		if err := s.Reset(); err != nil {
-			return "", fmt.Errorf("handoff saved, but reset failed: %w", err)
-		}
-		return "handoff saved; a fresh admiral takes over in a few seconds. Stop here.", nil
+	if h := toolHandlers[name]; h != nil {
+		return h(s, name, a, raw)
 	}
 	return "", fmt.Errorf("unknown tool %q", name)
+}
+
+// toolHandler answers one tool call; name and raw are there for the few
+// handlers that need them.
+type toolHandler func(s *Server, name string, a args, raw json.RawMessage) (string, error)
+
+// on adapts a handler that needs only the arguments.
+func on(h func(*Server, args) (string, error)) toolHandler {
+	return func(s *Server, _ string, a args, _ json.RawMessage) (string, error) { return h(s, a) }
+}
+
+var toolHandlers = map[string]toolHandler{
+	"fleet_status":          on((*Server).statusCall),
+	"fleet_peek":            on((*Server).peek),
+	"fleet_send":            on((*Server).send),
+	"fleet_answer":          on((*Server).answer),
+	"fleet_info":            on((*Server).info),
+	"fleet_spawn":           (*Server).spawnCall,
+	"fleet_sessions":        on(func(s *Server, a args) (string, error) { return s.sessions(a.Query, a.Limit) }),
+	"fleet_adopt":           on((*Server).adoptCall),
+	"fleet_profiles":        on(func(s *Server, a args) (string, error) { return s.profiles(a.Profile) }),
+	"fleet_close":           on((*Server).close),
+	"fleet_park":            on((*Server).parkCall),
+	"fleet_wall":            on((*Server).wallCall),
+	"fleet_team":            on((*Server).team),
+	"fleet_adr":             on(func(s *Server, a args) (string, error) { return s.adrCmd(a.Action, a.Agent, a.Dir, a.Number) }),
+	"fleet_note":            on((*Server).noteCall),
+	"fleet_route":           on((*Server).route),
+	"fleet_brief":           on((*Server).briefCall),
+	"fleet_admiral_profile": on(func(s *Server, a args) (string, error) { return s.admiralProfile(a.Profile, a.Summary.Text) }),
+	"fleet_reports":         on(func(s *Server, a args) (string, error) { return s.reports(a.Name, a.All, a.Limit) }),
+	"fleet_wait":            on(func(s *Server, a args) (string, error) { return s.wait(s.box(), waitReadAdmiral, a, nil) }),
+	"fleet_access":          on((*Server).accessCall),
+	"fleet_access_decide":   on((*Server).accessDecideCall),
+	"fleet_handoff":         on((*Server).handoffCall),
+}
+
+func init() {
+	for _, name := range []string{"fleet_handover", "fleet_handover_request", "fleet_admirals", "fleet_msg_send", "fleet_inbox", "fleet_access_request", "fleet_access_respond", "fleet_access_revoke"} {
+		toolHandlers[name] = func(s *Server, name string, a args, _ json.RawMessage) (string, error) { return s.admiralCall(name, a) }
+	}
+	for _, name := range []string{"fleet_takeover", "fleet_touching", "fleet_worktrees", "fleet_branches", "fleet_admiral_add", "fleet_admiral_close", "fleet_changes", "fleet_recall"} {
+		toolHandlers[name] = func(s *Server, name string, a args, _ json.RawMessage) (string, error) { return s.cliCall(name, a) }
+	}
+}
+
+// need is the "<field> is required" check of the tool handlers.
+func need(v, field string) error {
+	if v == "" {
+		return fmt.Errorf("%s is required", field)
+	}
+	return nil
+}
+
+func (s *Server) statusCall(args) (string, error) {
+	st, err := s.status()
+	if off, since := s.F.Offline(); off {
+		st = fleet.OfflineNote(since) + "\n" + st
+	}
+	return s.admiralHeader() + "\n" + st, err
+}
+
+func (s *Server) briefCall(args) (string, error) {
+	br, err := s.brief()
+	return s.admiralHeader() + "\n" + br, err
+}
+
+func (s *Server) spawnCall(_ string, a args, raw json.RawMessage) (string, error) {
+	var set struct{ Interactive *bool }
+	_ = json.Unmarshal(raw, &set)
+	a.interactiveSet = set.Interactive != nil
+	via, err := s.applyRoute(&a)
+	if err != nil {
+		return "", err
+	}
+	for f, v := range map[string]string{"name": a.Name, "dir": a.Dir} {
+		if err := need(v, f); err != nil {
+			return "", err
+		}
+	}
+	prof, err := s.spawnProfile(a.Profile, "fleet_profiles")
+	if err != nil {
+		return "", err
+	}
+	ag, err := s.F.SpawnWith(fleet.SpawnOpts{Worktree: a.Worktree, Card: a.card(), Role: fleet.Role{Leader: a.Leader, Interactive: a.Interactive, Admiral: s.Me()}, Effort: a.Effort, Driver: a.Driver, Model: a.Model}, a.Name, prof, a.Dir, a.Prompt)
+	if err != nil {
+		return "", err
+	}
+	if ag.Status == string(status.Queued) {
+		return s.queuedReply(ag) + cardNote(ag), nil
+	}
+	if w := ag.Worktree; w != nil {
+		return fmt.Sprintf("spawned %s (%s) in its own worktree %s on branch %s (of %s)", ag.Name, s.spawnLabel(ag), w.Path, w.Branch, w.Repo) + cardNote(ag) + leaderNote(ag) + via, nil
+	}
+	return fmt.Sprintf("spawned %s (%s) in %s%s", ag.Name, s.spawnLabel(ag), ag.Dir, s.dirNote(ag.Dir)) + cardNote(ag) + leaderNote(ag) + via, nil
+}
+
+func (s *Server) adoptCall(a args) (string, error) {
+	o := fleet.AdoptOpts{Profile: a.Profile, Dir: a.Dir, Name: a.Name, Admiral: s.Me(), Driver: a.Driver}
+	id, q := strings.TrimSpace(a.SessionID), strings.TrimSpace(a.Query)
+	var res sessions.Session
+	switch {
+	case (id == "") == (q == ""):
+		return "", fmt.Errorf("pass exactly one of session_id or query")
+	case q != "":
+		r, err := s.F.ResolveWords(a.Profile, strings.Fields(q))
+		if err != nil {
+			return "", err
+		}
+		res = r
+	default:
+		r, ok, err := s.F.ResolveID(a.Profile, id)
+		if err != nil {
+			return "", err
+		}
+		if !ok && a.Profile == "" {
+			return "", fmt.Errorf("no session %s; try fleet_sessions", id)
+		}
+		res = r
+		if !ok { // not in the store: Adopt reports it
+			res = sessions.Session{ID: id, Profile: a.Profile}
+		}
+	}
+	ag, err := s.F.AdoptResolved(o, res)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("adopted %s (%s) session %s in %s%s", ag.Name, ag.Profile, ag.SessionID, ag.Dir, s.dirNote(ag.Dir)), nil
+}
+
+func (s *Server) parkCall(a args) (string, error) {
+	if err := need(a.Name, "name"); err != nil {
+		return "", err
+	}
+	if err := s.scope(a.Name); err != nil {
+		return "", err
+	}
+	switch a.Action {
+	case "wake":
+		ag, err := s.F.Wake(a.Name, a.Force)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("woke %s (%s), session %s, in %s", ag.Name, ag.Profile, ag.SessionID, ag.Dir), nil
+	case "", "park":
+		if err := s.F.Park(a.Name, ""); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("parked %s; fleet_park name=%s action=wake resumes it", a.Name, a.Name), nil
+	}
+	return "", fmt.Errorf("action must be park or wake")
+}
+
+func (s *Server) wallCall(a args) (string, error) {
+	switch a.Action {
+	case "preset":
+		return "wall preset " + a.Preset, s.W.SetPreset(a.Preset)
+	case "show", "hide":
+		p, err := s.F.Pane(a.Name)
+		if err != nil {
+			return "", err
+		}
+		if a.Action == "show" {
+			ok, err := s.W.Show(p)
+			if err != nil || !ok {
+				return wall.FullMsg, err
+			}
+			return a.Name + " on wall", nil
+		}
+		return a.Name + " off wall", s.W.Hide(p)
+	case "hide_all":
+		n, err := s.W.HideAll()
+		return wall.HiddenAllMsg(n), err
+	case "restore":
+		n, err := s.W.Restore()
+		return wall.RestoredMsg(n), err
+	case "admiral_hide":
+		return wall.AdmiralMsg(a.Name, false), s.W.HideAdmiral(a.Name)
+	case "admiral_show":
+		shown, err := s.W.ShowAdmiral(a.Name)
+		if err != nil {
+			return "", err
+		}
+		if !shown {
+			return wall.NoRoomMsg, nil
+		}
+		return wall.AdmiralMsg(a.Name, true), nil
+	}
+	return "", fmt.Errorf("action must be show, hide, preset, hide_all, restore, admiral_show or admiral_hide")
+}
+
+func (s *Server) noteCall(a args) (string, error) {
+	if err := need(strings.TrimSpace(a.Text), "text"); err != nil {
+		return "", err
+	}
+	if err := checkRule(a.Rule, a.Text); err != nil {
+		return "", err // refused before anything is logged
+	}
+	out, add := "noted", supervisor.AppendNoteBy
+	if a.Pin {
+		out, add = "pinned", supervisor.AppendPinnedBy
+	}
+	if err := add(s.F.Home, s.Me(), a.Agent, a.Text); err != nil || !a.Rule {
+		return out, err
+	}
+	return ruleNote(out, s.F.Home, a.Text)
+}
+
+func (s *Server) accessCall(a args) (string, error) {
+	out := PolicyLine(s.F.MailPolicy()) + "\n" + RenderPairs(s.F.Mail().All())
+	if a.Limit > 0 {
+		out = strings.TrimRight(out, "\n") + "\n\n" + RenderLog(s.F.Mail().Log(a.Limit))
+	}
+	return out, nil
+}
+
+func (s *Server) accessDecideCall(a args) (string, error) {
+	if a.Action != "grant" && a.Action != "deny" && a.Action != "revoke" {
+		return "", fmt.Errorf("action must be grant, deny or revoke")
+	}
+	if !a.Confirmed {
+		return "", fmt.Errorf("not confirmed: ask the user, then call again with confirmed=true")
+	}
+	if err := s.scope(a.A, a.B); err != nil {
+		return "", err
+	}
+	if err := s.F.AccessDecide(a.A, a.B, a.Action); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s: %s and %s", a.Action, a.A, a.B), nil
+}
+
+func (s *Server) handoffCall(a args) (string, error) {
+	if err := need(strings.TrimSpace(a.Summary.Text), "summary"); err != nil {
+		return "", err
+	}
+	if err := supervisor.WriteHandoffOf(s.F.Home, s.Me(), a.Summary.Text); err != nil {
+		return "", err
+	}
+	if err := s.Reset(); err != nil {
+		return "", fmt.Errorf("handoff saved, but reset failed: %w", err)
+	}
+	return "handoff saved; a fresh admiral takes over in a few seconds. Stop here.", nil
 }
 
 // queueNote adds the memory guard's reason to a "queued" reply when that is

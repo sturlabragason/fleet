@@ -259,6 +259,9 @@ local preferences (never committed): ~/.config/fleet/config.toml ($FLEET_CONFIG 
   neon-drive, phosphor or graphite -- set it and run fleet up again;
   see examples/config.toml.example`
 
+// openFleet is fleet.Open; tests point it at a throwaway socket.
+var openFleet = fleet.Open
+
 func run(args []string) error {
 	args, err := topLevelProfile(args)
 	if err != nil {
@@ -277,29 +280,8 @@ func run(args []string) error {
 		}
 		return nil
 	}
-	switch cmd { // need no fleet state or tmux
-	case "keys":
-		return cmdKeys(rest)
-	case "playbook":
-		return cmdPlaybook(rest)
-	case "rule":
-		return cmdRule(rest)
-	case "touching":
-		return cmdTouching(rest)
-	case "exec":
-		return cmdExec(rest)
-	case "adr":
-		return cmdADR(rest)
-	case "merge":
-		return cmdMerge(rest)
-	case "graph":
-		return cmdGraph(rest)
-	case "acp-host":
-		return cmdACPHost(rest)
-	case "version", "--version":
-		return cmdVersion(rest)
-	case "doctor":
-		return cmdDoctor(rest)
+	if h := statelessCmds[cmd]; h != nil {
+		return h(rest)
 	}
 	if h := extCmds[cmd]; h != nil {
 		return h(rest)
@@ -307,179 +289,198 @@ func run(args []string) error {
 	if cmd == "changes" {
 		return cmdChanges(rest)
 	}
-	f, err := fleet.Open()
+	f, err := openFleet()
 	if err != nil {
 		return err
 	}
-	if err := leaderScope(f, commandName(cmd), rest); err != nil {
+	name := commandName(cmd)
+	if err := leaderScope(f, name, rest); err != nil {
 		return err
 	}
-	if err := extBefore(f.Home, commandName(cmd)); err != nil {
+	if err := extBefore(f.Home, name); err != nil {
 		return err
 	}
-	switch commandName(cmd) {
-	case "spawn":
-		return cmdSpawn(f, rest)
-	case "recall":
-		return cmdRecall(f, rest)
-	case "day":
-		return cmdDay(f, rest)
-	case "adopt":
-		return cmdAdopt(f, rest)
-	case "sessions":
-		return cmdSessions(f, rest)
-	case "ls":
-		return cmdLs(f, rest)
-	case "spend":
-		return cmdSpend(f, rest)
-	case "worktrees":
-		return cmdWorktrees(f, rest)
-	case "branches":
-		return cmdBranches(f, rest)
-	case "info":
-		if len(rest) != 1 {
-			return fmt.Errorf("usage: fleet info <name>")
-		}
-		out, err := f.Info(rest[0])
-		if err != nil {
-			return err
-		}
-		fmt.Println(out)
-		return nil
-	case "send":
-		force, resume := false, false
-		for len(rest) > 0 && (rest[0] == "--force" || rest[0] == "--resume") {
-			force, resume = force || rest[0] == "--force", resume || rest[0] == "--resume"
-			rest = rest[1:]
-		}
-		if len(rest) < 2 {
-			return fmt.Errorf("usage: fleet send [--force] [--resume] <name> \"text\"")
-		}
-		text := strings.Join(rest[1:], " ")
-		if err := f.ClosedError(rest[0], "use fleet send --resume"); err != nil {
-			if !resume {
-				return err
-			}
-			_, held, err := f.Resume(rest[0], text)
-			if err != nil {
-				return err
-			}
-			if held {
-				fmt.Println("resumed " + rest[0] + ": " + fleet.HeldNote(rest[0]))
-			}
-			return nil
-		}
-		if r := f.SendBlocker(rest[0], true); r != "" && !force {
-			return fmt.Errorf("not sent: %s; fleet send --force types it anyway", r)
-		}
-		return f.Send(rest[0], text)
-	case "peek":
-		return cmdPeek(f, rest)
-	case "close", "kill": // "kill" kept as a hidden alias
-		squad := false
-		if n := len(rest); n > 0 && rest[n-1] == "--squad" {
-			squad, rest = true, rest[:n-1]
-		}
-		if len(rest) != 1 {
-			return fmt.Errorf("usage: fleet close <name> [--squad]")
-		}
-		if squad {
-			bad := 0
-			for _, r := range f.SquadCloseAll(rest[0]) {
-				if r.OK {
-					n := ""
-					if r.Note != "" {
-						n = ". " + r.Note
-					}
-					fmt.Println("closed " + r.Agent + n)
-					continue
-				}
-				bad++
-				fmt.Fprintln(os.Stderr, r.Agent+": "+r.Note)
-			}
-			if bad > 0 {
-				return fmt.Errorf("%d squad agent(s) not closed", bad)
-			}
-		} else if note := fleet.SquadNote(rest[0], f.Squad(rest[0])); note != "" {
-			fmt.Println(note)
-		}
-		return f.Close(rest[0])
-	case "park":
-		if len(rest) != 1 {
-			return fmt.Errorf("usage: fleet park <name>")
-		}
-		if err := f.Park(rest[0], ""); err != nil {
-			return err
-		}
-		fmt.Printf("parked %s · fleet wake %s resumes it\n", rest[0], rest[0])
-		return nil
-	case "wake":
-		force := false
-		if n := len(rest); n > 0 && rest[n-1] == "--force" {
-			force, rest = true, rest[:n-1]
-		}
-		if len(rest) != 1 {
-			return fmt.Errorf("usage: fleet wake <name> [--force]")
-		}
-		ag, err := f.Wake(rest[0], force)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("woke %s (%s) session %s in %s pane %s\n", ag.Name, ag.Profile, ag.SessionID, ag.Dir, ag.PaneID)
-		return nil
-	case "takeover":
-		return cmdTakeover(f, rest)
-	case "team":
-		return cmdTeam(f, rest)
-	case "mcp":
-		return cmdMCP(f, rest)
-	case "mail":
-		return cmdMail(f, rest)
-	case "access":
-		return cmdAccess(f, rest)
-	case "report":
-		return cmdReport(f, rest)
-	case "reports":
-		return cmdReports(f, rest)
-	case "wait":
-		return cmdWait(f, rest)
-	case "models":
-		return cmdModels(f, rest)
-	case "config":
-		return cmdConfig(f, rest)
-	case "profiles":
-		for _, n := range tools.Names(f.Profiles) {
-			p := f.Profiles[n]
-			argv, _ := p.Argv(tools.Vars{Fleet: "fleet", Name: "<name>", ID: "<id>", PeerMCP: "<peer-mcp>", PeerMCPClaude: "<peer-mcp>"}, tools.Launch{})
-			fmt.Printf("%-16s %s  (patterns=%s)\n", n, strings.Join(argv, " "), p.Patterns)
-		}
-		fmt.Printf("\nprofiles: built-in + %s + [profile.*] in %s\n", tools.Path(f.Home), prefs.Path())
-		return nil
-	case "admiral": // also "supervisor", the deprecated alias (commandName, ADR-26)
+	if name == "admiral" { // also "supervisor", the deprecated alias (ADR-26)
 		return cmdAdmiral(f, cmd, rest)
-	case "note":
-		return cmdNote(f, rest)
-	case "ui":
-		return cmdUI(f)
-	case "up":
-		return cmdUp(f, rest)
-	case "wall":
-		return cmdWall(f, rest)
-	case "snap":
-		return cmdSnap(f, rest)
-	case "watch":
-		return cmdWatch(f, rest)
-	case "update":
-		return cmdUpdate(f, rest)
-	case "hook":
-		return cmdHook(f, rest)
-	case "web":
-		return cmdWeb(f, rest)
-	case "help", "-h", "--help":
-		fmt.Println(usage)
-		return nil
+	}
+	if h := fleetCmds[name]; h != nil {
+		return h(f, rest)
 	}
 	return fmt.Errorf("unknown command %q\n%s", cmd, usage)
+}
+
+// statelessCmds need no fleet state or tmux; run tries them before it opens
+// the fleet.
+var statelessCmds = map[string]func(args []string) error{
+	"keys":      cmdKeys,
+	"playbook":  cmdPlaybook,
+	"rule":      cmdRule,
+	"touching":  cmdTouching,
+	"exec":      cmdExec,
+	"adr":       cmdADR,
+	"merge":     cmdMerge,
+	"graph":     cmdGraph,
+	"acp-host":  cmdACPHost,
+	"version":   cmdVersion,
+	"--version": cmdVersion,
+	"doctor":    cmdDoctor,
+}
+
+// fleetCmds run on an open fleet, keyed by commandName.
+var fleetCmds = map[string]func(f *fleet.Fleet, args []string) error{
+	"spawn":     cmdSpawn,
+	"recall":    cmdRecall,
+	"day":       cmdDay,
+	"adopt":     cmdAdopt,
+	"sessions":  cmdSessions,
+	"ls":        cmdLs,
+	"spend":     cmdSpend,
+	"worktrees": cmdWorktrees,
+	"branches":  cmdBranches,
+	"info":      cmdInfo,
+	"send":      cmdSend,
+	"peek":      cmdPeek,
+	"close":     cmdClose,
+	"kill":      cmdClose, // hidden alias
+	"park":      cmdPark,
+	"wake":      cmdWake,
+	"takeover":  cmdTakeover,
+	"team":      cmdTeam,
+	"mcp":       cmdMCP,
+	"mail":      cmdMail,
+	"access":    cmdAccess,
+	"report":    cmdReport,
+	"reports":   cmdReports,
+	"wait":      cmdWait,
+	"models":    cmdModels,
+	"config":    cmdConfig,
+	"profiles":  cmdProfiles,
+	"note":      cmdNote,
+	"ui":        func(f *fleet.Fleet, _ []string) error { return cmdUI(f) },
+	"up":        cmdUp,
+	"wall":      cmdWall,
+	"snap":      cmdSnap,
+	"watch":     cmdWatch,
+	"update":    cmdUpdate,
+	"hook":      cmdHook,
+	"web":       cmdWeb,
+	"help":      cmdHelp,
+	"-h":        cmdHelp,
+	"--help":    cmdHelp,
+}
+
+func cmdHelp(*fleet.Fleet, []string) error {
+	fmt.Println(usage)
+	return nil
+}
+
+func cmdInfo(f *fleet.Fleet, rest []string) error {
+	if len(rest) != 1 {
+		return fmt.Errorf("usage: fleet info <name>")
+	}
+	out, err := f.Info(rest[0])
+	if err != nil {
+		return err
+	}
+	fmt.Println(out)
+	return nil
+}
+
+func cmdSend(f *fleet.Fleet, rest []string) error {
+	force, resume := false, false
+	for len(rest) > 0 && (rest[0] == "--force" || rest[0] == "--resume") {
+		force, resume = force || rest[0] == "--force", resume || rest[0] == "--resume"
+		rest = rest[1:]
+	}
+	if len(rest) < 2 {
+		return fmt.Errorf("usage: fleet send [--force] [--resume] <name> \"text\"")
+	}
+	text := strings.Join(rest[1:], " ")
+	if err := f.ClosedError(rest[0], "use fleet send --resume"); err != nil {
+		if !resume {
+			return err
+		}
+		_, held, err := f.Resume(rest[0], text)
+		if err != nil {
+			return err
+		}
+		if held {
+			fmt.Println("resumed " + rest[0] + ": " + fleet.HeldNote(rest[0]))
+		}
+		return nil
+	}
+	if r := f.SendBlocker(rest[0], true); r != "" && !force {
+		return fmt.Errorf("not sent: %s; fleet send --force types it anyway", r)
+	}
+	return f.Send(rest[0], text)
+}
+
+func cmdClose(f *fleet.Fleet, rest []string) error {
+	squad := false
+	if n := len(rest); n > 0 && rest[n-1] == "--squad" {
+		squad, rest = true, rest[:n-1]
+	}
+	if len(rest) != 1 {
+		return fmt.Errorf("usage: fleet close <name> [--squad]")
+	}
+	if squad {
+		bad := 0
+		for _, r := range f.SquadCloseAll(rest[0]) {
+			if r.OK {
+				n := ""
+				if r.Note != "" {
+					n = ". " + r.Note
+				}
+				fmt.Println("closed " + r.Agent + n)
+				continue
+			}
+			bad++
+			fmt.Fprintln(os.Stderr, r.Agent+": "+r.Note)
+		}
+		if bad > 0 {
+			return fmt.Errorf("%d squad agent(s) not closed", bad)
+		}
+	} else if note := fleet.SquadNote(rest[0], f.Squad(rest[0])); note != "" {
+		fmt.Println(note)
+	}
+	return f.Close(rest[0])
+}
+
+func cmdPark(f *fleet.Fleet, rest []string) error {
+	if len(rest) != 1 {
+		return fmt.Errorf("usage: fleet park <name>")
+	}
+	if err := f.Park(rest[0], ""); err != nil {
+		return err
+	}
+	fmt.Printf("parked %s · fleet wake %s resumes it\n", rest[0], rest[0])
+	return nil
+}
+
+func cmdWake(f *fleet.Fleet, rest []string) error {
+	force := false
+	if n := len(rest); n > 0 && rest[n-1] == "--force" {
+		force, rest = true, rest[:n-1]
+	}
+	if len(rest) != 1 {
+		return fmt.Errorf("usage: fleet wake <name> [--force]")
+	}
+	ag, err := f.Wake(rest[0], force)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("woke %s (%s) session %s in %s pane %s\n", ag.Name, ag.Profile, ag.SessionID, ag.Dir, ag.PaneID)
+	return nil
+}
+
+func cmdProfiles(f *fleet.Fleet, _ []string) error {
+	for _, n := range tools.Names(f.Profiles) {
+		p := f.Profiles[n]
+		argv, _ := p.Argv(tools.Vars{Fleet: "fleet", Name: "<name>", ID: "<id>", PeerMCP: "<peer-mcp>", PeerMCPClaude: "<peer-mcp>"}, tools.Launch{})
+		fmt.Printf("%-16s %s  (patterns=%s)\n", n, strings.Join(argv, " "), p.Patterns)
+	}
+	fmt.Printf("\nprofiles: built-in + %s + [profile.*] in %s\n", tools.Path(f.Home), prefs.Path())
+	return nil
 }
 
 func cmdSpawn(f *fleet.Fleet, args []string) error {
