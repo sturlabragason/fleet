@@ -88,9 +88,9 @@ func warnAdmiral(f *fleet.Fleet, warns []string) {
 
 // admiralMCPArgs wires the fleet MCP server into the admiral per CLI:
 // copilot-pattern profiles get the lean supervisor flags, claude-pattern
-// ones an --mcp-config with fleet (stdio) and the fleet tools pre-approved.
-// --allowedTools is written with = so the variadic option can't swallow a
-// positional boot prompt after it.
+// ones an --mcp-config with fleet (stdio), no built-in tools (--tools "")
+// and the fleet tools pre-approved (ADR-135). --allowedTools is written with
+// = so the variadic option can't swallow a positional boot prompt after it.
 func admiralMCPArgs(p tools.Profile, exe string) []string {
 	return admiralMCPArgsOf(p, exe, "", supervisor.Main)
 }
@@ -110,6 +110,8 @@ func admiralMCPArgsOf(p tools.Profile, exe, home, adm string) []string {
 		return supervisorMCPArgs(p)
 	case tools.FamilyClaude:
 		// --strict-mcp-config: fleet is its only MCP server, as for copilot.
+		// --tools "": no Bash, Read, Edit, Write or any other built-in, the
+		// match of copilot's --available-tools fleet (ADR-135).
 		// The rules go in as a system prompt file: Claude Code cuts MCP
 		// server instructions at about 4 KB (ADR-86).
 		if home != "" {
@@ -117,7 +119,7 @@ func admiralMCPArgsOf(p tools.Profile, exe, home, adm string) []string {
 		}
 		cfg, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{"fleet": map[string]any{
 			"type": "stdio", "command": exe, "args": mcpArgs}}})
-		out := []string{"--mcp-config", string(cfg), "--strict-mcp-config", "--allowedTools=mcp__fleet"}
+		out := []string{"--mcp-config", string(cfg), "--strict-mcp-config", "--tools", "", "--allowedTools=mcp__fleet"}
 		if home != "" {
 			out = append(out, "--append-system-prompt-file", admiralRulesPath(home, adm))
 		}
@@ -145,8 +147,12 @@ func writeAdmiralRules(home, adm string) error {
 // claudeAdmiralEnv loads every fleet tool up front (no ToolSearch deferral,
 // which hid the fleet tools' schemas) and keeps the user's claude.ai
 // connectors out of the admiral (ADR-86). It asks for the one-hour prompt
-// cache: admiral wakes are often more than five minutes apart (ADR-93).
-var claudeAdmiralEnv = []string{"ENABLE_TOOL_SEARCH=false", "ENABLE_CLAUDEAI_MCP_SERVERS=false", "ENABLE_PROMPT_CACHING_1H=1"}
+// cache: admiral wakes are often more than five minutes apart (ADR-93). No
+// CLAUDE.md and no auto-memory, the match of copilot's
+// --no-custom-instructions: those are coding instructions for a worker, and
+// with no file tools the admiral keeps its memory with fleet_note (ADR-135).
+var claudeAdmiralEnv = []string{"ENABLE_TOOL_SEARCH=false", "ENABLE_CLAUDEAI_MCP_SERVERS=false", "ENABLE_PROMPT_CACHING_1H=1",
+	"CLAUDE_CODE_DISABLE_CLAUDE_MDS=1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1"}
 
 // writeAdmiralMCP writes <admiral dir>/.mcp.json for a copilot admiral and
 // returns its path.

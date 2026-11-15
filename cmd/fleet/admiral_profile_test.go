@@ -99,7 +99,7 @@ func TestTopLevelProfile(t *testing.T) {
 
 func TestAdmiralMCPArgs(t *testing.T) {
 	got := admiralMCPArgs(tools.Profile{Patterns: "claude"}, "/opt/fleet")
-	want := []string{"--mcp-config", `{"mcpServers":{"fleet":{"args":["mcp","--admiral","main"],"command":"/opt/fleet","type":"stdio"}}}`, "--strict-mcp-config", "--allowedTools=mcp__fleet"}
+	want := []string{"--mcp-config", `{"mcpServers":{"fleet":{"args":["mcp","--admiral","main"],"command":"/opt/fleet","type":"stdio"}}}`, "--strict-mcp-config", "--tools", "", "--allowedTools=mcp__fleet"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("claude: %v", got)
 	}
@@ -584,7 +584,7 @@ func TestClaudeAdmiralGetsWholeRules(t *testing.T) {
 		if err != nil || string(b) != mcp.Instructions {
 			t.Fatalf("%s: rules file %s: %v", adm, path, err)
 		}
-		for _, want := range []string{"--append-system-prompt-file " + path, "--strict-mcp-config", `"--rules-in-prompt"`, `"--admiral","` + adm + `"`} {
+		for _, want := range []string{"--append-system-prompt-file " + path, "--strict-mcp-config", `--tools '\'''\'' --allowedTools=mcp__fleet`, `"--rules-in-prompt"`, `"--admiral","` + adm + `"`} {
 			if !strings.Contains(sl.Cmd, want) {
 				t.Errorf("%s: no %s in %s", adm, want, sl.Cmd)
 			}
