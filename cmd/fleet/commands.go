@@ -202,6 +202,9 @@ var usage = `usage:
                                             --dry-run prints the order it would take. Never pushes,
                                             never removes the worktree
   fleet profiles                            list tool profiles (~/.fleet/tools.toml)
+  fleet kagent acp [--context CTX] [--agent NS/NAME] [--url URL]
+                                            ACP adapter of the kagent profile: an agent in a Kubernetes
+                                            cluster over kagent's A2A gateway (ADR-145)
   fleet models [--json] [profile...]        which profiles can select a model and their defaults; with a
                                             profile, the models its tool offers (asked over ACP, no tokens)
   fleet snap [-C dir] [--set NAME] [--socket S] <agent | pane-id> <state>
@@ -324,6 +327,7 @@ var statelessCmds = map[string]func(args []string) error{
 	"merge":     cmdMerge,
 	"graph":     cmdGraph,
 	"acp-host":  cmdACPHost,
+	"kagent":    cmdKagent,
 	"version":   cmdVersion,
 	"--version": cmdVersion,
 	"doctor":    cmdDoctor,

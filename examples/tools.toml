@@ -64,3 +64,21 @@ acp_from = "claude"  # --driver acp uses the built-in claude adapter (ADR-76)
 # Override a built-in: always start copilot with an extra flag.
 # [copilot]
 # args = ["--allow-all"]
+
+# An agent in a Kubernetes cluster that runs kagent (ADR-145): one profile per
+# kube context and kagent Agent. Spawn with --profile kagent-prod. Fleet applies
+# nothing to the cluster; install kagent and apply a Harness and an Agent first:
+#   apiVersion: api.kagent.dev/v1alpha3
+#   kind: Harness
+#   metadata: {name: claude, namespace: dev}
+#   spec: {claude: {}}            # plus the substrate and model secret kagent's docs list
+#   ---
+#   apiVersion: api.kagent.dev/v1alpha3
+#   kind: Agent
+#   metadata: {name: claude, namespace: dev}
+#   spec: {harnessRef: {name: claude}}
+# [kagent-prod]
+# command = "{fleet}"
+# driver = "acp"
+# acp_from = "kagent"
+# acp = ["--context", "prod", "--agent", "dev/claude"]

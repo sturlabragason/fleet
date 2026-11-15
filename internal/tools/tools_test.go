@@ -186,6 +186,7 @@ func TestEveryProfileHasAutoMode(t *testing.T) {
 		"agy":            {"--dangerously-skip-permissions"},
 		"vibe":           {"--auto-approve"},
 		"fake":           nil, // the fake agent never asks for permission
+		"kagent":         nil, // permissions are the kagent Agent's, in the cluster
 	}
 	if len(ps) != len(want) {
 		t.Errorf("built-in profiles %v; a new one needs an auto mode too", Names(ps))
@@ -1120,5 +1121,24 @@ func TestFamily(t *testing.T) {
 	}
 	if tr := ps["plain"].Traits(); tr != (Traits{}) {
 		t.Errorf("plain: traits %+v", tr)
+	}
+}
+
+// A per-cluster kagent profile takes the adapter from the built-in and adds
+// its cluster and Agent (ADR-145).
+func TestKagentClusterProfile(t *testing.T) {
+	home := t.TempDir()
+	toml := "[kagent-prod]\ncommand = \"{fleet}\"\ndriver = \"acp\"\nacp_from = \"kagent\"\nacp = [\"--context\", \"prod\", \"--agent\", \"dev/claude\"]\n"
+	if err := os.WriteFile(filepath.Join(home, "tools.toml"), []byte(toml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ps, err := Load(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"/bin/fleet", "kagent", "acp", "--context", "prod", "--agent", "dev/claude"}
+	p := ps["kagent-prod"]
+	if got := p.ACPArgv(Vars{Fleet: "/bin/fleet", Name: "a1"}, Launch{Mode: AutoMode}); !reflect.DeepEqual(got, want) || !p.HasACPMode(AutoMode) || p.Driver != "acp" {
+		t.Errorf("argv %q (want %q), auto %v, driver %q", got, want, p.HasACPMode(AutoMode), p.Driver)
 	}
 }

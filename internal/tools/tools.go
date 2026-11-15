@@ -372,6 +372,14 @@ resume = ["--resume", "{id}"]
 patterns = "vibe"
 family = "vibe"
 
+[kagent]
+command = "{fleet}"
+family = "kagent"
+acp_command = ["{fleet}", "kagent", "acp"]
+mode_args = { auto = "" }
+acp_mode_args = { auto = "" }
+driver = "acp"
+
 [fake]
 command = "{fleet}"
 args = ["fakeagent", "{name}"]

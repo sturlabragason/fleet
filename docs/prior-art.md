@@ -22,7 +22,7 @@ Written 2026-11-05. Is fleet reinventing established patterns? Partly. tmux plus
 | CI runners, asciinema ○ | Done = exit code; terminal recordings | The done-check (§18 #5); optional `pipe-pane` recording to feed `testdata` (§18 #2) | Recording by default (secrets on screen) |
 | kubernetes-sigs/agent-sandbox ✓ | `Sandbox` CRD: one stateful pod, stable identity, persistent volume, pause/resume, warm pools, gVisor or Kata | One pod per agent with tmux and the unchanged CLI inside, session store on the volume | Nothing found |
 | devcontainers, Coder, Ona, Daytona, E2B, Modal ○ | Environments from a spec; API sandboxes | `devcontainer.json` as the agent image | Short-lived or IDE-centred platforms; data leaving the user's infrastructure |
-| kagent ○ (§18) | Kubernetes-native agent framework | Nothing | Runs its own agents, not the existing CLIs |
+| kagent ✓ (ADR-145) | Kubernetes-native agents; a Claude harness behind an A2A gateway, one Session per conversation | The `kagent` profile: an agent in a cluster over A2A, driven as an ACP agent | Applying its CRDs from fleet |
 
 ## 2. Top 5, ranked by value for effort
 
