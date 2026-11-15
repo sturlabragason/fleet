@@ -9,3 +9,5 @@ PUBLISHING.md
 # agent result files written in the checkout root
 /result*.md
 /fleet
+# graphify output if run bare; fleet keeps graphs in ~/.fleet/graphs (ADR-133)
+/graphify-out/

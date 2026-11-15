@@ -6,6 +6,7 @@ README, a screenshot or anything in internal/theme.
 
 # Commands
 - Build: make build
+- Code graph: make graph (needs graphify, `uv tool install graphifyy`), then `export GRAPHIFY_OUT=$(bin/fleet graph --path)` and `graphify affected <file>` / `graphify path A B` before a wide search. Fleet-spawned agents get `GRAPHIFY_OUT` already. Never commit `graphify-out/`.
 - All tests: make test (non-blocking; failures go to ~/.fleet/logs/fleet.log)
 - One package: go test ./internal/<pkg>/
 - Live dev loop: make dev (tmux -L fleet-dev; rebuild + restart on save)
@@ -21,6 +22,7 @@ README, a screenshot or anything in internal/theme.
 
 # Conventions
 - One package per component (DESIGN.md §15), each with a _test.go. Small files.
+- Extend through what exists (DESIGN.md §15 Extensions, ADR-126): an external CLI fleet calls is a companion (`internal/companion` Spec, `[integrations.<name>]`, doctor line, never installed by fleet); an optional feature fills an existing `Register` seam. No new plugin mechanism. `internal/companion/arch_test.go` fails on an external binary run any other way.
 - A user-facing feature or fix adds one line to CHANGELOG.md (newest first, under today's date) in the same commit. It is embedded in the binary and is what `Alt-g` shows (DESIGN.md §5d).
 - A package whose tests start tmux servers or processes has `func TestMain(m *testing.M) { os.Exit(testenv.Main(m)) }`; it fails the run if anything is left running (ADR-83).
 - Pane geometry lives only in internal/layout.

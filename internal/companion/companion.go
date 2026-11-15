@@ -174,6 +174,9 @@ type Opts struct {
 	Low     bool          // run under nice -n 19 and ionice -c3 when present
 	Env     []string      // extra KEY=value entries on top of the process env
 	Dir     string
+	// Clean runs the tool with only PATH, HOME and GRAPHIFY_* from the
+	// process env, plus Env, so no model API key reaches it.
+	Clean bool
 }
 
 // DefaultTimeout bounds a call whose Opts give none.
@@ -230,7 +233,9 @@ func execRun(ctx context.Context, path string, args []string, o Opts) ([]byte, e
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.WaitDelay = 2 * time.Second
 	cmd.Dir = o.Dir
-	if len(o.Env) > 0 {
+	if o.Clean {
+		cmd.Env = cleanEnv(os.Environ(), o.Env)
+	} else if len(o.Env) > 0 {
 		cmd.Env = append(os.Environ(), o.Env...)
 	}
 	var stderr strings.Builder
@@ -243,6 +248,17 @@ func execRun(ctx context.Context, path string, args []string, o Opts) ([]byte, e
 		return out, err
 	}
 	return out, nil
+}
+
+// cleanEnv keeps PATH, HOME and GRAPHIFY_* from environ and adds extra.
+func cleanEnv(environ, extra []string) []string {
+	var out []string
+	for _, kv := range environ {
+		if strings.HasPrefix(kv, "PATH=") || strings.HasPrefix(kv, "HOME=") || strings.HasPrefix(kv, "GRAPHIFY_") {
+			out = append(out, kv)
+		}
+	}
+	return append(out, extra...)
 }
 
 // FirstLine is the first non-blank line of s, trimmed.

@@ -164,6 +164,11 @@ var usage = `usage:
                                             the overlaps (exit 0 none, 1 overlap, 2 error). Agents'
                                             uncommitted result files don't count; worktrees whose work
                                             is already in main are left out unless --all
+  fleet graph [-C dir] [--force] [--path] [--json]
+                                            build or refresh the repo's code graph (graphify, optional)
+                                            under ~/.fleet/graphs; --path prints its directory for
+                                            GRAPHIFY_OUT. Agents get it automatically; rebuilt after
+                                            fleet merge unless [integrations.graphify] build = "manual"
   fleet worktrees [--repo DIR] [--json] [--prune]
                                             the repo's leftover worktrees under <repo>.wt/: size, merged,
                                             dirty, and which agent holds each (merged: in main by ancestry
@@ -287,6 +292,8 @@ func run(args []string) error {
 		return cmdADR(rest)
 	case "merge":
 		return cmdMerge(rest)
+	case "graph":
+		return cmdGraph(rest)
 	case "acp-host":
 		return cmdACPHost(rest)
 	case "version", "--version":

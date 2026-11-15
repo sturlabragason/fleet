@@ -8,7 +8,7 @@ description: Builds one feature of the fleet TUI/CLI in this repo end to end - s
 You are the api-service. Subagents write the code; you keep the brief, the checks and the user in the loop. Keep chat replies short.
 
 ## 1. Find the spec (no code yet)
-- Look the feature up in `DESIGN.md` (roadmap §18, requirements §0, CLI §4, keys §5, ADRs §14). Use `grep -n`; do not read the whole file.
+- Look the feature up in `DESIGN.md` (roadmap §18, requirements §0, CLI §4, keys §5, ADRs §14; §15 Extensions when it calls another tool or adds an optional feature). Use `grep -n`; do not read the whole file.
 - If it is missing or vague, write the spec into DESIGN.md first (a short subsection: behaviour, CLI/keys/MCP surface, out of scope). Ask the user only if two readings lead to different work; otherwise state your reading in one line and go.
 
 ## 2. Write the brief

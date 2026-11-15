@@ -12,6 +12,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/companion"
 	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/graph"
 	"github.com/sturlabragason/fleet/internal/watch"
 )
 
@@ -182,5 +183,22 @@ func TestCheckCompanions(t *testing.T) {
 	var buf bytes.Buffer
 	if err := writeDoctor(&buf, cs, false); err != nil {
 		t.Errorf("an optional tool must never fail doctor: %v", err)
+	}
+}
+
+func TestCheckGraphs(t *testing.T) {
+	now := time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC)
+	if _, ok := checkGraphs(nil, "/home/u", now); ok {
+		t.Error("no graphs should add no check")
+	}
+	c, ok := checkGraphs([]graph.Stamp{{Root: "/home/u/git/x", BuiltAt: now.Add(-3 * time.Hour)}}, "/home/u", now)
+	want := doctorCheck{Name: "code graphs", Level: levelInfo, Detail: "~/git/x 3h0m0s old"}
+	if !ok || c != want {
+		t.Errorf("got %+v, want %+v", c, want)
+	}
+	env := doctorTestEnv(t, "copilot")
+	write(t, filepath.Join(env.home, "graphs", "k", "fleet-graph.json"), `{"root":"/r","built_at":"2026-01-02T03:04:05Z","schema_version":1}`)
+	if got := levels(doctor(env))["code graphs"]; got != levelInfo {
+		t.Errorf("doctor code graphs = %q", got)
 	}
 }

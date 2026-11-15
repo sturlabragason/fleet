@@ -207,6 +207,15 @@ mode_args = { autopilot = "--allow-all --autopilot", plan = "--plan" }
 # path = "off"           # switch session search off
 # [integrations.terminal]
 # path = "kitty --single-instance"
+# [integrations.graphify]   # code graph for agents (DESIGN §6.15, ADR-133)
+# path = "auto"            # auto (PATH) | off | /path/to/graphify
+# build = "merge"          # merge: rebuild after fleet merge | manual: fleet graph only
+#
+# graphify's MCP server is not passed by fleet. To give agents its tools, add
+# it to your own MCP config (it reads $GRAPHIFY_OUT/graph.json, which fleet
+# sets for agents in a repo with a graph), e.g. Claude ~/.claude.json:
+#   "mcpServers": { "graphify": { "command": "graphify-mcp" } }
+# and keep it for workers in [defaults]: keep_mcp = ["graphify"]
 
 # An extension compiled in with a build tag reads its own settings from
 # [ext.<name>] (ADR-127); a default build has none and ignores the section.

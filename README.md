@@ -50,8 +50,9 @@ Session switchers make moving between agents faster, but you still do all the su
 - **Teams**: group agents (`fleet team create frontend teal`), then send to, show or close a whole team at once. Members are marked with a coloured `◆`.
 - **Agent mail**: agents message each other with `fleet mail` or peer MCP tools. Free inside a team or a repo, otherwise one agent asks and you decide.
 - **Squads**: `fleet spawn --leader <name> <profile>` makes an agent a leader, with its own tools to spawn, watch, message and close up to four agents of its own. Their reports wake the leader, which sends the admiral one summary; leaders are marked `▲` and never answer prompts, merge or push for you.
-- **CLI** for scripting: `spawn`, `adopt`, `sessions`, `ls`, `send`, `peek`, `close`, `team`, `mail`, `access`, `report`, `recall`, `day`, `spend`, `admiral`, `note`, `playbook`, `touching`, `merge`, `profiles`, `keys`, `changes`, `snap`, `wall`, `doctor`.
+- **CLI** for scripting: `spawn`, `adopt`, `sessions`, `ls`, `send`, `peek`, `close`, `team`, `mail`, `access`, `report`, `recall`, `day`, `spend`, `admiral`, `note`, `playbook`, `touching`, `merge`, `graph`, `profiles`, `keys`, `changes`, `snap`, `wall`, `doctor`.
 - **Recall**: `fleet recall <words>` finds what you were doing on a topic in agent reports, notes and, with [cass](https://github.com/Dicklesworthstone/coding_agent_session_search) installed, every Copilot CLI and Claude Code session on the machine. `fleet day` lists what waits on you and what got done, by repo. Neither calls a model, and the index stays local.
+- **Code graph** (optional): with [graphify](https://github.com/Graphify-Labs/graphify) installed (`uv tool install graphifyy`), `fleet graph` builds one code graph per repo outside the checkout, from `main`, again in the background after each `fleet merge`. Agents spawned in that repo get `GRAPHIFY_OUT` and one line in their playbook, so `graphify affected <file>` or `graphify path A B` answers "what does this touch" without a wide search. Local, no model, nothing committed.
 - **Spend**: `fleet spend` shows what each agent has cost so far and the fleet total — AI credits for Copilot agents, tokens for Claude and agy — read from the agents' own session files or the usage agy reports over ACP, never from a model.
 - **Fake agents** that cycle through states and print scripted work (reads, edits, test runs), so you can try everything without spending tokens. `fleet send <name> "!wait"` (or `!work`, `!error`, `!done`) holds one in a chosen state, which is how the demo above is composed.
 
@@ -328,6 +329,7 @@ See [docs/troubleshooting.md](docs/troubleshooting.md).
 ```sh
 make test   # go test ./..., never fails the build; output also in ~/.fleet/logs/test.log
 make dev    # tmux -L fleet-dev: rebuild, test and restart the TUI on every save (needs watchfiles)
+make graph  # code graph of this repo for agents (needs graphify; see DESIGN §6.15)
 make hooks  # pre-push check: commit emails, messages, added lines, deny list, secrets (scripts/check-public.sh)
 ```
 

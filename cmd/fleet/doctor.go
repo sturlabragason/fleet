@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/companion"
 	"github.com/sturlabragason/fleet/internal/conf"
 	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/graph"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/park"
 	"github.com/sturlabragason/fleet/internal/prefs"
@@ -129,6 +131,9 @@ func doctor(env doctorEnv) []doctorCheck {
 	if env.companions != nil {
 		cs = append(cs, checkCompanions(env.companions())...)
 	}
+	if c, ok := checkGraphs(graph.List(env.home), env.userHome, time.Now()); ok {
+		cs = append(cs, c)
+	}
 	return cs
 }
 
@@ -157,6 +162,26 @@ func checkCompanions(sts []companion.Status) []doctorCheck {
 		cs = append(cs, c)
 	}
 	return cs
+}
+
+// checkGraphs lists the code graphs fleet keeps (DESIGN §6.15) with their
+// age; ok is false when there are none.
+func checkGraphs(sts []graph.Stamp, userHome string, now time.Time) (doctorCheck, bool) {
+	if len(sts) == 0 {
+		return doctorCheck{}, false
+	}
+	var parts []string
+	for _, st := range sts {
+		root := st.Root
+		if userHome != "" {
+			if rel, ok := strings.CutPrefix(root, userHome+"/"); ok {
+				root = "~/" + rel
+			}
+		}
+		parts = append(parts, fmt.Sprintf("%s %s old", root, now.Sub(st.BuiltAt).Round(time.Minute)))
+	}
+	sort.Strings(parts)
+	return doctorCheck{Name: "code graphs", Level: levelInfo, Detail: strings.Join(parts, ", ")}, true
 }
 
 var tmuxVersionRe = regexp.MustCompile(`^tmux (?:next-)?(\d+)\.(\d+)`)

@@ -7,11 +7,15 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/sturlabragason/fleet/internal/adr"
+	"github.com/sturlabragason/fleet/internal/companion"
+	"github.com/sturlabragason/fleet/internal/graph"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/prefs"
 	"github.com/sturlabragason/fleet/internal/sysx"
 	"github.com/sturlabragason/fleet/internal/worktree"
 )
@@ -86,7 +90,33 @@ func cmdMerge(args []string) error {
 	}
 	fmt.Printf("merged %s into %s in %s\n", p.Branch, p.Base, p.BaseDir)
 	fmt.Println("worktree and branch left in place; nothing pushed")
+	rebuildGraph(p.BaseDir)
 	return nil
+}
+
+// graphAfterMerge: rebuild the code graph in the background when the build
+// mode is "merge" and graphify is usable (DESIGN §6.15).
+func graphAfterMerge(mode string, found bool) bool { return mode == "merge" && found }
+
+// rebuildGraph starts `fleet graph -C dir` detached. It never fails the merge.
+func rebuildGraph(dir string) {
+	pr, _ := prefs.Load()
+	_, err := companion.Find(graph.Spec)
+	if !graphAfterMerge(graph.BuildMode(pr), err == nil) {
+		return
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		logx.For("graphify").Warn("graph rebuild not started", "err", err)
+		return
+	}
+	cmd := exec.Command(exe, "graph", "-C", dir)
+	sysx.Detach(cmd)
+	if err := cmd.Start(); err != nil {
+		logx.For("graphify").Warn("graph rebuild not started", "err", err)
+		return
+	}
+	fmt.Println("fleet merge: rebuilding the code graph in the background (fleet graph)")
 }
 
 // fail prints the error, naming the other worktrees when it is a conflict, and

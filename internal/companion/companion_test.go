@@ -170,3 +170,11 @@ func TestOverridePathWithSpaces(t *testing.T) {
 		t.Fatalf("got %+v %v", tool, err)
 	}
 }
+
+func TestCleanEnv(t *testing.T) {
+	got := cleanEnv([]string{"PATH=/bin", "HOME=/h", "ANTHROPIC_API_KEY=x", "OPENAI_API_KEY=y", "GRAPHIFY_X=1", "FOO=2"}, []string{"GRAPHIFY_OUT=/o"})
+	want := []string{"PATH=/bin", "HOME=/h", "GRAPHIFY_X=1", "GRAPHIFY_OUT=/o"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("cleanEnv = %v, want %v", got, want)
+	}
+}

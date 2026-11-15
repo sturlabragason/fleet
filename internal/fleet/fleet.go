@@ -16,6 +16,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/acp"
 	"github.com/sturlabragason/fleet/internal/board"
+	"github.com/sturlabragason/fleet/internal/graph"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/mail"
 	"github.com/sturlabragason/fleet/internal/playbook"
@@ -402,6 +403,9 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 		if lead != "" {
 			text = strings.TrimRight(text, "\n") + "\n\n" + lead
 		}
+		if st, _, ok := graph.Find(f.Home, dir); ok {
+			text = strings.TrimRight(text, "\n") + "\n\n" + graph.Line(st)
+		}
 		full = playbook.Compose(text, prompt)
 		logx.For("fleet").Info("playbook", "agent", name, "effort", lvl, "sources", src, "bytes", len(full)-len(prompt))
 	case lead != "" && prompt != "":
@@ -543,6 +547,9 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 		p.Env = env
 	}
 	env := append(p.EnvList(), sysx.OwnerEnv+"="+OwnerTag(f.Home, name))
+	if _, out, ok := graph.Find(f.Home, dir); ok {
+		env = append(env, "GRAPHIFY_OUT="+out) // the repo's code graph (DESIGN §6.15)
+	}
 	pane, err := f.T.Spawn(Session, WindowPrefix+name, dir, env, tools.ShellCommand(argv))
 	if err != nil {
 		log.Error("spawn failed", "agent", name, "err", err)

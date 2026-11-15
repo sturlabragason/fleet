@@ -51,6 +51,7 @@ var CLIParity = map[string]string{
 	"branches":        "fleet_branches",
 	"adr":             "fleet_adr",
 	"merge":           "agent: runs in the agent's own worktree (playbook checklist step 8); the admiral asks the agent",
+	"graph":           "user: builds the repo's code graph; fleet hands it to agents through GRAPHIFY_OUT and the playbook (ADR-128)",
 	"profiles":        "fleet_profiles",
 	"models":          "fleet_profiles",
 	"snap":            "user: captures status fixtures for fleet's own tests",

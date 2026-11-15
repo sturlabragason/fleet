@@ -3,7 +3,7 @@ GO ?= go
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null)
 LDFLAGS := -X main.version=$(VERSION)
 
-.PHONY: build test dev run install up clean-dev hooks
+.PHONY: build test dev run install up clean-dev hooks graph
 
 build:
 	@mkdir -p $(BIN)
@@ -28,6 +28,10 @@ up: build
 
 clean-dev:
 	tmux -L fleet-dev kill-server 2>/dev/null || true
+
+# Code graph of this repo for agents, outside the checkout (DESIGN §6.15, ADR-133).
+graph: build
+	$(BIN)/fleet graph -C .
 
 # Pre-push check that blocks personal data and secrets (scripts/check-public.sh).
 hooks:

@@ -66,6 +66,7 @@ flowchart TB
 | `internal/acphost` | `fleet acp-host`: runs one ACP agent in its pane and draws its conversation, ADR-76 |
 | `internal/adr` | Hands out ADR numbers atomically to parallel agents |
 | `internal/companion` | The contract for companion CLIs fleet calls (cass, gh, rsync, ssh, clipboard, terminal): lookup, `off`, version floor, timeout, install hint, doctor line (ADR-126) |
+| `internal/graph` | The graphify companion: one code graph per repo under `~/.fleet/graphs/`, `fleet graph`, the stamp spawn reads for `GRAPHIFY_OUT` (ADR-128, ADR-133) |
 | `internal/recall` | `fleet recall` and `fleet day`; the cass adapter (ADR-119) |
 | `internal/summary` | Short summaries of an agent's screen through a model CLI (ADR-40) |
 | `internal/spend` | What an agent has cost, from its tool's session files (ADR-46) |
