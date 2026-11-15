@@ -67,6 +67,7 @@ var CLIParity = map[string]string{
 	"watch":           "infra: the status watcher fleet up starts",
 	"web":             "user: a browser view the user starts",
 	"hook":            "infra: tool hooks call it",
+	"kagent":          "infra: the kagent profile's ACP adapter, run by acp-host; spawn it with fleet_spawn profile=kagent (ADR-145)",
 }
 
 // integrationPrefix marks a CLIParity value whose command belongs to an
