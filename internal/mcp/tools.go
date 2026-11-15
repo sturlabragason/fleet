@@ -97,9 +97,10 @@ var baseToolDefs = []tool{
 		"action": map[string]any{"type": "string", "enum": []string{"list", "create", "delete", "add", "remove", "color", "send", "show", "hide", "close"}},
 		"team":   str("team name"), "agents": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "agent names for add/remove"},
 		"color": str("palette name (blue, pink, teal, mauve, sky, sapphire) or #rrggbb"), "text": str("text for send"), "confirmed": confirmedProp})},
-	{"fleet_note", "Save one line to the decisions log: a user decision, preference or promise, or a RAID entry starting risk:, assumption:, issue: or decision:. Survives an admiral reset. pin=true for a standing user rule: fleet_brief always shows pinned notes, not just the last 30.", obj([]string{"text"}, map[string]any{
+	{"fleet_note", "Save one line to the decisions log: a user decision, preference or promise, or a RAID entry starting risk:, assumption:, issue: or decision:. Survives an admiral reset. pin=true for a standing user rule: fleet_brief always shows pinned notes, not just the last 30. rule=true also adds it to every new spawn's playbook.", obj([]string{"text"}, map[string]any{
 		"text": str("the note, one line"), "agent": str("optional agent the note is about"),
-		"pin": map[string]any{"type": "boolean", "description": "a standing rule, always shown in fleet_brief"}})},
+		"pin":  map[string]any{"type": "boolean", "description": "a standing rule, always shown in fleet_brief"},
+		"rule": map[string]any{"type": "boolean", "description": "a rule every agent follows: added to the user's worker playbook layer (fleet rule)"}})},
 	{"fleet_brief", "Start-of-session brief, kept under 12 KB: the last handoff and pinned notes in full, unread report headlines, the agents, the request routes and the recent notes that fit. Each cut section names the tool with the rest. Call first in a fresh session.", obj(nil, map[string]any{})},
 	{"fleet_access", "List agent-to-agent access: the agent_mail policy, then every explicit pair with its state (pending, granted, denied), who asked, who decided and why. limit=N adds the last N messages between agents.", obj(nil, map[string]any{
 		"limit": map[string]any{"type": "integer", "description": "also show the last N agent-to-agent messages"}})},
@@ -131,6 +132,8 @@ type args struct {
 	// squad with it (ADR-53).
 	Leader, Squad bool
 	Pin           bool
+	// Rule makes a fleet_note a standing rule in every spawn (ADR-131).
+	Rule bool
 	// Resume brings a closed agent back for a fleet_send (ADR-95).
 	Resume bool
 	// Interactive marks a fleet_spawn the user talks to directly (ADR-61).
@@ -359,10 +362,19 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 		if err := need(strings.TrimSpace(a.Text), "text"); err != nil {
 			return "", err
 		}
-		if a.Pin {
-			return "pinned", supervisor.AppendPinnedBy(s.F.Home, s.Me(), a.Agent, a.Text)
+		if err := checkRule(a.Rule, a.Text); err != nil {
+			return "", err // refused before anything is logged
 		}
-		return "noted", supervisor.AppendNoteBy(s.F.Home, s.Me(), a.Agent, a.Text)
+		out, err := "noted", error(nil)
+		if a.Pin {
+			out, err = "pinned", supervisor.AppendPinnedBy(s.F.Home, s.Me(), a.Agent, a.Text)
+		} else {
+			err = supervisor.AppendNoteBy(s.F.Home, s.Me(), a.Agent, a.Text)
+		}
+		if err != nil || !a.Rule {
+			return out, err
+		}
+		return ruleNote(out, s.F.Home, a.Text)
 	case "fleet_route":
 		return s.route(a)
 	case "fleet_brief":

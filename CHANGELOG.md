@@ -7,6 +7,7 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
 ## 2026-11-15
+- Tell fleet a rule once and every new agent gets it: `fleet rule add "text"` (or `--repo DIR` for one repo), `fleet rule ls` and `fleet rule rm N`, and the admiral's `fleet_note` with `rule: true` does the same (ADR-131).
 - **Changed default:** an agent whose task card `may` has merge-local, push-main or release now merges, pushes main or releases on its own once CI is green on its branch and the pre-merge checks pass, and the admiral no longer asks you first; infrastructure applies and writes to shared trackers still ask. Leave those words out of `may` to keep being asked (ADR-129).
 - Workers now rebase onto main before their first edit, name the exact external target (org, project, repo) before writing to a tracker or mailbox, and run the repo's public check before committing rather than at push time; the first weekly agent review found these three behind most merge conflicts, wrong-tracker writes and refused pushes.
 

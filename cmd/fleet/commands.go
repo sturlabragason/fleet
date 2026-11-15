@@ -156,6 +156,9 @@ var usage = `usage:
   fleet playbook [--effort LEVEL] [dir]     print the worker playbook prepended to a spawn prompt in dir
                                             (built-in + ~/.fleet/worker.md + the repo's .fleet/worker.md;
                                             --effort light|standard|pro, default pro)
+  fleet rule add|ls|rm [--repo DIR] ["text" | N]
+                                            standing rules every new spawn's playbook carries: bullets in
+                                            ~/.fleet/worker.md, or with --repo the repo's .fleet/worker.md
   fleet touching [-C dir] [--json] [file...]
                                             files other worktrees of this repo change; with files, only
                                             the overlaps (exit 0 none, 1 overlap, 2 error). Agents'
@@ -272,6 +275,8 @@ func run(args []string) error {
 		return cmdKeys(rest)
 	case "playbook":
 		return cmdPlaybook(rest)
+	case "rule":
+		return cmdRule(rest)
 	case "touching":
 		return cmdTouching(rest)
 	case "exec":

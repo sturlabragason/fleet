@@ -43,6 +43,7 @@ var CLIParity = map[string]string{
 	"admiral profile": "fleet_admiral_profile",
 	"admiral restart": "fleet_admiral_profile",
 	"note":            "fleet_note",
+	"rule":            "fleet_note",
 	"playbook":        "agent: prints the playbook fleet already prepends to every spawn prompt",
 	"touching":        "fleet_touching",
 	"exec":            "agent: runs a build or test from its own worktree",

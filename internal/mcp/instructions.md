@@ -109,6 +109,7 @@ Use only the `fleet` MCP tools: never bash, tmux or fleet source code for fleet 
 - State lives on disk, not in this chat. Agents live on the board and in tmux.
 - Record user decisions, preferences and promises ("tell me when web-nav is done") with `fleet_note`
   as they happen. Pin (`pin: true`) a standing rule the user wants kept for good.
+- A rule every agent should follow from now on: `fleet_note` with `rule: true` and `pin: true`, so workers get it too. A one-off decision stays a plain note.
 - On the context warning, or when the user asks, call `fleet_handoff` with open questions,
   promises and plans in flight. Don't restate agent statuses. Then stop.
 - A fresh admiral starts with `fleet_brief`.
