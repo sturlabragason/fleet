@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/graph"
 	"github.com/sturlabragason/fleet/internal/wall"
 )
 
@@ -90,6 +91,31 @@ func TestCLIToolsTouchingOverlap(t *testing.T) {
 	}
 	if msg, isErr := callText(t, s, "fleet_touching", map[string]any{"dir": root}); !isErr || !strings.Contains(msg, "git") {
 		t.Fatalf("outside git: %q %v", msg, isErr)
+	}
+
+	// graph=true is `fleet touching --graph`: no graph is an error, then
+	// a b.go that a.go calls is one dependency away.
+	if msg, isErr := callText(t, s, "fleet_touching", map[string]any{"dir": repo, "files": []string{"b.go"}, "graph": true}); !isErr || !strings.Contains(msg, "run fleet graph") {
+		t.Fatalf("graph without a graph: %q %v", msg, isErr)
+	}
+	groot, err := graph.Root(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := graph.Dir(s.F.Home, groot)
+	os.MkdirAll(out, 0o755)
+	os.WriteFile(filepath.Join(out, "fleet-graph.json"), []byte(`{"schema_version":1}`), 0o644)
+	os.WriteFile(filepath.Join(out, "graph.json"), []byte(`{"nodes":[{"id":"a","source_file":"a.go"},{"id":"b","source_file":"b.go"}],`+
+		`"links":[{"source":"b","target":"a","relation":"calls"}]}`), 0o644)
+	for _, c := range []struct{ file, want string }{
+		{"b.go", "your b.go uses its a.go"},
+		{"a.go", "overlap:\n"},
+		{"c.go", "no other worktree changes these files"},
+	} {
+		msg, isErr := callText(t, s, "fleet_touching", map[string]any{"dir": repo, "files": []string{c.file}, "graph": true})
+		if isErr || !strings.Contains(msg, c.want) {
+			t.Errorf("graph %s: %q %v, want %q", c.file, msg, isErr, c.want)
+		}
 	}
 	if len(*runs) != 0 {
 		t.Fatalf("forked: %v", *runs)

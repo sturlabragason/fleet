@@ -47,7 +47,7 @@ To use a tool fleet doesn't start itself, register `fleet mcp --admiral main` (o
 | `fleet_takeover` | `name`, `acp` | Move an idle ACP agent into the tool's own screen; `acp` hands it back (ADR-82) |
 | `fleet_wait` | `agents`, `timeout_s` | Block until a report or message arrives |
 | `fleet_adr` | `action`, `dir`, `agent` | Claim, list or release ADR numbers for a repo (ADR-50) |
-| `fleet_touching` | `dir`, `files` | Files other worktrees change: merge order |
+| `fleet_touching` | `dir`, `files`, `graph` | Files other worktrees change: merge order; `graph` adds code one dependency away |
 | `fleet_worktrees` | `dir`, `prune`, `confirmed` | Leftover agent worktrees; `prune` removes merged, clean ones |
 | `fleet_branches` | `dir`, `prune`, `confirmed` | `fleet/` branches on origin; `prune` deletes merged ones (ADR-87) |
 | `fleet_changes` | `limit` | Running version and latest changelog lines |

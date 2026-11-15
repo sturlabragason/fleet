@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -111,33 +110,10 @@ func touching(args []string) (int, error) {
 // them, with the merge order that follows. Without files it checks this
 // worktree's own changes. The exit code stays the file-overlap answer.
 func touchingGraph(ctx context.Context, dir, cwd string, files []string, asJSON bool) (int, error) {
-	_, out, ok := graph.Find(logx.Home(), dir)
-	if !ok {
-		return 0, errors.New("no code graph for this repo; run fleet graph")
-	}
-	d, err := graph.LoadDeps(out)
+	cs, err := graph.Touching(ctx, logx.Home(), dir, cwd, files, resultFiles())
 	if err != nil {
 		return 0, err
 	}
-	top, err := worktree.TopLevel(dir)
-	if err != nil {
-		return 0, err
-	}
-	ignore := resultFiles()
-	mine := make([]string, len(files))
-	for i, f := range files {
-		mine[i] = worktree.RepoRel(top, cwd, f)
-	}
-	if len(files) == 0 {
-		if mine, err = worktree.Changes(top, ignore...); err != nil {
-			return 0, fmt.Errorf("this worktree's changes: %w", err)
-		}
-	}
-	ws, _, _, err := worktree.Touching(ctx, dir, cwd, nil, ignore, false)
-	if err != nil {
-		return 0, err
-	}
-	cs := graph.Couple(d, mine, ws)
 	if asJSON {
 		if cs == nil {
 			cs = []graph.Coupling{}
@@ -147,10 +123,8 @@ func touchingGraph(ctx context.Context, dir, cwd string, files []string, asJSON 
 	} else {
 		fmt.Print(graph.CouplingText(cs))
 	}
-	for _, c := range cs {
-		if c.Overlap != nil {
-			return 1, nil
-		}
+	if graph.Overlaps(cs) {
+		return 1, nil
 	}
 	return 0, nil
 }

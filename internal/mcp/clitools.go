@@ -13,6 +13,7 @@ import (
 	aifleet "github.com/sturlabragason/fleet"
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/graph"
 	"github.com/sturlabragason/fleet/internal/whatsnew"
 	"github.com/sturlabragason/fleet/internal/worktree"
 )
@@ -26,8 +27,9 @@ import (
 var cliToolDefs = []tool{
 	{"fleet_takeover", "Move an idle acp agent's session into the tool's own screen (tmux), in the same wall slot; acp=true hands a tmux agent back to fleet's acp host. Use when the user wants the tool's real UI for an agent.", obj([]string{"name"}, map[string]any{
 		"name": str("agent name"), "acp": map[string]any{"type": "boolean", "description": "move it back from tmux to the acp host"}})},
-	{"fleet_touching", "Files other worktrees of a repo change (merge order: fewer touched files merges first). With files, only the overlaps.", obj([]string{"dir"}, map[string]any{
-		"dir": str("a directory inside the repo (absolute)"), "files": strList("files to check for overlap, relative to dir")})},
+	{"fleet_touching", "Files other worktrees of a repo change (merge order: fewer touched files merges first). With files, only the overlaps. graph=true also lists code one dependency away (your X uses its Y), from the repo's code graph, as `fleet touching --graph`.", obj([]string{"dir"}, map[string]any{
+		"dir": str("a directory inside the repo (absolute)"), "files": strList("files to check for overlap, relative to dir; with graph and no files, the worktree's own changes"),
+		"graph": map[string]any{"type": "boolean", "description": "also code dependencies between the files, from the code graph (fleet graph)"}})},
 	{"fleet_worktrees", "A repo's leftover agent worktrees under <repo>.wt/: size, merged, dirty, the agent holding each. prune=true removes the merged ones no live or parked agent holds that are clean or hold only untracked result files, which it copies to <fleet home>/results/ first (git refuses other uncommitted work; never forced): ask the user first, confirmed=true only after an explicit yes.", obj([]string{"dir"}, map[string]any{
 		"dir": str("the repo (absolute)"), "prune": map[string]any{"type": "boolean", "description": "remove the prunable worktrees"}, "confirmed": confirmedProp})},
 	{"fleet_branches", "A repo's fleet/ branches on origin, merged or not, and the agent on each. prune=true deletes the merged ones no live, parked or recently closed agent is on, from origin: ask the user first, confirmed=true only after an explicit yes.", obj([]string{"dir"}, map[string]any{
@@ -118,6 +120,9 @@ func (s *Server) cliCall(name string, a args) (string, error) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), cliTimeout)
 		defer cancel()
+		if a.Graph {
+			return touchingGraph(ctx, s.F.Home, a.Dir, a.Files, fleet.ResultFiles(s.F.Store.Load()))
+		}
 		ws, overlap, left, err := worktree.Touching(ctx, a.Dir, a.Dir, a.Files, fleet.ResultFiles(s.F.Store.Load()), false)
 		if err != nil {
 			return "", err
@@ -171,6 +176,20 @@ func (s *Server) cliCall(name string, a args) (string, error) {
 	}
 	if lines := strings.Split(out, "\n"); len(lines) > n {
 		out = strings.Join(lines[:n], "\n") + fmt.Sprintf("\n(%d more lines: limit=N for more)", len(lines)-n)
+	}
+	return out, nil
+}
+
+// touchingGraph is fleet_touching graph=true, the text of `fleet touching
+// --graph` run in dir.
+func touchingGraph(ctx context.Context, home, dir string, files, ignore []string) (string, error) {
+	cs, err := graph.Touching(ctx, home, dir, dir, files, ignore)
+	if err != nil {
+		return "", err
+	}
+	out := strings.TrimSpace(graph.CouplingText(cs))
+	if graph.Overlaps(cs) {
+		return "overlap:\n" + out, nil
 	}
 	return out, nil
 }

@@ -159,9 +159,10 @@ type args struct {
 	// TimeoutS is fleet_wait's timeout in seconds (ADR-72).
 	TimeoutS int `json:"timeout_s"`
 	// CLI-backed tools (ADR-86): fleet_takeover's acp, fleet_touching's
-	// files, fleet_worktrees' and fleet_branches' prune.
+	// files and graph, fleet_worktrees' and fleet_branches' prune.
 	ACP   bool `json:"acp"`
 	Files []string
+	Graph bool
 	Prune bool
 	// Days is fleet_recall's window (ADR-119).
 	Days int
