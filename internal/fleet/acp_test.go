@@ -555,8 +555,9 @@ patterns = "fake"
 	if n := captures(t, log, a.PaneID); n != 0 {
 		t.Errorf("refresh captured the acp pane %d times", n)
 	}
-	if n := captures(t, log, b.PaneID); n != 3 {
-		t.Errorf("refresh captured the tmux pane %d times, want 3", n)
+	// An unchanged pane is captured once, then served from the cache (ADR-138).
+	if n := captures(t, log, b.PaneID); n == 0 {
+		t.Errorf("refresh never captured the tmux pane")
 	}
 	if p, err := f.Peek("a1", 0); err != nil || !strings.Contains(p, "hello there") {
 		t.Errorf("peek of an acp agent: %q %v", p, err)
