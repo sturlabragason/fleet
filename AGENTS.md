@@ -7,6 +7,7 @@ README, a screenshot or anything in internal/theme.
 # Commands
 - Build: make build
 - Code graph: make graph (needs graphify, `uv tool install graphifyy`), then `export GRAPHIFY_OUT=$(bin/fleet graph --path)` and `graphify affected <file>` / `graphify path A B` before a wide search. Fleet-spawned agents get `GRAPHIFY_OUT` already. Never commit `graphify-out/`.
+- Lint: make lint (golangci-lint v2 on lines changed since main, as CI gates it)
 - All tests: make test (non-blocking; failures go to ~/.fleet/logs/fleet.log)
 - One package: go test ./internal/<pkg>/
 - Live dev loop: make dev (tmux -L fleet-dev; rebuild + restart on save)
@@ -29,6 +30,17 @@ README, a screenshot or anything in internal/theme.
 - Tool profiles and status patterns are data (~/.fleet/tools.toml, patterns), not code.
 - Log with slog and a "component" attribute. Recover and log panics in the TUI loop.
 - Dependencies: stdlib + Charm libraries only.
+
+# Go rules (ADR-134)
+CI runs golangci-lint v2 (`.golangci.yml`) on the lines a change adds or edits; old findings don't block, new ones do.
+1. Before committing Go code, run `make lint` (golangci-lint v2.15, `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0`) and fix what it reports. A `//nolint:<linter> // reason` needs a specific linter and a reason.
+2. Add context and wrap errors: `fmt.Errorf("open inbox: %w", err)`. Compare errors with `errors.Is` or `errors.As`. Never `return nil` on an error without a comment saying why.
+3. Keep functions under about 80 lines and switches under about 10 cases. A new command or MCP tool is an entry in its handler table, not another `case`.
+4. Code that does I/O or runs a process takes `ctx context.Context` first and uses `exec.CommandContext`. `context.Background()` belongs only in `main` and tests (use `t.Context()` there).
+5. Delete what you replace. No unused functions kept for later, and no new uses of deprecated identifiers. Check what depends on code with `graphify affected <file>` before you move or delete it.
+6. Tests are table-driven and use `t.Helper`, `t.TempDir` and `t.Setenv`. Don't wait with `time.Sleep`: poll with a deadline or use `testing/synctest`.
+7. Keep files under 500 lines. When a file grows past that, split it by responsibility.
+8. Write current Go. After a Go version bump, run `go fix ./...` as its own commit.
 
 # Gotchas
 - Bash aliases don't exist inside tmux spawns; tool variants are profiles.

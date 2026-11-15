@@ -21,7 +21,9 @@ func TestWritePlugin(t *testing.T) {
 		t.Errorf("plugin.json %s", b)
 	}
 	var hooks struct {
-		Hooks map[string][]struct{ Hooks []struct{ Type, Command string } }
+		Hooks map[string][]struct {
+			Hooks []struct{ Type, Command string }
+		}
 	}
 	b, _ = os.ReadFile(filepath.Join(dir, "hooks", "hooks.json"))
 	if err := json.Unmarshal(b, &hooks); err != nil {

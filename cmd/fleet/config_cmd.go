@@ -18,8 +18,8 @@ import (
 // gets, each with the layer that set it, and the FLEET_* variables set in
 // this environment.
 type configExplain struct {
-	Profile  string          `json:"profile"`
-	Config   string          `json:"config"`
+	Profile      string          `json:"profile"`
+	Config       string          `json:"config"`
 	Settings     []prefs.Setting `json:"settings"`
 	Integrations []prefs.Setting `json:"integrations"`
 	Env          []string        `json:"env"`

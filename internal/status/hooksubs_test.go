@@ -45,7 +45,7 @@ func TestRecordSubs(t *testing.T) {
 		t.Fatal("non-subagent event created the subs file")
 	}
 	rec("SubagentStart", Payload{AgentID: "c1", AgentType: "explore"}) // Claude
-	rec("subagentStart", Payload{AgentType: "task"})                  // Copilot: no id
+	rec("subagentStart", Payload{AgentType: "task"})                   // Copilot: no id
 	rec("subagentStart", Payload{AgentType: "task"})
 	rec("subagentstart", Payload{AgentID: "c1", AgentType: "explore"}) // repeat: no new entry
 	rec("subagentStop", Payload{AgentType: "task"})                    // oldest running task

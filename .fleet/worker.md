@@ -1,5 +1,5 @@
 Repo rules (fleet)
-- Checks: locally `make build && go test ./<changed pkgs>/...`; the full `go vet ./... && go test ./...` and `-race` run in GitHub Actions on your pushed `fleet/<name>` branch and must be green before you merge (ADR-69). `make test` always exits 0, so it is not a check.
+- Checks: locally `make build && make lint && go test ./<changed pkgs>/...`; the full `go vet ./... && go test ./...` and `-race`, and golangci-lint on new lines (ADR-134), run in GitHub Actions on your pushed `fleet/<name>` branch and must be green before you merge (ADR-69). `make test` always exits 0, so it is not a check.
 - Tests use only `fleet-test-*` tmux sockets and the fake agent; pin `FLEET_CONFIG` to a nonexistent path or a temp file.
 - A user-facing feature or fix adds one line to `CHANGELOG.md` (top of today's `## YYYY-MM-DD` section, what the user can do now) in the same commit; `fleet changes` / `Alt-g` show it from the binary.
 - New external tool or optional feature: use the companion contract or an existing §15 seam (DESIGN.md §15 Extensions, ADR-126), never a new mechanism; `internal/companion/arch_test.go` enforces the first.

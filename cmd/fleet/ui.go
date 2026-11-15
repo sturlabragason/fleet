@@ -80,6 +80,7 @@ func (p *pollBackend) ApplyWall() error        { return p.w.ApplyCached() }
 func (p *pollBackend) OnWall() map[string]bool { return p.w.OnWall() }
 func (p *pollBackend) Pinned() map[string]bool { return p.w.Pinned() }
 func (p *pollBackend) Target() string          { return p.w.TargetAgent() }
+
 // Admirals lists main only: the live `-t fleet:` is the session's current
 // window, which is main, and a snapshot does not record the current window.
 func (p *pollBackend) Admirals() []ui.AdmiralInfo {

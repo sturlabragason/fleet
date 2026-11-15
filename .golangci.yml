@@ -1,0 +1,53 @@
+version: "2"
+run:
+  timeout: 10m
+  build-tags: [extexample]
+linters:
+  default: standard            # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - errorlint                # == on errors, %v instead of %w
+    - nilerr                   # return nil after err != nil
+    - bodyclose
+    - copyloopvar
+    - intrange
+    - modernize                # same analyzers as `go fix` in Go 1.26
+    - misspell
+    - unconvert
+    - wastedassign
+    - usetesting               # t.TempDir/t.Setenv/t.Context
+    - thelper
+    - nolintlint
+    - gocyclo
+    - gocognit
+    - revive
+  settings:
+    gocyclo: {min-complexity: 30}
+    gocognit: {min-complexity: 40}
+    nolintlint: {require-explanation: true, require-specific: true}
+    errcheck:
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (*os.File).Close
+        - os.Remove
+        - os.RemoveAll
+    revive:
+      rules:
+        - name: error-strings
+        - name: error-return
+        - name: errorf
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: unreachable-code
+        - name: context-as-argument
+  exclusions:
+    presets: [comments, std-error-handling, common-false-positives]
+    rules:
+      - path: _test\.go
+        linters: [errcheck, gocognit, gocyclo]
+formatters:
+  enable: [gofmt, goimports]
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

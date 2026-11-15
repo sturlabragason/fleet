@@ -74,10 +74,10 @@ func writeUsage(out io.Writer, c ubar.Config, l *ubar.Ledger, now time.Time, asJ
 		e := json.NewEncoder(out)
 		e.SetIndent("", "  ")
 		return e.Encode(struct {
-			Day             string                 `json:"day"`
+			Day             string                `json:"day"`
 			Profiles        map[string]ubar.Tally `json:"profiles"`
-			CopilotMonthAIC float64                `json:"copilot_month_aic"`
-			CopilotAllow    float64                `json:"copilot_month_allowance"`
+			CopilotMonthAIC float64               `json:"copilot_month_aic"`
+			CopilotAllow    float64               `json:"copilot_month_allowance"`
 		}{ubar.Day(now), today, monthAIC, c.CopilotMonthAIC})
 	}
 	names := make([]string, 0, len(today))

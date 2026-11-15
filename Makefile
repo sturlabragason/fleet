@@ -3,7 +3,7 @@ GO ?= go
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null)
 LDFLAGS := -X main.version=$(VERSION)
 
-.PHONY: build test dev run install up clean-dev hooks graph
+.PHONY: build test lint dev run install up clean-dev hooks graph
 
 build:
 	@mkdir -p $(BIN)
@@ -12,6 +12,12 @@ build:
 
 test:
 	$(GO) test ./... 2>&1 | tee -a $(HOME)/.fleet/logs/test.log; true
+
+# golangci-lint v2 (.golangci.yml) on what changed since main, as CI gates it (ADR-134).
+# LINT_BASE=<rev> moves the base; LINT_BASE= lints everything.
+LINT_BASE ?= main
+lint:
+	golangci-lint run $(if $(LINT_BASE),--new-from-merge-base=$(LINT_BASE)) ./...
 
 install: build
 	mkdir -p $(HOME)/.local/bin
