@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/playbook"
 	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/tmux"
 	"github.com/sturlabragason/fleet/internal/wall"
@@ -135,6 +136,27 @@ func TestNoteBriefHandoff(t *testing.T) {
 		if isErr || !strings.Contains(out, want) {
 			t.Errorf("brief missing %q:\n%s", want, out)
 		}
+	}
+}
+
+// fleet_note rule=true makes the note a standing rule in the user layer, so
+// the next spawn's playbook carries it at every level (ADR-131).
+func TestNoteRuleReachesPlaybook(t *testing.T) {
+	s, _, _ := memServer(t)
+	out, isErr := callText(t, s, "fleet_note", map[string]any{"text": "never send into a session I am typing in", "rule": true, "pin": true})
+	if isErr || !strings.Contains(out, "now in every new spawn") {
+		t.Fatalf("note rule: %q", out)
+	}
+	for _, l := range playbook.Levels {
+		if text, _ := playbook.Resolve(l, s.F.Home, t.TempDir()); !strings.Contains(text, "- never send into a session I am typing in") {
+			t.Errorf("%s: playbook lacks the rule", l)
+		}
+	}
+	if p := supervisor.Pinned(s.F.Home); len(p) != 1 {
+		t.Errorf("pinned %q", p)
+	}
+	if out, _ := callText(t, s, "fleet_note", map[string]any{"text": "Never send into a session I am typing in", "rule": true}); !strings.Contains(out, "already") {
+		t.Errorf("duplicate rule: %q", out)
 	}
 }
 
