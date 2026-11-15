@@ -41,7 +41,7 @@ patterns = "claude"
 	var a = struct {
 		status, line, tag string
 	}{}
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		as, err := f.Refresh()
 		if err != nil {
 			t.Fatal(err)

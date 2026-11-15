@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"time"
 
@@ -215,12 +216,7 @@ func stamp(p string) string {
 }
 
 func contains(l []string, s string) bool {
-	for _, v := range l {
-		if v == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(l, s)
 }
 
 // lifecycle runs every StopEvery and reports whether the watcher should

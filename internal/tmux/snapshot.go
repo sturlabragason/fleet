@@ -55,7 +55,7 @@ func (c *Client) Snapshot() (*Snapshot, error) {
 func parseSnapshot(at time.Time, out string) *Snapshot {
 	s := &Snapshot{At: at, Windows: map[string]map[string]string{}}
 	seen := map[string]bool{}
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		f := strings.Split(line, "\t")
 		if len(f) < paneFields+len(WindowKeys)+1 {
 			continue

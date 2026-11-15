@@ -81,7 +81,7 @@ func (f *Fleet) paneRoots() (map[string]int, bool) {
 	if err != nil {
 		return roots, tmux.NoServer(err)
 	}
-	for _, l := range strings.Split(out, "\n") {
+	for l := range strings.SplitSeq(out, "\n") {
 		fs := strings.Split(l, "\t")
 		if len(fs) != 3 || fs[0] == "" || fs[2] == "1" {
 			continue

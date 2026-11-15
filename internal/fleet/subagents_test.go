@@ -21,13 +21,13 @@ func TestRefreshReadsSubagents(t *testing.T) {
 	t.Setenv("FLEET_CONFIG", filepath.Join(home, "no-config.toml"))
 	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
 	t.Cleanup(func() { tc.KillServer() })
-	os.WriteFile(filepath.Join(home, "tools.toml"), []byte(fmt.Sprintf(`[sub]
+	os.WriteFile(filepath.Join(home, "tools.toml"), fmt.Appendf(nil, `[sub]
 command = "sh"
 args = ["-c", "echo working; cat"]
 launch_id = ["{id}"]
 subagent_log = "%s/{id}.jsonl"
 patterns = "fake"
-`, home)), 0o644)
+`, home), 0o644)
 	f, err := New(tc, home, "/nonexistent")
 	if err != nil {
 		t.Fatal(err)

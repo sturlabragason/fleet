@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -538,12 +539,8 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 	log := logx.For("fleet")
 	if extra := f.Prefs.For(profile).Env; len(extra) > 0 {
 		env := make(map[string]string, len(p.Env)+len(extra))
-		for k, v := range p.Env {
-			env[k] = v
-		}
-		for k, v := range extra {
-			env[k] = v
-		}
+		maps.Copy(env, p.Env)
+		maps.Copy(env, extra)
 		p.Env = env
 	}
 	env := append(p.EnvList(), sysx.OwnerEnv+"="+OwnerTag(f.Home, name))

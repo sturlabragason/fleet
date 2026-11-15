@@ -155,7 +155,7 @@ func TestInboxReadAndAll(t *testing.T) {
 	s := newStore(t)
 	s.Decide("a", "b", "grant")
 	s.Inbox("b", false, 0) // drop the grant msg
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		mustSend(t, s, "a", "b", fmt.Sprint("m", i))
 	}
 	if n := s.Unread("b"); n != 3 {
@@ -194,14 +194,12 @@ func TestConcurrentSend(t *testing.T) {
 	s.Inbox("b", false, 0)
 	var wg sync.WaitGroup
 	for _, from := range []string{"a", "c"} {
-		for i := 0; i < 25; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+		for i := range 25 {
+			wg.Go(func() {
 				if _, err := s.Send(from, "b", fmt.Sprint(from, i)); err != nil {
 					t.Error(err)
 				}
-			}()
+			})
 		}
 	}
 	wg.Wait()

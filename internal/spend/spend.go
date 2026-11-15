@@ -240,10 +240,7 @@ func copilotLine(b []byte) (record, bool) {
 		ctx = percent(u.InputTokens, u.MaxPromptTokens)
 	}
 	// inputTokens already contains the cached ones; keep each in one field.
-	fresh := u.InputTokens - u.CacheReadTokens - u.CacheWriteTokens
-	if fresh < 0 {
-		fresh = 0
-	}
+	fresh := max(u.InputTokens-u.CacheReadTokens-u.CacheWriteTokens, 0)
 	return record{sp: Spend{
 		Calls: 1, Input: fresh, Output: u.OutputTokens,
 		CacheRead: u.CacheReadTokens, CacheWrite: u.CacheWriteTokens,
@@ -368,7 +365,7 @@ func scan(p parser, buf []byte, lastID string) result {
 		return result{lastID: lastID}
 	}
 	out := result{lastID: lastID, consumed: int64(end + 1)}
-	for _, line := range bytes.Split(buf[:end], []byte("\n")) {
+	for line := range bytes.SplitSeq(buf[:end], []byte("\n")) {
 		if !anyTag(p.tags, line) {
 			continue
 		}

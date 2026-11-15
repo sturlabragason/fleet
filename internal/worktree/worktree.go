@@ -35,7 +35,7 @@ type Worktree struct {
 func Parse(out string) []Worktree {
 	var ws []Worktree
 	var cur *Worktree
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		key, val, _ := strings.Cut(strings.TrimRight(line, "\r"), " ")
 		if key == "worktree" {
 			ws = append(ws, Worktree{Path: val})
@@ -263,7 +263,7 @@ func onlyResults(ctx context.Context, wt string, ignore []string) bool {
 		return false
 	}
 	var skip map[string]bool
-	for _, r := range strings.Split(out, "\x00") {
+	for r := range strings.SplitSeq(out, "\x00") {
 		if r == "" {
 			continue
 		}
@@ -306,7 +306,7 @@ func changes(ctx context.Context, wt string, ignore ...string) ([]string, error)
 		if err != nil {
 			return nil, err
 		}
-		for _, f := range strings.Split(out, "\n") {
+		for f := range strings.SplitSeq(out, "\n") {
 			if f = strings.TrimSpace(f); f != "" {
 				set[f] = true
 			}

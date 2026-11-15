@@ -277,7 +277,7 @@ func pickClipboard(ctx context.Context, list []string, read func(string) []strin
 		return nil, "", fmt.Errorf("%s: %w", list[0], err)
 	}
 	var uris bool
-	for _, t := range strings.Fields(string(types)) {
+	for t := range strings.FieldsSeq(string(types)) {
 		if imageTypes[t] {
 			data, err := output(ctx, read(t))
 			if err != nil {

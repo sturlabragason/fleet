@@ -131,7 +131,7 @@ func nonNeg(n int64) int64 {
 func skipPartial(f *os.File, off int64) int64 {
 	probe := make([]byte, 1<<16)
 	n, _ := f.ReadAt(probe, off)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if probe[i] == '\n' {
 			return off + int64(i) + 1
 		}

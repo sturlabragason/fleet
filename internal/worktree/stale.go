@@ -130,7 +130,7 @@ func status(dir string) (untracked []string, other, failed bool) {
 	if err != nil {
 		return nil, true, true
 	}
-	for _, r := range strings.Split(out, "\x00") {
+	for r := range strings.SplitSeq(out, "\x00") {
 		switch {
 		case r == "":
 		case strings.HasPrefix(r, "?? "):

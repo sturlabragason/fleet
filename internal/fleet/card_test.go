@@ -236,7 +236,7 @@ func TestOneDoneCheckRunsOnceAndASweepPicksUpALostOne(t *testing.T) {
 	fakeAdm(f, pasted, &idle)
 	out := filepath.Join(t.TempDir(), "runs")
 	setCard(t, f, "a", &board.Card{Check: "echo x >> " + out})
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		if _, err := f.Report("a", "done", "shipped"); err != nil {
 			t.Fatal(err)
 		}
@@ -314,7 +314,7 @@ func TestRepeatedDoneReportNeverAutoClosesAFailedCheck(t *testing.T) {
 	closed := ""
 	f.CloseLater = func(n string) error { closed = n; return nil }
 	setCard(t, f, "a", &board.Card{Check: "exit 1"})
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		note, err := f.Report("a", "done", "shipped")
 		if err != nil {
 			t.Fatal(err)

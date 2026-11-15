@@ -155,7 +155,7 @@ func (v view) idsPath() string { return v.mark + ".ids" }
 
 func readIDs(path string) map[string]bool {
 	ids := map[string]bool{}
-	for _, id := range strings.Fields(readTrim(path)) {
+	for id := range strings.FieldsSeq(readTrim(path)) {
 		ids[id] = true
 	}
 	return ids

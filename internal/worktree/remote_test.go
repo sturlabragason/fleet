@@ -44,7 +44,7 @@ func remoteHeads(t *testing.T, repo string) string {
 		t.Fatal(err)
 	}
 	var hs []string
-	for _, f := range strings.Fields(out) {
+	for f := range strings.FieldsSeq(out) {
 		if h, ok := strings.CutPrefix(f, "refs/heads/"); ok {
 			hs = append(hs, h)
 		}

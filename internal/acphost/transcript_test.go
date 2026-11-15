@@ -16,7 +16,7 @@ func TestTailAndLastSessionAcrossBlocks(t *testing.T) {
 	}
 	_ = tx.add(Entry{Kind: KindSession, SessionID: "first"})
 	long := strings.Repeat("x", 1000)
-	for i := 0; i < 200; i++ { // ~200 KB: several tail blocks
+	for i := range 200 { // ~200 KB: several tail blocks
 		_ = tx.add(Entry{Kind: KindAgent, Text: fmt.Sprintf("%d %s", i, long)})
 	}
 	_ = tx.add(Entry{Kind: KindSession, SessionID: "second"})
@@ -47,7 +47,7 @@ func TestTailAndLastSessionAcrossBlocks(t *testing.T) {
 	p2 := filepath.Join(t.TempDir(), "b.jsonl")
 	tx2, _ := openTranscript(p2)
 	_ = tx2.add(Entry{Kind: KindSession, SessionID: "only"})
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		_ = tx2.add(Entry{Kind: KindAgent, Text: long})
 	}
 	tx2.close()

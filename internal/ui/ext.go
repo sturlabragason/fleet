@@ -1,5 +1,9 @@
 package ui
 
+import "maps"
+
+import "strings"
+
 import tea "github.com/charmbracelet/bubbletea"
 
 // Extension is what a feature compiled in with a build tag adds to the
@@ -52,9 +56,7 @@ func Register(e Extension) {
 		}
 	}
 	exts = append(exts, e)
-	for k, h := range e.Keys {
-		extKeys[k] = h
-	}
+	maps.Copy(extKeys, e.Keys)
 }
 
 // extPoll is each extension's poll result, by its index in exts.
@@ -104,11 +106,11 @@ func extView(m *Model) ExtView {
 func extViewOpen(m *Model) bool { return extView(m) != nil }
 
 func extBadge(m *Model) string {
-	var s string
+	var s strings.Builder
 	for _, e := range exts {
 		if e.Badge != nil {
-			s += e.Badge(m)
+			s.WriteString(e.Badge(m))
 		}
 	}
-	return s
+	return s.String()
 }

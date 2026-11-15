@@ -165,7 +165,7 @@ func notes(home string) []Hit {
 		if err != nil {
 			continue
 		}
-		for _, l := range strings.Split(string(b), "\n") {
+		for l := range strings.SplitSeq(string(b), "\n") {
 			ts, rest, ok := strings.Cut(l, " ")
 			t, err := time.ParseInLocation("2006-01-02T15:04", ts, time.Local)
 			if !ok || err != nil {
@@ -195,7 +195,7 @@ func matches(text string, words []string) bool {
 
 // matchingLine is the first line of text that holds any of words.
 func matchingLine(text string, words []string) string {
-	for _, l := range strings.Split(text, "\n") {
+	for l := range strings.SplitSeq(text, "\n") {
 		ll := strings.ToLower(l)
 		for _, w := range words {
 			if strings.Contains(ll, w) {
@@ -249,8 +249,8 @@ func Area(dir string) string {
 		return "other"
 	}
 	d := filepath.ToSlash(dir)
-	if i := strings.Index(d, ".wt/"); i >= 0 {
-		return filepath.Base(d[:i])
+	if before, _, ok := strings.Cut(d, ".wt/"); ok {
+		return filepath.Base(before)
 	}
 	if home, _ := os.UserHomeDir(); home != "" && filepath.Clean(dir) == filepath.Clean(home) {
 		return "~"

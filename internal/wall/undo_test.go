@@ -76,7 +76,7 @@ func TestUndoWhenThePaneIsGone(t *testing.T) {
 	}
 	c.Run("set-option", "-p", "-t", agents[1], "remain-on-exit", "on")
 	c.Run("respawn-pane", "-k", "-t", agents[1], "true")
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		if d, _ := c.Run("display-message", "-p", "-t", agents[1], "#{pane_dead}"); d == "1" {
 			break
 		}

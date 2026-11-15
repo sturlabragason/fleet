@@ -263,7 +263,7 @@ func cleanEnv(environ, extra []string) []string {
 
 // FirstLine is the first non-blank line of s, trimmed.
 func FirstLine(s string) string {
-	for _, l := range strings.Split(s, "\n") {
+	for l := range strings.SplitSeq(s, "\n") {
 		if l = strings.TrimSpace(l); l != "" {
 			return l
 		}

@@ -46,7 +46,7 @@ patterns = "fake"
 
 func readArg(t *testing.T, path string) string {
 	t.Helper()
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		if b, err := os.ReadFile(path); err == nil && len(b) > 0 {
 			return string(b)
 		}
@@ -119,7 +119,7 @@ func TestSpawnPlaybookLogRedacted(t *testing.T) {
 	full := readArg(t, out)
 	b, _ := os.ReadFile(logFile)
 	var line string
-	for _, l := range strings.Split(string(b), "\n") {
+	for l := range strings.SplitSeq(string(b), "\n") {
 		if strings.Contains(l, "msg=started") && strings.Contains(l, "agent=pb3") {
 			line = l
 		}

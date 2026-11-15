@@ -468,7 +468,7 @@ func TestHelpOverlayScrollsToEveryKey(t *testing.T) {
 		return v
 	}
 	view()
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		prev := m.helpOff
 		m.Update(tea.KeyMsg{Type: tea.KeyDown})
 		v := view()
@@ -724,7 +724,7 @@ func TestOverviewNeverBlinks(t *testing.T) {
 	if sgrBlinks(first) {
 		t.Error("view carries the SGR blink attribute")
 	}
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		m.Update(animMsg{})
 		if v := m.View(); v != first {
 			t.Fatalf("tick %d changed the frame:\n%s\nwas:\n%s", i, v, first)

@@ -142,7 +142,7 @@ func TestAdmiralMailOpenPolicy(t *testing.T) {
 func TestWakeLandsInOwningAdmiralPane(t *testing.T) {
 	f := twoAdmirals(t)
 	spawnFor(t, f, "print", "p1")
-	idle := ptr(true)
+	idle := new(true)
 	var typed []string
 	f.SupPane = func() AdmiralView { return AdmiralView{Pane: "%main", Idle: *idle, Box: true} }
 	f.AdmiralPane = func(name string) AdmiralView {

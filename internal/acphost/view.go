@@ -176,7 +176,7 @@ func (v *view) note(s string) {
 
 // Write is io.Writer: each line is a note.
 func (v *view) Write(p []byte) (int, error) {
-	for _, l := range strings.Split(strings.TrimRight(string(p), "\n"), "\n") {
+	for l := range strings.SplitSeq(strings.TrimRight(string(p), "\n"), "\n") {
 		v.note(l)
 	}
 	return len(p), nil
@@ -292,10 +292,7 @@ func (v *view) scrollLines(n int) {
 func (v *view) scrollBy(pages int) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	step := v.page / 2
-	if step < 1 {
-		step = 1
-	}
+	step := max(v.page/2, 1)
 	v.scroll += pages * step
 	if v.scroll < 0 {
 		v.scroll = 0
@@ -418,10 +415,7 @@ func (v *view) frame(w, h int) (rows []string, cx, cy int) {
 	if hint != "" {
 		bottom = append(bottom, hint)
 	}
-	bodyH := h - len(top) - len(bottom)
-	if bodyH < 0 {
-		bodyH = 0
-	}
+	bodyH := max(h-len(top)-len(bottom), 0)
 	v.page = bodyH
 	body, more := v.body(w, bodyH)
 	if ruled && v.scroll == 0 { // nothing to scroll back to: lay out without the rule
@@ -476,10 +470,7 @@ func (v *view) body(w, n int) ([]string, int) {
 	if v.scroll > len(rev)-n {
 		v.scroll = max(len(rev)-n, 0)
 	}
-	end := len(rev)
-	if end > v.scroll+n {
-		end = v.scroll + n
-	}
+	end := min(len(rev), v.scroll+n)
 	var out []string
 	for j := end - 1; j >= v.scroll; j-- {
 		out = append(out, v.paintLine(rev[j], w))

@@ -77,7 +77,7 @@ func TestStuckSameErrorTwice(t *testing.T) {
 	// Derive the banner from the fixture, so recapturing it with `fleet snap`
 	// cannot break this assertion.
 	var banner string
-	for _, l := range strings.Split(errScreen, "\n") {
+	for l := range strings.SplitSeq(errScreen, "\n") {
 		if strings.HasPrefix(l, "✖ Error:") {
 			banner = l
 			break
@@ -151,7 +151,7 @@ func TestStuckNoProgressOff(t *testing.T) {
 func TestStuckLongProgressingBuildIsNotStuck(t *testing.T) {
 	work := read(t, "fake", "working")
 	var screens []string
-	for i := 0; i < 60; i++ {
+	for i := range 60 {
 		screens = append(screens, work+"\n  compiling package "+strings.Repeat("x", i))
 	}
 	got, mem := feed(t, "fake", time.Minute, 30*time.Second, screens) // 30 minutes of build
@@ -206,7 +206,7 @@ func TestStuckEpisodeIsClaimedOnce(t *testing.T) {
 	var mem *StuckState
 	now := time.Now()
 	var starts, notifies int
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		now = now.Add(time.Second)
 		st, line, _ := set.Match(work)
 		var rec Status
@@ -269,7 +269,7 @@ func TestVibeStartupWarningIsNotAnError(t *testing.T) {
 func TestStuckHeldBannerWithMovingScreenIsOneFailure(t *testing.T) {
 	base := read(t, "vibe", "error")
 	var screens []string
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		screens = append(screens, base+"\n  ⎿ read "+strings.Repeat("f", i)+".go")
 	}
 	got, mem := feed(t, "vibe", 0, time.Second, screens)
@@ -293,7 +293,7 @@ func TestStuckErrorMemoryExpiresWhileWorking(t *testing.T) {
 	errScreen := read(t, "fake", "error")
 	work := read(t, "fake", "working")
 	screens := []string{errScreen, work, errScreen + "\n"}
-	for i := 0; i < 10; i++ { // 10 ticks of 30s = 5 minutes of real progress
+	for i := range 10 { // 10 ticks of 30s = 5 minutes of real progress
 		screens = append(screens, work+"\n  compiling "+strings.Repeat("p", i))
 	}
 	got, mem := feed(t, "fake", 0, 30*time.Second, screens)

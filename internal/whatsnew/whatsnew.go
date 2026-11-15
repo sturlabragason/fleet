@@ -48,7 +48,7 @@ var (
 func Parse(md string) []Entry {
 	var out []Entry
 	day := ""
-	for _, l := range strings.Split(md, "\n") {
+	for l := range strings.SplitSeq(md, "\n") {
 		l = strings.TrimRight(l, " \t\r")
 		if strings.HasPrefix(l, "#") {
 			day = ""
@@ -82,7 +82,7 @@ func splitRefs(text string) (string, []string, []string) {
 		return text, nil, nil
 	}
 	var refs, hashes []string
-	for _, r := range strings.Split(text[i+1:len(text)-1], ",") {
+	for r := range strings.SplitSeq(text[i+1:len(text)-1], ",") {
 		r = strings.TrimSpace(r)
 		switch {
 		case hashRe.MatchString(r):

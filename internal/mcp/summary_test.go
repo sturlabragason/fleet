@@ -43,7 +43,7 @@ func summaryServer(t *testing.T) (*Server, *fakeModel) {
 	if _, err := f.Spawn("a1", "yn", home, ""); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		if p, _ := f.Peek("a1", 0); strings.Contains(p, "[y/n]") {
 			break
 		}

@@ -62,7 +62,7 @@ func TestApplyInTmux(t *testing.T) {
 	if _, err := tm("new-session", "-d", "-s", "t", "-x", "300", "-y", "80", "cat"); err != nil {
 		t.Skip("no tmux")
 	}
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		tm("split-window", "-t", "t", "cat")
 		tm("select-layout", "-t", "t", "even-vertical")
 	}
@@ -119,7 +119,7 @@ func TestSupsStack(t *testing.T) {
 	c := Default
 	for _, n := range []int{1, 2, 3} {
 		var sups []string
-		for i := 0; i < n; i++ {
+		for i := range n {
 			sups = append(sups, fmt.Sprintf("%%%d", i+1))
 		}
 		root := c.Build(Input{W: 300, H: 60, Sups: sups, Ov: "%9"})

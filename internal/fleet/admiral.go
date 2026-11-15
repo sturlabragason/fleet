@@ -2,6 +2,7 @@ package fleet
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -36,12 +37,7 @@ func (f *Fleet) AdmiralBoxes() []string {
 }
 
 func (f *Fleet) isAdmiralBox(box string) bool {
-	for _, b := range f.AdmiralBoxes() {
-		if b == box {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(f.AdmiralBoxes(), box)
 }
 
 // OwnerOf is the admiral that owns an agent: "main" when the agent has no

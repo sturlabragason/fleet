@@ -20,7 +20,7 @@ func TestRotationIsShared(t *testing.T) {
 	}
 	b, _ := openRotator(path)
 	line := []byte(strings.Repeat("x", 60) + "\n")
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		a.Write(line)
 	}
 	b.Write([]byte("from b\n"))

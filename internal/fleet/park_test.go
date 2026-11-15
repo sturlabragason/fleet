@@ -91,7 +91,7 @@ func boardList(f *Fleet) []*board.Agent {
 
 func waitPane(t *testing.T, f *Fleet, name string) string {
 	t.Helper()
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		if p := f.paneOf(name); p != "" {
 			return p
 		}
@@ -186,7 +186,7 @@ func TestWakeResumesInTheConfiguredMode(t *testing.T) {
 func waitFor(t *testing.T, f *Fleet, name, want string) {
 	t.Helper()
 	pane, out := waitPane(t, f, name), ""
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		if out, _ = f.T.Capture(pane, 10); strings.Contains(out, want) {
 			return
 		}
@@ -513,7 +513,7 @@ func TestParkRefusesWhenItCannotReadTheScreen(t *testing.T) {
 	f.T.Paste(pane, "Continue? [y/n]", true)
 	setState(t, f, "pr1", "idle", time.Now())
 	var err error
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		if err = f.Park("pr1", ""); err != nil {
 			break
 		}
@@ -573,7 +573,7 @@ patterns = "fake"
 	}
 	id := a.SessionID
 	waitFor(t, f, "c1", "ctx=ctx-pro started-"+id)
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		setState(t, f, "c1", "idle", time.Now())
 		if err := f.Park("c1", ""); err != nil {
 			t.Fatal(err)
@@ -625,7 +625,7 @@ func TestTmuxAgentKeepsItsDriverAcrossTheUpgrade(t *testing.T) {
 		t.Fatal(err)
 	}
 	flipToACP(f) // the upgrade lands while it is parked
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		woke, err := f.Wake("u1", false)
 		if err != nil {
 			t.Fatal(err)

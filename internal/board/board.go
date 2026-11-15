@@ -98,25 +98,25 @@ type Agent struct {
 	// UserAt is the user's last key press seen in the agent's pane (tmux
 	// client_activity while the pane was the client's active one). For
 	// UserHold after it the agent counts as the user's (ADR-61).
-	UserAt time.Time `json:"user_at,omitempty"`
+	UserAt time.Time `json:"user_at"`
 	// PromptAt is when fleet last handed the agent work: its spawn task or a
 	// text fleet_send. A turn that ends after it with no final report is
 	// "no report" (ADR-68).
-	PromptAt time.Time `json:"prompt_at,omitempty"`
+	PromptAt time.Time `json:"prompt_at"`
 	// NoReportTold is when the owner was told this agent stopped without a
 	// report; once per task, so a newer PromptAt re-arms it (ADR-68).
-	NoReportTold time.Time `json:"no_report_told,omitempty"`
+	NoReportTold time.Time `json:"no_report_told"`
 	// RecycleTold is when the owner was told to hand this agent's work to a
 	// fresh agent; once per agent (ADR-71).
-	RecycleTold time.Time `json:"recycle_told,omitempty"`
+	RecycleTold time.Time `json:"recycle_told"`
 	// ResurfacedAt is the At of the open ask whose long wait the owner was
 	// last told about; once per report, so a newer report re-arms it (ADR-130).
-	ResurfacedAt time.Time `json:"resurfaced_at,omitempty"`
+	ResurfacedAt time.Time `json:"resurfaced_at"`
 	// TurnAt is when the agent's latest turn began: the refresher's last
 	// switch to working after an idle of at least NoReportAfter (a shorter
 	// idle is a boundary inside one turn). It is what the user's agents are
 	// judged by, since what the user types sets no PromptAt (ADR-68).
-	TurnAt time.Time `json:"turn_at,omitempty"`
+	TurnAt time.Time `json:"turn_at"`
 	// Driver is "acp" for an agent run under `fleet acp-host` (DESIGN §7d,
 	// ADR-74); "" is the tmux driver, which every agent had before it.
 	Driver string `json:"driver,omitempty"`
@@ -172,7 +172,7 @@ type Card struct {
 	// that keeps one check to one run (ADR-43): a second done report, or a
 	// sweep, sees it and stands down. A claim older than the timeout is
 	// stale — its runner died — and may be taken again.
-	Started time.Time `json:"started,omitempty"`
+	Started time.Time `json:"started"`
 	extra   jsonx.Extra
 }
 

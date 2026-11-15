@@ -72,10 +72,7 @@ func wrap(segs []seg, w int, first, rest []seg) [][]seg {
 				newLine()
 			}
 			for used+tw > w { // longer than a whole line: cut it
-				room := w - used
-				if room < 1 {
-					room = 1
-				}
+				room := max(w-used, 1)
 				head := cutWidth(tok, room)
 				put(head, s.st)
 				tok = tok[len(head):]
@@ -162,7 +159,7 @@ func markdown(s string, w, indent int, ms mdStyles) [][]seg {
 	pad := strings.Repeat(" ", indent)
 	var out [][]seg
 	fence := false
-	for _, raw := range strings.Split(strings.TrimRight(s, "\n "), "\n") {
+	for raw := range strings.SplitSeq(strings.TrimRight(s, "\n "), "\n") {
 		line := strings.TrimRight(raw, " \t\r")
 		trim := strings.TrimLeft(line, " ")
 		if strings.HasPrefix(trim, "```") || strings.HasPrefix(trim, "~~~") {
@@ -183,10 +180,7 @@ func markdown(s string, w, indent int, ms mdStyles) [][]seg {
 		lead := pad + strings.Repeat(" ", len(line)-len(trim))
 		switch {
 		case isRule(trim):
-			n := w - indent
-			if n > 40 {
-				n = 40
-			}
+			n := min(w-indent, 40)
 			out = append(out, []seg{{pad, sty{}}, {strings.Repeat("─", max(n, 1)), ms.rule}})
 		case heading(trim) > 0:
 			text := strings.TrimSpace(strings.TrimLeft(trim, "#"))

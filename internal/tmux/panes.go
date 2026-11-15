@@ -165,7 +165,7 @@ func (c *Client) ListPanes(target string) ([]PaneInfo, error) {
 	}
 	var ps []PaneInfo
 	seen := map[string]bool{}
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		if p, ok := parsePane(strings.Split(line, "\t")); ok && !seen[p.ID] {
 			seen[p.ID] = true
 			ps = append(ps, p)

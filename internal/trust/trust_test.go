@@ -230,7 +230,7 @@ func TestMarkClaudeMergesConcurrentWrites(t *testing.T) {
 	const n = 12
 	var wg sync.WaitGroup
 	errs := make(chan error, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -244,7 +244,7 @@ func TestMarkClaudeMergesConcurrentWrites(t *testing.T) {
 	for err := range errs {
 		t.Fatal(err)
 	}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if d := filepath.Join(home, fmt.Sprintf("repo-%d", i)); !claudeTrusted(t, path, d) {
 			t.Errorf("%s lost by a concurrent write", d)
 		}

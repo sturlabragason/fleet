@@ -22,7 +22,7 @@ func queueFleet(t *testing.T, maxWorking int) *Fleet {
 	t.Cleanup(func() { tc.KillServer() })
 	os.WriteFile(filepath.Join(home, "tools.toml"), []byte("[cat]\ncommand = \"sh\"\nargs = [\"-c\", \"cat\"]\npatterns = \"fake\"\n"), 0o644)
 	cfg := filepath.Join(home, "config.toml")
-	os.WriteFile(cfg, []byte(fmt.Sprintf("[defaults]\nmax_working = %d\n", maxWorking)), 0o644)
+	os.WriteFile(cfg, fmt.Appendf(nil, "[defaults]\nmax_working = %d\n", maxWorking), 0o644)
 	t.Setenv("FLEET_CONFIG", cfg)
 	f, err := New(tc, home, "/nonexistent")
 	if err != nil {
@@ -91,7 +91,7 @@ func TestSpawnQueuesAtCapAndDrains(t *testing.T) {
 
 func TestMaxWorkingZeroNeverQueues(t *testing.T) {
 	f := queueFleet(t, 0)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		a, err := f.Spawn(fmt.Sprintf("z%d", i), "cat", "", "")
 		if err != nil || a.Status == "queued" || a.PaneID == "" {
 			t.Fatalf("z%d: %v %+v", i, err, a)

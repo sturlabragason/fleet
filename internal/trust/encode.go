@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -101,12 +102,7 @@ func errParse(path string, err error) error { return fmt.Errorf("%s: %w", path, 
 
 // contains reports whether l has s.
 func contains(l []string, s string) bool {
-	for _, v := range l {
-		if v == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(l, s)
 }
 
 // without returns l with every s removed.

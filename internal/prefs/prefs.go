@@ -6,6 +6,7 @@ package prefs
 
 import (
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"time"
@@ -297,9 +298,7 @@ func (p *Prefs) ToolsDoc() conf.Doc {
 		return nil
 	}
 	d := conf.Doc{}
-	for name, sec := range p.profiles {
-		d[name] = sec
-	}
+	maps.Copy(d, p.profiles)
 	return d
 }
 
@@ -363,12 +362,8 @@ func applySpawn(s Spawn, sec map[string]conf.Value) Spawn {
 	}
 	if m := conf.Map(sec, "env"); len(m) > 0 {
 		env := make(map[string]string, len(s.Env)+len(m))
-		for k, v := range s.Env {
-			env[k] = v
-		}
-		for k, v := range m {
-			env[k] = v
-		}
+		maps.Copy(env, s.Env)
+		maps.Copy(env, m)
 		s.Env = env
 	}
 	return s

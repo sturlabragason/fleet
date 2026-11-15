@@ -8,6 +8,7 @@ package usage
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"strconv"
 	"strings"
@@ -50,9 +51,7 @@ type Config struct {
 // DefaultConfig is the config without a [usage] section.
 func DefaultConfig() Config {
 	ps := map[string]Price{}
-	for k, v := range DefaultPrices {
-		ps[k] = v
-	}
+	maps.Copy(ps, DefaultPrices)
 	return Config{CopilotMonthAIC: DefaultCopilotMonthAIC, DayUSD: map[string]float64{}, Prices: ps}
 }
 

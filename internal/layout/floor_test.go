@@ -134,7 +134,7 @@ func TestCappedWallNeverRendersUnderTheFloor(t *testing.T) {
 		}
 		fw, fh := Default.Floor(w, h)
 		var ids []string
-		for i := 0; i < n; i++ {
+		for i := range n {
 			ids = append(ids, "%"+string(rune('a'+i)))
 		}
 		r := paneRects(t, Input{W: s.winW, H: s.winH, Sups: []string{"%1"}, Ov: "%2", Wall: ids, Preset: "9"})
@@ -212,7 +212,7 @@ func TestMainStackPresetRespectsTheFloor(t *testing.T) {
 		}
 		fw, fh := Default.Floor(w, h)
 		var ids []string
-		for i := 0; i < n; i++ {
+		for i := range n {
 			ids = append(ids, "%"+string(rune('a'+i)))
 		}
 		in := Input{W: s.winW, H: s.winH, Sups: []string{"%1"}, Ov: "%2", Wall: ids, Preset: "m"}

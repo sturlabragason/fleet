@@ -159,7 +159,7 @@ func buildLocked(ctx context.Context, home, root string, force bool) (Stamp, err
 		return Stamp{}, err
 	}
 	var st Stamp
-	for pass := 0; pass < buildPasses; pass++ {
+	for range buildPasses {
 		_ = os.Remove(base + ".rerun")
 		args := []string{"update", root}
 		if force {

@@ -48,7 +48,7 @@ func spawnKid(t *testing.T, f *Fleet, name string) int {
 		t.Fatal(err)
 	}
 	pane := waitPane(t, f, name)
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		out, _ := f.T.Capture(pane, 20)
 		if m := kidRe.FindStringSubmatch(out); m != nil {
 			pid, _ := strconv.Atoi(m[1])

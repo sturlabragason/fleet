@@ -21,13 +21,13 @@ func TestStatusSpendColumnAndTotal(t *testing.T) {
 	t.Setenv("FLEET_CONFIG", filepath.Join(home, "no-config.toml"))
 	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
 	t.Cleanup(func() { tc.KillServer() })
-	os.WriteFile(filepath.Join(home, "tools.toml"), []byte(fmt.Sprintf(`[cop]
+	os.WriteFile(filepath.Join(home, "tools.toml"), fmt.Appendf(nil, `[cop]
 command = "sh"
 args = ["-c", "cat"]
 launch_id = ["{id}"]
 subagent_log = "%s/{id}.jsonl"
 patterns = "copilot"
-`, home)), 0o644)
+`, home), 0o644)
 	f, err := fleet.New(tc, home, "/nonexistent")
 	if err != nil {
 		t.Fatal(err)

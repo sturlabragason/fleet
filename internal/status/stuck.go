@@ -30,7 +30,7 @@ const ErrorForget = 2 * time.Minute
 // refreshes. nil means nothing worth remembering.
 type StuckState struct {
 	// Since is when the current stuck episode began; zero = not stuck now.
-	Since time.Time `json:"since,omitempty"`
+	Since time.Time `json:"since"`
 	// Reason is the one-line why, for the tile and the admiral.
 	Reason string `json:"reason,omitempty"`
 	// Notified records that this episode was reported, so the admiral hears
@@ -49,7 +49,7 @@ type StuckState struct {
 	ErrGap bool `json:"err_gap,omitempty"`
 	// ErrWorking is when the agent started working without that banner, so
 	// the memory can be dropped after ErrorForget.
-	ErrWorking time.Time `json:"err_working,omitempty"`
+	ErrWorking time.Time `json:"err_working"`
 }
 
 // Stuck reports whether a stuck episode is running.

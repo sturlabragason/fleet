@@ -3,6 +3,7 @@ package acphost
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -61,13 +62,7 @@ func FilterEnv(env, drop []string) []string {
 	out := make([]string, 0, len(env))
 	for _, kv := range env {
 		k, _, _ := strings.Cut(kv, "=")
-		keep := true
-		for _, d := range drop {
-			if k == d {
-				keep = false
-				break
-			}
-		}
+		keep := !slices.Contains(drop, k)
 		if keep {
 			out = append(out, kv)
 		}

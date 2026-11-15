@@ -130,7 +130,7 @@ func TestRestoreAndHideAllResizeEachPaneOnce(t *testing.T) {
 	logs := map[string]string{s.Ov: filepath.Join(dir, "ov")}
 	c.Run("respawn-pane", "-k", "-t", s.Ov, winchLogger(t, logs[s.Ov]))
 	var agents []string
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		name := fmt.Sprintf("a%d", i)
 		f := filepath.Join(dir, name)
 		p, _ := c.Spawn("f", "ag-"+name, "", nil, winchLogger(t, f))

@@ -53,7 +53,7 @@ func TestStepInterval(t *testing.T) {
 	w.Now = func() time.Time { return now }
 	w.Interval = time.Second
 	w.Step()
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		now = now.Add(200 * time.Millisecond)
 		w.Step()
 	}
@@ -98,7 +98,7 @@ func TestEventsCoalesce(t *testing.T) {
 		Paths: func() []string { return []string{log} }, Interval: time.Hour,
 		MinGap: 500 * time.Millisecond, Now: func() time.Time { return now }}
 	w.Step()
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		now = now.Add(100 * time.Millisecond)
 		f, _ := os.OpenFile(log, os.O_APPEND|os.O_WRONLY, 0o644)
 		f.WriteString("line\n")

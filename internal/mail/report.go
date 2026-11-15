@@ -2,6 +2,7 @@ package mail
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -63,12 +64,7 @@ var ReportStates = []string{"done", "blocked", "question", "progress"}
 
 // ValidState reports whether st is one of ReportStates.
 func ValidState(st string) bool {
-	for _, s := range ReportStates {
-		if s == st {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ReportStates, st)
 }
 
 // FoldSummary folds whitespace (newlines included) to single spaces, drops

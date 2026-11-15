@@ -199,7 +199,7 @@ func modelName(m Model) string {
 // Clean trims a model reply to at most MaxLines non-empty lines.
 func Clean(s string) string {
 	var out []string
-	for _, line := range strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n") {
+	for line := range strings.SplitSeq(strings.ReplaceAll(s, "\r\n", "\n"), "\n") {
 		line = strings.TrimRight(line, " \t")
 		if strings.TrimSpace(line) == "" {
 			continue
@@ -235,7 +235,7 @@ func (s *Summarizer) load(agent string) (Result, bool) {
 		return Result{}, false
 	}
 	r := Result{Text: strings.TrimRight(text, "\n")}
-	for _, line := range strings.Split(head, "\n") {
+	for line := range strings.SplitSeq(head, "\n") {
 		k, v, ok := strings.Cut(line, ": ")
 		if !ok {
 			continue

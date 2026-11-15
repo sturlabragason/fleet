@@ -29,13 +29,13 @@ func crowd(w int) (*Model, *fakeBE) {
 		return &board.Agent{Name: name, Profile: "fake", Status: st, StatusSince: now.Add(-age)}
 	}
 	as := []*board.Agent{ag("wall", "working", time.Minute)}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		as = append(as, ag(fmt.Sprintf("w%d", i), "waiting", time.Duration(10-i)*time.Minute))
 	}
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		as = append(as, ag(fmt.Sprintf("r%02d", i), "working", time.Minute))
 	}
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		as = append(as, ag(fmt.Sprintf("i%d", i), "idle", time.Hour))
 	}
 	m.onWall = map[string]bool{"wall": true}
@@ -125,7 +125,7 @@ func TestFoldChipAndWheel(t *testing.T) {
 	if !strings.Contains(v, "↓ 4 more") || strings.Contains(v, "↑") {
 		t.Errorf("unfolded rows overflow downwards:\n%s", v)
 	}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		m.Update(tea.MouseMsg{X: 5, Y: 10, Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown})
 	}
 	if m.rowOff != 2 {
@@ -161,7 +161,7 @@ func TestTierKeys(t *testing.T) {
 		}
 	}
 	m.unfold = true // 9 lines in 7: moving down to the last scrolls
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		m.key("down")
 	}
 	if m.sel != "i5" || m.rowOff != 2 {
@@ -186,7 +186,7 @@ func TestTiersNarrowPane(t *testing.T) {
 				t.Errorf("w=%d: line too wide: %q", w, l)
 			}
 		}
-		for i := 0; i < 30; i++ {
+		for range 30 {
 			m.key("down")
 		}
 		m.View()

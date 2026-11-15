@@ -22,7 +22,7 @@ const borders = "│┃║"
 // trailing spaces and repeated blank lines.
 func CleanScreen(text string) string {
 	var out []string
-	for _, l := range strings.Split(text, "\n") {
+	for l := range strings.SplitSeq(text, "\n") {
 		l = stripBorders(l)
 		if strings.Trim(l, boxChars+" ") == "" {
 			l = ""
@@ -142,10 +142,7 @@ func scanTail(path string, fn func(line []byte)) error {
 	if err != nil {
 		return err
 	}
-	off := fi.Size() - LastMessageTail
-	if off < 0 {
-		off = 0
-	}
+	off := max(fi.Size()-LastMessageTail, 0)
 	if _, err := f.Seek(off, io.SeekStart); err != nil {
 		return err
 	}

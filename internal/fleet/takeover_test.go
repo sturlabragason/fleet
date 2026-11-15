@@ -42,14 +42,14 @@ func TestTakeoverMovesSessionBetweenDrivers(t *testing.T) {
 	os.WriteFile(host, []byte("#!/bin/sh\nexec sleep 600\n"), 0o755)
 	tool := filepath.Join(home, "stubtool")
 	os.WriteFile(tool, []byte("#!/bin/sh\nexec sleep 600\n"), 0o755)
-	os.WriteFile(filepath.Join(home, "tools.toml"), []byte(fmt.Sprintf(`[stub]
+	os.WriteFile(filepath.Join(home, "tools.toml"), fmt.Appendf(nil, `[stub]
 command = %q
 acp = ["--acp"]
 resume = ["--resume", "{id}"]
 [noresume]
 command = %q
 acp = ["--acp"]
-`, tool, tool)), 0o644)
+`, tool, tool), 0o644)
 	f, err := New(tc, home, host)
 	if err != nil {
 		t.Fatal(err)

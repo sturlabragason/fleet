@@ -97,7 +97,7 @@ type sessionFile struct {
 // recordEnv is the env named in FAKE_ACP_ENV (comma-separated) that is set.
 func recordEnv() map[string]string {
 	out := map[string]string{}
-	for _, k := range strings.Split(os.Getenv("FAKE_ACP_ENV"), ",") {
+	for k := range strings.SplitSeq(os.Getenv("FAKE_ACP_ENV"), ",") {
 		if v, ok := os.LookupEnv(k); ok && k != "" {
 			out[k] = v
 		}

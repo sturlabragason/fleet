@@ -5,6 +5,7 @@ package proc
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -114,13 +115,7 @@ func Kill(ps []Proc, grace time.Duration) {
 	}
 	// SIGKILL is delivered asynchronously; wait briefly so callers see the tree gone.
 	for end := time.Now().Add(500 * time.Millisecond); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
-		gone := true
-		for _, p := range live {
-			if alive(p) {
-				gone = false
-				break
-			}
-		}
+		gone := !slices.ContainsFunc(live, alive)
 		if gone {
 			break
 		}

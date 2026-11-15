@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -110,7 +111,7 @@ func worktrees(dir string) []string {
 		return nil
 	}
 	var ws []string
-	for _, l := range strings.Split(out, "\n") {
+	for l := range strings.SplitSeq(out, "\n") {
 		if p, ok := strings.CutPrefix(l, "worktree "); ok {
 			ws = append(ws, p)
 		}
@@ -227,12 +228,7 @@ func workTree(dir string) treeState {
 }
 
 func contains(xs []string, s string) bool {
-	for _, x := range xs {
-		if x == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(xs, s)
 }
 
 // listShort joins up to three items and counts the rest.

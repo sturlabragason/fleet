@@ -13,7 +13,8 @@ import (
 	"github.com/sturlabragason/fleet/internal/supervisor"
 )
 
-func ptr(b bool) *bool { return &b }
+//go:fix inline
+func ptr(b bool) *bool { return new(b) }
 
 // fakeAdmiral is an admiral pane with an input box: TypeText appends to the
 // box, Enter submits it, BSpace deletes one rune.
@@ -85,7 +86,7 @@ func fakeAdm(f *Fleet, pasted *[]string, idle *bool) *fakeAdmiral {
 
 func TestWakeNeverTypesOverUserInput(t *testing.T) {
 	f, pasted := mailFleet(t)
-	a := fakeAdm(f, pasted, ptr(true))
+	a := fakeAdm(f, pasted, new(true))
 	a.box = "can we review the fleet? wha"
 	f.Report("a", "blocked", "need creds")
 	f.DeliverWake()
@@ -107,7 +108,7 @@ func TestWakeNeverTypesOverUserInput(t *testing.T) {
 
 func TestWakeCoalescesQueuedReports(t *testing.T) {
 	f, pasted := mailFleet(t)
-	a := fakeAdm(f, pasted, ptr(true))
+	a := fakeAdm(f, pasted, new(true))
 	a.box = "typing"
 	f.Report("a", "done", "x")
 	f.Report("b", "blocked", "y")
@@ -126,7 +127,7 @@ func TestWakeEnterGuard(t *testing.T) {
 	f, pasted := mailFleet(t)
 	GuardWait = 100 * time.Millisecond
 	t.Cleanup(func() { GuardWait = 1500 * time.Millisecond })
-	a := fakeAdm(f, pasted, ptr(false))
+	a := fakeAdm(f, pasted, new(false))
 	f.Report("a", "done", "x")
 	*a.idle = true
 	a.beforeTyp = func(a *fakeAdmiral) { a.mu.Lock(); a.box = "on the acme sum"; a.mu.Unlock() }
@@ -165,7 +166,7 @@ func TestWakeEnterGuard(t *testing.T) {
 // A paste that fails is retried on the next poll.
 func TestWakeRetriesFailedPaste(t *testing.T) {
 	f, pasted := mailFleet(t)
-	a := fakeAdm(f, pasted, ptr(true))
+	a := fakeAdm(f, pasted, new(true))
 	ok := f.TypeText
 	f.TypeText = func(pane, text string) error { return os.ErrClosed }
 	f.Report("a", "blocked", "x")
@@ -182,7 +183,7 @@ func TestWakeRetriesFailedPaste(t *testing.T) {
 // This is the poll (the watcher's housekeeping) doing the retry.
 func TestWakeRetriedWhileReportsStayUnread(t *testing.T) {
 	f, pasted := mailFleet(t)
-	busy := ptr(false)
+	busy := new(false)
 	a := fakeAdm(f, pasted, busy)
 	f.Report("a", "done", "x")
 	if len(a.submitted) != 0 {
@@ -223,7 +224,7 @@ func TestWakeUnsubmittedIsRequeued(t *testing.T) {
 	f, pasted := mailFleet(t)
 	GuardWait = 50 * time.Millisecond
 	t.Cleanup(func() { GuardWait = 1500 * time.Millisecond })
-	a := fakeAdm(f, pasted, ptr(true))
+	a := fakeAdm(f, pasted, new(true))
 	a.beforeTyp = func(a *fakeAdmiral) { a.mu.Lock(); a.box = "mid sentence"; a.mu.Unlock() }
 	f.Report("a", "done", "x")
 	if len(a.submitted) != 0 {
@@ -241,7 +242,7 @@ func TestWakeUnsubmittedIsRequeued(t *testing.T) {
 
 func TestBadge(t *testing.T) {
 	f, pasted := mailFleet(t)
-	fakeAdm(f, pasted, ptr(false))
+	fakeAdm(f, pasted, new(false))
 	f.Report("a", "done", "x")
 	f.Report("b", "blocked", "y")
 	f.Report("a", "progress", "z")
@@ -303,7 +304,7 @@ func TestWakeGivesUpAfterMaxTries(t *testing.T) {
 	f, pasted := mailFleet(t)
 	GuardWait = 20 * time.Millisecond
 	t.Cleanup(func() { GuardWait = 1500 * time.Millisecond })
-	a := fakeAdm(f, pasted, ptr(true))
+	a := fakeAdm(f, pasted, new(true))
 	typed := 0
 	f.TypeText = func(pane, text string) error {
 		typed++
@@ -313,7 +314,7 @@ func TestWakeGivesUpAfterMaxTries(t *testing.T) {
 		return nil
 	}
 	f.Report("a", "done", "x") // first try
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		a.mu.Lock()
 		a.box = ""
 		a.mu.Unlock()
@@ -334,7 +335,7 @@ func TestWakeGivesUpAfterMaxTries(t *testing.T) {
 // Only one process types into the admiral pane at a time.
 func TestWakeOneTyperAtATime(t *testing.T) {
 	f, pasted := mailFleet(t)
-	a := fakeAdm(f, pasted, ptr(true))
+	a := fakeAdm(f, pasted, new(true))
 	release, ok := f.lockWake(mail.Admiral)
 	if !ok {
 		t.Fatal("lock not taken")
@@ -400,7 +401,7 @@ func TestWakeTriesPersistAcrossProcesses(t *testing.T) {
 // never reads empty again and every retry waits on it forever.
 func TestWakeEnterFailureClearsBox(t *testing.T) {
 	f, pasted := mailFleet(t)
-	a := fakeAdm(f, pasted, ptr(true))
+	a := fakeAdm(f, pasted, new(true))
 	ok := f.PressKeys
 	f.PressKeys = func(pane string, keys ...string) error {
 		if len(keys) == 1 && keys[0] == "Enter" {
@@ -436,7 +437,7 @@ func settleWake(t *testing.T, settle, maxHold time.Duration) *time.Duration {
 func TestWakeSettlesBeforeTyping(t *testing.T) {
 	f, pasted := mailFleet(t)
 	off := settleWake(t, 30*time.Second, time.Hour)
-	a := fakeAdm(f, pasted, ptr(true))
+	a := fakeAdm(f, pasted, new(true))
 	f.Report("a", "done", "x")
 	f.DeliverWake()
 	if len(a.submitted) != 0 {
@@ -461,7 +462,7 @@ func TestWakeSettlesBeforeTyping(t *testing.T) {
 func TestWakeMaxHold(t *testing.T) {
 	f, pasted := mailFleet(t)
 	off := settleWake(t, time.Hour, 2*time.Minute)
-	a := fakeAdm(f, pasted, ptr(true))
+	a := fakeAdm(f, pasted, new(true))
 	f.Report("a", "done", "x")
 	*off = time.Minute
 	f.DeliverWake()
@@ -482,7 +483,7 @@ func TestWakeEnterDroppedIsPressedAgain(t *testing.T) {
 	f, pasted := mailFleet(t)
 	GuardWait = 50 * time.Millisecond
 	t.Cleanup(func() { GuardWait = 1500 * time.Millisecond })
-	a := fakeAdm(f, pasted, ptr(true))
+	a := fakeAdm(f, pasted, new(true))
 	a.dropEnter = 1
 	f.Report("a", "done", "x")
 	if want := ReportLine("a", "done", "x"); a.box != "" || len(a.submitted) != 1 || a.submitted[0] != want {
@@ -508,7 +509,7 @@ func TestWakeEnterDroppedIsPressedAgain(t *testing.T) {
 // empty box that never comes.
 func TestWakeLeftInBoxIsResubmitted(t *testing.T) {
 	f, pasted := mailFleet(t)
-	a := fakeAdm(f, pasted, ptr(true))
+	a := fakeAdm(f, pasted, new(true))
 	stale := "[fleet] 3 new reports: a (question), b (done), c (done). Full text: call fleet_reports."
 	a.box = stale
 	os.MkdirAll(filepath.Dir(f.typedPath(mail.Admiral)), 0o755)
@@ -532,7 +533,7 @@ func TestWakeLeftInBoxRequeuedWhenEnterFails(t *testing.T) {
 	f, pasted := mailFleet(t)
 	GuardWait = 20 * time.Millisecond
 	t.Cleanup(func() { GuardWait = 1500 * time.Millisecond })
-	busy := ptr(false)
+	busy := new(false)
 	a := fakeAdm(f, pasted, busy)
 	f.Report("a", "done", "x") // queued: the admiral is busy
 	es := f.takeWake(mail.Admiral)
@@ -561,7 +562,7 @@ func TestWakeUnreadableBoxIsNotASubmit(t *testing.T) {
 	f, pasted := mailFleet(t)
 	GuardWait = 50 * time.Millisecond
 	t.Cleanup(func() { GuardWait = 1500 * time.Millisecond })
-	a := fakeAdm(f, pasted, ptr(true))
+	a := fakeAdm(f, pasted, new(true))
 	a.dropEnter = 1
 	view, blank := f.SupPane, false
 	f.SupPane = func() AdmiralView {
@@ -591,7 +592,7 @@ func TestWakeUrgentSkipsSettle(t *testing.T) {
 	for _, state := range []string{"question", "blocked"} {
 		f, pasted := mailFleet(t)
 		settleWake(t, 30*time.Second, time.Hour)
-		a := fakeAdm(f, pasted, ptr(true))
+		a := fakeAdm(f, pasted, new(true))
 		f.Report("a", state, "x")
 		if want := ReportLine("a", state, "x"); len(a.submitted) != 1 || a.submitted[0] != want {
 			t.Fatalf("%s: submitted %q, want %q at once", state, a.submitted, want)

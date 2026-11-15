@@ -151,16 +151,16 @@ func (c *stubConn) ResumeSession(ctx context.Context, id, cwd string, mcp []acp.
 	return nil
 }
 func (c *stubConn) PromptBlocks(ctx context.Context, id string, blocks []acp.ContentBlock) (acp.PromptResult, error) {
-	text := ""
+	var text strings.Builder
 	for _, b := range blocks {
 		switch b.Type {
 		case "text":
-			text += b.Text
+			text.WriteString(b.Text)
 		default:
-			text += "<" + b.Type + " " + b.MimeType + b.Name + ">"
+			text.WriteString("<" + b.Type + " " + b.MimeType + b.Name + ">")
 		}
 	}
-	c.call("prompt " + text)
+	c.call("prompt " + text.String())
 	select {
 	case f := <-c.turns:
 		if r := f(c.h); r != "ERR" {

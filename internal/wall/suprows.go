@@ -33,7 +33,7 @@ func seenKey(h int, panes []string) string {
 
 func (w *Wall) storedSupRows() map[string]int {
 	out := map[string]int{}
-	for _, f := range strings.Fields(w.opt(supRowsOption)) {
+	for f := range strings.FieldsSeq(w.opt(supRowsOption)) {
 		id, n, ok := strings.Cut(f, "=")
 		if r, err := strconv.Atoi(n); ok && err == nil && r > 0 {
 			out[id] = r

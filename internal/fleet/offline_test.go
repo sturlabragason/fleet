@@ -76,7 +76,7 @@ func TestNetworkOutage(t *testing.T) {
 		t.Fatal(err)
 	}
 	spawn("c1", "later [slow 100]")
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		if _, err := f.Refresh(); err != nil {
 			t.Fatal(err)
 		}

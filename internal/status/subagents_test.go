@@ -271,7 +271,7 @@ func TestScanSubagentsFailedWrite(t *testing.T) {
 
 func TestRememberBounded(t *testing.T) {
 	var k []KnownSub
-	for i := 0; i < SubKnownMax+5; i++ {
+	for i := range SubKnownMax + 5 {
 		k = remember(k, KnownSub{AgentID: fmt.Sprint(i)})
 	}
 	k = remember(k, KnownSub{AgentID: "10", Name: "again"})
@@ -283,7 +283,7 @@ func TestRememberBounded(t *testing.T) {
 func TestPruneSubagents(t *testing.T) {
 	now := at("2026-11-05T12:00:00Z")
 	var l []Subagent
-	for i := 0; i < 16; i++ {
+	for i := range 16 {
 		s := Subagent{ID: fmt.Sprint(i), Name: fmt.Sprint(i), State: SubDone, Started: now.Add(time.Duration(i-30) * time.Minute)}
 		s.Ended = now.Add(-time.Duration(16-i) * 10 * time.Second) // all within 5 minutes
 		if i%5 == 0 {
@@ -302,7 +302,7 @@ func TestPruneSubagents(t *testing.T) {
 	}
 	// More than SubMax running: the oldest running go.
 	var r []Subagent
-	for i := 0; i < 14; i++ {
+	for i := range 14 {
 		r = append(r, Subagent{Name: fmt.Sprint(i), State: SubRunning, Started: now.Add(time.Duration(i) * time.Second)})
 	}
 	if got := PruneSubagents(r, now); len(got) != SubMax || got[0].Name != "2" {
@@ -317,7 +317,7 @@ func TestPruneSubagents(t *testing.T) {
 func before(data []byte, ts string) []byte {
 	var head []byte
 	for _, l := range strings.SplitAfter(string(data), "\n") {
-		if i := strings.Index(l, `"timestamp":"`); i >= 0 && l[i+13:] >= ts {
+		if _, after, ok := strings.Cut(l, `"timestamp":"`); ok && after >= ts {
 			break
 		}
 		head = append(head, l...)

@@ -23,7 +23,7 @@ func TestUpdateLoad(t *testing.T) {
 func TestConcurrent(t *testing.T) {
 	s := NewStore(t.TempDir())
 	var wg sync.WaitGroup
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -384,7 +384,7 @@ func TestPruneClosed(t *testing.T) {
 	now := time.Now()
 	b := &Board{}
 	b.AddClosed(&Agent{Name: "old"}, "", now.Add(-ClosedKeep-time.Minute))
-	for i := 0; i < ClosedMax+1; i++ {
+	for i := range ClosedMax + 1 {
 		b.AddClosed(&Agent{Name: fmt.Sprintf("a%02d", i), PaneID: "%1"}, "t", now.Add(time.Duration(i)*time.Second))
 	}
 	set := b.closedSet()

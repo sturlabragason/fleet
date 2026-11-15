@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"sort"
 	"strconv"
@@ -43,9 +44,7 @@ func Day(ctx context.Context, o DayOpts) string {
 		o.Now = time.Now()
 	}
 	dirs := map[string]string{}
-	for k, v := range o.Dirs {
-		dirs[k] = v
-	}
+	maps.Copy(dirs, o.Dirs)
 	sessions, cassErr := Sessions(ctx, o.Since)
 	for _, s := range sessions {
 		if n := s.Agent; n != "" && dirs[n] == "" {

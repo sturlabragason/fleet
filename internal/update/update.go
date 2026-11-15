@@ -489,7 +489,7 @@ func (u *Updater) get(ctx context.Context, url string, limit int64) ([]byte, err
 
 // sumFor finds asset's line in a SHA256SUMS file.
 func sumFor(sums []byte, asset string) (string, error) {
-	for _, line := range strings.Split(string(sums), "\n") {
+	for line := range strings.SplitSeq(string(sums), "\n") {
 		f := strings.Fields(line)
 		if len(f) == 2 && strings.TrimPrefix(f[1], "*") == asset && len(f[0]) == 64 {
 			return strings.ToLower(f[0]), nil

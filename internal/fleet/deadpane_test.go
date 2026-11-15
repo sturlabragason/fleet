@@ -34,7 +34,7 @@ func deadFleet(t *testing.T, script, cfg, dir string) (*Fleet, *deadRec) {
 	home := t.TempDir()
 	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
 	t.Cleanup(func() { tc.KillServer() })
-	os.WriteFile(filepath.Join(home, "tools.toml"), []byte(fmt.Sprintf("[dies]\ncommand = \"sh\"\nargs = [\"-c\", %q]\npatterns = \"fake\"\n", script)), 0o644)
+	os.WriteFile(filepath.Join(home, "tools.toml"), fmt.Appendf(nil, "[dies]\ncommand = \"sh\"\nargs = [\"-c\", %q]\npatterns = \"fake\"\n", script), 0o644)
 	cfgPath := filepath.Join(home, "no-config.toml")
 	if cfg != "" {
 		cfgPath = filepath.Join(home, "config.toml")
@@ -49,7 +49,7 @@ func deadFleet(t *testing.T, script, cfg, dir string) (*Fleet, *deadRec) {
 	f.FreeMem = func() (uint64, error) { return 64 << 30, nil }
 	r := &deadRec{}
 	f.DrainQueue, f.Housekeeping = true, true
-	adm := fakeAdm(f, nil, ptr(true))
+	adm := fakeAdm(f, nil, new(true))
 	adm.onSubmit = func(text string) {
 		r.mu.Lock()
 		r.pasted = append(r.pasted, text)
@@ -92,7 +92,7 @@ func reports(t *testing.T, f *Fleet) []mail.Msg {
 func TestDeadPaneCleanExitCloses(t *testing.T) {
 	f, r := deadFleet(t, "echo bye; sleep 0.3; exit 0", "", "")
 	poll(t, f, func() bool { c, _ := r.get(); return len(c) > 0 })
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		poll(t, f, func() bool { return true })
 	}
 	closed, pasted := r.get()
@@ -143,7 +143,7 @@ func TestDeadPaneSignalAndOff(t *testing.T) {
 		t.Fatalf("report %q", ms[0].Text)
 	}
 	f.Store.Update(func(b *board.Board) error { b.Agents["d1"].Exit.At = time.Now().Add(-time.Hour); return nil })
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		poll(t, f, func() bool { return true })
 	}
 	closed, pasted := r.get()

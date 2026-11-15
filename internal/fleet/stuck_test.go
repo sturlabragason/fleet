@@ -59,13 +59,13 @@ patterns = "fake"
 // refreshUntilStuck polls until a1 is stuck, then refreshes a few more times.
 func refreshUntilStuck(t *testing.T, f *Fleet) {
 	t.Helper()
-	for i := 0; i < 60; i++ {
+	for range 60 {
 		as, err := f.Refresh()
 		if err != nil {
 			t.Fatal(err)
 		}
 		if len(as) == 1 && as[0].Status == "stuck" {
-			for j := 0; j < 5; j++ {
+			for range 5 {
 				f.Refresh()
 				time.Sleep(20 * time.Millisecond)
 			}
@@ -144,7 +144,7 @@ func TestRefreshStuckInterruptOptIn(t *testing.T) {
 func TestRefreshStuckOnlyReportsWhenDraining(t *testing.T) {
 	f, _ := stuckFleet(t, "stuck_after = \"300ms\"\n")
 	f.DrainQueue, f.Housekeeping = true, false
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		as, _ := f.Refresh()
 		if len(as) == 1 && as[0].Status == "stuck" {
 			break

@@ -111,7 +111,7 @@ func envOf(pid int, key string) string {
 	if err != nil {
 		return ""
 	}
-	for _, kv := range strings.Split(string(env), "\x00") {
+	for kv := range strings.SplitSeq(string(env), "\x00") {
 		if v, ok := strings.CutPrefix(kv, key+"="); ok {
 			return v
 		}

@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"encoding/json"
+	"maps"
 	"strings"
 )
 
@@ -78,9 +79,7 @@ func Register(e Extension) {
 	for _, n := range e.IdentityBound {
 		identityBound[n] = true
 	}
-	for cmd, v := range e.Parity {
-		CLIParity[cmd] = v
-	}
+	maps.Copy(CLIParity, e.Parity)
 	if e.Instructions != nil {
 		Instructions = e.Instructions(Instructions)
 	}

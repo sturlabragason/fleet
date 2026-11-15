@@ -348,7 +348,7 @@ func (m *Model) tierLines(tv tierView) []string {
 	dim := lipgloss.NewStyle().Foreground(colIdle)
 	for l := tv.off; l < end; l++ {
 		var slots []string
-		for c := 0; c < cols; c++ {
+		for c := range cols {
 			i := l*cols + c
 			switch i {
 			case up:

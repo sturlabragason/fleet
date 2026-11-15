@@ -121,7 +121,7 @@ func TestCloseBlocker(t *testing.T) {
 
 func TestAutoCloseDone(t *testing.T) {
 	f, pasted := mailFleet(t)
-	fakeAdm(f, pasted, ptr(true))
+	fakeAdm(f, pasted, new(true))
 	var closed []string
 	f.CloseLater = func(n string) error { closed = append(closed, n); return nil }
 	clean, dirty := repo(t), repo(t)
@@ -187,7 +187,7 @@ func TestSupPaneIdleByPatterns(t *testing.T) {
 // closed; the board and the wake line carry only a short headline.
 func TestLongReportSurvivesClose(t *testing.T) {
 	f, pasted := mailFleet(t)
-	fakeAdm(f, pasted, ptr(true))
+	fakeAdm(f, pasted, new(true))
 	full := "Heads-up: " + strings.Repeat("overlap detail ", 30) + "\nsecond line: branch slice/x"
 	raw := full + "\x1b[2J\x03"
 	if _, err := f.Report("a", "done", raw); err != nil {
@@ -269,7 +269,7 @@ func TestAgentBlockerBaseline(t *testing.T) {
 
 func TestAutoCloseReadOnlyAndNonGit(t *testing.T) {
 	f, pasted := mailFleet(t)
-	fakeAdm(f, pasted, ptr(true))
+	fakeAdm(f, pasted, new(true))
 	var closed []string
 	f.CloseLater = func(n string) error { closed = append(closed, n); return nil }
 	// worktree = false: this test checks the spawn dir's own baseline, so

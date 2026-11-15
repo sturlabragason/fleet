@@ -32,7 +32,7 @@ func TestFillPicksLastUsageRecord(t *testing.T) {
 	home := t.TempDir()
 	var b strings.Builder
 	b.WriteString(usage(1000, 200000))
-	for i := 0; i < 2000; i++ { // large prefix: more than one tail window
+	for i := range 2000 { // large prefix: more than one tail window
 		fmt.Fprintf(&b, `{"type":"assistant.message","data":{"content":"line %d mentions session.usage_record"}}`+"\n", i)
 	}
 	writeEvents(t, home, "s1", b.String())
@@ -112,7 +112,7 @@ func TestNotes(t *testing.T) {
 
 func TestHandoffRotationKeeps20(t *testing.T) {
 	home := t.TempDir()
-	for i := 0; i < 25; i++ {
+	for i := range 25 {
 		if err := WriteHandoff(home, fmt.Sprintf("handoff %d", i)); err != nil {
 			t.Fatal(err)
 		}
@@ -210,7 +210,7 @@ func TestLockSerialises(t *testing.T) {
 func TestHandoffNamesSortByTime(t *testing.T) {
 	home := t.TempDir()
 	mt := time.Date(2026, 11, 4, 21, 0, 0, 0, time.Local)
-	for i := 0; i < 3; i++ { // same mtime every time: names collide
+	for i := range 3 { // same mtime every time: names collide
 		WriteHandoff(home, fmt.Sprintf("h%d", i))
 		os.Chtimes(filepath.Join(Dir(home), "handoff.md"), mt, mt)
 	}
@@ -296,7 +296,7 @@ func TestPinnedNotes(t *testing.T) {
 	if err := AppendPinned(home, "", "User rule: never push"); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 40; i++ {
+	for i := range 40 {
 		AppendNote(home, "", fmt.Sprintf("note %d", i))
 	}
 	pins := Pinned(home)
@@ -387,7 +387,7 @@ func TestFollowAfterClear(t *testing.T) {
 	write("22222222-new", start.Add(2*time.Minute))
 	other := filepath.Join(store, "-elsewhere")
 	os.MkdirAll(other, 0o755)
-	for i := 0; i < 30; i++ { // a busy store: newer sessions of other dirs
+	for i := range 30 { // a busy store: newer sessions of other dirs
 		w := filepath.Join(other, fmt.Sprintf("%08d-w.jsonl", i))
 		os.WriteFile(w, []byte(`{"type":"user","cwd":"/elsewhere","message":{"content":"x"}}`+"\n"), 0o644)
 	}

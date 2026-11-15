@@ -34,7 +34,7 @@ env = { KEEP = "profile", GOMAXPROCS = "9" }
 		t.Fatal(err)
 	}
 	var out string
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		out, _ = f.Peek("e1", 0)
 		if strings.Contains(out, "GF=") {
 			break

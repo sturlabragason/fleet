@@ -237,7 +237,7 @@ func TestColorProfileAndNoColor(t *testing.T) {
 
 func TestViewScrollBack(t *testing.T) {
 	v := newView(io.Discard, nil, colorprofile.TrueColor, "a1", "")
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		v.add(Entry{Kind: KindTool, ToolID: fmt.Sprint(i), Title: fmt.Sprintf("step %02d", i), Status: "completed"})
 	}
 	screen(v, 40, 10) // sets the page height

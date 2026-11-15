@@ -3,6 +3,7 @@ package worktree
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path"
@@ -384,7 +385,7 @@ func unmergedFiles(dir string) ([]string, error) {
 		return nil, err
 	}
 	var files []string
-	for _, f := range strings.Split(out, "\n") {
+	for f := range strings.SplitSeq(out, "\n") {
 		if f = strings.TrimSpace(f); f != "" {
 			files = append(files, f)
 		}
@@ -505,9 +506,7 @@ func resolveRegion(ours, base, theirs []string, theirsFirst bool) []string {
 	}
 	o, t := ours[pre:len(ours)-suf], theirs[pre:len(theirs)-suf]
 	deleted := map[string]int{}
-	for l, n := range inBase {
-		deleted[l] = n
-	}
+	maps.Copy(deleted, inBase)
 	for _, l := range t {
 		deleted[l]--
 	}

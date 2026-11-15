@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -204,9 +205,7 @@ func (p Profile) ACPNeedsCommandPath() bool {
 // {command_path} replaced by commandPath.
 func (p Profile) ACPEnv(commandPath string) map[string]string {
 	out := make(map[string]string, len(p.Env)+len(p.ACPEnvVars))
-	for k, v := range p.Env {
-		out[k] = v
-	}
+	maps.Copy(out, p.Env)
 	// An npm shim on Windows (claude.cmd) can't be spawned by the adapter
 	// without a shell: leave the variable unset, and the adapter runs the
 	// Claude Code it bundles.

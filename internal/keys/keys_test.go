@@ -91,7 +91,7 @@ func TestHelpGroupsAndRows(t *testing.T) {
 	for _, w := range []int{0, PopupWidth() - 4} {
 		h := Help(w)
 		var heads []string
-		for _, l := range strings.Split(h, "\n") {
+		for l := range strings.SplitSeq(h, "\n") {
 			for _, g := range Groups {
 				if l == string(g) {
 					heads = append(heads, l)
@@ -111,7 +111,7 @@ func TestHelpGroupsAndRows(t *testing.T) {
 			t.Errorf("width %d: footer missing", w)
 		}
 		if w > 0 {
-			for _, l := range strings.Split(h, "\n") {
+			for l := range strings.SplitSeq(h, "\n") {
 				if ansi.StringWidth(l) > w {
 					t.Errorf("line wider than %d: %q", w, l)
 				}

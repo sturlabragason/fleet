@@ -59,7 +59,7 @@ func pidOf(t *testing.T, f *Fleet, name, key string) int {
 	t.Helper()
 	pane := waitPane(t, f, name)
 	re := regexp.MustCompile(key + `=(\d+)`)
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		out, _ := f.T.Capture(pane, 20)
 		if m := re.FindStringSubmatch(out); m != nil {
 			pid, _ := strconv.Atoi(m[1])

@@ -37,7 +37,7 @@ func Unmarshal[T any](data []byte, v *T) (Extra, error) {
 	if json.Unmarshal(data, &all) != nil {
 		return nil, nil //nolint:nilerr // v decoded; without an object there are no extra keys to keep
 	}
-	known := knownKeys(reflect.TypeOf(v).Elem())
+	known := knownKeys(reflect.TypeFor[T]())
 	for k := range all {
 		if known[strings.ToLower(k)] {
 			delete(all, k)
@@ -84,8 +84,7 @@ func knownKeys(t reflect.Type) map[string]bool {
 	}
 	m := map[string]bool{}
 	if t.Kind() == reflect.Struct {
-		for i := 0; i < t.NumField(); i++ {
-			f := t.Field(i)
+		for f := range t.Fields() {
 			tag := f.Tag.Get("json")
 			name, _, _ := strings.Cut(tag, ",")
 			if name == "-" && tag == "-" {

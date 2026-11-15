@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -359,10 +360,5 @@ func (f *Fleet) diedOfNet(a *board.Agent, p tmux.PaneInfo) bool {
 	} else {
 		screen, _ = f.T.Capture(p.ID, 20)
 	}
-	for _, l := range status.Tail(screen, 20) {
-		if netwatch.NetError(l) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(status.Tail(screen, 20), netwatch.NetError)
 }

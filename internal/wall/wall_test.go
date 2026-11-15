@@ -31,7 +31,7 @@ func TestFiveOntoFourSlots(t *testing.T) {
 	c.SetPaneOption(sup, "@role", "sup")
 	c.SetPaneOption(ov, "@role", "ov")
 	var agents []string
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		name := fmt.Sprintf("a%d", i)
 		p, _ := c.Spawn("f", "ag-"+name, "", nil, "cat")
 		c.SetPaneOption(p, "@fleet_agent", name)
@@ -126,7 +126,7 @@ func setupWallSize(t *testing.T, n, x, y int) (*tmux.Client, *Wall, []string) {
 	c.SetPaneOption(sup, "@role", "sup")
 	c.SetPaneOption(ov, "@role", "ov")
 	var agents []string
-	for i := 0; i < n; i++ {
+	for i := range n {
 		name := fmt.Sprintf("a%d", i)
 		p, _ := c.Spawn("f", "ag-"+name, "", nil, "cat")
 		c.SetPaneOption(p, "@fleet_agent", name)
@@ -696,7 +696,7 @@ func TestNextAndKeepFocusShowLeaveTheOverviewFocused(t *testing.T) {
 	s, _ := w.Read()
 	focusHook(t, c, w, agents[1]) // a1 is ▶
 	focusHook(t, c, w, s.Ov)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		name, ok, err := w.Next(1)
 		if err != nil || !ok || name == "" {
 			t.Fatalf("next %d: %q %v %v", i, name, ok, err)
@@ -968,7 +968,7 @@ func TestApplyGathersStrandedAdmiral(t *testing.T) {
 	if paneWindow(c, stray) != "admiral" {
 		t.Fatal("the cached apply looked outside the main window")
 	}
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if err := w.Apply(); err != nil {
 			t.Fatal(err)
 		}

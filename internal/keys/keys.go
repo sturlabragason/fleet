@@ -160,7 +160,7 @@ const PopupMargin = 1
 // the border and a 1-col margin on each side.
 func PopupWidth() int {
 	w := 0
-	for _, l := range strings.Split(Help(0), "\n") {
+	for l := range strings.SplitSeq(Help(0), "\n") {
 		w = max(w, ansi.StringWidth(l))
 	}
 	return w + 2 + 2*PopupMargin
@@ -308,7 +308,7 @@ func wrap(s string, w int) []string {
 	}
 	var out []string
 	cur := ""
-	for _, word := range strings.Fields(s) {
+	for word := range strings.FieldsSeq(s) {
 		switch {
 		case cur == "":
 			cur = word

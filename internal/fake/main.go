@@ -60,7 +60,7 @@ func Main(args []string, in io.Reader, out, errw io.Writer) int {
 
 func splitList(s string) []string {
 	var out []string
-	for _, x := range strings.Split(s, ",") {
+	for x := range strings.SplitSeq(s, ",") {
 		if x = strings.TrimSpace(x); x != "" {
 			out = append(out, x)
 		}

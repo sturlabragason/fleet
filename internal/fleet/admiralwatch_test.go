@@ -15,7 +15,7 @@ func TestAdmiralPaneExitReportedOnce(t *testing.T) {
 	f.T.SetPaneOption(pane, "@role", "sup")
 	f.T.SetPaneOption(pane, "@fleet_admiral", "ops")
 	poll(t, f, func() bool { return len(reports(t, f)) > 0 })
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		poll(t, f, func() bool { return true })
 	}
 	ms := reports(t, f)

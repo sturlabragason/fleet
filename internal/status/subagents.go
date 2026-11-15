@@ -22,12 +22,12 @@ type Subagent struct {
 	Name    string    `json:"name"`
 	State   string    `json:"state"`
 	Started time.Time `json:"started"`
-	Ended   time.Time `json:"ended,omitempty"`
+	Ended   time.Time `json:"ended"`
 	// A write_agent call woke this subagent and has not reported back yet.
 	// If it fails (agent not found, not in background mode) the wake is undone.
 	WakeCall  string    `json:"wake_call,omitempty"`
 	PrevState string    `json:"prev_state,omitempty"` // "" = restored from Known
-	PrevEnded time.Time `json:"prev_ended,omitempty"`
+	PrevEnded time.Time `json:"prev_ended"`
 	// The subagent sent a message without tool requests in its current turn;
 	// it ends at that turn's assistant.turn_end unless it calls a tool first.
 	EndPending bool `json:"end_pending,omitempty"`

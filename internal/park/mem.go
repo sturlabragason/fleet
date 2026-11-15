@@ -23,7 +23,7 @@ func memInfo(key string) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	for _, l := range strings.Split(string(b), "\n") {
+	for l := range strings.SplitSeq(string(b), "\n") {
 		v, ok := strings.CutPrefix(l, key)
 		if !ok {
 			continue

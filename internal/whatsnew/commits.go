@@ -90,7 +90,7 @@ func Commits(repo string, curated []Entry) ([]Entry, error) {
 		cited = append(cited, e.Hashes...)
 	}
 	var es []Entry
-	for _, rec := range strings.Split(out, "\x1e") {
+	for rec := range strings.SplitSeq(out, "\x1e") {
 		head, files, _ := strings.Cut(rec, "\n")
 		f := strings.Split(head, "\x1f")
 		if len(f) != 3 || len(f[0]) < 7 || !featRe.MatchString(f[2]) || isCited(f[0], cited) || touches(files, "CHANGELOG.md") {
@@ -112,7 +112,7 @@ func isCited(full string, cited []string) bool {
 }
 
 func touches(files, name string) bool {
-	for _, f := range strings.Split(files, "\n") {
+	for f := range strings.SplitSeq(files, "\n") {
 		if strings.TrimSpace(f) == name {
 			return true
 		}

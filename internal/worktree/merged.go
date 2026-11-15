@@ -43,14 +43,12 @@ func mergedAll(ctx context.Context, dir string, revs []string) []bool {
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 8)
 	for i, r := range revs {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			out, err := gitCtx(ctx, dir, append([]string{"rev-list", "--no-merges", r, "--not"}, bases...)...)
 			own[i], ok[i] = strings.Fields(out), err == nil
-		}()
+		})
 	}
 	wg.Wait()
 	var rest []string
@@ -121,7 +119,7 @@ func patchIDs(ctx context.Context, dir string, commits []string) (map[string]str
 		return nil, err
 	}
 	ids := map[string]string{}
-	for _, l := range strings.Split(out, "\n") {
+	for l := range strings.SplitSeq(out, "\n") {
 		if id, c, ok := strings.Cut(l, " "); ok {
 			ids[c] = id
 		}

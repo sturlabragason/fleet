@@ -72,16 +72,14 @@ func dialAny(addrs []string, timeout time.Duration) bool {
 		if a == "" {
 			continue
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			var d net.Dialer
 			c, err := d.DialContext(ctx, "tcp", a)
 			if err == nil {
 				c.Close()
 				ok <- true
 			}
-		}()
+		})
 	}
 	go func() { wg.Wait(); close(ok) }()
 	_, any := <-ok

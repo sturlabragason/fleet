@@ -126,7 +126,7 @@ func TestCleanScreen(t *testing.T) {
 			t.Errorf("%s: nothing removed", f)
 		}
 		prevBlank := false
-		for _, l := range strings.Split(got, "\n") {
+		for l := range strings.SplitSeq(got, "\n") {
 			if l != strings.TrimRight(l, " ") {
 				t.Errorf("%s: trailing spaces %q", f, l)
 			}

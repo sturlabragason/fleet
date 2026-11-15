@@ -248,7 +248,7 @@ func tmuxLog(t *testing.T) string {
 	}
 	dir := t.TempDir()
 	log := filepath.Join(dir, "tmux.log")
-	os.WriteFile(filepath.Join(dir, "tmux"), []byte(fmt.Sprintf("#!/bin/sh\necho \"$*\" >> %s\nexec %s \"$@\"\n", log, real)), 0o755)
+	os.WriteFile(filepath.Join(dir, "tmux"), fmt.Appendf(nil, "#!/bin/sh\necho \"$*\" >> %s\nexec %s \"$@\"\n", log, real), 0o755)
 	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
 	return log
 }
@@ -257,7 +257,7 @@ func captures(t *testing.T, log, pane string) int {
 	t.Helper()
 	b, _ := os.ReadFile(log)
 	n := 0
-	for _, l := range strings.Split(string(b), "\n") {
+	for l := range strings.SplitSeq(string(b), "\n") {
 		if strings.Contains(l, "capture-pane") && strings.HasSuffix(strings.TrimSpace(l), "-t "+pane) {
 			n++
 		}
@@ -298,7 +298,7 @@ func hostArgs(t *testing.T, home string) [][]string {
 	for {
 		b, _ := os.ReadFile(filepath.Join(home, "host.args"))
 		var out [][]string
-		for _, run := range strings.Split(string(b), "---\n") {
+		for run := range strings.SplitSeq(string(b), "---\n") {
 			if run != "" {
 				out = append(out, strings.Split(strings.TrimSuffix(run, "\n"), "\n"))
 			}
@@ -652,7 +652,7 @@ func TestReadTranscriptTail(t *testing.T) {
 	os.MkdirAll(acphost.Dir(home), 0o700)
 	writeTranscript(t, home, "a1", acphost.Entry{Kind: acphost.KindSession, SessionID: "OLD"})
 	big := strings.Repeat("x", 1000)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		writeTranscript(t, home, "a1", acphost.Entry{Kind: acphost.KindAgent, Text: big})
 	}
 	writeTranscript(t, home, "a1", acphost.Entry{Kind: acphost.KindTool, Title: "go test", Status: "completed"})

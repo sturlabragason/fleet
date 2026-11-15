@@ -37,7 +37,7 @@ func RemoteBranches(main string, agents map[string]string) ([]RemoteBranch, erro
 		return nil, err
 	}
 	var bs []RemoteBranch
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(out), "\n") {
 		ref, sha, ok := strings.Cut(line, " ")
 		if !ok {
 			continue

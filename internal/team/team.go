@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -173,10 +174,8 @@ func (f *File) Names() []string {
 // Of returns the team an agent is in ("" if none).
 func (f *File) Of(agent string) string {
 	for n, t := range f.Teams {
-		for _, m := range t.Members {
-			if m == agent {
-				return n
-			}
+		if slices.Contains(t.Members, agent) {
+			return n
 		}
 	}
 	return ""

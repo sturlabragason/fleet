@@ -68,10 +68,7 @@ func eachFromEnd(path string, fn func(Entry) bool) error {
 	off := st.Size()
 	var rest []byte // the partial first line of the block read last
 	for off > 0 {
-		n := int64(tailBlock)
-		if n > off {
-			n = off
-		}
+		n := min(int64(tailBlock), off)
 		off -= n
 		buf := make([]byte, n, int(n)+len(rest))
 		if _, err := f.ReadAt(buf, off); err != nil && err != io.EOF {

@@ -93,7 +93,7 @@ func parseWake(b []byte, unread []mail.Msg) []wakeEntry {
 		ids[m.ID] = true
 	}
 	var out []wakeEntry
-	for _, l := range strings.Split(string(b), "\n") {
+	for l := range strings.SplitSeq(string(b), "\n") {
 		p := strings.SplitN(l, "\t", 4)
 		if len(p) < 4 || !ids[p[0]] {
 			continue
@@ -114,7 +114,7 @@ func (f *Fleet) readTries(box string) map[string]int {
 	if err != nil {
 		return out
 	}
-	for _, l := range strings.Split(string(b), "\n") {
+	for l := range strings.SplitSeq(string(b), "\n") {
 		p := strings.SplitN(l, "\t", 2)
 		if len(p) != 2 {
 			continue
@@ -557,7 +557,7 @@ func (f *Fleet) quiet() bool {
 	if err != nil {
 		return true // no server or no client: nobody is typing
 	}
-	for _, l := range strings.Fields(out) {
+	for l := range strings.FieldsSeq(out) {
 		if s, err := strconv.ParseInt(l, 10, 64); err == nil && time.Since(time.Unix(s, 0)) < Quiet {
 			return false
 		}

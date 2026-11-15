@@ -102,7 +102,7 @@ func Ancestors(pid int, ppid func(int) int) map[int]bool {
 // ProcPPid reads PPid from /proc/<pid>/status (0 when unknown).
 func ProcPPid(pid int) int {
 	b, _ := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
-	for _, l := range strings.Split(string(b), "\n") {
+	for l := range strings.SplitSeq(string(b), "\n") {
 		if v, ok := strings.CutPrefix(l, "PPid:"); ok {
 			n, _ := strconv.Atoi(strings.TrimSpace(v))
 			return n

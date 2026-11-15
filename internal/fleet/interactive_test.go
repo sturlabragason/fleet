@@ -17,7 +17,7 @@ import (
 func autoCloseFleet(t *testing.T) (*Fleet, *[]string) {
 	t.Helper()
 	f, pasted := mailFleet(t)
-	fakeAdm(f, pasted, ptr(true))
+	fakeAdm(f, pasted, new(true))
 	var closed []string
 	f.CloseLater = func(n string) error { closed = append(closed, n); return nil }
 	clean := repo(t)

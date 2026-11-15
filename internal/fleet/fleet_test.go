@@ -33,7 +33,7 @@ patterns = "fake"
 		t.Fatal(err)
 	}
 	var st string
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		as, _ := f.Refresh()
 		if len(as) == 1 && as[0].Status == "waiting" {
 			st = as[0].Status
@@ -174,7 +174,7 @@ func TestSpawnFakeAgentEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out string
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		out, _ = f.Peek("a1", 0)
 		if strings.Contains(out, "queued: hello fleet") {
 			break
@@ -220,7 +220,7 @@ patterns = "fake"
 		return ""
 	}
 	var as []*board.Agent
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		as, _ = f.Refresh()
 		if len(as) == 1 && as[0].Status == "error" {
 			break
@@ -284,7 +284,7 @@ patterns = "pend"
 	}
 	waitFor := func(name, want string) string {
 		var out string
-		for i := 0; i < 40; i++ {
+		for range 40 {
 			if out, _ = f.Peek(name, 0); strings.Contains(out, want) {
 				return out
 			}

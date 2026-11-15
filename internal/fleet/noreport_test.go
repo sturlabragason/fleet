@@ -65,7 +65,7 @@ patterns = "fake"
 	}
 	refreshUntil := func(what string, ok func(*board.Agent) bool) {
 		t.Helper()
-		for i := 0; i < 50; i++ {
+		for range 50 {
 			f.Refresh()
 			if ok(f.Store.Load().Agents["a1"]) {
 				return
@@ -154,7 +154,7 @@ patterns = "fake"
 	}
 	refreshUntil := func(what string, ok func(*board.Agent) bool) {
 		t.Helper()
-		for i := 0; i < 80; i++ {
+		for range 80 {
 			f.Refresh()
 			if ok(f.Store.Load().Agents["a1"]) {
 				return

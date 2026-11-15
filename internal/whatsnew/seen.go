@@ -23,7 +23,7 @@ func LoadSeen() (map[string]bool, error) {
 		return map[string]bool{}, err
 	}
 	seen := map[string]bool{}
-	for _, l := range strings.Split(string(b), "\n") {
+	for l := range strings.SplitSeq(string(b), "\n") {
 		if l = strings.TrimSpace(l); l != "" {
 			seen[l] = true
 		}

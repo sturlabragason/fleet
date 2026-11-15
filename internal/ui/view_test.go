@@ -23,7 +23,7 @@ func overview(w, h, n int) (*Model, string) {
 	m.now = func() time.Time { return now }
 	m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	var as []*board.Agent
-	for i := 0; i < n; i++ {
+	for i := range n {
 		as = append(as, &board.Agent{Name: fmt.Sprintf("agent-%02d", i), Profile: "claude-copilot",
 			Status: "working", LastLine: "53% (105k/200k)", StatusSince: now.Add(-12 * time.Minute)})
 	}
@@ -244,7 +244,7 @@ func TestQueuedTileShowsPositionAndGoal(t *testing.T) {
 			t.Errorf("queued tile missing %q:\n%s", want, q1)
 		}
 	}
-	for _, l := range strings.Split(q1, "\n") {
+	for l := range strings.SplitSeq(q1, "\n") {
 		if ansi.StringWidth(l) != tw {
 			t.Errorf("row width %d, want %d: %q", ansi.StringWidth(l), tw, l)
 		}
@@ -341,7 +341,7 @@ func TestHeaderReportBadge(t *testing.T) {
 		m.Update(tea.WindowSizeMsg{Width: w, Height: 20})
 		be.reports = 12
 		m.Update(m.poll()())
-		for _, l := range strings.Split(ansi.Strip(m.View()), "\n") {
+		for l := range strings.SplitSeq(ansi.Strip(m.View()), "\n") {
 			if ansi.StringWidth(l) > w {
 				t.Errorf("w=%d: line wider than pane: %q", w, l)
 			}

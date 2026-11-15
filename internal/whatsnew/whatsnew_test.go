@@ -59,7 +59,7 @@ func TestEmbeddedChangelog(t *testing.T) {
 		t.Fatalf("only %d entries", len(es))
 	}
 	prev := ""
-	for _, l := range strings.Split(aifleet.Changelog, "\n") {
+	for l := range strings.SplitSeq(aifleet.Changelog, "\n") {
 		if !strings.HasPrefix(l, "## ") {
 			continue
 		}

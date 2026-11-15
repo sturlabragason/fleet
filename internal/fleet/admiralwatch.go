@@ -41,20 +41,16 @@ func (f *Fleet) watchAdmirals(panes []tmux.PaneInfo, now time.Time) {
 		}
 		if p.Dead {
 			if f.T.PaneOption(p.ID, exitToldOpt) == "" {
-				f.admWatch.jobs.Add(1)
-				go func() {
-					defer f.admWatch.jobs.Done()
+				f.admWatch.jobs.Go(func() {
 					f.admiralExited(name, p)
-				}()
+				})
 			}
 			continue
 		}
 		if f.followDue(name, now) {
-			f.admWatch.jobs.Add(1)
-			go func() {
-				defer f.admWatch.jobs.Done()
+			f.admWatch.jobs.Go(func() {
 				f.followAdmiral(name)
-			}()
+			})
 		}
 	}
 }

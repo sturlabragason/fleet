@@ -2,6 +2,7 @@ package fleet
 
 import (
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -122,12 +123,8 @@ func (f *Fleet) agentEnv(profile string, p tools.Profile) map[string]string {
 		return p.Env
 	}
 	env := make(map[string]string, len(p.Env)+len(extra))
-	for k, v := range p.Env {
-		env[k] = v
-	}
-	for k, v := range extra {
-		env[k] = v
-	}
+	maps.Copy(env, p.Env)
+	maps.Copy(env, extra)
 	return env
 }
 

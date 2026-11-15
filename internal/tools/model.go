@@ -1,5 +1,7 @@
 package tools
 
+import "maps"
+
 import "strings"
 
 // ModelArg is the model a launch argv selects: the value of the last
@@ -67,9 +69,7 @@ func (p Profile) WithModel(m string) Profile {
 	p.Args = args
 	if p.ACPModelEnv != "" {
 		env := make(map[string]string, len(p.ACPEnvVars)+1)
-		for k, v := range p.ACPEnvVars {
-			env[k] = v
-		}
+		maps.Copy(env, p.ACPEnvVars)
 		env[p.ACPModelEnv] = m
 		p.ACPEnvVars = env
 	}

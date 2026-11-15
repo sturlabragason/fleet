@@ -34,7 +34,7 @@ func (f *Fleet) clients() []ClientSeen {
 		return nil
 	}
 	var cs []ClientSeen
-	for _, l := range strings.Split(strings.TrimSpace(out), "\n") {
+	for l := range strings.SplitSeq(strings.TrimSpace(out), "\n") {
 		pane, at, ok := strings.Cut(l, "\t")
 		s, err := strconv.ParseInt(at, 10, 64)
 		if !ok || err != nil || pane == "" {

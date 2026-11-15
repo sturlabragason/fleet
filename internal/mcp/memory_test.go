@@ -167,7 +167,7 @@ func TestBriefShowsPinnedNotes(t *testing.T) {
 	if _, isErr := callText(t, s, "fleet_note", map[string]any{"text": "User rule: ask before merging", "pin": true}); isErr {
 		t.Fatal("pinned note failed")
 	}
-	for i := 0; i < 31; i++ {
+	for i := range 31 {
 		callText(t, s, "fleet_note", map[string]any{"text": fmt.Sprintf("note %d", i)})
 	}
 	out, _ := callText(t, s, "fleet_brief", nil)
@@ -196,14 +196,14 @@ func TestBriefStaysUnderBudget(t *testing.T) {
 	if err := supervisor.WriteHandoffOf(home, s.Me(), handoff); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 80; i++ {
+	for i := range 80 {
 		callText(t, s, "fleet_route", map[string]any{"action": "set", "name": fmt.Sprintf("route%02d", i), "fields": map[string]any{
 			"triggers": []any{strings.Repeat("a long trigger phrase ", 5)}, "dir": home}})
 	}
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		callText(t, s, "fleet_note", map[string]any{"text": fmt.Sprintf("PIN-%d %s", i, strings.Repeat("rule ", 50)+"end"), "pin": true})
 	}
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		callText(t, s, "fleet_note", map[string]any{"text": fmt.Sprintf("note-%03d %s", i, strings.Repeat("x", 300))})
 	}
 	out, err := s.brief()
@@ -216,7 +216,7 @@ func TestBriefStaysUnderBudget(t *testing.T) {
 	if !strings.HasPrefix(out, "## Handoff (") || !strings.Contains(out, handoff+"\n") {
 		t.Error("handoff not whole and first")
 	}
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		if !strings.Contains(out, fmt.Sprintf("PIN-%d %s\n", i, strings.Repeat("rule ", 50)+"end")) {
 			t.Errorf("pinned note %d cut", i)
 		}
@@ -231,7 +231,7 @@ func TestBriefStaysUnderBudget(t *testing.T) {
 	}
 
 	// Pinned notes over half the budget are still shown whole, with a warning.
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		callText(t, s, "fleet_note", map[string]any{"text": fmt.Sprintf("BIG-%d %s", i, strings.Repeat("y", 300)), "pin": true})
 	}
 	out, _ = s.brief()

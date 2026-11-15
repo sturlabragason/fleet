@@ -108,7 +108,7 @@ func envValue(pid int, key string) string {
 		return ""
 	}
 	pre := []byte(key + "=")
-	for _, kv := range bytes.Split(b, []byte{0}) {
+	for kv := range bytes.SplitSeq(b, []byte{0}) {
 		if v, ok := bytes.CutPrefix(kv, pre); ok {
 			return string(v)
 		}
@@ -124,7 +124,7 @@ func Swap(pid int) uint64 {
 	if err != nil {
 		return 0
 	}
-	for _, l := range strings.Split(string(b), "\n") {
+	for l := range strings.SplitSeq(string(b), "\n") {
 		if v, ok := strings.CutPrefix(l, "VmSwap:"); ok {
 			f := strings.Fields(v)
 			if len(f) > 0 {

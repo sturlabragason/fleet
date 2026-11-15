@@ -36,7 +36,7 @@ func TestRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Wait for the prompt rather than a fixed sleep (flaky under a loaded suite).
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		if p, _ := f.Peek("a1", 0); strings.Contains(p, "[y/n]") {
 			break
 		}
@@ -64,12 +64,12 @@ func TestRoundTrip(t *testing.T) {
 	}
 	inW.Write([]byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}` + "\n"))
 	list := call(2, "tools/list", nil)
-	names := ""
+	var names strings.Builder
 	for _, tl := range list["result"].(map[string]any)["tools"].([]any) {
-		names += tl.(map[string]any)["name"].(string) + " "
+		names.WriteString(tl.(map[string]any)["name"].(string) + " ")
 	}
 	for _, want := range []string{"fleet_status", "fleet_peek", "fleet_send", "fleet_answer", "fleet_spawn", "fleet_sessions", "fleet_adopt", "fleet_profiles", "fleet_close", "fleet_wall", "fleet_note", "fleet_brief", "fleet_handoff", "fleet_team", "fleet_info"} {
-		if !strings.Contains(names, want) {
+		if !strings.Contains(names.String(), want) {
 			t.Errorf("missing tool %s", want)
 		}
 	}
@@ -80,7 +80,7 @@ func TestRoundTrip(t *testing.T) {
 	// The prompt can take a while to appear on slow machines (CI).
 	var st string
 	var isErr bool
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		st, isErr = text(call(100+i, "tools/call", map[string]any{"name": "fleet_status", "arguments": map[string]any{}}))
 		if strings.Contains(st, "a1 |  |  | yn | tmux | waiting") {
 			break

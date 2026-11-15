@@ -79,7 +79,7 @@ func req(t *testing.T, hs *httptest.Server, method, path, body string, hdr map[s
 func waitScreen(t *testing.T, f *fleet.Fleet, name, want string) string {
 	t.Helper()
 	var out string
-	for i := 0; i < 60; i++ {
+	for range 60 {
 		if out, _ = f.Peek(name, 0); strings.Contains(out, want) {
 			return out
 		}
