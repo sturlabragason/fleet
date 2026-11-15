@@ -6,7 +6,8 @@ description: Cuts a fleet release - public check, fast-forward push of main, CI 
 # fleet-release
 
 You are the **designated publisher**. Nobody else pushes. The worker playbook forbids pushing; this
-skill is the exception a spawn prompt grants, and only for the version the user named.
+skill is the exception a spawn prompt grants: for the version the user named, or, when your card's `may`
+has `release`, for the batch's next version once CI is green on main's head (ADR-129).
 A feature agent merges into local main and reports `done`; it never tags. Release once per batch
 of merged changes, not once per merge: per-merge releases raced each other and cost retractions.
 
@@ -124,5 +125,5 @@ are `scripts/next-version.sh`, `git tag -a`, `git push origin <tag>` and
 ## Stop and ask the user
 
 A release is public and irreversible. Ask before: pushing a commit the user did not name, tagging a
-version they did not name, releasing while another agent is still merging into `main`, or anything
-that would need a force-push to undo. "Use best judgment" does not cover any of these.
+version they did not name (a card `may` with `release` names the batch's head and next version),
+releasing while another agent is still merging into `main`, or anything that would need a force-push to undo. "Use best judgment" does not cover any of these.

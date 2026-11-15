@@ -80,7 +80,7 @@ A leader may not answer a permission prompt, merge, push or apply infrastructure
 
 `fleet_answer`, `fleet_close`, `fleet_squad_close`, `fleet_access_decide`, `fleet_team` `close`, and any `fleet_send` to an agent already sitting on a prompt refuse to run unless `confirmed=true`. The instructions tell the admiral to ask you in one line first, for example "Answer y to web-nav (run `make test`)?", and to set the flag only after an explicit yes. `fleet_answer` also takes `expect`, the question you confirmed: if the prompt on screen has changed, the call is refused.
 
-Beyond `expect`, this is enforced in code only to the extent that the flag has to be set. The model sets it, so the real safeguard is the instruction plus your reply. Ordinary prompts through `fleet_send` need no confirmation. The instructions also tell the admiral to ask before telling any agent to merge, push to a shared branch or apply infrastructure.
+Beyond `expect`, this is enforced in code only to the extent that the flag has to be set. The model sets it, so the real safeguard is the instruction plus your reply. Ordinary prompts through `fleet_send` need no confirmation. A merge, main push or release that the agent's card `may` allows (`merge-local`, `push-main`, `release`) needs no question: green CI on the branch head and `fleet merge`'s checks are the gate, and once such a batch has merged the admiral starts one publisher for it (ADR-129). The instructions still tell the admiral to ask before any other merge or push to a shared branch, any infrastructure apply and any write to an external or shared tracker.
 
 Planned ([DESIGN.md §8, ADR-9](../DESIGN.md#14-decisions-adrs)): risky actions shown as approval cards in the TUI, and a blue flash on tiles the admiral acts on.
 

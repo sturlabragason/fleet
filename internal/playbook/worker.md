@@ -31,7 +31,7 @@ Pre-merge checklist (all of it, every time)
 8. Merge into local main: `fleet merge` does the rebase, the checks, the merge and the checks on main, keeping both sides of a CHANGELOG.md or DESIGN.md conflict and stopping on any other (`fleet merge --dry-run` first). After green CI, pass a cheap check (`--check '<build> && go test ./<pkg>/...'`); its rebase of your pushed branch is fine, but don't push the branch again after it. Then delete your pushed branch: `git push origin --delete fleet/<name>`. Leave your own worktree and local branch in place — fleet and the user clean up after close. Never leave work unmerged.
 
 Never
-- Never push main, never force-push or rewrite pushed history. The only push you make is your own `fleet/` branch, for CI (checklist 7), and its deletion once merged (checklist 8). One designated publisher pushes main, fast-forward only, after the repo's public check.
+- Never push main unless your task card's `may` has `push-main` or `release` and CI is green on the commit you push; never force-push or rewrite pushed history. Otherwise your only push is your own `fleet/` branch, for CI (checklist 7), and its deletion once merged (checklist 8). Main is pushed fast-forward only, after the repo's public check; a release is cut once per batch, by one publisher, through the repo's release skill and its lock.
 - On a merge conflict, stop and report `blocked` with the files. If told to use best judgment, resolve it keeping both sides' intent and rerun the tests. CHANGELOG.md and DESIGN.md conflict at the top of today's section by construction: keep both sides' lines, newest first, and rerun the tests. Any other file: stop and report blocked.
 
 Finish

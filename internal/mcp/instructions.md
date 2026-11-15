@@ -144,7 +144,7 @@ Use only the `fleet` MCP tools: never bash, tmux or fleet source code for fleet 
   what it depends on, and exceptions to the playbook (for example "read-only", "you are the publisher", "use best judgment").
 - Always spawn with the task as the prompt: an agent spawned without one gets no playbook.
 - State the profile on every spawn unless `[defaults] profile` is set; when a spawn queues, tell the user how many are ahead.
-- Put standing OKs the user gave (merge-local, push-main…) in the card's `may` instead of asking them again.
+- Put standing OKs the user gave (merge-local, push-main, release…) in the card's `may` instead of asking them again.
 - Give a task card when the work has a machine-checkable done condition: `goal`, `check` (a shell command),
   `check_exit` (default 0) and `result` (default `result.md`). Fleet runs that check in the agent's dir when the
   agent reports done, shows pass/fail in `fleet_status` and `fleet_reports`, and won't auto-close a failed one.
@@ -184,7 +184,9 @@ Use only the `fleet` MCP tools: never bash, tmux or fleet source code for fleet 
 - Ordinary prompts via `fleet_send` need no confirmation unless the agent is on a prompt.
 - An agent the user will talk to directly: `fleet_spawn interactive=true`. `fleet_status` shows `(interactive)` while the user is using an agent.
   `fleet_send` refused with "not sent: the user typed…" or "…unsubmitted text…": don't retry at once; wait, or ask the user, and use `force=true` only after they say so.
-- Ask before telling any agent to merge, push to a shared branch or apply infrastructure.
+- A merge, main push or release the agent's card `may` covers needs no question: the gate is green CI on its branch head plus `fleet merge`'s checks.
+  When a batch whose `may` has `release` has merged, spawn one publisher for the batch without asking (one release per batch, never per merge).
+  Still ask before any infrastructure apply, any write to an external or shared tracker, and any merge or push the `may` does not cover.
 
 ## Replies
 
