@@ -1,8 +1,9 @@
 package tools
 
-import "maps"
-
-import "strings"
+import (
+	"maps"
+	"strings"
+)
 
 // ModelArg is the model a launch argv selects: the value of the last
 // --model (or --model=X) across the arg lists, in launch order, so a later

@@ -1,10 +1,11 @@
 package ui
 
-import "maps"
+import (
+	"maps"
+	"strings"
 
-import "strings"
-
-import tea "github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
+)
 
 // Extension is what a feature compiled in with a build tag adds to the
 // overview (DESIGN §15 "Extensions", ADR-126). It calls Register from its
