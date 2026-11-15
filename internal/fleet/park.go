@@ -79,12 +79,14 @@ func (f *Fleet) park(name, reason string, force bool) error {
 		// Parked before a refresh read it: the transcript has it.
 		if sid := acphost.LastSession(acphost.TranscriptPath(f.Home, name)); sid != "" {
 			a.SessionID = sid
-			f.Store.Update(func(b *board.Board) error {
+			if err := f.Store.Update(func(b *board.Board) error {
 				if cur, ok := b.Agents[name]; ok && cur.SessionID == "" {
 					cur.SessionID = sid
 				}
 				return nil
-			})
+			}); err != nil {
+				logx.For("fleet").Warn("session id not saved", "agent", name, "err", err)
+			}
 		}
 	}
 	if why := blocker(a, pinned, force); why != "" {
@@ -135,13 +137,15 @@ func (f *Fleet) park(name, reason string, force bool) error {
 			f.acpStop(name)
 		}
 		if err := f.KillPane(pane); err != nil {
-			f.Store.Update(func(b *board.Board) error {
+			if err := f.Store.Update(func(b *board.Board) error {
 				if cur, ok := b.Agents[name]; ok && cur.Status == string(status.Parked) {
 					cur.Status, cur.StatusSince, cur.PaneID, cur.LastLine = prev, prevSince, pane, ""
 					cur.Subagents = prevSubs
 				}
 				return nil
-			})
+			}); err != nil {
+				logx.For("fleet").Warn("park failed and the board still says parked", "agent", name, "err", err)
+			}
 			return fmt.Errorf("park %s: %w", name, err)
 		}
 	}
@@ -298,7 +302,7 @@ func (f *Fleet) Wake(name string, force bool) (*board.Agent, error) {
 		return nil, err
 	}
 	// start writes a fresh entry; keep the history the parked one carried.
-	f.Store.Update(func(b *board.Board) error {
+	if err := f.Store.Update(func(b *board.Board) error {
 		if cur, ok := b.Agents[name]; ok {
 			cur.Created, cur.Report, cur.UserAt = old.Created, old.Report, old.UserAt
 			cur.PromptAt, cur.NoReportTold, cur.TurnAt = old.PromptAt, old.NoReportTold, old.TurnAt
@@ -307,19 +311,23 @@ func (f *Fleet) Wake(name string, force bool) (*board.Agent, error) {
 			a = cur
 		}
 		return nil
-	})
+	}); err != nil {
+		logx.For("fleet").Warn("woke, but its history was not carried over", "agent", name, "err", err)
+	}
 	logx.For("fleet").Info("woke", "agent", name, "session_id", old.SessionID, "pane", a.PaneID)
 	return a, nil
 }
 
 // unclaimWake puts a failed wake back on the board as parked.
 func (f *Fleet) unclaimWake(name string, old *board.Agent) {
-	f.Store.Update(func(b *board.Board) error {
+	if err := f.Store.Update(func(b *board.Board) error {
 		if cur, ok := b.Agents[name]; ok && cur.Status == string(status.Starting) {
 			cur.Status, cur.StatusSince, cur.LastLine = string(status.Parked), time.Now(), old.LastLine
 		}
 		return nil
-	})
+	}); err != nil {
+		logx.For("fleet").Warn("wake failed and the board still says starting", "agent", name, "err", err)
+	}
 }
 
 // pinned is the set of agents whose pane the user pinned (@fleet_pin): the

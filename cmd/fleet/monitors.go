@@ -231,7 +231,7 @@ func openWallTerminal(f *fleet.Fleet) (string, error) {
 	if err := c.Start(); err != nil {
 		return "", err
 	}
-	c.Process.Release()
+	_ = c.Process.Release() // only frees the handle; the terminal is already running
 	line := tools.ShellCommand(argv)
 	logx.For("monitors").Info("opened wall terminal", "argv", line)
 	return line, nil

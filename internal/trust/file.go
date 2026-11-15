@@ -87,7 +87,7 @@ func lock(path string) (func(), error) {
 		return nil, fmt.Errorf("lock %s: %w", fh.Name(), err)
 	}
 	return func() {
-		sysx.Flock(fh, sysx.LockUn)
+		sysx.Unlock(fh)
 		fh.Close()
 	}, nil
 }

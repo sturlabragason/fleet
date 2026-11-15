@@ -39,7 +39,7 @@ func (f *Fleet) resurface(agents []*board.Agent, now time.Time) {
 	}
 	// Claim on the board first, so two processes can't both tell.
 	var tell []board.Agent
-	f.Store.Update(func(b *board.Board) error {
+	if err := f.Store.Update(func(b *board.Board) error {
 		for _, a := range b.Agents {
 			if due(a) {
 				a.ResurfacedAt = a.Report.At
@@ -47,7 +47,10 @@ func (f *Fleet) resurface(agents []*board.Agent, now time.Time) {
 			}
 		}
 		return nil
-	})
+	}); err != nil {
+		logx.For("fleet").Warn("re-surface claim failed; telling at the next poll", "err", err)
+		return
+	}
 	log := logx.For("fleet")
 	for _, a := range tell {
 		line := ResurfaceLine(a.Name, now.Sub(a.Report.At), a.Report.Summary)

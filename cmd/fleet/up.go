@@ -96,7 +96,7 @@ func admiralLaunchOf(f *fleet.Fleet, adm, prof, resumeID, boot string) (supLaunc
 	}
 	if dir == "" {
 		dir = supervisor.DirOf(f.Home, adm)
-		os.MkdirAll(dir, 0o700)
+		_ = os.MkdirAll(dir, 0o700) // the Stat below falls back to a scratch dir
 	}
 	if _, err := os.Stat(dir); err != nil {
 		// No checkout next to the binary (go install): the admiral works

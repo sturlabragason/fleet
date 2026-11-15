@@ -181,7 +181,7 @@ func flockHolder(home string) (int, bool) {
 	}
 	defer f.Close()
 	if err := sysx.Flock(f, sysx.LockSh|sysx.LockNB); err == nil {
-		sysx.Flock(f, sysx.LockUn)
+		sysx.Unlock(f)
 		return 0, false
 	}
 	pid, _ := lockPID(home)

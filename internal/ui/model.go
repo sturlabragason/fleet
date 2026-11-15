@@ -95,7 +95,9 @@ func (m *Model) saveCursor() {
 		return
 	}
 	b, _ := json.Marshal(struct{ Selected string }{m.sel})
-	os.WriteFile(filepath.Join(m.stateDir, "ui.json"), b, 0o644)
+	if err := os.WriteFile(filepath.Join(m.stateDir, "ui.json"), b, 0o644); err != nil {
+		logx.For("ui").Warn("selection not saved", "err", err)
+	}
 }
 
 func (m *Model) poll() tea.Cmd {

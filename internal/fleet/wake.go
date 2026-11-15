@@ -57,10 +57,8 @@ const BadgeOption = "@fleet_reports"
 // counter and one lock per box, all under mail/<box>/.
 func (f *Fleet) wakeBox(box, id, from, state, line string) {
 	p := f.wakePath(box)
-	os.MkdirAll(filepath.Dir(p), 0o755)
-	if fh, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
-		fh.WriteString(wakeEntry{id: id, from: from, state: state, line: line}.raw() + "\n")
-		fh.Close()
+	if err := appendLine(p, wakeEntry{id: id, from: from, state: state, line: line}.raw()); err != nil {
+		logx.For("mail").Error("wake not queued", "box", box, "err", err)
 	}
 	f.DeliverWakeTo(box)
 }
@@ -139,8 +137,11 @@ func (f *Fleet) writeTries(box string, es []wakeEntry) {
 		os.Remove(f.triesPath(box))
 		return
 	}
-	os.MkdirAll(filepath.Dir(f.triesPath(box)), 0o755)
-	if err := os.WriteFile(f.triesPath(box), []byte(sb.String()), 0o644); err != nil {
+	err := os.MkdirAll(filepath.Dir(f.triesPath(box)), 0o755)
+	if err == nil {
+		err = os.WriteFile(f.triesPath(box), []byte(sb.String()), 0o644)
+	}
+	if err != nil {
 		logx.For("mail").Warn("wake try counter not written", "box", box, "err", err)
 	}
 }
@@ -187,21 +188,36 @@ func (f *Fleet) requeueWake(box string, es []wakeEntry) error {
 	if len(es) == 0 {
 		return nil
 	}
-	fh, err := os.OpenFile(f.wakePath(box), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err == nil {
-		defer fh.Close()
-		for _, e := range es {
-			if _, werr := fh.WriteString(e.raw() + "\n"); werr != nil {
-				err = werr
-				break
-			}
-		}
+	raws := make([]string, len(es))
+	for i, e := range es {
+		raws[i] = e.raw()
 	}
+	err := appendLine(f.wakePath(box), strings.Join(raws, "\n"))
 	if err != nil {
 		logx.For("mail").Error("wake lost: could not put it back on the queue",
 			"box", box, "err", err, "queued", len(es), "line", wakeLineTo(box, es))
 	}
 	return err
+}
+
+// appendLine appends line and a newline to the file at p, creating both
+// the file and its directory.
+func appendLine(p, line string) error {
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return fmt.Errorf("append %s: %w", p, err)
+	}
+	fh, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("append %s: %w", p, err)
+	}
+	_, err = fh.WriteString(line + "\n")
+	if cerr := fh.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return fmt.Errorf("append %s: %w", p, err)
+	}
+	return nil
 }
 
 // lockWake takes the cross-process claim on typing into the admiral pane.
@@ -211,7 +227,10 @@ func (f *Fleet) requeueWake(box string, es []wakeEntry) error {
 // means somebody else holds it and this process types nothing.
 func (f *Fleet) lockWake(box string) (release func(), ok bool) {
 	p := f.wakePath(box) + ".lock"
-	os.MkdirAll(filepath.Dir(p), 0o755)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		logx.For("mail").Warn("wake lock dir", "box", box, "err", err)
+		return func() {}, false
+	}
 	lf, err := os.OpenFile(p, os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		return func() {}, false
@@ -221,7 +240,7 @@ func (f *Fleet) lockWake(box string) (release func(), ok bool) {
 		return func() {}, false
 	}
 	return func() {
-		sysx.Flock(lf, sysx.LockUn)
+		sysx.Unlock(lf)
 		lf.Close()
 	}, true
 }
@@ -299,7 +318,7 @@ func (f *Fleet) DeliverWakeTo(box string) {
 	}
 	es := parseWake(b, unread)
 	if len(es) == 0 {
-		f.requeueWake(box, f.takeWake(box)) // compacts: entries whose report was read go
+		_ = f.requeueWake(box, f.takeWake(box)) // compacts: entries whose report was read go; it logs a loss itself
 		return
 	}
 	// Already announced: the admiral was told about every queued report and
@@ -335,12 +354,12 @@ func (f *Fleet) DeliverWakeTo(box string) {
 	}
 	prev, ok, err := f.Mail().ClaimWakeUpTo(box, newestID(es))
 	if err != nil {
-		f.requeueWake(box, es)
+		_ = f.requeueWake(box, es) // it logs a loss itself
 		f.stalledWake("wake not claimed", "box", box, "err", err, "queued", len(es))
 		return
 	}
 	if !ok {
-		f.requeueWake(box, es) // announced between the read above and the claim
+		_ = f.requeueWake(box, es) // announced between the read above and the claim; it logs a loss itself
 		return
 	}
 	line := wakeLineTo(box, es)
@@ -476,7 +495,9 @@ func (f *Fleet) guardEnter(box, pane, line string) bool {
 			if !f.submitWake(box, pane, want) {
 				// The line is in the box: take it back, or the box never
 				// reads empty again and every retry waits on it.
-				f.pressKeys(pane, backspaces(len([]rune(line)))...)
+				if err := f.pressKeys(pane, backspaces(len([]rune(line)))...); err != nil {
+					log.Warn("wake: could not take the line back", "box", box, "err", err)
+				}
 				log.Warn("wake not submitted: Enter did not take; line removed", "box", box)
 				return false
 			}
@@ -493,13 +514,17 @@ func (f *Fleet) guardEnter(box, pane, line string) bool {
 	switch {
 	case strings.HasPrefix(got, want):
 		tail := after(raw, want)
-		f.pressKeys(pane, backspaces(n+len([]rune(tail)))...)
+		if err := f.pressKeys(pane, backspaces(n+len([]rune(tail)))...); err != nil {
+			log.Warn("wake: could not take the line back", "box", box, "err", err)
+		}
 		if err := f.pressKeys(pane, "-l", "--", tail); err != nil {
 			log.Warn("wake: could not retype user text", "box", box, "err", err)
 		}
 		how = "removed, user text after it kept"
 	case strings.HasSuffix(got, want), got != "" && strings.HasPrefix(want, got):
-		f.pressKeys(pane, backspaces(n)...)
+		if err := f.pressKeys(pane, backspaces(n)...); err != nil {
+			log.Warn("wake: could not take the line back", "box", box, "err", err)
+		}
 		how = "removed"
 	}
 	log.Warn("wake not submitted: input box did not hold exactly the wake line", "box", box, "wake", how)
@@ -672,7 +697,9 @@ func (f *Fleet) recordTyped(box, line, prev string, es []wakeEntry) {
 	for _, e := range es {
 		sb.WriteString(e.raw() + "\n")
 	}
-	os.WriteFile(f.typedPath(box), []byte(sb.String()), 0o644)
+	if err := os.WriteFile(f.typedPath(box), []byte(sb.String()), 0o644); err != nil {
+		logx.For("mail").Warn("typed wake not recorded", "box", box, "err", err)
+	}
 }
 
 // resubmitTyped submits a wake fleet typed and never saw submitted: the box
@@ -710,7 +737,9 @@ func (f *Fleet) resubmitTyped(box string) {
 	}
 	// Enter would not take, or only the start of the line is left (the
 	// process died while taking it back): remove it and requeue the reports.
-	f.pressKeys(v.Pane, backspaces(len([]rune(line)))...)
+	if err := f.pressKeys(v.Pane, backspaces(len([]rune(line)))...); err != nil {
+		log.Warn("wake: could not take the line back", "box", box, "err", err)
+	}
 	es := parseWake([]byte(p[2]), f.Mail().Peek(box))
 	tries := f.readTries(box)
 	for i := range es {

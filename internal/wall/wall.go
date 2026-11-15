@@ -117,7 +117,7 @@ func (w *Wall) Read() (*State, error) {
 		}
 	}
 	s := &State{Cfg: w.Cfg, Preset: w.opt("@fleet_wall")}
-	fmt.Sscan(dims, &s.W, &s.H)
+	_, _ = fmt.Sscan(dims, &s.W, &s.H) // tmux printed two numbers; a bad parse leaves 0x0
 	if s.Preset == "" {
 		s.Preset = "4"
 	}

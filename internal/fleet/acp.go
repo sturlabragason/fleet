@@ -327,12 +327,14 @@ const acpClosingFor = time.Minute
 
 // markClosing sets or clears (zero at) the board's closing mark.
 func (f *Fleet) markClosing(name string, at time.Time) {
-	f.Store.Update(func(b *board.Board) error {
+	if err := f.Store.Update(func(b *board.Board) error {
 		if a, ok := b.Agents[name]; ok {
 			a.Closing = at
 		}
 		return nil
-	})
+	}); err != nil {
+		logx.For("fleet").Warn("acp: closing mark not saved", "agent", name, "err", err)
+	}
 }
 
 // acpSocketMax is the longest control socket path that fits sun_path on

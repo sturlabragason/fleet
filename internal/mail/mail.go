@@ -314,7 +314,7 @@ func (s *Store) update(fn func(*state) error) error {
 	if err := sysx.Flock(lf, sysx.LockEx); err != nil {
 		return err
 	}
-	defer sysx.Flock(lf, sysx.LockUn)
+	defer sysx.Unlock(lf)
 	s.migrateAdmiral()
 	pairs, err := s.loadPairs()
 	if err != nil {

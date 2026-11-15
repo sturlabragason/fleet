@@ -209,7 +209,7 @@ func (b *backend) Menu(name string, x, y int) error {
 		return err
 	}
 	var left, top int
-	fmt.Sscan(off, &left, &top)
+	_, _ = fmt.Sscan(off, &left, &top) // a bad parse puts the menu at the client's corner
 	target, pins := b.w.TargetAgent(), b.w.Pinned()
 	st := menuState{multi: len(b.f.AdmiralNames()) > 1, onWall: b.w.OnWall()[name], hasTarget: target != "", pinned: pins[name], targetPinned: pins[target]}
 	args := menuArgs(tools.Quote(b.f.Exe), name, x+left, y+top, st)

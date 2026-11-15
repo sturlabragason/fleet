@@ -92,7 +92,9 @@ func (f *Fleet) writeOffline(o offlineFile) {
 	b, _ := json.Marshal(o)
 	tmp := f.offlinePath() + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o644); err == nil {
-		os.Rename(tmp, f.offlinePath())
+		if err := os.Rename(tmp, f.offlinePath()); err != nil {
+			logx.For("net").Warn("offline state not saved", "err", err)
+		}
 	}
 }
 

@@ -340,8 +340,10 @@ func (s *Server) progressFor(tok json.RawMessage) func(int, string) {
 	}
 	enc := s.out
 	return func(n int, msg string) {
-		enc.Encode(map[string]any{"jsonrpc": "2.0", "method": "notifications/progress",
-			"params": map[string]any{"progressToken": tok, "progress": n, "message": msg}})
+		if err := enc.Encode(map[string]any{"jsonrpc": "2.0", "method": "notifications/progress",
+			"params": map[string]any{"progressToken": tok, "progress": n, "message": msg}}); err != nil {
+			logx.For("mcp").Debug("progress not sent", "err", err)
+		}
 	}
 }
 

@@ -95,7 +95,7 @@ func cmdACPHost(args []string) error {
 	// Ctrl-C never stops the agent (ADR-82).
 	if fd := int(os.Stdin.Fd()); term.IsTerminal(fd) {
 		if old, err := term.MakeRaw(fd); err == nil {
-			defer term.Restore(fd, old)
+			defer func() { _ = term.Restore(fd, old) }() // exiting; nothing to do if it fails
 			os.Stdout.WriteString(acphost.ScreenOn + acphost.PasteOn + acphost.MouseOn + acphost.FocusOn)
 			defer os.Stdout.WriteString(acphost.FocusOff + acphost.MouseOff + acphost.PasteOff + acphost.ScreenOff)
 			cfg.Keys = true

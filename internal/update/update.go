@@ -192,6 +192,14 @@ func save(home string, s State) error {
 	return os.Rename(tmp, statePath(home))
 }
 
+// saveLogged is save where the caller goes on either way: a state file that
+// cannot be written only means the next check comes sooner.
+func saveLogged(home string, s State) {
+	if err := save(home, s); err != nil {
+		logx.For("update").Warn("state not saved", "err", err)
+	}
+}
+
 // Updater checks, stages and applies releases for one binary.
 type Updater struct {
 	Home    string // ~/.fleet
@@ -301,7 +309,7 @@ func (u *Updater) Step(ctx context.Context) (done bool) {
 	if s.Staged != "" && !Newer(s.Staged, u.Current) {
 		os.Remove(u.stagedPath(s.Staged))
 		s.Staged, s.StagedSum = "", ""
-		save(u.Home, s)
+		saveLogged(u.Home, s)
 	}
 	if s.Staged == "" && now.Sub(s.CheckedAt) >= u.every() {
 		s = u.check(ctx, s, now)
@@ -320,7 +328,7 @@ func (u *Updater) Step(ctx context.Context) (done bool) {
 		u.fail(&s, s.Staged, now, err)
 		os.Remove(u.stagedPath(s.Staged))
 		s.Staged, s.StagedSum = "", ""
-		save(u.Home, s)
+		saveLogged(u.Home, s)
 		return false
 	}
 	u.applied = true
@@ -334,24 +342,24 @@ func (u *Updater) check(ctx context.Context, s State, now time.Time) State {
 	latest, err := u.Latest(ctx)
 	if err != nil {
 		log.Info("check failed", "err", err) // offline is normal; try at the next interval
-		save(u.Home, s)
+		saveLogged(u.Home, s)
 		return s
 	}
 	s.Latest = latest
 	if !Newer(latest, u.Current) || (s.Failed == latest && now.Sub(s.FailedAt) < RetryFailed) {
-		save(u.Home, s)
+		saveLogged(u.Home, s)
 		return s
 	}
 	sum, err := u.Stage(ctx, latest)
 	if err != nil {
 		u.fail(&s, latest, now, err)
-		save(u.Home, s)
+		saveLogged(u.Home, s)
 		return s
 	}
 	s.Staged, s.StagedSum = latest, sum
 	s.Failed, s.FailedAt, s.Err = "", time.Time{}, ""
 	log.Info("staged", "version", latest, "sha256", sum)
-	save(u.Home, s)
+	saveLogged(u.Home, s)
 	return s
 }
 
@@ -523,7 +531,7 @@ func (u *Updater) apply(s *State, now time.Time) error {
 	}
 	prev := filepath.Join(Dir(u.Home), "fleet-"+u.Current+".prev")
 	os.Remove(prev)
-	os.Link(u.Exe, prev) // best effort: another filesystem has no hard link
+	_ = os.Link(u.Exe, prev) // best effort: another filesystem has no hard link
 	// Recorded before the rename: the watcher re-execs as soon as it sees
 	// the new file, and nothing after the rename may be needed to keep it.
 	before := s.Applied
@@ -547,7 +555,9 @@ func (u *Updater) apply(s *State, now time.Time) error {
 	}
 	if err := os.Rename(tmp, u.Exe); err != nil {
 		if old != "" {
-			os.Rename(old, u.Exe)
+			if rerr := os.Rename(old, u.Exe); rerr != nil {
+				logx.For("update").Error("old binary not put back", "old", old, "exe", u.Exe, "err", rerr)
+			}
 		}
 		os.Remove(tmp)
 		s.Applied = before
@@ -656,12 +666,12 @@ func (u *Updater) Install(ctx context.Context) (string, error) {
 	s.CheckedAt = now
 	latest, err := u.Latest(ctx)
 	if err != nil {
-		save(u.Home, s)
+		saveLogged(u.Home, s)
 		return "", err
 	}
 	s.Latest = latest
 	if !Newer(latest, u.Current) {
-		save(u.Home, s)
+		saveLogged(u.Home, s)
 		return "", nil
 	}
 	sum, err := u.Stage(ctx, latest)
@@ -675,7 +685,7 @@ func (u *Updater) Install(ctx context.Context) (string, error) {
 			os.Remove(u.stagedPath(s.Staged))
 		}
 		s.Staged, s.StagedSum = "", ""
-		save(u.Home, s)
+		saveLogged(u.Home, s)
 		return "", err
 	}
 	u.applied = true

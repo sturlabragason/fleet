@@ -32,5 +32,5 @@ func lockOf(home, name string, nb int) (unlock func(), err error) {
 		f.Close()
 		return nil, err
 	}
-	return func() { sysx.Flock(f, sysx.LockUn); f.Close() }, nil
+	return func() { sysx.Unlock(f); f.Close() }, nil
 }

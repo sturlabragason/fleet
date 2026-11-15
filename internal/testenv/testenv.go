@@ -165,7 +165,7 @@ func Reap(ps []Proc) {
 		if s := testSocket(p.PID); s != "" {
 			socks = append(socks, s)
 		}
-		sysx.Kill(p.PID, syscall.SIGTERM)
+		_ = sysx.Kill(p.PID, syscall.SIGTERM) // the loop below checks what is still running
 	}
 	for end := time.Now().Add(2 * time.Second); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
 		alive := false
@@ -178,7 +178,7 @@ func Reap(ps []Proc) {
 	}
 	for _, p := range ps {
 		if running(p.PID) {
-			sysx.Kill(p.PID, syscall.SIGKILL)
+			_ = sysx.Kill(p.PID, syscall.SIGKILL) // last resort; nothing left to try if it fails
 		}
 	}
 	for _, s := range socks {

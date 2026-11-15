@@ -91,7 +91,7 @@ func (s *Store) Update(fn func(*File) error) error {
 	if err := sysx.Flock(lf, sysx.LockEx); err != nil {
 		return err
 	}
-	defer sysx.Flock(lf, sysx.LockUn)
+	defer sysx.Unlock(lf)
 	f := s.Load()
 	if err := fn(f); err != nil {
 		if errors.Is(err, errSkip) {

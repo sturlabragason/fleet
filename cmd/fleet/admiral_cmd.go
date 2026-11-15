@@ -138,7 +138,9 @@ func cmdAdmiralAdd(f *fleet.Fleet, args []string) error {
 		return err
 	}
 	if _, err := newAdmiralPane(f, name, *prof); err != nil {
-		supervisor.Remove(f.Home, name)
+		if rerr := supervisor.Remove(f.Home, name); rerr != nil {
+			logx.For("admiral").Warn("undo add", "admiral", name, "err", rerr)
+		}
 		return err
 	}
 	if err := wall.New(f.T, fleet.Session).Apply(); err != nil {
@@ -212,9 +214,13 @@ func cmdAdmiralClose(f *fleet.Fleet, args []string) error {
 		return err
 	}
 	if perr == nil {
-		f.KillPane(pane)
+		if err := f.KillPane(pane); err != nil {
+			logx.For("admiral").Warn("kill admiral pane", "admiral", name, "pane", pane, "err", err)
+		}
 	}
-	wall.New(f.T, fleet.Session).Apply()
+	if err := wall.New(f.T, fleet.Session).Apply(); err != nil {
+		logx.For("admiral").Error("apply", "err", err)
+	}
 	msg := fmt.Sprintf("admiral %s closed · %d agents and %d unread reports → main", name, agents, reports)
 	display(f, msg)
 	fmt.Println(msg)

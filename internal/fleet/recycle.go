@@ -72,7 +72,7 @@ func (f *Fleet) recycleScan(agents []board.Agent, now time.Time) {
 	}
 	// Claim on the board first, so two processes can't both tell.
 	var tell []string
-	f.Store.Update(func(b *board.Board) error {
+	if err := f.Store.Update(func(b *board.Board) error {
 		for name := range due {
 			if a, ok := b.Agents[name]; ok && a.RecycleTold.IsZero() {
 				a.RecycleTold = now
@@ -80,7 +80,10 @@ func (f *Fleet) recycleScan(agents []board.Agent, now time.Time) {
 			}
 		}
 		return nil
-	})
+	}); err != nil {
+		logx.For("fleet").Warn("recycle claim failed; telling at the next poll", "err", err)
+		return
+	}
 	for _, name := range tell {
 		f.reportRecycle(name, due[name])
 	}

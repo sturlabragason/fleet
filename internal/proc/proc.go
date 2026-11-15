@@ -93,7 +93,9 @@ func Kill(ps []Proc, grace time.Duration) {
 		return
 	}
 	for _, p := range live {
-		sysx.Kill(p.PID, syscall.SIGTERM)
+		if err := sysx.Kill(p.PID, syscall.SIGTERM); err != nil {
+			log.Debug("SIGTERM failed; it may be gone already", "pid", p.PID, "err", err)
+		}
 	}
 	deadline := time.Now().Add(grace)
 	for {
@@ -111,7 +113,9 @@ func Kill(ps []Proc, grace time.Duration) {
 	}
 	for _, p := range live {
 		log.Warn("SIGKILL after grace", "pid", p.PID)
-		sysx.Kill(p.PID, syscall.SIGKILL)
+		if err := sysx.Kill(p.PID, syscall.SIGKILL); err != nil {
+			log.Debug("SIGKILL failed; it may be gone already", "pid", p.PID, "err", err)
+		}
 	}
 	// SIGKILL is delivered asynchronously; wait briefly so callers see the tree gone.
 	for end := time.Now().Add(500 * time.Millisecond); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {

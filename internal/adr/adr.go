@@ -84,7 +84,7 @@ func (s *Store) update(fn func(*File) error) error {
 	if err := sysx.Flock(lf, sysx.LockEx); err != nil {
 		return err
 	}
-	defer sysx.Flock(lf, sysx.LockUn)
+	defer sysx.Unlock(lf)
 	f, err := s.load()
 	if errors.Is(err, errBroken) {
 		logx.For("adr").Error("broken adr-claims.json, moved to adr-claims.json.broken, starting empty", "path", s.path())

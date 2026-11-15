@@ -4,6 +4,8 @@
 // Unix keeps the syscall behaviour; Windows gets the nearest equivalent.
 package sysx
 
+import "os"
+
 // Flock operations, as for flock(2).
 const (
 	LockSh = 1
@@ -11,3 +13,7 @@ const (
 	LockNB = 4
 	LockUn = 8
 )
+
+// Unlock releases a lock taken with Flock. Its error is dropped on purpose:
+// every caller also closes f, and closing the file releases the lock anyway.
+func Unlock(f *os.File) { _ = Flock(f, LockUn) }

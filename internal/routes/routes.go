@@ -115,7 +115,7 @@ func update(home string, fn func(*file) error) error {
 	if err := sysx.Flock(lf, sysx.LockEx); err != nil {
 		return err
 	}
-	defer sysx.Flock(lf, sysx.LockUn)
+	defer sysx.Unlock(lf)
 	f, err := load(home)
 	if err != nil {
 		return err

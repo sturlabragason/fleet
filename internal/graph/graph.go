@@ -150,7 +150,7 @@ func buildLocked(ctx context.Context, home, root string, force bool) (Stamp, err
 		_ = os.WriteFile(base+".rerun", nil, 0o644)
 		return Stamp{}, ErrBusy
 	}
-	defer sysx.Flock(lock, sysx.LockUn)
+	defer sysx.Unlock(lock)
 	tool, err := companion.Find(Spec)
 	if err != nil {
 		return Stamp{}, err

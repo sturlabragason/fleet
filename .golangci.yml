@@ -32,6 +32,11 @@ linters:
         - (*os.File).Close
         - os.Remove
         - os.RemoveAll
+        # tmux.Client.RunInput logs its failures (component "tmux"); a caller
+        # that can act on the error still checks it.
+        - (*github.com/sturlabragason/fleet/internal/tmux.Client).Run
+        - (*github.com/sturlabragason/fleet/internal/tmux.Client).SetPaneOption
+        - (*github.com/sturlabragason/fleet/internal/tmux.Client).UnsetPaneOption
     revive:
       rules:
         - name: error-strings

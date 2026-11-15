@@ -493,7 +493,7 @@ func (s *Store) Update(fn func(*Board) error) error {
 	if err := sysx.Flock(lf, sysx.LockEx); err != nil {
 		return err
 	}
-	defer sysx.Flock(lf, sysx.LockUn)
+	defer sysx.Unlock(lf)
 	b, old, err := s.load()
 	if err != nil {
 		return err
@@ -600,7 +600,12 @@ func (s *Store) AppendEvent(e Event) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
 	data, _ := json.Marshal(e)
-	f.Write(append(data, '\n'))
+	_, err = f.Write(append(data, '\n'))
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		logx.For("board").Warn("event not recorded", "agent", e.Agent, "err", err)
+	}
 }

@@ -73,13 +73,15 @@ func (f *Fleet) Takeover(name string, toACP bool) (*board.Agent, error) {
 		return nil, fmt.Errorf("take over %s: %w (it stays parked)", name, err)
 	}
 	now := time.Now()
-	f.Store.Update(func(b *board.Board) error {
+	if err := f.Store.Update(func(b *board.Board) error {
 		if cur, ok := b.Agents[name]; ok {
 			cur.UserAt = now
 			w = cur
 		}
 		return nil
-	})
+	}); err != nil {
+		logx.For("fleet").Warn("take over: board not updated", "agent", name, "err", err)
+	}
 	logx.For("fleet").Info("taken over", "agent", name, "from", from, "to", to, "session_id", w.SessionID, "pane", w.PaneID)
 	return w, nil
 }

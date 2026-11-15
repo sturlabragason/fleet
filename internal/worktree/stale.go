@@ -145,7 +145,8 @@ func status(dir string) (untracked []string, other, failed bool) {
 // dirSize sums the file sizes under dir without following symlinks.
 func dirSize(dir string) int64 {
 	var n int64
-	filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+	// The callback never returns an error, so neither does WalkDir.
+	_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return nil //nolint:nilerr // skip what cannot be read; the size is a best-effort sum
 		}

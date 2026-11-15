@@ -116,7 +116,7 @@ func updateRegistry(home string, fn func([]Admiral) ([]Admiral, error)) error {
 	if err := sysx.Flock(lf, sysx.LockEx); err != nil {
 		return err
 	}
-	defer sysx.Flock(lf, sysx.LockUn)
+	defer sysx.Unlock(lf)
 	as, err := fn(Admirals(home))
 	if err != nil {
 		return err

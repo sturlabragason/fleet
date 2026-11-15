@@ -112,7 +112,7 @@ func DeleteMergedRemote(dir, branch string) (bool, error) {
 		out, lerr := gitCtx(ctx, dir, "ls-remote", "--heads", Remote, "refs/heads/"+branch)
 		cancel()
 		if lerr == nil && strings.TrimSpace(out) == "" {
-			git(dir, "update-ref", "-d", tracking)
+			_, _ = git(dir, "update-ref", "-d", tracking) // left behind, the next sweep drops it
 			return false, nil
 		}
 		return false, err

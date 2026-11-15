@@ -425,5 +425,5 @@ func (h *host) say(s string) {
 		h.con.note(s)
 		return
 	}
-	io.WriteString(h.out, s+"\n")
+	_, _ = io.WriteString(h.out, s+"\n") // the pane is the only place to say it
 }

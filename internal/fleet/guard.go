@@ -149,7 +149,7 @@ func (f *Fleet) claimStamp(name string, now time.Time, every time.Duration) (boo
 	if err := sysx.Flock(lf, sysx.LockEx); err != nil {
 		return false, time.Time{}
 	}
-	defer sysx.Flock(lf, sysx.LockUn)
+	defer sysx.Unlock(lf)
 	var before time.Time
 	// A fresh file (size 0) has never been claimed; its mtime is now.
 	if st, err := lf.Stat(); err == nil && st.Size() > 0 {
@@ -175,5 +175,7 @@ func (f *Fleet) releaseGuard(before time.Time) {
 		os.Remove(p)
 		return
 	}
-	os.Chtimes(p, before, before)
+	if err := os.Chtimes(p, before, before); err != nil {
+		logx.For("fleet").Warn("memory guard: stamp not put back", "err", err)
+	}
 }

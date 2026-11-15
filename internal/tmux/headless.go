@@ -77,7 +77,7 @@ func (c *Client) headlessRun(args []string) (string, error) {
 	if err := sysx.Flock(lf, sysx.LockEx); err != nil {
 		return "", err
 	}
-	defer sysx.Flock(lf, sysx.LockUn)
+	defer sysx.Unlock(lf)
 	path := filepath.Join(dir, "state.json")
 	st := &hlState{}
 	if b, err := os.ReadFile(path); err == nil {
@@ -305,7 +305,7 @@ func (c *Client) hlNew(st *hlState, dir string, window bool, args []string) (str
 	}
 	p.PID = ex.Process.Pid
 	// Reaped while this process lives, so an exited pane reads dead, not as a zombie.
-	go ex.Wait()
+	go func() { _ = ex.Wait() }() // its exit status is not used
 	st.Panes = append(st.Panes, p)
 	if fl['P'] == "" {
 		return "", true, nil

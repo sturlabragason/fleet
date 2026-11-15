@@ -168,7 +168,7 @@ func RecordSubs(home, agent, event string, p Payload, now time.Time) error {
 	if err := sysx.Flock(lf, sysx.LockEx); err != nil {
 		return err
 	}
-	defer sysx.Flock(lf, sysx.LockUn)
+	defer sysx.Unlock(lf)
 	h, _ := readSubs(home, agent)
 	data, err := json.Marshal(applySub(h, event, p, now))
 	if err != nil {

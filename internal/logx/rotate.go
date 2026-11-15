@@ -81,7 +81,7 @@ func (r *rotator) check(now time.Time) {
 	if sysx.Flock(lf, sysx.LockEx) != nil {
 		return
 	}
-	defer sysx.Flock(lf, sysx.LockUn)
+	defer sysx.Unlock(lf)
 	// Another process may have rotated while this one waited for the lock.
 	if on, err := os.Stat(r.path); err == nil && os.SameFile(cur, on) && on.Size() >= MaxSize {
 		for i := Keep; i > 1; i-- {

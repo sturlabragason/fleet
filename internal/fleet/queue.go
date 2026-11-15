@@ -179,7 +179,7 @@ func (f *Fleet) startQueued(a *board.Agent) {
 	}
 	if err := start(); err != nil {
 		logx.For("fleet").Error("queue start failed", "agent", a.Name, "err", err)
-		f.Store.Update(func(b *board.Board) error {
+		if err := f.Store.Update(func(b *board.Board) error {
 			// Only our claim turns into an error; a closed or re-spawned
 			// agent is left alone.
 			if cur, ok := b.Agents[a.Name]; ok && cur.Status == string(status.Starting) {
@@ -188,7 +188,9 @@ func (f *Fleet) startQueued(a *board.Agent) {
 				cur.Status, cur.StatusSince, cur.LastLine = string(status.Error), now, "queue start failed: "+err.Error()
 			}
 			return nil
-		})
+		}); err != nil {
+			logx.For("fleet").Warn("queue start failure not saved", "agent", a.Name, "err", err)
+		}
 	}
 }
 

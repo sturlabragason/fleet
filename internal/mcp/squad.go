@@ -9,6 +9,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/mail"
 	"github.com/sturlabragason/fleet/internal/status"
 )
@@ -141,7 +142,9 @@ func (s *Server) squadSpawn(me string, a args) (string, error) {
 }
 
 func (s *Server) squadStatus(me string) string {
-	s.F.Refresh()
+	if _, err := s.F.Refresh(); err != nil {
+		logx.For("mcp").Warn("squad status: refresh failed; showing the board as it is", "err", err)
+	}
 	ms := s.F.Squad(me)
 	if len(ms) == 0 {
 		return "your squad is empty; spawn an agent with fleet_squad_spawn"

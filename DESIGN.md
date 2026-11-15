@@ -2193,6 +2193,8 @@ Rejected: moving every CLI-backed tool at once (the admiral and takeover code is
 
 **Trade-offs.** A finding on an unchanged line of a changed function is not reported, so a refactor can keep an old problem. A downstream overlay lints its own build tags in its own CI. `deadcode` is not a CI step: the `Register` seams read as dead in a default build by design, and staticcheck's `unused` already covers unexported code. gofumpt stays off; it would rewrite 94 files for style alone.
 
+**Pay-down.** errcheck: 156 → 0. About 95 were tmux calls whose error the client already logs, so `(*tmux.Client).Run`, `SetPaneOption` and `UnsetPaneOption` are in errcheck's `exclude-functions`; a caller that can act still checks. `sysx.Unlock` drops the unlock error, because closing the file releases the lock. The rest log with a component, return, or say with `_ =` and a comment why the error is ignored.
+
 **ADR-135: a Claude admiral gets no built-in tools, CLAUDE.md or auto-memory, as a copilot admiral has none** (§6.10; ADR-86, ADR-93, ADR-70) — accepted 2026-11-15.
 
 **Context.** A copilot admiral starts with `--available-tools fleet` (only the fleet MCP tools exist for the model) and `--no-custom-instructions`. A Claude admiral got `--strict-mcp-config --allowedTools=mcp__fleet`, and `--allowedTools` only pre-approves: Bash, Read, Edit, Write, Grep, Agent and the rest stayed available, and the personal admiral used them (tmux send-keys, git log, builds) against its "fleet tools only" rule. It also loaded the user's CLAUDE.md files and Claude's auto-memory, which are a coding agent's instructions. A session from before ADR-93 resumes inside the fleet checkout, so it also loaded the repo's AGENTS.md and the repo's memory dir.

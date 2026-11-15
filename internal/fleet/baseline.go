@@ -100,7 +100,9 @@ func fingerprint(path string) string {
 	}
 	defer fh.Close()
 	h := fnv.New64a()
-	io.Copy(h, fh)
+	if _, err := io.Copy(h, fh); err != nil {
+		return "unreadable"
+	}
 	return strconv.FormatUint(h.Sum64(), 16)
 }
 

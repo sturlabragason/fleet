@@ -590,7 +590,9 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 		b.DropClosed(name) // a new agent of the name is not the closed one
 		return nil
 	}); err != nil {
-		f.KillPane(pane)
+		if kerr := f.KillPane(pane); kerr != nil {
+			log.Warn("pane of a failed spawn not killed", "agent", name, "pane", pane, "err", kerr)
+		}
 		log.Error("board write failed", "agent", name, "err", err)
 		return nil, err
 	}
