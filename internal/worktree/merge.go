@@ -252,12 +252,23 @@ func Merge(o Options) (*Plan, error) {
 	}
 }
 
+// agentTrailerExec runs after each commit a fleet/<name> rebase replays: it
+// adds `Fleet-Agent: <name>` (FLEET_AGENT) unless the commit names an agent
+// already, so `fleet recall` can tell who made a fast-forwarded commit
+// (ADR-137).
+const agentTrailerExec = `test -n "$(git log -1 --format='%(trailers:key=Fleet-Agent,valueonly)')" || git commit -q --amend --allow-empty --no-edit --no-verify --trailer "Fleet-Agent: $FLEET_AGENT"`
+
 // rebase replays the branch onto the base, resolving shared-doc conflicts as
 // they come and aborting on any other.
 func rebase(p *Plan, logf func(string)) error {
 	// diff3 markers carry the replayed commit's base, which KeepBoth needs
 	// to tell a line the commit removed (an old ADR number) from a new one.
-	_, err := git(p.Dir, "-c", "merge.conflictStyle=diff3", "rebase", p.Base)
+	args, env := []string{"-c", "merge.conflictStyle=diff3", "rebase"}, []string{"GIT_EDITOR=true"}
+	if name, ok := strings.CutPrefix(p.Branch, "fleet/"); ok {
+		args = append(args, "--exec", agentTrailerExec)
+		env = append(env, "FLEET_AGENT="+name)
+	}
+	_, err := gitEnv(p.Dir, env, append(args, p.Base)...)
 	for i := 0; err != nil; i++ {
 		if i > 100 {
 			abortRebase(p.Dir)
@@ -292,7 +303,7 @@ func rebase(p *Plan, logf func(string)) error {
 			}
 		}
 		logf("kept both sides in " + strings.Join(unmerged, ", "))
-		_, err = gitEnv(p.Dir, []string{"GIT_EDITOR=true"}, "-c", "merge.conflictStyle=diff3", "rebase", "--continue")
+		_, err = gitEnv(p.Dir, env, "-c", "merge.conflictStyle=diff3", "rebase", "--continue")
 	}
 	return nil
 }

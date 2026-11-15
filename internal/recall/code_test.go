@@ -16,9 +16,10 @@ func gitT(t *testing.T, dir string, args ...string) {
 	}
 }
 
-// Touched names the agent behind each commit to a file (a merge subject, a
-// fleet/ branch tip, a claimed ADR), with its last report, leaves a commit
-// with none unnamed and commits to other files out.
+// Touched names the agent behind each commit to a file (a Fleet-Agent
+// trailer first, then a merge subject, a fleet/ branch tip, a claimed ADR),
+// with its last report, leaves a commit with none unnamed and commits to
+// other files out.
 func TestTouched(t *testing.T) {
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	repo := t.TempDir()
@@ -47,6 +48,11 @@ func TestTouched(t *testing.T) {
 	gitT(t, repo, "commit", "-qam", "feat: A fast-forwarded")
 	gitT(t, repo, "checkout", "-q", "main")
 	gitT(t, repo, "merge", "-q", "--ff-only", "fleet/z")
+	gitT(t, repo, "checkout", "-qb", "fleet/w")
+	write("a.go", "package a\n\nfunc A() { _ = 3 }\n")
+	gitT(t, repo, "commit", "-qam", "fix: A trailer (ADR-7)\n\nFleet-Agent: x")
+	gitT(t, repo, "checkout", "-q", "main")
+	gitT(t, repo, "merge", "-q", "--ff-only", "fleet/w")
 
 	o := Owners{
 		Reports: []Msg{{From: "x", Text: "done: old"}, {From: "y", Text: "done: other"}, {From: "x", Text: "done: shipped A\ndetail"}},
@@ -57,6 +63,7 @@ func TestTouched(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []struct{ kind, who, title, text string }{
+		{"commit", "x", "fix: A trailer (ADR-7)", "done: shipped A"},
 		{"commit", "z", "feat: A fast-forwarded", ""},
 		{"commit", "y", "fix: A by ADR (ADR-7)", "done: other"},
 		{"merge", "x", "add A", "done: shipped A"},
@@ -71,10 +78,25 @@ func TestTouched(t *testing.T) {
 		}
 	}
 	r := Result{Topic: "a.go", CodeFiles: []string{"a.go"}, Code: hits, noCass: true}
-	if out := r.Format(); !strings.Contains(out, "## code: 4 commits to a.go") || !strings.Contains(out, "merge  x: add A") {
+	if out := r.Format(); !strings.Contains(out, "## code: 5 commits to a.go") || !strings.Contains(out, "merge  x: add A") {
 		t.Errorf("format:\n%s", out)
 	}
 	if _, err := Touched(t.Context(), t.TempDir(), []string{"a.go"}, Owners{}, 10); err == nil {
 		t.Error("not a repo: want an error")
+	}
+}
+
+// fleetAgent reads the Fleet-Agent trailer values git prints (ADR-137).
+func TestFleetAgent(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"", ""},
+		{"fu-trailer", "fu-trailer"},
+		{"  a1 ", "a1"},
+		{"first\x1esecond", "first"},
+		{"\x1elater", "later"},
+	} {
+		if got := fleetAgent(c.in); got != c.want {
+			t.Errorf("fleetAgent(%q) = %q, want %q", c.in, got, c.want)
+		}
 	}
 }

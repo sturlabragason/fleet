@@ -118,6 +118,10 @@ func TestMergeSharedDocConflict(t *testing.T) {
 	if checked[wts["b"]] != 1 || checked[realPath(repo)]+checked[repo] < 2 {
 		t.Fatalf("checks run: %v", checked)
 	}
+	// The commit replayed through the conflict still gets its trailer.
+	if out, _ := git(repo, "log", "-1", "--format=%(trailers:key=Fleet-Agent,valueonly)", "main"); strings.TrimSpace(out) != "b" {
+		t.Fatalf("Fleet-Agent after a resolved conflict: %q", out)
+	}
 	// Nothing was pushed: the repo has no remote and no stray refs.
 	if out, _ := git(repo, "remote"); strings.TrimSpace(out) != "" {
 		t.Fatalf("remote %q", out)
@@ -385,5 +389,38 @@ func TestPlanIgnoresResultFiles(t *testing.T) {
 	write(t, wts["a"], "b.go", "package b // a\n")
 	if p, _ = NewPlan(wts["b"], ign...); len(p.Neighbours) != 1 || strings.Join(p.Neighbours[0].Files, ",") != "b.go" {
 		t.Fatalf("real overlap: %+v", p.Neighbours)
+	}
+}
+
+// Every commit fleet merge lands for fleet/<name> carries one Fleet-Agent
+// trailer naming the agent (ADR-137): added where missing, never doubled,
+// other trailers kept, empty commits too, whether or not main moved.
+func TestMergeAddsFleetAgentTrailer(t *testing.T) {
+	for _, mainMoved := range []bool{false, true} {
+		t.Run("main moved "+strconv.FormatBool(mainMoved), func(t *testing.T) {
+			repo, wts := mergeRepo(t, "a")
+			write(t, wts["a"], "a.go", "package a\n")
+			run(t, wts["a"], "add", ".")
+			run(t, wts["a"], "commit", "-q", "-m", "feat: a\n\nbody\n\nAssisted-by: test")
+			write(t, wts["a"], "a.go", "package a\n\nconst A = 1\n")
+			run(t, wts["a"], "commit", "-q", "-am", "fix: a\n\nFleet-Agent: other")
+			run(t, wts["a"], "commit", "-q", "--allow-empty", "-m", "chore: empty")
+			if mainMoved {
+				write(t, repo, "m.go", "package m\n")
+				run(t, repo, "add", ".")
+				run(t, repo, "commit", "-q", "-m", "main moved")
+			}
+			if _, err := Merge(Options{Dir: wts["a"]}); err != nil {
+				t.Fatalf("merge: %v", err)
+			}
+			out, err := git(repo, "log", "--format=%s|%(trailers:key=Fleet-Agent,valueonly,separator=+)|%(trailers:key=Assisted-by,valueonly,separator=+)", "main", "-n3")
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := "chore: empty|a|\nfix: a|other|\nfeat: a|a|test\n"
+			if out != want {
+				t.Fatalf("main log:\n%q\nwant\n%q", out, want)
+			}
+		})
 	}
 }

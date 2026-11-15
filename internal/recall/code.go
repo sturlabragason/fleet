@@ -22,12 +22,13 @@ var adrRef = regexp.MustCompile(`ADR-(\d+)`)
 
 // Touched answers "what touched these files": the commits on main's
 // first-parent line that changed them, newest first, at most limit. The
-// agent is the name in a `Merge fleet/<name>: subject` commit (Kind
+// agent is the commit's Fleet-Agent trailer, which fleet merge adds
+// (ADR-137), else the name in a `Merge fleet/<name>: subject` commit (Kind
 // "merge"), else the fleet/<name> branch whose tip the commit is, else the
 // agent that claimed the first ADR the subject names; its last report's
 // first line is the hit's Text.
 func Touched(ctx context.Context, repo string, files []string, o Owners, limit int) ([]Hit, error) {
-	args := append([]string{"-C", repo, "--literal-pathspecs", "log", "--first-parent", "main", fmt.Sprintf("-n%d", limit), "--format=%H%x1f%cI%x1f%s", "--"}, files...)
+	args := append([]string{"-C", repo, "--literal-pathspecs", "log", "--first-parent", "main", fmt.Sprintf("-n%d", limit), "--format=%H%x1f%cI%x1f%(trailers:key=Fleet-Agent,valueonly,separator=%x1e)%x1f%s", "--"}, files...)
 	out, err := exec.CommandContext(ctx, "git", args...).Output()
 	if err != nil {
 		return nil, fmt.Errorf("git log: %w", err)
@@ -39,18 +40,21 @@ func Touched(ctx context.Context, repo string, files []string, o Owners, limit i
 	}
 	var hits []Hit
 	for l := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
-		f := strings.SplitN(l, "\x1f", 3)
-		if len(f) != 3 {
+		f := strings.SplitN(l, "\x1f", 4)
+		if len(f) != 4 {
 			continue
 		}
 		at, _ := time.Parse(time.RFC3339, f[1])
-		h := Hit{Kind: "commit", At: at.Local(), Title: f[2], Who: tips[f[0]]}
-		if rest, ok := strings.CutPrefix(f[2], "Merge fleet/"); ok {
+		h := Hit{Kind: "commit", At: at.Local(), Title: f[3], Who: tips[f[0]]}
+		if rest, ok := strings.CutPrefix(f[3], "Merge fleet/"); ok {
 			if name, title, ok := strings.Cut(rest, ": "); ok {
 				h.Kind, h.Who, h.Title = "merge", name, title
 			}
 		}
-		for _, m := range adrRef.FindAllStringSubmatch(f[2], -1) {
+		if who := fleetAgent(f[2]); who != "" {
+			h.Who = who
+		}
+		for _, m := range adrRef.FindAllStringSubmatch(f[3], -1) {
 			if n, _ := strconv.Atoi(m[1]); h.Who == "" && o.ADR[n] != "" {
 				h.Who = o.ADR[n]
 			}
@@ -59,6 +63,17 @@ func Touched(ctx context.Context, repo string, files []string, o Owners, limit i
 		hits = append(hits, h)
 	}
 	return hits, nil
+}
+
+// fleetAgent is the first Fleet-Agent trailer value in git's
+// %(trailers:key=Fleet-Agent,valueonly,separator=%x1e) output.
+func fleetAgent(s string) string {
+	for v := range strings.SplitSeq(s, "\x1e") {
+		if v = strings.TrimSpace(v); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // branchTips maps the commit at the tip of each fleet/<name> branch to name;
