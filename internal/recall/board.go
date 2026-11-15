@@ -34,7 +34,7 @@ func FromBoard(b *board.Board) Board {
 		}
 		ag := Agent{Name: a.Name, Status: a.Status, Dir: a.Dir}
 		if a.Report != nil {
-			ag.ReportState, ag.ReportHead = a.Report.State, firstLine(a.Report.Summary)
+			ag.ReportState, ag.ReportHead, ag.ReportAt, ag.Open = a.Report.State, firstLine(a.Report.Summary), a.Report.At, a.OpenAsk()
 		}
 		out.Agents = append(out.Agents, ag)
 	}

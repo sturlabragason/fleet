@@ -112,6 +112,12 @@ ready_timeout = "15s"
 # recycle_compactions = 2
 # recycle_aic = 1000
 
+# An agent's question or blocked report that has waited on you longer than this
+# wakes its owner once more: "[fleet] <name> has waited 2h on the user: ...".
+# Once per report; "0" turns it off. Read live (DESIGN §6.7, ADR-130).
+# [reports]
+# resurface_after = "2h"
+
 # The cheap model behind `fleet peek --summary` and MCP fleet_peek summary=true
 # (DESIGN §6.2, ADR-40). It shells out to a CLI you already have signed in, so
 # fleet never holds an API key. Defaults: Copilot CLI, Haiku 5.5, one call per

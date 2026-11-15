@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/sturlabragason/fleet/internal/board"
 )
 
 // Agent is what the day digest needs of a board agent.
@@ -16,6 +18,8 @@ type Agent struct {
 	Name, Status, Dir string
 	ReportState       string // the latest report's state, "" when none
 	ReportHead        string
+	ReportAt          time.Time
+	Open              bool // the report is an ask nobody answered (board.Agent.OpenAsk)
 }
 
 // DayOpts feeds Day.
@@ -49,31 +53,7 @@ func Day(ctx context.Context, o DayOpts) string {
 	}
 	var b strings.Builder
 
-	b.WriteString("## Waiting on you\n")
-	listed := map[string]bool{}
-	var wait []string
-	for _, m := range o.Unread {
-		if st := m.State(); st == "question" || st == "blocked" {
-			wait = append(wait, fmt.Sprintf("%s %s: %s", stamp(m.T, o.Now), m.From, clip(firstLine(m.Text), 160)))
-			listed[m.From] = true
-		}
-	}
-	for _, a := range o.Agents {
-		switch {
-		case listed[a.Name]:
-		case needsYou[a.Status]:
-			wait = append(wait, fmt.Sprintf("%s is %s (%s)", a.Name, a.Status, Area(a.Dir)))
-		case a.ReportState == "question" || a.ReportState == "blocked":
-			wait = append(wait, fmt.Sprintf("%s: %s: %s", a.Name, a.ReportState, clip(a.ReportHead, 160)))
-		default:
-			continue
-		}
-		listed[a.Name] = true
-	}
-	if len(o.Unread) > 0 {
-		wait = append(wait, fmt.Sprintf("%d unread reports (fleet reports / fleet_reports)", len(o.Unread)))
-	}
-	writeList(&b, wait)
+	writeWaiting(&b, o)
 
 	fmt.Fprintf(&b, "\n## Done since %s\n", o.Since.Format("Mon 15:04"))
 	last := map[string]Msg{}
@@ -120,6 +100,84 @@ func Day(ctx context.Context, o DayOpts) string {
 	}
 	b.WriteString(extDay(ctx, o))
 	return b.String()
+}
+
+// fleetNotices open the reports fleet files itself in an agent's name
+// (internal/fleet: stuck, no report, recycle, re-surface, crash, admiral
+// exit). They are notices, not asks (ADR-130).
+var fleetNotices = []string{"stuck: ", "no report: ", "recycle: ", "resurface: ", "crashed ("}
+
+// FleetNotice reports whether body, a report's text after "state: ", is
+// one of fleet's own notices.
+func FleetNotice(body string) bool {
+	for _, p := range fleetNotices {
+		if strings.HasPrefix(body, p) {
+			return true
+		}
+	}
+	return strings.HasPrefix(body, "admiral ") && strings.Contains(body, "'s pane exited")
+}
+
+// writeWaiting is "Waiting on you" (ADR-130): every open ask, read or
+// unread, oldest first with its age; then agents whose screen waits; then
+// fleet's own unread notices under their own heading, not counted.
+func writeWaiting(b *strings.Builder, o DayOpts) {
+	type ask struct {
+		at   time.Time
+		line string
+	}
+	var asks []ask
+	listed := map[string]bool{}
+	for _, a := range o.Agents {
+		if a.Open {
+			asks = append(asks, ask{a.ReportAt, fmt.Sprintf("%s %s %s: %s", board.Age(o.Now.Sub(a.ReportAt)), a.Name, a.ReportState, clip(a.ReportHead, 160))})
+			listed[a.Name] = true
+		}
+	}
+	onBoard := map[string]bool{}
+	for _, a := range o.Agents {
+		onBoard[a.Name] = true
+	}
+	var notices []string
+	for _, m := range o.Unread {
+		st := m.State()
+		if st != "question" && st != "blocked" {
+			continue
+		}
+		body := strings.TrimSpace(strings.TrimPrefix(firstLine(m.Text), st+":"))
+		line := fmt.Sprintf("%s %s", board.Age(o.Now.Sub(m.T)), m.From)
+		switch {
+		case FleetNotice(body):
+			notices = append(notices, line+": "+clip(body, 160))
+		case !onBoard[m.From] && !listed[m.From]:
+			// A closed agent's unread ask: the board can't say it was answered.
+			asks = append(asks, ask{m.T, line + " " + st + ": " + clip(body, 160)})
+			listed[m.From] = true
+		}
+	}
+	sort.SliceStable(asks, func(i, j int) bool { return asks[i].at.Before(asks[j].at) })
+	b.WriteString("## Waiting on you")
+	if len(asks) > 0 {
+		fmt.Fprintf(b, " (%d)", len(asks))
+	}
+	b.WriteString("\n")
+	var wait []string
+	for _, a := range asks {
+		wait = append(wait, a.line)
+	}
+	for _, a := range o.Agents {
+		if !listed[a.Name] && needsYou[a.Status] {
+			wait = append(wait, fmt.Sprintf("%s is %s (%s)", a.Name, a.Status, Area(a.Dir)))
+		}
+	}
+	if len(o.Unread) > 0 {
+		wait = append(wait, fmt.Sprintf("%d unread reports (fleet reports / fleet_reports)", len(o.Unread)))
+	}
+	writeList(b, wait)
+	if len(notices) > 0 {
+		fmt.Fprintf(b, "### Fleet notices (%d)\n", len(notices))
+		writeList(b, notices)
+	}
 }
 
 func isFleetPrompt(title string) bool {

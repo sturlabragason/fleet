@@ -147,6 +147,7 @@ func (m *Model) header() string {
 	if by := strings.TrimSpace(m.badgeBy); by != "" && m.reports > 0 {
 		badge = "  " + by
 	}
+	badge += waitBadge(m.agents, m.now())
 	badge += extBadge(m)
 	if !m.offline.IsZero() { // steady text, no age ticking (ADR-110)
 		badge = "  " + offlineMark + " offline since " + m.offline.Format("15:04") + badge
@@ -179,6 +180,25 @@ func reportBadge(n int) string {
 		return "  " + reportMark + " 1 report"
 	}
 	return fmt.Sprintf("  %s %d reports", reportMark, n)
+}
+
+// waitBadge is "N waiting on you (oldest 6h)": the agents whose ask is
+// open (board.Agent.OpenAsk), "" when none. Fleet's own notices are not
+// counted. Plain text, no blink (ADR-81, ADR-130).
+func waitBadge(agents []*board.Agent, now time.Time) string {
+	n, oldest := 0, now
+	for _, a := range agents {
+		if a.OpenAsk() {
+			n++
+			if a.Report.At.Before(oldest) {
+				oldest = a.Report.At
+			}
+		}
+	}
+	if n == 0 {
+		return ""
+	}
+	return fmt.Sprintf("  %d waiting on you (oldest %s)", n, board.Age(now.Sub(oldest)))
 }
 
 // offlineMark opens the header's network-down note (ADR-110).

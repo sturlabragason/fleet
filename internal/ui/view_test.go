@@ -405,3 +405,20 @@ func TestCardSaysNoReport(t *testing.T) {
 		t.Fatalf("card should say idle · no report:\n%s", v)
 	}
 }
+
+// The header counts open asks only, with the oldest one's age (ADR-130).
+func TestWaitBadge(t *testing.T) {
+	now := time.Now()
+	ask := func(st string, ago time.Duration) *board.Agent {
+		return &board.Agent{Status: "idle", Report: &board.Report{State: st, At: now.Add(-ago)}}
+	}
+	answered := ask("question", 9*time.Hour)
+	answered.TurnAt = now
+	got := waitBadge([]*board.Agent{ask("question", time.Hour), ask("blocked", 6*time.Hour), ask("done", 7*time.Hour), answered}, now)
+	if got != "  2 waiting on you (oldest 6h)" {
+		t.Errorf("badge %q", got)
+	}
+	if got := waitBadge(nil, now); got != "" {
+		t.Errorf("no asks: %q", got)
+	}
+}

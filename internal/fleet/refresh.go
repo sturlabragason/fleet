@@ -168,6 +168,7 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 			f.DeliverWake()
 			f.sweepDone(out, now)
 			f.checkRecycle(out, now)
+			f.resurface(out, now)
 		}
 		f.sweepChecks(out)
 		f.reapDead(out, deadPanes, now, off)

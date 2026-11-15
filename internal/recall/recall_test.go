@@ -110,7 +110,7 @@ func TestDay(t *testing.T) {
 		Unread: []Msg{{From: "other", Text: "question: which palette?", T: now.Add(-time.Hour)}},
 	})
 	waiting, rest, _ := strings.Cut(out, "## Done since")
-	for _, want := range []string{"08:00 other: question: which palette?", "fp is waiting (shop)", "1 unread reports"} {
+	for _, want := range []string{"1h other question: which palette?", "fp is waiting (shop)", "1 unread reports"} {
 		if !strings.Contains(waiting, want) {
 			t.Errorf("waiting lacks %q:\n%s", want, out)
 		}

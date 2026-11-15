@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -179,17 +178,7 @@ func reportCellAt(a *board.Agent, now time.Time) string {
 }
 
 // ago is a report's age in its largest whole unit: 30s, 5m, 8h, 2d.
-func ago(d time.Duration) string {
-	switch {
-	case d < time.Minute:
-		return strconv.Itoa(max(int(d/time.Second), 0)) + "s"
-	case d < time.Hour:
-		return strconv.Itoa(int(d/time.Minute)) + "m"
-	case d < 48*time.Hour:
-		return strconv.Itoa(int(d/time.Hour)) + "h"
-	}
-	return strconv.Itoa(int(d/(24*time.Hour))) + "d"
-}
+func ago(d time.Duration) string { return board.Age(d) }
 
 // statusWord is the status column of fleet_status and fleet_squad_status:
 // an agent idle on an open question reads "waiting (question)" (ADR-90).

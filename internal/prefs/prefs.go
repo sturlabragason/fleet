@@ -133,6 +133,7 @@ type Prefs struct {
 	integrations map[string]Integration
 	ext          map[string]Integration
 	recycle      Recycle
+	resurface    time.Duration
 	usage        map[string]conf.Value
 }
 
@@ -195,7 +196,7 @@ func Load() (*Prefs, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	p := &Prefs{Path: path, defaults: Neutral(), profiles: map[string]map[string]conf.Value{}, maxWorking: DefaultMaxWorking, summary: DefaultSummary(), memory: DefaultMemory(), squad: DefaultSquad(), recycle: DefaultRecycle()}
+	p := &Prefs{Path: path, defaults: Neutral(), profiles: map[string]map[string]conf.Value{}, maxWorking: DefaultMaxWorking, summary: DefaultSummary(), memory: DefaultMemory(), squad: DefaultSquad(), recycle: DefaultRecycle(), resurface: DefaultResurface}
 	if sec, ok := d["defaults"]; ok {
 		p.defaults = applySpawn(p.defaults, sec)
 		if v := conf.Str(sec, "max_working"); v != "" {
@@ -219,6 +220,11 @@ func Load() (*Prefs, error) {
 	}
 	if sec, ok := d["memory"]; ok {
 		if p.memory, err = applyMemory(p.memory, sec, path); err != nil {
+			return nil, err
+		}
+	}
+	if sec, ok := d["reports"]; ok {
+		if p.resurface, err = applyReports(p.resurface, sec, path); err != nil {
 			return nil, err
 		}
 	}

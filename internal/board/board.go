@@ -109,6 +109,9 @@ type Agent struct {
 	// RecycleTold is when the owner was told to hand this agent's work to a
 	// fresh agent; once per agent (ADR-71).
 	RecycleTold time.Time `json:"recycle_told,omitempty"`
+	// ResurfacedAt is the At of the open ask whose long wait the owner was
+	// last told about; once per report, so a newer report re-arms it (ADR-130).
+	ResurfacedAt time.Time `json:"resurfaced_at,omitempty"`
 	// TurnAt is when the agent's latest turn began: the refresher's last
 	// switch to working after an idle of at least NoReportAfter (a shorter
 	// idle is a boundary inside one turn). It is what the user's agents are
@@ -289,12 +292,33 @@ func (a *Agent) Answered() bool {
 	return r != nil && (r.State == "question" || r.State == "blocked") && a.TurnAt.After(r.At)
 }
 
+// OpenAsk reports whether the agent's newest report is a question or
+// blocked report nobody has answered yet: no turn started and nothing was
+// sent to it since (ADR-90). It waits on the user whatever the screen shows
+// (ADR-130).
+func (a *Agent) OpenAsk() bool {
+	r := a.Report
+	return r != nil && (r.State == "question" || r.State == "blocked") && !a.TurnAt.After(r.At) && !a.PromptAt.After(r.At)
+}
+
+// Age is a duration in its largest whole unit: 30s, 5m, 8h, 2d.
+func Age(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return strconv.Itoa(max(int(d/time.Second), 0)) + "s"
+	case d < time.Hour:
+		return strconv.Itoa(int(d/time.Minute)) + "m"
+	case d < 48*time.Hour:
+		return strconv.Itoa(int(d/time.Hour)) + "h"
+	}
+	return strconv.Itoa(int(d/(24*time.Hour))) + "d"
+}
+
 // Asking reports whether the agent sits idle on an open question: its newest
 // report is a question, no turn has started since and fleet has sent it
 // nothing since (a send queued mid-turn is the answer too) (ADR-90, fleet#10).
 func (a *Agent) Asking() bool {
-	r := a.Report
-	return a.Status == "idle" && r != nil && r.State == "question" && !a.TurnAt.After(r.At) && !a.PromptAt.After(r.At)
+	return a.Status == "idle" && a.OpenAsk() && a.Report.State == "question"
 }
 
 // Shown is the status to draw: "waiting" for an agent Asking, else Status.
