@@ -65,3 +65,16 @@ same every time and lives in the table above).
 
 Change the injected text first, keep it to one line per rule, and update the table here. A repo
 adds its own rules in `.fleet/worker.md`, a user in `~/.fleet/worker.md` (DESIGN §4, ADR-22).
+
+## A weekly review
+
+Every rule above came out of a retro: a worker's `retro:` line, a correction the user had to
+repeat, a merge that conflicted. Fleet has no scheduler of its own, so a recurring review is an
+agent that a systemd user timer spawns. The timer runs a script that calls `fleet spawn --goal
+"weekly review" --result result-review-<date>.md review-<date> <profile> <dir> "<prompt>"`. The
+prompt points the agent at the evidence (`fleet day --since 7d`, `fleet reports --all`,
+`fleet spend --json`, `~/.fleet/decisions.log`, the tools' session logs, the week's `retro:`
+lines). It asks for ranked, cited changes: text changes on `fleet/` branches for review, code
+changes as issues. It also tells the agent never to merge or push. Use `Persistent=true` so a
+week the machine was off still runs at the next boot, and check `fleet ls --json` so the agent
+spawns at most once.

@@ -7,6 +7,8 @@ description: Cuts a fleet release - public check, fast-forward push of main, CI 
 
 You are the **designated publisher**. Nobody else pushes. The worker playbook forbids pushing; this
 skill is the exception a spawn prompt grants, and only for the version the user named.
+A feature agent merges into local main and reports `done`; it never tags. Release once per batch
+of merged changes, not once per merge: per-merge releases raced each other and cost retractions.
 
 Local-only, never committed: `PUBLISHING.md` (the original cutover record, in the main checkout and
 in `.gitignore`), `.git/info/public-emails`, `.git/info/public-deny`, `.git/info/public-allow`.
