@@ -156,3 +156,35 @@ func TestSessions(t *testing.T) {
 		t.Errorf("no cass: %v", err)
 	}
 }
+
+// Every open ask is listed, read or unread, oldest first with its age; an
+// answered one is not; fleet's own notices sit under their own heading and
+// are not counted (ADR-130).
+func TestDayListsEveryOpenAskOldestFirst(t *testing.T) {
+	t.Setenv("FLEET_CASS", "off")
+	now := time.Date(2026, 11, 13, 9, 0, 0, 0, time.Local)
+	out := Day(context.Background(), DayOpts{
+		Home: t.TempDir(), Since: now.Add(-24 * time.Hour), Now: now,
+		Agents: []Agent{
+			{Name: "new", Status: "idle", Open: true, ReportState: "question", ReportHead: "which palette?", ReportAt: now.Add(-35 * time.Minute)},
+			{Name: "old", Status: "idle", Open: true, ReportState: "blocked", ReportHead: "need the token", ReportAt: now.Add(-14 * time.Hour)},
+			{Name: "moved", Status: "working", ReportState: "question", ReportHead: "answered already", ReportAt: now.Add(-20 * time.Hour)},
+		},
+		Unread: []Msg{
+			{ID: "7", From: "grind", Text: "blocked: no report: the agent went idle mid-task", T: now.Add(-3 * time.Hour)},
+			{ID: "8", From: "new", Text: "question: which palette?", T: now.Add(-35 * time.Minute)},
+		},
+	})
+	waiting, _, _ := strings.Cut(out, "## Done since")
+	want := "## Waiting on you (2)\n- 14h old blocked: need the token\n- 35m new question: which palette?\n"
+	if !strings.HasPrefix(waiting, want) {
+		t.Fatalf("want asks oldest first:\n%s\ngot:\n%s", want, waiting)
+	}
+	notices, ok := strings.CutPrefix(waiting[strings.Index(waiting, "### Fleet notices"):], "### Fleet notices (1)\n")
+	if !ok || !strings.HasPrefix(notices, "- 3h grind: no report: the agent went idle mid-task\n") {
+		t.Errorf("fleet notices:\n%s", waiting)
+	}
+	if strings.Contains(waiting, "answered already") {
+		t.Errorf("an answered ask is listed:\n%s", waiting)
+	}
+}
