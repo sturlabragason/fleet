@@ -46,6 +46,9 @@ func TestTouchingIgnoresResultFiles(t *testing.T) {
 	gitT(repo, "add", ".")
 	gitT(repo, "commit", "-q", "-m", "seed")
 	gitT(repo, "worktree", "add", "-q", "-b", "fleet/a", other)
+	os.WriteFile(filepath.Join(other, "a.go"), []byte("package x\n"), 0o644) // unmerged work, so a is listed
+	gitT(other, "add", ".")
+	gitT(other, "commit", "-q", "-m", "a")
 	os.WriteFile(filepath.Join(other, "result.md"), []byte("done\n"), 0o644)
 
 	var code exitCode

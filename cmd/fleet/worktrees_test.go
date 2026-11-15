@@ -38,8 +38,8 @@ func TestWorktreesCommand(t *testing.T) {
 	b := &board.Board{Agents: map[string]*board.Agent{
 		"held": {Name: "held", Worktree: &board.Worktree{Path: worktree.Path(repo, "held")}},
 	}}
-	// A recently closed agent can still be resumed into its worktree; one
-	// closed past ClosedKeep cannot (ADR-113).
+	// A recently closed agent shows; its merged worktree can still go, since
+	// the work is in main (ADR-132). One closed past ClosedKeep doesn't show.
 	b.AddClosed(&board.Agent{Name: "shut", Worktree: &board.Worktree{Path: worktree.Path(repo, "shut")}}, "", time.Now())
 	b.LegacyClosed = map[string]*board.Closed{"old": {Agent: board.Agent{Name: "old", Worktree: &board.Worktree{Path: worktree.Path(repo, "old")}}, At: time.Now().Add(-board.ClosedKeep - time.Hour)}}
 
@@ -53,13 +53,13 @@ func TestWorktreesCommand(t *testing.T) {
 	}
 	want := map[string]string{"free": "", "held": "live", "shut": "closed", "old": ""}
 	for _, e := range es {
-		if e.Agent != want[e.Name] || e.Prunable != (want[e.Name] == "") {
+		if e.Agent != want[e.Name] || e.Prunable != (want[e.Name] != "live") {
 			t.Errorf("%+v", e)
 		}
 	}
 	out.Reset()
 	runWorktrees(b, nil, []string{"--repo", repo}, &out)
-	if !strings.Contains(out.String(), "4 worktrees") || !strings.Contains(out.String(), "2 can be pruned") {
+	if !strings.Contains(out.String(), "4 worktrees") || !strings.Contains(out.String(), "3 can be pruned") {
 		t.Errorf("table:\n%s", out.String())
 	}
 	out.Reset()
@@ -69,10 +69,11 @@ func TestWorktreesCommand(t *testing.T) {
 	if !strings.Contains(out.String(), "branch fleet/free deleted") {
 		t.Errorf("prune output: %s", out.String())
 	}
-	for _, n := range []string{"held", "shut"} {
-		if _, err := os.Stat(worktree.Path(repo, n)); err != nil {
-			t.Errorf("%s worktree removed", n)
-		}
+	if _, err := os.Stat(worktree.Path(repo, "held")); err != nil {
+		t.Error("held worktree removed")
+	}
+	if _, err := os.Stat(worktree.Path(repo, "shut")); err == nil {
+		t.Error("shut's merged worktree kept")
 	}
 
 	// A board.json or closed.json that cannot be read refuses a prune: it
@@ -88,10 +89,8 @@ func TestWorktreesCommand(t *testing.T) {
 			t.Errorf("list with broken %s: %v", file, err)
 		}
 	}
-	for _, n := range []string{"held", "shut"} {
-		if _, err := os.Stat(worktree.Path(repo, n)); err != nil {
-			t.Errorf("%s worktree removed with the board unreadable", n)
-		}
+	if _, err := os.Stat(worktree.Path(repo, "held")); err != nil {
+		t.Error("held worktree removed with the board unreadable")
 	}
 	if err := runWorktrees(b, nil, []string{"--repo", t.TempDir()}, &out); err == nil || !strings.Contains(err.Error(), "not in a git repo") {
 		t.Errorf("non-repo: %v", err)
