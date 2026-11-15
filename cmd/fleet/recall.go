@@ -12,6 +12,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/graph"
 	"github.com/sturlabragason/fleet/internal/mail"
 	"github.com/sturlabragason/fleet/internal/recall"
 )
@@ -44,12 +45,13 @@ func cmdRecall(f *fleet.Fleet, args []string) error {
 	limit := fs.Int("n", 10, "hits per section")
 	asJSON := fs.Bool("json", false, "print JSON")
 	refresh := fs.Bool("refresh", false, "update the cass index first")
+	dir := fs.String("C", ".", "repo whose commits answer a topic that names code")
 	words, err := parseInterspersed(fs, args)
 	if err != nil {
 		return err
 	}
 	if len(words) == 0 {
-		return errors.New("usage: fleet recall [--days N] [-n 10] [--refresh] [--json] <words...>")
+		return errors.New("usage: fleet recall [-C dir] [--days N] [-n 10] [--refresh] [--json] <words...>")
 	}
 	ctx := context.Background()
 	if *refresh {
@@ -58,7 +60,8 @@ func cmdRecall(f *fleet.Fleet, args []string) error {
 		}
 	}
 	bd := recall.FromBoard(f.Store.Load())
-	r := recall.Search(ctx, strings.Join(words, " "), recall.Opts{Home: f.Home, Days: *days, Limit: *limit, Agents: bd.Sessions})
+	repo, files := graph.Resolve(f.Home, *dir, words)
+	r := recall.Search(ctx, strings.Join(words, " "), recall.Opts{Home: f.Home, Days: *days, Limit: *limit, Agents: bd.Sessions, Repo: repo, Files: files})
 	if *asJSON {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")

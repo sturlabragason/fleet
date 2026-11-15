@@ -89,3 +89,67 @@ func TestCouplingText(t *testing.T) {
 		t.Fatalf("empty text = %q", got)
 	}
 }
+
+func TestFiles(t *testing.T) {
+	out := writeGraph(t, `{"nodes":[
+ {"id":"1","label":"Touching()","source_file":"internal/worktree/touching.go","file_type":"code"},
+ {"id":"2","label":"Changes()","source_file":"internal/worktree/worktree.go","file_type":"code"},
+ {"id":"3","label":".Changes()","source_file":"internal/ui/backend.go","file_type":"code"},
+ {"id":"4","label":"Model","source_file":"internal/ui/ui.go","file_type":"code"},
+ {"id":"5","label":"Changes","source_file":"DESIGN.md","file_type":"document"}],"links":[]}`)
+	cases := []struct {
+		name string
+		want []string
+	}{
+		{"Touching", []string{"internal/worktree/touching.go"}},
+		{"Changes", []string{"internal/ui/backend.go", "internal/worktree/worktree.go"}},
+		{"worktree.Changes", []string{"internal/worktree/worktree.go"}},
+		{"ui.Model", []string{"internal/ui/ui.go"}},
+		{"Backend.Changes", []string{"internal/ui/backend.go"}}, // Type.Method: methods only
+		{"touching.go", []string{"internal/worktree/touching.go"}},
+		{"internal/worktree", []string{"internal/worktree/touching.go", "internal/worktree/worktree.go"}},
+		{"internal/ui/ui.go", []string{"internal/ui/ui.go"}},
+		{"internal/work", nil},
+		{"Nope", nil},
+	}
+	for _, c := range cases {
+		got, err := Files(out, c.name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(got, c.want) {
+			t.Errorf("Files(%q) = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestResolve(t *testing.T) {
+	repo, wt := gitRepo(t)
+	home := t.TempDir()
+	write(t, filepath.Join(repo, "docs", "a.md"), "x")
+	if root, files := Resolve(home, wt, []string{"docs/a.md", "Touching", "merge"}); root != repo || !reflect.DeepEqual(files, []string{"docs/a.md"}) {
+		t.Errorf("no graph: root %q files %v, want only the path that exists", root, files)
+	}
+	out := Dir(home, repo)
+	write(t, filepath.Join(out, stampFile), goodStamp(repo))
+	write(t, filepath.Join(out, "graph.json"), `{"nodes":[
+ {"id":"1","label":"Touching()","source_file":"t.go","file_type":"code"},
+ {"id":"2","label":"merge()","source_file":"m.go","file_type":"code"}],"links":[]}`)
+	cases := []struct {
+		words []string
+		want  []string
+	}{
+		{[]string{"who", "touched", "Touching"}, []string{"t.go"}},
+		{[]string{"merge"}, nil}, // a plain word is not taken as code
+		{[]string{"Touching", "t.go"}, []string{"t.go"}},
+		{[]string{"docs/a.md"}, []string{"docs/a.md"}}, // a path the graph lacks
+	}
+	for _, c := range cases {
+		if _, got := Resolve(home, wt, c.words); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("Resolve(%v) = %v, want %v", c.words, got, c.want)
+		}
+	}
+	if root, files := Resolve(home, t.TempDir(), []string{"x.go"}); root != "" || files != nil {
+		t.Errorf("outside a repo: %q %v", root, files)
+	}
+}

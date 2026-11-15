@@ -6,7 +6,7 @@ README, a screenshot or anything in internal/theme.
 
 # Commands
 - Build: make build
-- Code graph: make graph (needs graphify, `uv tool install graphifyy`), then `export GRAPHIFY_OUT=$(bin/fleet graph --path)` and `graphify affected <file>` / `graphify path A B` before a wide search. Fleet-spawned agents get `GRAPHIFY_OUT` already. Never commit `graphify-out/`.
+- Code graph: make graph (needs graphify, `uv tool install graphifyy`), then `export GRAPHIFY_OUT=${GRAPHIFY_OUT:-$(fleet graph --path)}` and `graphify affected <file>` / `graphify path A B` before a wide search. Fleet-spawned agents get `GRAPHIFY_OUT` already; don't overwrite it. `fleet recall <file|pkg.Func>` lists who changed that code. Never commit `graphify-out/`.
 - Lint: make lint (golangci-lint v2 on lines changed since main, as CI gates it)
 - All tests: make test (non-blocking; failures go to ~/.fleet/logs/fleet.log)
 - One package: go test ./internal/<pkg>/

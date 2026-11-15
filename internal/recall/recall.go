@@ -40,16 +40,25 @@ type Opts struct {
 	// closed records), to name sessions whose dir does not.
 	Agents map[string]string
 	Now    time.Time
+	// Repo and Files ask "what touched these files" too (ADR-136): the
+	// repo's commits to them, see Touched.
+	Repo  string
+	Files []string
 }
 
 // Result is a search's answer. CassErr is ErrNoCass when cass is missing.
 type Result struct {
-	Topic    string        `json:"topic"`
-	Fleet    []Hit         `json:"fleet"`
-	Sessions []Hit         `json:"sessions"`
-	CassErr  string        `json:"cass_error,omitempty"`
-	IndexAge time.Duration `json:"index_age_ns,omitempty"`
-	noCass   bool
+	Topic    string `json:"topic"`
+	Fleet    []Hit  `json:"fleet"`
+	Sessions []Hit  `json:"sessions"`
+	CassErr  string `json:"cass_error,omitempty"`
+	// CodeFiles are the files the topic resolved to, Code the commits
+	// that changed them (ADR-136).
+	CodeFiles []string      `json:"code_files,omitempty"`
+	Code      []Hit         `json:"code,omitempty"`
+	CodeErr   string        `json:"code_error,omitempty"`
+	IndexAge  time.Duration `json:"index_age_ns,omitempty"`
+	noCass    bool
 }
 
 // Search looks topic up in fleet's records and, through cass, in the
@@ -61,7 +70,14 @@ func Search(ctx context.Context, topic string, o Opts) Result {
 	if o.Now.IsZero() {
 		o.Now = time.Now()
 	}
-	r := Result{Topic: topic, Fleet: searchFleet(topic, o)}
+	r := Result{Topic: topic, Fleet: searchFleet(topic, o), CodeFiles: o.Files}
+	if len(o.Files) > 0 {
+		code, err := Touched(ctx, o.Repo, o.Files, Owners{Reports: Reports(o.Home), ADR: adrOwners(o.Home)}, o.Limit)
+		if err != nil {
+			r.CodeErr = err.Error()
+		}
+		r.Code = code
+	}
 	hits, err := cassSearch(ctx, topic, o.Days, o.Limit)
 	switch {
 	case errors.Is(err, ErrNoCass):
@@ -278,6 +294,7 @@ func clip(s string, n int) string {
 // Format renders r as text for the terminal and the admiral.
 func (r Result) Format() string {
 	var b strings.Builder
+	r.formatCode(&b)
 	fmt.Fprintf(&b, "## fleet reports and notes: %d\n", len(r.Fleet))
 	if len(r.Fleet) == 0 {
 		b.WriteString("none\n")

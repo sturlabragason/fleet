@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/graph"
 	"github.com/sturlabragason/fleet/internal/recall"
 )
 
@@ -21,6 +22,13 @@ func (s *Server) recall(a args) (string, error) {
 		}
 		return recall.DayFor(ctx, s.F.Home, b, s.F.Mail().Peek(s.box()), time.Now().AddDate(0, 0, -days)), nil
 	}
-	r := recall.Search(ctx, a.Query, recall.Opts{Home: s.F.Home, Days: a.Days, Limit: a.Limit, Agents: recall.FromBoard(b).Sessions})
+	o := recall.Opts{Home: s.F.Home, Days: a.Days, Limit: a.Limit, Agents: recall.FromBoard(b).Sessions}
+	if a.Dir != "" {
+		if err := absDir(a.Dir); err != nil {
+			return "", err
+		}
+		o.Repo, o.Files = graph.Resolve(s.F.Home, a.Dir, strings.Fields(a.Query))
+	}
+	r := recall.Search(ctx, a.Query, o)
 	return r.Format(), nil
 }
