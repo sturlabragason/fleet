@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/graph"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/playbook"
 	"github.com/sturlabragason/fleet/internal/worktree"
@@ -73,6 +75,7 @@ func touching(args []string) (int, error) {
 	dir := fs.String("C", ".", "directory inside the repo")
 	asJSON := fs.Bool("json", false, "JSON output")
 	all := fs.Bool("all", false, "also list worktrees whose work is already in main")
+	withGraph := fs.Bool("graph", false, "also code dependencies between the files, from the code graph")
 	if err := fs.Parse(args); err != nil {
 		return 0, err
 	}
@@ -81,6 +84,9 @@ func touching(args []string) (int, error) {
 		return 0, err
 	}
 	files := fs.Args()
+	if *withGraph {
+		return touchingGraph(context.Background(), *dir, cwd, files, *asJSON)
+	}
 	ws, overlap, left, err := worktree.Touching(context.Background(), *dir, cwd, files, resultFiles(), *all)
 	if err != nil {
 		return 0, err
@@ -96,6 +102,55 @@ func touching(args []string) (int, error) {
 	}
 	if overlap {
 		return 1, nil
+	}
+	return 0, nil
+}
+
+// touchingGraph is `fleet touching --graph` (ADR-136): the other worktrees
+// whose changes overlap the files, or are one code dependency away from
+// them, with the merge order that follows. Without files it checks this
+// worktree's own changes. The exit code stays the file-overlap answer.
+func touchingGraph(ctx context.Context, dir, cwd string, files []string, asJSON bool) (int, error) {
+	_, out, ok := graph.Find(logx.Home(), dir)
+	if !ok {
+		return 0, errors.New("no code graph for this repo; run fleet graph")
+	}
+	d, err := graph.LoadDeps(out)
+	if err != nil {
+		return 0, err
+	}
+	top, err := worktree.TopLevel(dir)
+	if err != nil {
+		return 0, err
+	}
+	ignore := resultFiles()
+	mine := make([]string, len(files))
+	for i, f := range files {
+		mine[i] = worktree.RepoRel(top, cwd, f)
+	}
+	if len(files) == 0 {
+		if mine, err = worktree.Changes(top, ignore...); err != nil {
+			return 0, fmt.Errorf("this worktree's changes: %w", err)
+		}
+	}
+	ws, _, _, err := worktree.Touching(ctx, dir, cwd, nil, ignore, false)
+	if err != nil {
+		return 0, err
+	}
+	cs := graph.Couple(d, mine, ws)
+	if asJSON {
+		if cs == nil {
+			cs = []graph.Coupling{}
+		}
+		b, _ := json.MarshalIndent(cs, "", "  ")
+		fmt.Println(string(b))
+	} else {
+		fmt.Print(graph.CouplingText(cs))
+	}
+	for _, c := range cs {
+		if c.Overlap != nil {
+			return 1, nil
+		}
 	}
 	return 0, nil
 }
