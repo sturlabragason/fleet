@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -163,5 +164,37 @@ func TestGuardParksIdleAgentBurningCPU(t *testing.T) {
 	}
 	if st := b.Agents["busy"].Status; st == string(status.Parked) {
 		t.Error("a working agent was parked for its CPU")
+	}
+}
+
+func TestReapPlanSparesDesktopApps(t *testing.T) {
+	old := isGUI
+	isGUI = func(pid int) bool { return pid == 21 || pid == 24 }
+	t.Cleanup(func() { isGUI = old })
+	const tag = "a@/h"
+	info := func(pid, ppid int, comm string) proc.Info {
+		return proc.Info{Proc: proc.Proc{PID: pid, Start: 1}, PPID: ppid, Comm: comm, Owner: tag}
+	}
+	// A leftover shell that ran `soffice deck.pptx &` and a build, with
+	// LibreOffice's helper under it (no display library of its own), and
+	// a viewer xdg-open reparented away with its helper.
+	ps := []proc.Info{info(20, 1, "bash"), info(21, 20, "oosplash"), info(22, 21, "soffice.bin"), info(23, 20, "sleep"),
+		info(24, 1, "eog"), info(25, 24, "glycin-loader")}
+	var orph []Orphan
+	for _, p := range ps {
+		orph = append(orph, Orphan{Agent: "a", PID: p.PID, Comm: p.Comm, proc: p, GUI: isGUI(p.PID)})
+	}
+	kill, by := reapPlan(orph, ps, 0)
+	var got []int
+	for _, p := range kill {
+		got = append(got, p.PID)
+	}
+	slices.Sort(got)
+	got = slices.Compact(got)
+	if want := []int{20, 23}; !slices.Equal(got, want) {
+		t.Errorf("killed %v, want %v: a desktop app or its children were reaped", got, want)
+	}
+	if len(by["a"]) != 2 {
+		t.Errorf("reported %+v, want the shell and the build only", by["a"])
 	}
 }

@@ -45,8 +45,10 @@ func stat(pid int) (ppid int, state byte, start uint64, ok bool) {
 	return ppid, f[0][0], start, true
 }
 
-// Tree returns pid and all its descendants, pid first. It is empty when
-// pid is not running or /proc can't be read.
+// Tree returns pid and all its descendants, pid first, leaving out a GUI
+// descendant and everything below it: a desktop app the agent opened for
+// the user outlives the agent. It is empty when pid is not running or
+// /proc can't be read.
 func Tree(pid int) []Proc {
 	_, _, st, ok := stat(pid)
 	if pid <= 0 || !ok {
@@ -65,7 +67,11 @@ func Tree(pid int) []Proc {
 	}
 	out := []Proc{{pid, st}}
 	for i := 0; i < len(out); i++ {
-		out = append(out, kids[out[i].PID]...)
+		for _, k := range kids[out[i].PID] {
+			if !GUI(k.PID) {
+				out = append(out, k)
+			}
+		}
 	}
 	return out
 }

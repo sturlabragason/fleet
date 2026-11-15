@@ -23,7 +23,8 @@ import (
 // housekeeping poll reads /proc and:
 //   - kills processes tagged with an agent's owner tag (FLEET_OWNER) whose
 //     agent has no live pane: what a close, park, crash or admiral restart
-//     left behind after the processes left the pane's tree;
+//     left behind after the processes left the pane's tree, except a
+//     desktop app it opened for the user (proc.GUI);
 //   - parks an agent whose own processes hold more than [memory] agent_max
 //     (RSS + swap), whatever its status;
 //   - parks an idle agent whose own processes burn more than
@@ -68,6 +69,9 @@ type Orphan struct {
 	// Spared: a daemon some command of the agent started (a browser, an
 	// ssh master) that the reaper leaves alone unless it is over agent_max.
 	Spared bool
+	// GUI: a desktop app the agent opened for the user (xdg-open,
+	// soffice, a browser window). Never killed: it holds the user's work.
+	GUI bool
 	// Docs: the documents a LibreOffice process has open (fleet doctor
 	// only). It holds the user's own documents too, so it is never a
 	// process to kill blind.
@@ -111,7 +115,7 @@ func (f *Fleet) orphans(ps []proc.Info, roots map[string]int) []Orphan {
 			continue
 		}
 		out = append(out, Orphan{Agent: name, PID: p.PID, Comm: p.Comm, Mem: p.RSS, proc: p,
-			Spared: p.Daemon && p.Comm != "fleet"})
+			Spared: p.Daemon && p.Comm != "fleet", GUI: isGUI(p.PID)})
 	}
 	return out
 }
@@ -164,34 +168,13 @@ func (f *Fleet) guardProcs(as []*board.Agent, now time.Time) {
 	}
 }
 
+// isGUI is proc.GUI; a var so tests can fake it.
+var isGUI = proc.GUI
+
 // reapOrphans kills orphans and their descendants with the same tag, and
-// tells the admiral of each agent once per pass. A spared daemon is killed
-// only over capMem (0: never).
+// tells the admiral of each agent once per pass.
 func (f *Fleet) reapOrphans(orph []Orphan, ps []proc.Info, capMem uint64) {
-	kids := map[int][]proc.Info{}
-	for _, p := range ps {
-		kids[p.PPID] = append(kids[p.PPID], p)
-	}
-	by := map[string][]Orphan{}
-	var kill []proc.Proc
-	for _, o := range orph {
-		o.Mem += proc.Swap(o.PID)
-		if o.Spared && (capMem == 0 || o.Mem <= capMem) {
-			continue
-		}
-		by[o.Agent] = append(by[o.Agent], o)
-		// Processes as scanned, so a reused pid is never signalled; an
-		// untagged or other-tagged descendant (a user's shell in a tmux
-		// server the agent started) is not the agent's.
-		for q := []proc.Info{o.proc}; len(q) > 0; q = q[1:] {
-			kill = append(kill, q[0].Proc)
-			for _, k := range kids[q[0].PID] {
-				if k.Owner == o.proc.Owner {
-					q = append(q, k)
-				}
-			}
-		}
-	}
+	kill, by := reapPlan(orph, ps, capMem)
 	if len(kill) == 0 {
 		return
 	}
@@ -212,6 +195,49 @@ func (f *Fleet) reapOrphans(orph []Orphan, ps []proc.Info, capMem uint64) {
 		f.tellAdmiralBox(f.AdmiralBoxOf(n), fmt.Sprintf("killed %d leftover process(es) of %s that outlived its pane (%s, %s).",
 			len(pids), n, strings.Join(pids, ", "), park.Bytes(mem)))
 	}
+}
+
+// reapPlan picks the processes reapOrphans kills, by agent. A spared
+// daemon is killed only over capMem (0: never). A GUI app and its subtree
+// are never killed.
+func reapPlan(orph []Orphan, ps []proc.Info, capMem uint64) ([]proc.Proc, map[string][]Orphan) {
+	kids := map[int][]proc.Info{}
+	for _, p := range ps {
+		kids[p.PPID] = append(kids[p.PPID], p)
+	}
+	// A GUI app's own helpers (a browser's zygote) need not map a display
+	// library: the app's whole subtree stays.
+	gui := map[int]bool{}
+	for _, o := range orph {
+		for q := []proc.Info{o.proc}; o.GUI && len(q) > 0; q = q[1:] {
+			gui[q[0].PID] = true
+			q = append(q, kids[q[0].PID]...)
+		}
+	}
+	by := map[string][]Orphan{}
+	var kill []proc.Proc
+	for _, o := range orph {
+		if gui[o.PID] {
+			continue
+		}
+		o.Mem += proc.Swap(o.PID)
+		if o.Spared && (capMem == 0 || o.Mem <= capMem) {
+			continue
+		}
+		by[o.Agent] = append(by[o.Agent], o)
+		// Processes as scanned, so a reused pid is never signalled; an
+		// untagged or other-tagged descendant (a user's shell in a tmux
+		// server the agent started) is not the agent's.
+		for q := []proc.Info{o.proc}; len(q) > 0; q = q[1:] {
+			kill = append(kill, q[0].Proc)
+			for _, k := range kids[q[0].PID] {
+				if k.Owner == o.proc.Owner && !isGUI(k.PID) {
+					q = append(q, k)
+				}
+			}
+		}
+	}
+	return kill, by
 }
 
 // agentMax is the per-agent memory cap in bytes; 0 = no cap.

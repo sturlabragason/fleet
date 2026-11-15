@@ -304,16 +304,21 @@ func checkOrphans(list func() ([]fleet.Orphan, error)) doctorCheck {
 		for _, o := range orph {
 			mem += o.Mem
 			left := ""
-			if o.Spared {
+			switch {
+			case o.GUI:
+				left = ", a desktop app left alone"
+			case o.Spared:
 				left = ", a daemon left alone"
 			}
 			if len(o.Docs) > 0 {
 				left += ", documents open: " + strings.Join(o.Docs, ", ")
 			}
 			ps = append(ps, fmt.Sprintf("%s pid %d (%s, %s%s)", o.Agent, o.PID, o.Comm, park.Bytes(o.Mem), left))
-			if proc.Office(o.Comm) {
+			switch {
+			case proc.Office(o.Comm):
 				office = append(office, strconv.Itoa(o.PID))
-			} else {
+			case o.GUI: // the user's window: nothing to fix
+			default:
 				kill = append(kill, strconv.Itoa(o.PID))
 			}
 		}

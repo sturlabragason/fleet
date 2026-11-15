@@ -7,6 +7,7 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
 ## 2026-11-15
+- Closing or parking an agent no longer kills a desktop app it opened for you (a LibreOffice deck from `xdg-open`, a browser window, an image viewer); `fleet doctor` lists it as a desktop app left alone (ADR-142)
 - Closing or parking an agent now drops its page cache from the agent's cgroup at once, so it no longer counts against a slice's `MemoryHigh` until something reclaims it; `fleet doctor` names the documents a leftover LibreOffice holds open and says to close them rather than kill it (ADR-139)
 - `fleet merge` adds a `Fleet-Agent: <name>` trailer to every commit it lands for `fleet/<name>`, and `fleet recall` uses it to name who touched the code (ADR-137)
 - The admiral's `fleet_touching` takes `graph: true` for the same answer as `fleet touching --graph`: worktrees changing code one dependency away from your files (ADR-136)
