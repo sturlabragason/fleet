@@ -15,8 +15,6 @@ import (
 
 // fakeAdmiral is an admiral pane with an input box: TypeText appends to the
 // box, Enter submits it, BSpace deletes one rune.
-//
-//go:fix inline
 type fakeAdmiral struct {
 	mu        sync.Mutex
 	idle      *bool
