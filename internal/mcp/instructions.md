@@ -44,7 +44,7 @@ Use only the `fleet` MCP tools: never bash, tmux or fleet source code for fleet 
 | `fleet_note` | One line to the decisions and RAID log; `pin: true` for a standing rule. |
 | `fleet_adr` | `claim` an ADR number per agent before spawning; `list` the claims. |
 | `fleet_touching` | Which worktrees change which files: merge order, fewer touched files first. |
-| `fleet_worktrees` | A repo's leftover agent worktrees; `prune` ✱ removes the merged, clean ones. |
+| `fleet_worktrees` | A repo's leftover agent worktrees; `prune` ✱ removes the merged ones that are clean or hold only result files (copied to the results dir first). |
 | `fleet_branches` | A repo's `fleet/` branches on origin; `prune` ✱ deletes the merged ones from origin. |
 | `fleet_recall` | "Where was I on X?", "what did we decide about X?", "what happened today?": reports, notes and sessions, no spawn; no query is the day digest. |
 | `fleet_changes` | Running version and latest changelog: "what's new?", or after `[fleet updated]`. |

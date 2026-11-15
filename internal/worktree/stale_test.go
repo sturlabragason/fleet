@@ -17,9 +17,11 @@ func staleByName(es []Entry) map[string]Entry {
 
 // staleRepo makes: merged clean (a), unmerged commit (b), merged with an
 // untracked file (c), merged with only a result.md (d), all under repo.wt/.
+// The fleet home is a temp dir, so a prune archives there.
 func staleRepo(t *testing.T) string {
 	t.Helper()
 	t.Setenv("FLEET_CONFIG", filepath.Join(t.TempDir(), "none.toml"))
+	t.Setenv("FLEET_HOME", t.TempDir())
 	repo := testRepo(t)
 	for _, n := range []string{"a", "b", "c", "d"} {
 		run(t, repo, "worktree", "add", "-q", "-b", "fleet/"+n, Path(repo, n))
@@ -53,17 +55,17 @@ func TestStaleListAndPrune(t *testing.T) {
 	if c := m["c"]; c.Merged == nil || !*c.Merged || !c.Dirty || c.Prunable || c.ResultOnly {
 		t.Errorf("c: %+v", c)
 	}
-	if d := m["d"]; !d.Dirty || !d.ResultOnly || d.Prunable {
+	if d := m["d"]; !d.Dirty || !d.ResultOnly || !d.Prunable {
 		t.Errorf("d: %+v", d)
 	}
 	rs := Prune(main, es)
-	if len(rs) != 1 || !rs[0].Removed || rs[0].Branch != "fleet/a" {
+	if len(rs) != 2 || !rs[0].Removed || rs[0].Branch != "fleet/a" || !rs[1].Removed {
 		t.Fatalf("prune: %+v", rs)
 	}
 	if _, err := os.Stat(Path(repo, "a")); !os.IsNotExist(err) {
 		t.Error("a still on disk")
 	}
-	for _, n := range []string{"b", "c", "d"} {
+	for _, n := range []string{"b", "c"} {
 		if _, err := os.Stat(Path(repo, n)); err != nil {
 			t.Errorf("%s removed: %v", n, err)
 		}
@@ -122,7 +124,7 @@ func TestStaleGone(t *testing.T) {
 	if !a.Gone || !a.Prunable {
 		t.Fatalf("a: %+v", a)
 	}
-	if rs := Prune(main, es); len(rs) != 1 || !rs[0].Removed {
+	if rs := Prune(main, es); len(rs) == 0 || !rs[0].Entry.Gone || !rs[0].Removed {
 		t.Fatalf("prune: %+v", rs)
 	}
 	es, _ = Stale(main, repo, nil)
@@ -145,6 +147,7 @@ func TestHumanSize(t *testing.T) {
 func patchRepo(t *testing.T) string {
 	t.Helper()
 	t.Setenv("FLEET_CONFIG", filepath.Join(t.TempDir(), "none.toml"))
+	t.Setenv("FLEET_HOME", t.TempDir())
 	repo := testRepo(t)
 	p := Path(repo, "p")
 	run(t, repo, "worktree", "add", "-q", "-b", "fleet/p", p)
@@ -192,9 +195,9 @@ func TestStaleMergedByPatchID(t *testing.T) {
 // after the file is copied to <fleet home>/results/<repo>/<worktree>/, never
 // over an earlier copy; any other untracked file still refuses.
 func TestPruneArchivesResultFile(t *testing.T) {
+	repo := staleRepo(t)
 	home := t.TempDir()
 	t.Setenv("FLEET_HOME", home)
-	repo := staleRepo(t)
 	main, _ := Main(repo)
 	want := []byte("the handoff\n")
 	os.WriteFile(filepath.Join(Path(repo, "d"), "result.md"), want, 0o644)

@@ -22,31 +22,6 @@ type RemoteBranch struct {
 	Prunable bool   `json:"prunable"`
 }
 
-// Merged reports whether every commit of rev is in the local main (or
-// master) or its remote-tracking copy, either as an ancestor or as an equal
-// patch: `fleet merge` rebases before it merges, so the pushed copy of a
-// merged branch is usually not an ancestor of main (ADR-87). Any git error
-// reads as not merged.
-func Merged(dir, rev string) bool {
-	base := baseBranch(dir)
-	if base == "" {
-		return false
-	}
-	bases := []string{base}
-	if _, err := git(dir, "rev-parse", "--verify", "--quiet", "refs/remotes/"+Remote+"/"+base); err == nil {
-		bases = append(bases, "refs/remotes/"+Remote+"/"+base)
-	}
-	for _, b := range bases {
-		ctx, cancel := context.WithTimeout(context.Background(), staleTimeout)
-		out, err := gitCtx(ctx, dir, "cherry", b, rev)
-		cancel()
-		if err == nil && !strings.Contains("\n"+out, "\n+") {
-			return true
-		}
-	}
-	return false
-}
-
 // RemoteBranches fetches the remote with --prune and lists its fleet/
 // branches. agents maps a branch to the board state ("live" or "parked") of
 // the agent on it; those are never prunable.
@@ -69,9 +44,14 @@ func RemoteBranches(main string, agents map[string]string) ([]RemoteBranch, erro
 		}
 		b := RemoteBranch{Branch: strings.TrimPrefix(ref, "refs/remotes/"+Remote+"/"), Sha: sha}
 		b.Agent = agents[b.Branch]
-		b.Merged = Merged(main, sha)
-		b.Prunable = b.Merged && b.Agent == ""
 		bs = append(bs, b)
+	}
+	shas := make([]string, len(bs))
+	for i, b := range bs {
+		shas[i] = b.Sha
+	}
+	for i, m := range MergedAll(main, shas) {
+		bs[i].Merged, bs[i].Prunable = m, m && bs[i].Agent == ""
 	}
 	return bs, nil
 }

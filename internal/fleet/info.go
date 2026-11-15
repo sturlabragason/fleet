@@ -28,7 +28,7 @@ type Git struct {
 	Branch string // current branch ("" when detached)
 	Dirty  int    // paths in `git status --porcelain` not ignored (untracked files one by one when ignoring); -1 if it failed
 	Base   string // local main, or master when there is no main ("" = neither)
-	Merged bool   // HEAD is an ancestor of Base
+	Merged bool   // HEAD's work is in Base, by ancestry or equal patch (worktree.Merged)
 	Ahead  int    // commits on HEAD not on Base
 }
 
@@ -75,8 +75,7 @@ func GitInfo(dir string, ignore ...string) Git {
 	if g.Base == "" {
 		return g
 	}
-	_, err := git("merge-base", "--is-ancestor", "HEAD", g.Base)
-	g.Merged = err == nil
+	g.Merged = worktree.Merged(dir, "HEAD")
 	if out, err := git("rev-list", "--count", g.Base+"..HEAD"); err == nil {
 		g.Ahead, _ = strconv.Atoi(out)
 	}

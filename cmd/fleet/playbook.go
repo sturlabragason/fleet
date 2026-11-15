@@ -72,6 +72,7 @@ func touching(args []string) (int, error) {
 	fs := flag.NewFlagSet("touching", flag.ContinueOnError)
 	dir := fs.String("C", ".", "directory inside the repo")
 	asJSON := fs.Bool("json", false, "JSON output")
+	all := fs.Bool("all", false, "also list worktrees whose work is already in main")
 	if err := fs.Parse(args); err != nil {
 		return 0, err
 	}
@@ -80,7 +81,7 @@ func touching(args []string) (int, error) {
 		return 0, err
 	}
 	files := fs.Args()
-	ws, overlap, err := worktree.Touching(context.Background(), *dir, cwd, files, resultFiles())
+	ws, overlap, left, err := worktree.Touching(context.Background(), *dir, cwd, files, resultFiles(), *all)
 	if err != nil {
 		return 0, err
 	}
@@ -91,7 +92,7 @@ func touching(args []string) (int, error) {
 		b, _ := json.MarshalIndent(ws, "", "  ")
 		fmt.Println(string(b))
 	} else {
-		fmt.Print(worktree.TouchingText(ws, len(files) > 0))
+		fmt.Print(worktree.TouchingText(ws, len(files) > 0, left))
 	}
 	if overlap {
 		return 1, nil

@@ -7,11 +7,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/logx"
@@ -26,6 +28,7 @@ type Worktree struct {
 	Bare     bool     `json:"-"`
 	Prunable bool     `json:"-"`
 	Files    []string `json:"files"`
+	Merged   bool     `json:"merged,omitempty"` // its work is in main (Merged); only `fleet touching --all` lists one with no tracked changes
 }
 
 // Parse reads `git worktree list --porcelain` output.
@@ -136,7 +139,13 @@ func gitCtx(ctx context.Context, dir string, args ...string) (string, error) {
 // gitKeep is gitCtx that also returns stdout when git fails, for commands
 // that report per item and exit non-zero when one fails (git push).
 func gitKeep(ctx context.Context, dir string, args ...string) (string, error) {
+	return gitIn(ctx, dir, nil, args...)
+}
+
+// gitIn is gitKeep with in as git's stdin.
+func gitIn(ctx context.Context, dir string, in io.Reader, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
+	cmd.Stdin = in
 	for _, e := range os.Environ() {
 		switch k, _, _ := strings.Cut(e, "="); k {
 		case "GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE":
@@ -185,32 +194,94 @@ func CommonDir(dir string) (string, error) {
 // returns an error rather than a list that might wrongly look clear. ignore
 // is passed on to Changes.
 func Others(dir string, ignore ...string) ([]Worktree, error) {
-	return others(context.Background(), dir, ignore...)
+	ws, _, err := others(context.Background(), dir, true, ignore...)
+	return ws, err
 }
 
-func others(ctx context.Context, dir string, ignore ...string) ([]Worktree, error) {
+// others is Others; with all false it leaves out the worktrees whose work is
+// in main (Merged) and whose only uncommitted changes are result files
+// and counts them in left (ADR-132). Each worktree is read concurrently.
+func others(ctx context.Context, dir string, all bool, ignore ...string) (res []Worktree, left int, err error) {
 	top, err := topLevel(ctx, dir)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	out, err := gitCtx(ctx, dir, "worktree", "list", "--porcelain")
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	var res []Worktree
+	var ws []Worktree
 	for _, w := range Parse(out) {
-		if w.Bare || w.Prunable || realPath(w.Path) == top {
-			continue
+		if !w.Bare && !w.Prunable && realPath(w.Path) != top {
+			ws = append(ws, w)
 		}
-		if w.Files, err = changes(ctx, w.Path, ignore...); err != nil {
-			logx.For("worktree").Warn("changes unreadable", "worktree", w.Path, "err", err)
-			return nil, fmt.Errorf("worktree %s: %w", w.Path, err)
+	}
+	heads := make([]string, len(ws))
+	for i, w := range ws {
+		heads[i] = w.Head
+	}
+	merged := mergedAll(ctx, dir, heads)
+	skip := make([]bool, len(ws))
+	errs := make([]error, len(ws))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 8)
+	for i := range ws {
+		wg.Add(1)
+		go func(w *Worktree, i int) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			if w.Merged = merged[i]; w.Merged && !all && onlyResults(ctx, w.Path, ignore) {
+				skip[i] = true
+				return
+			}
+			w.Files, errs[i] = changes(ctx, w.Path, ignore...)
+		}(&ws[i], i)
+	}
+	wg.Wait()
+	for i, w := range ws {
+		if errs[i] != nil {
+			logx.For("worktree").Warn("changes unreadable", "worktree", w.Path, "err", errs[i])
+			return nil, 0, fmt.Errorf("worktree %s: %w", w.Path, errs[i])
 		}
-		if len(w.Files) > 0 {
+		if skip[i] {
+			left++
+		} else if len(w.Files) > 0 {
 			res = append(res, w)
 		}
 	}
-	return res, nil
+	return res, left, nil
+}
+
+// onlyResults reports whether wt's uncommitted changes are at most untracked
+// result files: those in ignore or a `result*.md` at its root. A new file an
+// agent has not staged yet still counts, so a merged worktree at main's HEAD
+// with fresh work is never left out of `fleet touching`.
+func onlyResults(ctx context.Context, wt string, ignore []string) bool {
+	out, err := gitCtx(ctx, wt, "status", "--porcelain", "-z", "--untracked-files=all")
+	if err != nil {
+		return false
+	}
+	var skip map[string]bool
+	for _, r := range strings.Split(out, "\x00") {
+		if r == "" {
+			continue
+		}
+		if !strings.HasPrefix(r, "?? ") {
+			return false
+		}
+		f := r[3:]
+		if root, _ := filepath.Match("result*.md", f); root {
+			continue
+		}
+		if skip == nil {
+			skip = Ignored(wt, ignore)
+		}
+		if !skip[f] {
+			return false
+		}
+	}
+	return true
 }
 
 // Changes returns the repo-relative files a worktree changes: those differing

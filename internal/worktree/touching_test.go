@@ -2,6 +2,8 @@ package worktree
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -23,6 +25,21 @@ func TestTouchingLeavesOutMergedWorktrees(t *testing.T) {
 	if _, overlap, _, _ := Touching(context.Background(), repo, repo, []string{"p.go"}, nil, false); !overlap {
 		t.Error("x changes p.go too: want an overlap")
 	}
+	// A merged worktree with a new, unstaged file still shows: fresh work.
+	fresh := Path(repo, "fresh")
+	run(t, repo, "worktree", "add", "-q", "-b", "fleet/fresh", fresh)
+	os.WriteFile(filepath.Join(fresh, "new.go"), []byte("n\n"), 0o644)
+	os.WriteFile(filepath.Join(fresh, "result.md"), []byte("r\n"), 0o644)
+	ws, _, left, _ = Touching(context.Background(), repo, repo, []string{"new.go"}, nil, false)
+	if len(ws) != 1 || ws[0].Branch != "fleet/fresh" || left != 1 {
+		t.Errorf("fresh work: %+v, left %d", ws, left)
+	}
+	os.Remove(filepath.Join(fresh, "new.go"))
+	ws, _, left, _ = Touching(context.Background(), repo, repo, nil, nil, false)
+	if len(ws) != 1 || left != 2 {
+		t.Errorf("fresh with only result.md: %+v, left %d; want it left out", ws, left)
+	}
+	run(t, repo, "worktree", "remove", "--force", fresh)
 	ws, _, left, _ = Touching(context.Background(), repo, repo, nil, nil, true)
 	merged := map[string]bool{}
 	for _, w := range ws {
@@ -32,4 +49,3 @@ func TestTouchingLeavesOutMergedWorktrees(t *testing.T) {
 		t.Errorf("--all: %+v, left %d", ws, left)
 	}
 }
-

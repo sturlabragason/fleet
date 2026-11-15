@@ -28,7 +28,7 @@ var cliToolDefs = []tool{
 		"name": str("agent name"), "acp": map[string]any{"type": "boolean", "description": "move it back from tmux to the acp host"}})},
 	{"fleet_touching", "Files other worktrees of a repo change (merge order: fewer touched files merges first). With files, only the overlaps.", obj([]string{"dir"}, map[string]any{
 		"dir": str("a directory inside the repo (absolute)"), "files": strList("files to check for overlap, relative to dir")})},
-	{"fleet_worktrees", "A repo's leftover agent worktrees under <repo>.wt/: size, merged, dirty, the agent holding each. prune=true removes the merged, clean ones no live, parked or recently closed (resumable) agent holds (git refuses uncommitted work; never forced): ask the user first, confirmed=true only after an explicit yes.", obj([]string{"dir"}, map[string]any{
+	{"fleet_worktrees", "A repo's leftover agent worktrees under <repo>.wt/: size, merged, dirty, the agent holding each. prune=true removes the merged ones no live or parked agent holds that are clean or hold only untracked result files, which it copies to <fleet home>/results/ first (git refuses other uncommitted work; never forced): ask the user first, confirmed=true only after an explicit yes.", obj([]string{"dir"}, map[string]any{
 		"dir": str("the repo (absolute)"), "prune": map[string]any{"type": "boolean", "description": "remove the prunable worktrees"}, "confirmed": confirmedProp})},
 	{"fleet_branches", "A repo's fleet/ branches on origin, merged or not, and the agent on each. prune=true deletes the merged ones no live, parked or recently closed agent is on, from origin: ask the user first, confirmed=true only after an explicit yes.", obj([]string{"dir"}, map[string]any{
 		"dir": str("the repo (absolute)"), "prune": map[string]any{"type": "boolean", "description": "delete the merged branches from origin"}, "confirmed": confirmedProp})},
@@ -117,11 +117,11 @@ func (s *Server) cliCall(name string, a args) (string, error) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), cliTimeout)
 		defer cancel()
-		ws, overlap, err := worktree.Touching(ctx, a.Dir, a.Dir, a.Files, fleet.ResultFiles(s.F.Store.Load()))
+		ws, overlap, left, err := worktree.Touching(ctx, a.Dir, a.Dir, a.Files, fleet.ResultFiles(s.F.Store.Load()), false)
 		if err != nil {
 			return "", err
 		}
-		out := strings.TrimSpace(worktree.TouchingText(ws, len(a.Files) > 0))
+		out := strings.TrimSpace(worktree.TouchingText(ws, len(a.Files) > 0, left))
 		if overlap {
 			return "overlap:\n" + out, nil
 		}

@@ -159,16 +159,18 @@ var usage = `usage:
   fleet rule add|ls|rm [--repo DIR] ["text" | N]
                                             standing rules every new spawn's playbook carries: bullets in
                                             ~/.fleet/worker.md, or with --repo the repo's .fleet/worker.md
-  fleet touching [-C dir] [--json] [file...]
+  fleet touching [-C dir] [--json] [--all] [file...]
                                             files other worktrees of this repo change; with files, only
                                             the overlaps (exit 0 none, 1 overlap, 2 error). Agents'
-                                            uncommitted result files don't count
+                                            uncommitted result files don't count; worktrees whose work
+                                            is already in main are left out unless --all
   fleet worktrees [--repo DIR] [--json] [--prune]
                                             the repo's leftover worktrees under <repo>.wt/: size, merged,
-                                            dirty, and which agent holds each. --prune removes the merged,
-                                            clean ones no live, parked or recently closed (resumable)
-                                            agent holds (git's own refusal guards uncommitted work;
-                                            never --force)
+                                            dirty, and which agent holds each (merged: in main by ancestry
+                                            or equal patch). --prune removes the merged, clean ones no
+                                            live or parked agent holds, copying untracked result files to
+                                            ~/.fleet/results/<repo>/<worktree>/ first (git's own refusal
+                                            guards other uncommitted work; never --force)
   fleet branches [--repo DIR] [--json] [--prune]
                                             the repo's fleet/ branches on origin, merged or not, and the
                                             agent on each. --prune deletes the merged ones (by ancestry or

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -28,7 +29,7 @@ func runWorktrees(b *board.Board, bad error, args []string, out io.Writer) error
 	fs := flag.NewFlagSet("worktrees", flag.ContinueOnError)
 	repo := fs.String("repo", "", "repo dir (default: the current directory)")
 	asJSON := fs.Bool("json", false, "machine-readable output")
-	prune := fs.Bool("prune", false, "remove the merged, clean worktrees no agent holds")
+	prune := fs.Bool("prune", false, "remove the merged worktrees no live or parked agent holds")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -51,19 +52,26 @@ func runWorktrees(b *board.Board, bad error, args []string, out io.Writer) error
 			held[a.Worktree.Path] = "parked"
 		}
 	}
+	results := fleet.ResultFiles(b)
 	if err := holdClosed(b, bad, *prune, func(a *board.Agent) {
 		if a.Worktree != nil && a.Worktree.Path != "" && held[a.Worktree.Path] == "" {
 			held[a.Worktree.Path] = "closed"
 		}
+		if p, _, ok := fleet.ResultPath(a); ok {
+			results = append(results, p)
+		}
 	}); err != nil {
 		return err
 	}
-	es, err := worktree.Stale(main, cwd, held)
+	es, err := worktree.Stale(main, cwd, held, results...)
 	if err != nil {
 		return err
 	}
 	if *prune {
 		for _, r := range worktree.Prune(main, es) {
+			for _, p := range r.Archived {
+				fmt.Fprintf(out, "saved %s\n", p)
+			}
 			switch {
 			case r.Err != nil:
 				fmt.Fprintf(out, "kept %s: %v\n", r.Entry.Path, r.Err)
@@ -105,7 +113,7 @@ func writeWorktrees(out io.Writer, es []worktree.Entry) error {
 		}
 		merged, dirty, size := "?", yesNo(e.Dirty), worktree.HumanSize(e.Bytes)
 		if e.ResultOnly {
-			dirty = "result.md"
+			dirty = strings.Join(e.Results, ",")
 		}
 		if e.Merged != nil {
 			merged = yesNo(*e.Merged)
@@ -124,7 +132,7 @@ func writeWorktrees(out io.Writer, es []worktree.Entry) error {
 	if err := w.Flush(); err != nil {
 		return err
 	}
-	_, err := fmt.Fprintf(out, "%d worktrees, %s; %d can be pruned (merged, clean, no live, parked or recently closed agent): fleet worktrees --prune\n", len(es), worktree.HumanSize(total), pr)
+	_, err := fmt.Fprintf(out, "%d worktrees, %s; %d can be pruned (merged, clean or only result files, no live or parked agent): fleet worktrees --prune\n", len(es), worktree.HumanSize(total), pr)
 	return err
 }
 
@@ -147,7 +155,7 @@ func loadBoard(s *board.Store) (*board.Board, error) {
 
 // holdClosed calls hold with each agent closed within board.ClosedKeep:
 // `fleet resume` can still bring it back into its worktree and branch, so a
-// prune must keep them (ADR-113). When the board or the records cannot be
+// prune keeps them unless their work is in main (ADR-113, ADR-132). When the board or the records cannot be
 // read (bad), a prune is refused rather than run as if there were no agents.
 func holdClosed(b *board.Board, bad error, prune bool, hold func(*board.Agent)) error {
 	if bad == nil {

@@ -187,13 +187,13 @@ func TestChangesOutsideRepoFails(t *testing.T) {
 
 func TestTouchingText(t *testing.T) {
 	ws := []Worktree{{Path: "/r.wt/x", Branch: "fleet/x", Files: []string{"a.go", "b.go"}}}
-	if got := TouchingText(ws, true); got != "/r.wt/x  fleet/x  2 files\n    a.go\n    b.go\n" {
+	if got := TouchingText(ws, true, 0); got != "/r.wt/x  fleet/x  2 files\n    a.go\n    b.go\n" {
 		t.Errorf("%q", got)
 	}
-	if got := TouchingText(nil, true); got != "no other worktree touches these files\n" {
+	if got := TouchingText(nil, true, 0); got != "no other worktree touches these files\n" {
 		t.Errorf("%q", got)
 	}
-	if got := TouchingText(nil, false); got != "" {
+	if got := TouchingText(nil, false, 0); got != "" {
 		t.Errorf("%q", got)
 	}
 }

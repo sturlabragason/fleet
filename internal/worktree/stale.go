@@ -2,12 +2,16 @@ package worktree
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
+
+	"github.com/sturlabragason/fleet/internal/logx"
 )
 
 // staleTimeout bounds each git question `fleet worktrees` asks.
@@ -20,21 +24,27 @@ type Entry struct {
 	Path   string `json:"path"`
 	Branch string `json:"branch"`
 	Bytes  int64  `json:"bytes"`
-	Merged *bool  `json:"merged"` // HEAD is in main or master; nil: unknown
+	Merged *bool  `json:"merged"` // the work is in main (Merged, ADR-132); nil: unknown
 	Dirty  bool   `json:"dirty"`  // git status shows anything, untracked included
-	// ResultOnly: the only change is the agent's untracked result.md handoff.
-	// Still dirty, so never pruned: removing it would lose the result.
-	ResultOnly bool   `json:"result_only,omitempty"`
-	Agent      string `json:"agent"` // "live", "parked", "closed" (resumable) or "": the agent in it
-	Prunable   bool   `json:"prunable"`
-	Gone       bool   `json:"gone"` // the dir was deleted by hand; only the registration is left
-	Unknown    bool   `json:"-"`    // a git query failed; never prunable
+	// ResultOnly: the only changes are untracked result files (Results), the
+	// agent's handoff. Still dirty, but prunable once merged: Prune archives
+	// them first (ADR-132).
+	ResultOnly bool     `json:"result_only,omitempty"`
+	Results    []string `json:"results,omitempty"` // worktree-relative
+	Agent      string   `json:"agent"`             // "live", "parked", "closed" (resumable) or "": the agent in it
+	Prunable   bool     `json:"prunable"`
+	Gone       bool     `json:"gone"` // the dir was deleted by hand; only the registration is left
+	Unknown    bool     `json:"-"`    // a git query failed; never prunable
 }
 
 // Stale lists the repo's linked worktrees under `<main>.wt/`. agents maps a
-// worktree path to the board state ("live" or "parked") of the agent that
-// holds it; cwd's own worktree is never prunable.
-func Stale(main, cwd string, agents map[string]string) ([]Entry, error) {
+// worktree path to the board state ("live", "parked" or "closed") of the
+// agent that holds it; a live or parked one is never prunable, a closed one
+// is once its work is in main. results are the absolute task-card result
+// files of the agents on the board and in the closed records; they, and any
+// `result*.md` at a worktree's root, are a handoff, not work left behind.
+// cwd's own worktree is never prunable.
+func Stale(main, cwd string, agents map[string]string, results ...string) ([]Entry, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), staleTimeout)
 	out, err := gitCtx(ctx, main, "worktree", "list", "--porcelain")
 	cancel()
@@ -46,9 +56,16 @@ func Stale(main, cwd string, agents map[string]string) ([]Entry, error) {
 	for p, s := range agents {
 		held[realPath(p)] = s
 	}
+	cards := map[string]bool{}
+	for _, p := range results {
+		if filepath.IsAbs(p) { // the file may not exist: resolve its directory, keep its name
+			cards[filepath.Join(realPath(filepath.Dir(p)), filepath.Base(p))] = true
+		}
+	}
 	cwd = realPath(cwd)
-	base := baseBranch(main)
 	var es []Entry
+	var heads []string
+	var at []int // es index of each head
 	for i, w := range Parse(out) {
 		path := realPath(w.Path)
 		if i == 0 || w.Bare || !strings.HasPrefix(path, root) {
@@ -61,41 +78,68 @@ func Stale(main, cwd string, agents map[string]string) ([]Entry, error) {
 			continue
 		}
 		e.Bytes = dirSize(path)
-		e.Dirty, e.Unknown, e.ResultOnly = status(path)
-		if base != "" {
-			ctx, cancel := context.WithTimeout(context.Background(), staleTimeout)
-			_, err := gitCtx(ctx, path, "merge-base", "--is-ancestor", "HEAD", base)
-			cancel()
-			m := err == nil
-			e.Merged = &m
+		untracked, other, failed := status(path)
+		e.Dirty, e.Unknown = other || len(untracked) > 0, failed
+		if !other && len(untracked) > 0 && allResults(path, untracked, cards) {
+			e.ResultOnly, e.Results = true, untracked
+		}
+		if w.Head != "" {
+			heads, at = append(heads, w.Head), append(at, len(es))
+		}
+		es = append(es, e)
+	}
+	if len(Bases(main)) > 0 {
+		for j, m := range MergedAll(main, heads) {
+			es[at[j]].Merged = &m
+		}
+	}
+	for i := range es {
+		e := &es[i]
+		if e.Gone {
+			continue
 		}
 		if e.Merged == nil {
 			e.Unknown = true
 		}
-		inside := cwd == path || strings.HasPrefix(cwd, path+string(filepath.Separator))
-		e.Prunable = !e.Unknown && e.Merged != nil && *e.Merged && !e.Dirty && e.Agent == "" && !inside
-		es = append(es, e)
+		inside := cwd == e.Path || strings.HasPrefix(cwd, e.Path+string(filepath.Separator))
+		free := e.Agent == "" || e.Agent == "closed"
+		e.Prunable = !e.Unknown && *e.Merged && (!e.Dirty || e.ResultOnly) && free && !inside
 	}
 	return es, nil
 }
 
-// isDirty reports whether dir has anything in git status; failed is true when
-// git could not say.
-func isDirty(dir string) (dirty, failed bool) {
-	dirty, failed, _ = status(dir)
-	return dirty, failed
+// allResults reports whether every worktree-relative file is a result file:
+// one in cards (absolute), or a `result*.md` at the worktree root.
+func allResults(wt string, files []string, cards map[string]bool) bool {
+	for _, f := range files {
+		root, _ := filepath.Match("result*.md", f)
+		if !root && !cards[filepath.Join(wt, filepath.FromSlash(f))] {
+			return false
+		}
+	}
+	return true
 }
 
-// status is isDirty plus whether an untracked result.md is the only change.
-func status(dir string) (dirty, failed, resultOnly bool) {
+// status reads dir's git status: the untracked files, whether anything else
+// (a modified, staged or deleted tracked file) shows, and whether git could
+// not say.
+func status(dir string) (untracked []string, other, failed bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), staleTimeout)
 	defer cancel()
-	out, err := gitCtx(ctx, dir, "status", "--porcelain", "--untracked-files=all")
+	out, err := gitCtx(ctx, dir, "status", "--porcelain", "-z", "--untracked-files=all")
 	if err != nil {
-		return true, true, false
+		return nil, true, true
 	}
-	out = strings.TrimSpace(out)
-	return out != "", false, out == "?? result.md"
+	for _, r := range strings.Split(out, "\x00") {
+		switch {
+		case r == "":
+		case strings.HasPrefix(r, "?? "):
+			untracked = append(untracked, r[3:])
+		default: // a rename's source record lands here too: it is dirt either way
+			other = true
+		}
+	}
+	return untracked, other, false
 }
 
 // dirSize sums the file sizes under dir without following symlinks.
@@ -115,16 +159,19 @@ func dirSize(dir string) int64 {
 
 // PruneResult is the outcome for one entry of Prune.
 type PruneResult struct {
-	Entry   Entry
-	Removed bool
-	Branch  string // the fleet/ branch deleted with it
-	Err     error  // why git refused
+	Entry    Entry
+	Removed  bool
+	Branch   string   // the fleet/ branch deleted with it
+	Archived []string // where its result files were copied
+	Err      error    // why git refused
 }
 
 // Prune removes each prunable entry: `git worktree remove` without --force,
 // so git itself refuses a tree with uncommitted or untracked files, then
-// `git branch -d` for its fleet/ branch. A gone entry only has its
-// registration pruned. One failure never stops the rest.
+// deletes its fleet/ branch (`-D` only when Merged says its work is in main
+// by patch). A tree whose only change is its result files has them copied
+// to <fleet home>/results/<repo>/<worktree>/ first (ADR-132). A gone entry
+// only has its registration pruned. One failure never stops the rest.
 func Prune(main string, es []Entry) []PruneResult {
 	var rs []PruneResult
 	pruned := false
@@ -142,8 +189,12 @@ func Prune(main string, es []Entry) []PruneResult {
 			}
 			r.Removed = r.Err == nil
 		default:
-			if dirty, _ := isDirty(e.Path); dirty {
+			untracked, other, failed := status(e.Path)
+			if failed || other || !subset(untracked, e.Results) {
 				r.Err = fmt.Errorf("uncommitted changes appeared")
+				break
+			}
+			if r.Archived, r.Err = archive(main, e.Path, untracked); r.Err != nil {
 				break
 			}
 			if _, r.Err = gitCtx(ctx, main, "worktree", "remove", e.Path); r.Err != nil {
@@ -151,7 +202,11 @@ func Prune(main string, es []Entry) []PruneResult {
 			}
 			r.Removed = true
 			if strings.HasPrefix(e.Branch, BranchPrefix) {
-				if _, err := gitCtx(ctx, main, "branch", "-d", e.Branch); err == nil {
+				_, err := gitCtx(ctx, main, "branch", "-d", e.Branch)
+				if err != nil && Merged(main, e.Branch) {
+					_, err = gitCtx(ctx, main, "branch", "-D", e.Branch)
+				}
+				if err == nil {
 					r.Branch = e.Branch
 				}
 			}
@@ -160,6 +215,62 @@ func Prune(main string, es []Entry) []PruneResult {
 		rs = append(rs, r)
 	}
 	return rs
+}
+
+func subset(xs, of []string) bool {
+	for _, x := range xs {
+		if !slices.Contains(of, x) {
+			return false
+		}
+	}
+	return true
+}
+
+// archive moves wt's result files to <fleet home>/results/<repo>/<wt name>/,
+// keeping each earlier copy: a taken name gets -1, -2, ... before its
+// extension. It returns the new paths.
+func archive(main, wt string, files []string) ([]string, error) {
+	dir := filepath.Join(logx.Home(), "results", filepath.Base(main), filepath.Base(wt))
+	var done []string
+	for _, f := range files {
+		src := filepath.Join(wt, filepath.FromSlash(f))
+		if st, err := os.Lstat(src); err != nil || !st.Mode().IsRegular() {
+			return done, fmt.Errorf("%s is not a regular file", f)
+		}
+		data, err := os.ReadFile(src)
+		if err != nil {
+			return done, err
+		}
+		dst := filepath.Join(dir, filepath.FromSlash(f))
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return done, err
+		}
+		ext := filepath.Ext(dst)
+		stem := strings.TrimSuffix(dst, ext)
+		for n := 1; ; n++ {
+			out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+			if errors.Is(err, fs.ErrExist) {
+				dst = fmt.Sprintf("%s-%d%s", stem, n, ext)
+				continue
+			}
+			if err != nil {
+				return done, err
+			}
+			_, err = out.Write(data)
+			if cerr := out.Close(); err == nil {
+				err = cerr
+			}
+			if err != nil {
+				return done, err
+			}
+			break
+		}
+		if err := os.Remove(src); err != nil {
+			return done, err
+		}
+		done = append(done, dst)
+	}
+	return done, nil
 }
 
 // HumanSize renders a byte count as 412M, 3.1G, 17K.
