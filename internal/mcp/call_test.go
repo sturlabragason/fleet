@@ -49,10 +49,14 @@ func TestCallArgumentErrors(t *testing.T) {
 }
 
 // Every tool the admiral server lists has a handler in the table
-// (fleet_instructions is answered in server.go before call).
+// (fleet_instructions is answered in server.go before call, extension tools
+// by extCall).
 func TestEveryAdmiralToolHasHandler(t *testing.T) {
 	for _, d := range toolDefs {
-		if toolHandlers[d.Name] == nil && d.Name != instructionsToolDef.Name {
+		if _, ext := extTools[d.Name]; ext || d.Name == instructionsToolDef.Name {
+			continue
+		}
+		if toolHandlers[d.Name] == nil {
 			t.Errorf("%s is listed but has no handler", d.Name)
 		}
 	}
