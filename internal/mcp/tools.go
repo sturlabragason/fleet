@@ -195,7 +195,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 	var a args
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &a); err != nil {
-			return "", fmt.Errorf("bad arguments: %v", err)
+			return "", fmt.Errorf("bad arguments: %w", err)
 		}
 	}
 	need := func(v, field string) error {
@@ -414,7 +414,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 			return "", err
 		}
 		if err := s.Reset(); err != nil {
-			return "", fmt.Errorf("handoff saved, but reset failed: %v", err)
+			return "", fmt.Errorf("handoff saved, but reset failed: %w", err)
 		}
 		return "handoff saved; a fresh admiral takes over in a few seconds. Stop here.", nil
 	}

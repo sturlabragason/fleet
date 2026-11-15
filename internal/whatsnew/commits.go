@@ -63,7 +63,7 @@ func Commits(repo string, curated []Entry) ([]Entry, error) {
 	if _, err := git(repo, "rev-parse", "--verify", "-q", ref); err != nil {
 		ref = "refs/heads/master"
 		if _, err := git(repo, "rev-parse", "--verify", "-q", ref); err != nil {
-			return nil, nil
+			return nil, nil //nolint:nilerr // a repo with neither main nor master has no commits to list
 		}
 	}
 	// The shown day is the committer day in local time, the same date

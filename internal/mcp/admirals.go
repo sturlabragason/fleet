@@ -36,7 +36,7 @@ func (s *Server) scope(names ...string) error {
 func (s *Server) teamScope(team string) error {
 	ms, err := s.F.Teams.Members(team)
 	if err != nil {
-		return nil // the team action reports a missing team itself
+		return nil //nolint:nilerr // the team action reports a missing team itself
 	}
 	return s.scope(ms...)
 }

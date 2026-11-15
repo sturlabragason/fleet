@@ -1,6 +1,7 @@
 package supervisor
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -55,7 +56,7 @@ func TestFindPaneOfHiddenAdmiral(t *testing.T) {
 	if got, err := FindPaneOf(c, "f:main", "main"); err != nil || got != main {
 		t.Fatalf("main: %q %v", got, err)
 	}
-	if _, err := FindPaneOf(c, "f:main", "docs"); err != ErrNoPane {
+	if _, err := FindPaneOf(c, "f:main", "docs"); !errors.Is(err, ErrNoPane) {
 		t.Fatalf("other session matched: %v", err)
 	}
 }

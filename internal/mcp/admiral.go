@@ -55,7 +55,7 @@ func (s *Server) admiralProfile(name, summary string) (string, error) {
 		}
 	}
 	if err := s.SwapProfile(name); err != nil {
-		return "", fmt.Errorf("could not schedule the swap: %v", err)
+		return "", fmt.Errorf("could not schedule the swap: %w", err)
 	}
 	return fmt.Sprintf("switching admiral to %s in a few seconds. Stop here.", name), nil
 }

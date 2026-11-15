@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/charmbracelet/colorprofile"
 	"io"
 	"os"
 	"os/exec"
@@ -14,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/charmbracelet/colorprofile"
 
 	"github.com/sturlabragason/fleet/internal/acp"
 	"github.com/sturlabragason/fleet/internal/logx"

@@ -2,10 +2,11 @@ package fleet
 
 import (
 	"fmt"
-	"github.com/sturlabragason/fleet/internal/theme"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/sturlabragason/fleet/internal/theme"
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"

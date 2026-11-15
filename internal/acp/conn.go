@@ -7,10 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/sturlabragason/fleet/internal/logx"
 	"io"
 	"strconv"
 	"sync"
+
+	"github.com/sturlabragason/fleet/internal/logx"
 )
 
 // ErrClosed is returned by calls on a connection that was closed or whose
@@ -102,7 +103,7 @@ func readLine(br *bufio.Reader, max int) (line []byte, long bool, err error) {
 				line = append(line, chunk...)
 			}
 		}
-		if err != bufio.ErrBufferFull {
+		if !errors.Is(err, bufio.ErrBufferFull) {
 			return line, long, err
 		}
 	}

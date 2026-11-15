@@ -86,7 +86,7 @@ func (s *Server) squadCall(me, name string, raw json.RawMessage) (string, error)
 	var a args
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &a); err != nil {
-			return "", fmt.Errorf("bad arguments: %v", err)
+			return "", fmt.Errorf("bad arguments: %w", err)
 		}
 	}
 	if !s.F.IsLeader(me) {

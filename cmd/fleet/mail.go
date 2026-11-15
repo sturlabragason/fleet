@@ -132,7 +132,7 @@ func cmdReport(f *fleet.Fleet, args []string) error {
 		return fmt.Errorf("refusing to file %q as a report: it looks like a flag\n%s", text, reportUsage)
 	}
 	if err := mail.CheckReport(text); err != nil {
-		return fmt.Errorf("%v\n%s", err, reportUsage)
+		return fmt.Errorf("%w\n%s", err, reportUsage)
 	}
 	me, err := f.Me(*as)
 	if err != nil {

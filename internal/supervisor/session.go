@@ -7,10 +7,11 @@ package supervisor
 
 import (
 	"encoding/json"
-	"github.com/sturlabragason/fleet/internal/jsonx"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/sturlabragason/fleet/internal/jsonx"
 
 	"github.com/sturlabragason/fleet/internal/legacy"
 )

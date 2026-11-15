@@ -47,10 +47,10 @@ type Error struct {
 }
 
 func (e *Error) Error() string {
-	switch e.Err {
-	case ErrTooOld:
+	switch {
+	case errors.Is(e.Err, ErrTooOld):
 		return fmt.Sprintf("%s %s is older than %s", e.Spec.Name, e.Version, e.Spec.Min)
-	case ErrOff:
+	case errors.Is(e.Err, ErrOff):
 		return e.Spec.Name + " is off by config"
 	}
 	return e.Spec.Name + " is not installed"
@@ -202,7 +202,7 @@ func (t Tool) JSON(ctx context.Context, o Opts, v any, args ...string) error {
 		return err
 	}
 	if err := json.Unmarshal(out, v); err != nil {
-		return fmt.Errorf("%s%s: unreadable output: %v", t.Spec.Name, sub(args), err)
+		return fmt.Errorf("%s%s: unreadable output: %w", t.Spec.Name, sub(args), err)
 	}
 	return nil
 }
@@ -243,7 +243,7 @@ func execRun(ctx context.Context, path string, args []string, o Opts) ([]byte, e
 	out, err := cmd.Output()
 	if err != nil {
 		if l := FirstLine(stderr.String()); l != "" {
-			return out, fmt.Errorf("%v: %s", err, l)
+			return out, fmt.Errorf("%w: %s", err, l)
 		}
 		return out, err
 	}

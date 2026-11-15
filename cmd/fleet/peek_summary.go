@@ -15,7 +15,7 @@ import (
 func cmdPeekSummary(f *fleet.Fleet, name string) error {
 	r, err := f.PeekSummary(context.Background(), name)
 	if err != nil {
-		return fmt.Errorf("no summary for %s: %v (try fleet peek %s)", name, err, name)
+		return fmt.Errorf("no summary for %s: %w (try fleet peek %s)", name, err, name)
 	}
 	fmt.Println(r.Text)
 	switch {

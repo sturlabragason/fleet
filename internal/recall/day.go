@@ -3,6 +3,7 @@ package recall
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -83,7 +84,7 @@ func Day(ctx context.Context, o DayOpts) string {
 
 	b.WriteString("\n## Sessions outside fleet")
 	switch {
-	case cassErr == ErrNoCass:
+	case errors.Is(cassErr, ErrNoCass):
 		b.WriteString("\n" + CassHint + "\n")
 	case cassErr != nil:
 		b.WriteString("\n" + cassErr.Error() + "\n")
@@ -285,7 +286,7 @@ func Sessions(ctx context.Context, since time.Time) ([]Session, error) {
 		} `json:"sessions"`
 	}
 	if err := json.Unmarshal(out, &res); err != nil {
-		return nil, fmt.Errorf("cass sessions: unreadable output: %v", err)
+		return nil, fmt.Errorf("cass sessions: unreadable output: %w", err)
 	}
 	var hits []Session
 	for _, s := range res.Sessions {

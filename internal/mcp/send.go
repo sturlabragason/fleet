@@ -268,7 +268,7 @@ func (s *Server) peekSummary(name string) (string, error) {
 	defer cancel()
 	r, err := s.F.PeekSummary(ctx, name)
 	if err != nil {
-		return "", fmt.Errorf("no summary for %s: %v. Call fleet_peek without summary to read the screen", name, err)
+		return "", fmt.Errorf("no summary for %s: %w. Call fleet_peek without summary to read the screen", name, err)
 	}
 	switch {
 	case r.Stale:

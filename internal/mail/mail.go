@@ -289,7 +289,7 @@ func (s *Store) loadPairs() ([]Pair, error) {
 	if err := json.Unmarshal(data, &ps); err != nil {
 		logx.For("mail").Error("broken grants.json: mail and access refused until it is repaired", "err", err, "copy", s.grantsPath()+".broken")
 		_ = os.WriteFile(s.grantsPath()+".broken", data, 0o600)
-		return nil, fmt.Errorf("grants.json does not parse (%v); fix or move it aside (a copy is in grants.json.broken), until then mail and access are refused", err)
+		return nil, fmt.Errorf("grants.json does not parse (%w); fix or move it aside (a copy is in grants.json.broken), until then mail and access are refused", err)
 	}
 	return ps, nil
 }

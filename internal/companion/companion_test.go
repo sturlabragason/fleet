@@ -3,6 +3,7 @@ package companion
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -76,7 +77,7 @@ func TestMinVersionAndCache(t *testing.T) {
 	s := Spec{Name: "v", Env: []string{"FLEET_V"}, Version: []string{"--version"}, Min: "0.10"}
 	_, err := Find(s)
 	var e *Error
-	if !errors.As(err, &e) || e.Err != ErrTooOld || e.Version != "0.9.2" {
+	if !errors.As(err, &e) || !errors.Is(e.Err, ErrTooOld) || e.Version != "0.9.2" {
 		t.Fatalf("too old: %v", err)
 	}
 	s.Min = "0.9"
@@ -176,5 +177,21 @@ func TestCleanEnv(t *testing.T) {
 	want := []string{"PATH=/bin", "HOME=/h", "GRAPHIFY_X=1", "GRAPHIFY_OUT=/o"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("cleanEnv = %v, want %v", got, want)
+	}
+}
+
+func TestErrorMessageSeesWrappedCause(t *testing.T) {
+	s := Spec{Name: "tool", Min: "1.0"}
+	for _, c := range []struct {
+		err  error
+		want string
+	}{
+		{fmt.Errorf("probe: %w", ErrTooOld), "tool 0.9 is older than 1.0"},
+		{fmt.Errorf("config: %w", ErrOff), "tool is off by config"},
+		{ErrMissing, "tool is not installed"},
+	} {
+		if got := (&Error{Spec: s, Err: c.err, Version: "0.9"}).Error(); got != c.want {
+			t.Errorf("Error() with %v = %q, want %q", c.err, got, c.want)
+		}
 	}
 }

@@ -126,7 +126,7 @@ func (c *CLI) Summarize(ctx context.Context, prompt string) (string, error) {
 		if ctx.Err() != nil || errors.Is(err, exec.ErrWaitDelay) {
 			return "", fmt.Errorf("summary: %s timed out after %s", cmd, timeout)
 		}
-		return "", fmt.Errorf("summary: %s: %v: %s", cmd, err, firstLine(stderr.String()))
+		return "", fmt.Errorf("summary: %s: %w: %s", cmd, err, firstLine(stderr.String()))
 	}
 	return stdout.String(), nil
 }

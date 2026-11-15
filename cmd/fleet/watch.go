@@ -157,7 +157,7 @@ func stopWatcher(f *fleet.Fleet) error {
 	if err := p.Signal(syscall.SIGTERM); err != nil {
 		watch.Clear(f.Home)
 		fmt.Println("no watcher running")
-		return nil
+		return nil //nolint:nilerr // no process to signal means no watcher is running
 	}
 	fmt.Printf("stopped the watcher (pid %d)\n", pid)
 	return nil

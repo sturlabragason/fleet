@@ -123,7 +123,7 @@ func (c *Client) RunInput(stdin string, args ...string) (string, error) {
 		return strings.TrimRight(out.String(), "\n"), err
 	}
 	if err != nil {
-		err = fmt.Errorf("tmux %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(errb.String()))
+		err = fmt.Errorf("tmux %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(errb.String()))
 		if !quietErr(errb.String()) {
 			logx.For("tmux").Warn("command failed", "socket", c.Socket, "err", err)
 		}

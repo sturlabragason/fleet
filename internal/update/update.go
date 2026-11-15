@@ -576,7 +576,7 @@ func Probe(path, want string) error {
 		return fmt.Errorf("downloaded binary says %q, want fleet %s", out, want)
 	}
 	if out, err := run("mcp", "--probe"); err != nil || out != "ok" {
-		return fmt.Errorf("downloaded binary failed its probe: %q %v", out, err)
+		return fmt.Errorf("downloaded binary failed its probe: %q %w", out, err)
 	}
 	return nil
 }
@@ -621,7 +621,7 @@ func Attest(path string) error {
 	out, err := exec.CommandContext(ctx, t.Path, "attestation", "verify", path, "-R", Repo,
 		"--signer-workflow", Repo+"/.github/workflows/release.yml").CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("gh attestation verify failed: %v: %s", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("gh attestation verify failed: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }

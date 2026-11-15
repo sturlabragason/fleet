@@ -9,6 +9,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -213,7 +214,7 @@ func (s *Server) Serve(r io.Reader, w io.Writer) error {
 	enc := json.NewEncoder(w)
 	for {
 		raw, rerr := s.next()
-		if rerr != nil && rerr != io.EOF {
+		if rerr != nil && !errors.Is(rerr, io.EOF) {
 			log.Info("stdin closed", "err", rerr)
 			return rerr
 		}
@@ -226,7 +227,7 @@ func (s *Server) Serve(r io.Reader, w io.Writer) error {
 				return err
 			}
 		}
-		if rerr == io.EOF {
+		if errors.Is(rerr, io.EOF) {
 			log.Info("stdin closed")
 			return nil
 		}

@@ -2,6 +2,7 @@ package recall
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -152,7 +153,7 @@ func TestSessions(t *testing.T) {
 		t.Errorf("agent: %+v", ss[1])
 	}
 	t.Setenv("FLEET_CASS", "off")
-	if _, err := Sessions(context.Background(), time.Now()); err != ErrNoCass {
+	if _, err := Sessions(context.Background(), time.Now()); !errors.Is(err, ErrNoCass) {
 		t.Errorf("no cass: %v", err)
 	}
 }

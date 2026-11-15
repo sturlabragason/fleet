@@ -154,7 +154,7 @@ func checkCompanions(sts []companion.Status) []doctorCheck {
 			if st.Source != "PATH" {
 				c.Detail += " (from " + st.Source + ")"
 			}
-		case errors.As(st.Err, &e) && e.Err == companion.ErrOff:
+		case errors.As(st.Err, &e) && errors.Is(e.Err, companion.ErrOff):
 			c.Level, c.Detail = levelInfo, "off by "+st.Source+": "+st.Spec.Feature+" is off"
 		default:
 			c.Level, c.Detail, c.Fix = levelInfo, st.Err.Error()+": "+st.Spec.Feature+" is off", st.Spec.Hint

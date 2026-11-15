@@ -184,7 +184,7 @@ func TestSendKeysWithReadOnlyClient(t *testing.T) {
 func TestRunRefusesGoneTmpdir(t *testing.T) {
 	t.Setenv("TMUX_TMPDIR", filepath.Join(t.TempDir(), "gone"))
 	c := New("fleet-test-gone")
-	if _, err := c.Run("set-option", "-gu", "@fleet_reports"); err != ErrTmpdirGone {
+	if _, err := c.Run("set-option", "-gu", "@fleet_reports"); !errors.Is(err, ErrTmpdirGone) {
 		t.Fatalf("err = %v, want ErrTmpdirGone", err)
 	}
 	if c.HasSession("fleet") {

@@ -283,7 +283,7 @@ func (c *Client) hlNew(st *hlState, dir string, window bool, args []string) (str
 	start := strings.Join(pos, " ")
 	argv, err := shellArgv(start)
 	if err != nil || len(argv) == 0 {
-		return "", true, fmt.Errorf("headless: can't run %q: %v", start, err)
+		return "", true, fmt.Errorf("headless: can't run %q: %w", start, err)
 	}
 	st.Next++
 	p := &hlPane{ID: "%" + strconv.Itoa(st.Next), Session: sess, Window: fl['n'],

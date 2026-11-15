@@ -348,7 +348,7 @@ func TestRefreshPanicKeepsLooping(t *testing.T) {
 	w.Interval = time.Second
 	w.Step()
 	good := w.ok
-	w.Refresh = func() error { var m map[string]int; m["x"] = 1; return nil }
+	w.Refresh = func() error { panic("refresh blew up") }
 	now = now.Add(2 * time.Second)
 	if !w.Step() {
 		t.Fatal("panicking pass did not count as a refresh")

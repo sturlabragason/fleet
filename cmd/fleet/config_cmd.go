@@ -109,7 +109,7 @@ func explainIntegrations(p *prefs.Prefs) []prefs.Setting {
 		val, src := t.Path, t.Source
 		var e *companion.Error
 		switch {
-		case errors.As(err, &e) && e.Err == companion.ErrOff:
+		case errors.As(err, &e) && errors.Is(e.Err, companion.ErrOff):
 			val = "off"
 		case err != nil:
 			val = "(" + err.Error() + ")"

@@ -93,7 +93,7 @@ func TestDoctorProfiles(t *testing.T) {
 	if _, ok := got["profile agy"]; ok {
 		t.Errorf("checked a built-in profile the user never defined: %v", got)
 	}
-	if err := writeDoctor(&bytes.Buffer{}, doctor(env), true); err != exitCode(1) {
+	if err := writeDoctor(&bytes.Buffer{}, doctor(env), true); !errors.Is(err, exitCode(1)) {
 		t.Errorf("exit = %v, want exit 1", err)
 	}
 }

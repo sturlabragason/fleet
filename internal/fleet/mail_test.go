@@ -1,6 +1,7 @@
 package fleet
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -121,7 +122,7 @@ func TestWhoami(t *testing.T) {
 	if err := f.UserOnly(); err != nil {
 		t.Fatalf("user outside a pane refused: %v", err)
 	}
-	if _, err := f.Me(""); err != ErrNotAgent {
+	if _, err := f.Me(""); !errors.Is(err, ErrNotAgent) {
 		t.Fatalf("me: %v", err)
 	}
 }

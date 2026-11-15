@@ -66,7 +66,7 @@ func (f *Fleet) Takeover(name string, toACP bool) (*board.Agent, error) {
 	if err != nil {
 		if rerr := setDriver(a.Driver); rerr == nil {
 			if _, werr := f.Wake(name, true); werr != nil {
-				return nil, fmt.Errorf("take over %s: %w; waking it again on %s failed too: %v (it stays parked)", name, err, from, werr)
+				return nil, fmt.Errorf("take over %s: %w; waking it again on %s failed too: %w (it stays parked)", name, err, from, werr)
 			}
 			return nil, fmt.Errorf("take over %s: %w; it runs on %s again", name, err, from)
 		}

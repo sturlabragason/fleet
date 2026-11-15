@@ -473,7 +473,7 @@ func (s *Store) broken(name string, data []byte, err error) error {
 		logx.For("board").Error("state file does not parse; fleet will not write over it until it is fixed or moved aside", "file", path, "err", err)
 		_ = os.WriteFile(path+".broken", data, 0o644)
 	}
-	return fmt.Errorf("%s does not parse (%v); copy kept at %s.broken: fix the file or move it aside", path, err, path)
+	return fmt.Errorf("%s does not parse (%w); copy kept at %s.broken: fix the file or move it aside", path, err, path)
 }
 
 // Update runs fn on the board under an exclusive lock and saves the result.

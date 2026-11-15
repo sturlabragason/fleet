@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/sturlabragason/fleet/internal/logx"
 	"io"
 	"os"
 	"os/exec"
 	"sync"
 	"time"
+
+	"github.com/sturlabragason/fleet/internal/logx"
 )
 
 // Handler receives what the agent sends on its own.

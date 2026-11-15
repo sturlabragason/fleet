@@ -253,7 +253,7 @@ func readLine(br *bufio.Reader) ([]byte, error) {
 		if len(buf) > maxLine {
 			return nil, bufio.ErrTooLong
 		}
-		if err == bufio.ErrBufferFull {
+		if errors.Is(err, bufio.ErrBufferFull) {
 			continue
 		}
 		return buf, err

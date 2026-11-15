@@ -4,8 +4,9 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"github.com/sturlabragason/fleet/internal/prefs"
 	"strings"
+
+	"github.com/sturlabragason/fleet/internal/prefs"
 
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/mail"
@@ -67,7 +68,7 @@ func (s *Server) agentCall(name string, raw json.RawMessage) (string, error) {
 	var a args
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &a); err != nil {
-			return "", fmt.Errorf("bad arguments: %v", err)
+			return "", fmt.Errorf("bad arguments: %w", err)
 		}
 	}
 	isAgentTool := false

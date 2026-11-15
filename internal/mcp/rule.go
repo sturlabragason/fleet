@@ -16,7 +16,7 @@ func checkRule(rule bool, text string) error {
 func ruleNote(out, home, text string) (string, error) {
 	r, added, err := rules.Add(rules.UserFile(home), text)
 	if err != nil {
-		return out + "; not a rule: " + err.Error(), nil
+		return out + "; not a rule: " + err.Error(), nil //nolint:nilerr // the note was saved; the rule failure is part of the result text
 	}
 	if !added {
 		return out + "; already a standing rule: " + r, nil

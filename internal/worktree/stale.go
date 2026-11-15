@@ -147,7 +147,7 @@ func dirSize(dir string) int64 {
 	var n int64
 	filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
-			return nil
+			return nil //nolint:nilerr // skip what cannot be read; the size is a best-effort sum
 		}
 		if info, err := d.Info(); err == nil {
 			n += info.Size()

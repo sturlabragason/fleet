@@ -432,7 +432,7 @@ func startAdmiralOf(f *fleet.Fleet, adm, pane string, sl supLaunch, old supervis
 	logx.For("admiral").Error("start failed; restoring", "profile", sl.Profile, "old", oldName, "old_session", old.SessionID)
 	if rerr := restoreAdmiralOf(f, adm, pane, old, oldName, resumeOK, fallback); rerr != nil {
 		logx.For("admiral").Error("restore failed", "err", rerr)
-		return fmt.Errorf("%v (restore failed: %v)", err, rerr)
+		return fmt.Errorf("%w (restore failed: %w)", err, rerr)
 	}
 	return err
 }

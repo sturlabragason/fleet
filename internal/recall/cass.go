@@ -77,7 +77,7 @@ func cassSearch(ctx context.Context, query string, days, limit int) ([]Hit, erro
 		Hits []cassHit `json:"hits"`
 	}
 	if err := json.Unmarshal(out, &res); err != nil {
-		return nil, fmt.Errorf("cass search: unreadable output: %v", err)
+		return nil, fmt.Errorf("cass search: unreadable output: %w", err)
 	}
 	seen := map[string]bool{}
 	var hits []Hit

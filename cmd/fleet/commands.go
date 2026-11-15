@@ -29,7 +29,7 @@ import (
 func loadTheme() error {
 	p, err := prefs.Load()
 	if err != nil {
-		return nil
+		return nil //nolint:nilerr // a config that does not parse is reported by the command that needs it
 	}
 	return theme.Load(p.Theme())
 }

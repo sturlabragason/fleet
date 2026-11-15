@@ -12,8 +12,9 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/sturlabragason/fleet/internal/companion"
 	"strings"
+
+	"github.com/sturlabragason/fleet/internal/companion"
 )
 
 // DefaultRoot is the remote directory, under the remote home, that holds

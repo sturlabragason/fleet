@@ -100,7 +100,7 @@ func DeleteMergedRemote(dir, branch string) (bool, error) {
 	}
 	tracking := "refs/remotes/" + Remote + "/" + branch
 	if _, err := git(dir, "rev-parse", "--verify", "--quiet", tracking); err != nil {
-		return false, nil
+		return false, nil //nolint:nilerr // no tracking ref means nothing on the remote to delete
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), remoteTimeout)
 	_, err := gitCtx(ctx, dir, "fetch", "--quiet", Remote, "+refs/heads/"+branch+":"+tracking)

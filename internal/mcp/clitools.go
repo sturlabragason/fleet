@@ -68,7 +68,7 @@ func (s *Server) runFleet(dir string, args ...string) (string, int, error) {
 		return out.String(), ee.ExitCode(), nil
 	}
 	if err != nil {
-		return out.String(), -1, fmt.Errorf("fleet %s: %v", args[0], err)
+		return out.String(), -1, fmt.Errorf("fleet %s: %w", args[0], err)
 	}
 	return out.String(), 0, nil
 }

@@ -35,7 +35,7 @@ func Unmarshal[T any](data []byte, v *T) (Extra, error) {
 	}
 	var all map[string]json.RawMessage
 	if json.Unmarshal(data, &all) != nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // v decoded; without an object there are no extra keys to keep
 	}
 	known := knownKeys(reflect.TypeOf(v).Elem())
 	for k := range all {
@@ -58,7 +58,7 @@ func Marshal(v any, extra Extra) ([]byte, error) {
 	}
 	var all map[string]json.RawMessage
 	if err := json.Unmarshal(b, &all); err != nil {
-		return b, nil
+		return b, nil //nolint:nilerr // b is valid JSON; without an object there is nowhere to put extra keys
 	}
 	known := knownKeys(reflect.TypeOf(v))
 	for k, raw := range extra {

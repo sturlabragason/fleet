@@ -123,7 +123,7 @@ var ErrNoHost = errors.New("acp host not running")
 func Call(home, name string, req Request, timeout time.Duration) (Response, error) {
 	conn, err := net.DialTimeout("unix", SocketPath(home, name), timeout)
 	if err != nil {
-		return Response{}, fmt.Errorf("%w: %v", ErrNoHost, err)
+		return Response{}, fmt.Errorf("%w: %w", ErrNoHost, err)
 	}
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(timeout))

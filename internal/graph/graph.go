@@ -201,7 +201,7 @@ func stampFrom(root, out string) (Stamp, error) {
 		Commit string            `json:"built_at_commit"`
 	}
 	if err := json.Unmarshal(b, &g); err != nil {
-		return Stamp{}, fmt.Errorf("graph.json: %v", err)
+		return Stamp{}, fmt.Errorf("graph.json: %w", err)
 	}
 	if g.Graph.SchemaVersion > SchemaVersion {
 		return Stamp{}, fmt.Errorf("graphify too new: graph schema %d, fleet reads up to %d", g.Graph.SchemaVersion, SchemaVersion)

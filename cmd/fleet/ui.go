@@ -251,7 +251,7 @@ func (b *backend) SetSupCtx(label, color string) error {
 	}
 	pane, err := supervisor.FindPane(b.f.T, mainTarget())
 	if err != nil {
-		return nil // no admiral, nothing to colour
+		return nil //nolint:nilerr // no admiral, nothing to colour
 	}
 	if label == "" {
 		b.f.T.Run("set-option", "-p", "-u", "-t", pane, "@fleet_ctx")
