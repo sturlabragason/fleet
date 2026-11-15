@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/logx"
@@ -102,9 +104,40 @@ func (s *Store) Log(n int) []Msg {
 	return out[max(0, len(out)-n):]
 }
 
+// boxCache holds each inbox's parsed messages by path. The watcher peeks
+// every admiral's box on every pass, so an unchanged file (same inode, size
+// and modification time) is not parsed again (ADR-138). It is package-level
+// because Fleet.Mail builds a new Store per call.
+var boxCache sync.Map // path -> boxEntry
+
+type boxEntry struct {
+	fi os.FileInfo
+	ms []Msg
+}
+
 // read returns every message in agent's inbox, oldest first.
 func (s *Store) read(agent string) []Msg {
-	f, err := os.Open(s.inboxPath(agent))
+	p := s.inboxPath(agent)
+	fi, err := os.Stat(p)
+	if err != nil {
+		boxCache.Delete(p)
+		return nil
+	}
+	if e, ok := boxCache.Load(p); ok {
+		c := e.(boxEntry)
+		if os.SameFile(c.fi, fi) && c.fi.Size() == fi.Size() && c.fi.ModTime().Equal(fi.ModTime()) {
+			return slices.Clone(c.ms)
+		}
+	}
+	// A write between the Stat and this read leaves a newer file than fi
+	// describes, so the next read parses it again.
+	out := parseBox(p)
+	boxCache.Store(p, boxEntry{fi, out})
+	return slices.Clone(out)
+}
+
+func parseBox(path string) []Msg {
+	f, err := os.Open(path)
 	if err != nil {
 		return nil
 	}

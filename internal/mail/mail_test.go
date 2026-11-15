@@ -3,6 +3,7 @@ package mail
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -445,5 +446,61 @@ func TestSendFYIKeepsTheFlag(t *testing.T) {
 	}
 	if n := s.UnreadFYI("b"); n != 0 {
 		t.Fatalf("UnreadFYI after read = %d", n)
+	}
+}
+
+// TestReadSeesEveryChange: the parsed-inbox cache (ADR-138) never serves a
+// stale box, even after a same-size rewrite with the old modification time.
+func TestReadSeesEveryChange(t *testing.T) {
+	s := newStore(t)
+	p := s.inboxPath("a")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	line := func(id string) string {
+		return `{"id":"` + id + `","from":"b","to":"a","kind":"msg","text":"x"}` + "\n"
+	}
+	steps := []struct {
+		name  string
+		write func() error
+		want  string
+	}{
+		{"first read", func() error { return os.WriteFile(p, []byte(line("1")), 0o644) }, "1"},
+		{"append", func() error {
+			f, err := os.OpenFile(p, os.O_APPEND|os.O_WRONLY, 0o644)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			_, err = f.WriteString(line("2"))
+			return err
+		}, "1,2"},
+		{"same-size rewrite, same mtime", func() error {
+			fi, err := os.Stat(p)
+			if err != nil {
+				return err
+			}
+			if err := writeAtomic(p, []byte(line("3")+line("4"))); err != nil {
+				return err
+			}
+			return os.Chtimes(p, fi.ModTime(), fi.ModTime())
+		}, "3,4"},
+		{"removed", func() error { return os.Remove(p) }, ""},
+	}
+	for _, st := range steps {
+		if err := st.write(); err != nil {
+			t.Fatalf("%s: %v", st.name, err)
+		}
+		for range 3 { // later reads are served from the cache
+			ms := s.Box("a")
+			var ids []string
+			for i := range ms {
+				ids = append(ids, ms[i].ID)
+				ms[i].ID = "mutated" // a caller's edit must not reach the cache
+			}
+			if got := strings.Join(ids, ","); got != st.want {
+				t.Fatalf("%s: ids %q, want %q", st.name, got, st.want)
+			}
+		}
 	}
 }
