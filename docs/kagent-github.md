@@ -43,6 +43,10 @@ When the agent's pane starts, fleet gets a token, writes it into that Secret wit
 under your kubeconfig, and gets a new one every 30 minutes while the pane is open. When there is no token, the spawn
 fails and says where to put one.
 
+kagent v1.0.1 reads the Secret once per conversation, at its first GitHub request, and keeps that token. A new
+conversation gets the current token. One that first talked to GitHub more than about an hour ago gets `401` on a later
+push with an App token: spawn a new agent, or use a token file with a long-lived token.
+
 ## 3. The token
 
 Choose one.
