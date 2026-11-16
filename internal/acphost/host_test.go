@@ -264,7 +264,11 @@ func startRigGated(t *testing.T, cfg Config, caps acp.AgentCapabilities, gate ch
 		r.waitFor(func() bool { _, err := Call(home, cfg.Name, Request{Op: OpState}, time.Second); return err == nil }, "socket")
 		return r
 	}
-	r.waitFor(func() bool { return LastSession(TranscriptPath(home, cfg.Name)) != "" }, "session")
+	// setup records the session entry before it writes the first status, so
+	// wait for both before a test reads either.
+	r.waitFor(func() bool {
+		return LastSession(TranscriptPath(home, cfg.Name)) != "" && r.status().Status != ""
+	}, "session")
 	return r
 }
 
