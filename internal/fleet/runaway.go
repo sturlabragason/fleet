@@ -1,6 +1,7 @@
 package fleet
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -120,8 +121,15 @@ func (f *Fleet) orphans(ps []proc.Info, roots map[string]int) []Orphan {
 	return out
 }
 
+// ErrNoOwnerTags: this OS can't read the owner tag from a process's
+// environment, so leftover processes can't be told apart (darwin).
+var ErrNoOwnerTags = errors.New("this OS does not let fleet read another process's environment, where agents tag their processes")
+
 // Orphans lists this fleet's leftover agent processes (for fleet doctor).
 func (f *Fleet) Orphans() ([]Orphan, error) {
+	if !proc.OwnerTags {
+		return nil, ErrNoOwnerTags
+	}
 	roots, ok := f.paneRoots()
 	if !ok {
 		return nil, fmt.Errorf("reading tmux panes failed")

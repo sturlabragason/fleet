@@ -1,3 +1,5 @@
+//go:build !darwin
+
 package proc
 
 import (
@@ -37,13 +39,5 @@ func TestDocs(t *testing.T) {
 	}
 	if got := Docs(43); got != nil {
 		t.Errorf("Docs of a missing pid = %q", got)
-	}
-}
-
-func TestOffice(t *testing.T) {
-	for comm, want := range map[string]bool{"soffice.bin": true, "oosplash": true, "soffice": true, "node": false, "office-helper": false} {
-		if Office(comm) != want {
-			t.Errorf("Office(%q) = %v, want %v", comm, !want, want)
-		}
 	}
 }

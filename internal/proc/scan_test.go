@@ -3,6 +3,7 @@ package proc
 import (
 	"os"
 	"os/exec"
+	"runtime"
 	"sort"
 	"testing"
 	"time"
@@ -61,7 +62,9 @@ func TestScanFindsTaggedProcesses(t *testing.T) {
 	if last == nil {
 		t.Fatal("tagged child not scanned")
 	}
-	if last.Owner != "a@home" || last.PPID != os.Getpid() || last.Comm != "sleep" || last.RSS == 0 {
+	// darwin can't read another process's environment (ps_darwin.go).
+	wantOwner := map[bool]string{true: "", false: "a@home"}[runtime.GOOS == "darwin"]
+	if last.Owner != wantOwner || last.PPID != os.Getpid() || last.Comm != "sleep" || last.RSS == 0 {
 		t.Fatalf("scanned %+v", *last)
 	}
 }

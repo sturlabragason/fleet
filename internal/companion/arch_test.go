@@ -14,7 +14,8 @@ import (
 // external binary only through a companion Spec (ADR-126).
 func TestNoDirectExternalTools(t *testing.T) {
 	// The system shells, git and tmux are fleet's own requirements, not companions.
-	core := map[string]bool{"git": true, "tmux": true, "sh": true, "/bin/sh": true, "bash": true, "nice": true, "ionice": true, "taskkill": true}
+	// ps is darwin's process table, which Linux reads from /proc (internal/proc).
+	core := map[string]bool{"git": true, "tmux": true, "sh": true, "/bin/sh": true, "bash": true, "nice": true, "ionice": true, "taskkill": true, "ps": true}
 	re := regexp.MustCompile(`exec\.(?:LookPath|Command)\("([^"]+)"|exec\.CommandContext\([^,()]+,\s*"([^"]+)"`)
 	for _, root := range []string{"../../cmd", "../../internal"} {
 		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {

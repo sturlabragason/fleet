@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/proc"
 	"github.com/sturlabragason/fleet/internal/sysx"
 )
 
@@ -193,15 +194,8 @@ func flockHolder(home string) (int, bool) {
 // watcher like that, which is how a watcher from before ADR-62 (which does
 // not re-exec itself) gets replaced.
 func StaleExe(pid int, exe string) bool {
-	running, err := os.Stat(filepath.Join("/proc", strconv.Itoa(pid), "exe"))
-	if err != nil {
-		return false
-	}
-	want, err := os.Stat(exe)
-	if err != nil {
-		return false
-	}
-	return !sameFile(running, want)
+	runs, ok := proc.RunsExe(pid, exe)
+	return ok && !runs
 }
 
 // lockPID is the pid written into the lock file.

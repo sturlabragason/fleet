@@ -81,6 +81,9 @@ func waitGone(pid int) bool {
 }
 
 func TestGuardReapsProcessesThatOutliveTheirAgent(t *testing.T) {
+	if !proc.OwnerTags {
+		t.Skip("orphans are found by owner tag, which this OS does not expose")
+	}
 	guardNow(t, time.Hour)
 	f := guardFleet(t, "")
 	if _, err := f.Spawn("o1", "leak", f.Home, ""); err != nil {
