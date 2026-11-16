@@ -13,6 +13,8 @@ import (
 type Models struct {
 	Current   string
 	Available []ModelInfo
+	// Effort is the current reasoning effort ("" = not reported).
+	Effort string
 	// via is the method that switches the model ("" = none offered) and
 	// configID the option it sets for MethodSessionSetConfig.
 	via, configID string
@@ -51,8 +53,29 @@ func (m Models) IDs() []string {
 }
 
 // models reads a session result: the "models" object when the agent sends
-// one, else a select config option of category "model".
+// one, else a select config option of category "model", and the effort.
 func (st SessionModelState) models() Models {
+	m := st.pickModels()
+	m.Effort = Effort(st.ConfigOptions)
+	return m
+}
+
+// Effort is the current value of the "thought_level" select (Copilot's
+// reasoning_effort, claude-agent-acp's effort); "" when there is none or
+// it is "default", which names no level.
+func Effort(opts []ConfigOption) string {
+	for _, o := range opts {
+		if o.Category == "thought_level" {
+			if v, _ := o.CurrentValue.(string); v != "default" {
+				return v
+			}
+		}
+	}
+	return ""
+}
+
+// pickModels reads the "models" object, else the model config option.
+func (st SessionModelState) pickModels() Models {
 	if st.Models != nil {
 		return Models{Current: st.Models.CurrentModelID, Available: st.Models.AvailableModels, via: MethodSessionSetModel}
 	}

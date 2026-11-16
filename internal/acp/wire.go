@@ -325,6 +325,7 @@ const (
 	UpdatePlan           = "plan"
 	UpdateModeChange     = "current_mode_update"
 	UpdateUsage          = "usage_update" // context fill and cost (ACP unstable)
+	UpdateConfigOption   = "config_option_update"
 )
 
 // SessionUpdate is one update, flattened over its kinds. Content is a single
@@ -350,6 +351,8 @@ type SessionUpdate struct {
 	Size int64           `json:"size,omitempty"`
 	Cost *Cost           `json:"cost,omitempty"`
 	Meta json.RawMessage `json:"_meta,omitempty"`
+	// ConfigOptions is a config_option_update's full list of options.
+	ConfigOptions []ConfigOption `json:"configOptions,omitempty"`
 }
 
 // Cost is a usage_update's cumulative session cost.

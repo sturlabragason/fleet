@@ -448,6 +448,10 @@ func (h *host) SessionUpdate(n acp.SessionNotification) {
 		if h.con != nil {
 			h.con.setMeter(func(m *meter) { m.usage(u) })
 		}
+	case acp.UpdateConfigOption:
+		if h.con != nil {
+			h.con.setMeter(func(m *meter) { m.config(u.ConfigOptions) })
+		}
 	case acp.UpdateToolCall, acp.UpdateToolCallUpdate:
 		h.flush()
 		title := u.Title

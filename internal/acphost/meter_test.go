@@ -34,10 +34,14 @@ func TestFooter(t *testing.T) {
 		{"stale window left out", func(m *meter) { m.usage(rl("five_hour", 0.9, -time.Minute)) }, 120, "ctx ▰▱▱▱ 25%  claude-opus-5-5  $1.20"},
 		{"narrow drops from the end", func(m *meter) { m.usage(rl("five_hour", 0.4, time.Hour+30*time.Second)) }, 36, "5h ▰▰▱▱ 60% left (1h00m)"},
 		{"copilot", func(m *meter) {
-			m.setModels(acp.Models{Current: "claude-opus-5.5", Available: []acp.ModelInfo{{ModelID: "claude-opus-5.5", Name: "Claude Opus 5.5"}}})
+			m.setModels(acp.Models{Current: "claude-opus-5.5", Effort: "high", Available: []acp.ModelInfo{{ModelID: "claude-opus-5.5", Name: "Claude Opus 5.5"}}})
 			m.spend(spend.Spend{Calls: 1, AIC: 12.3, HasAIC: true, Context: 34, Model: "claude-opus-5.5",
 				Quota: &spend.Quota{LeftPct: 62, Resets: now.Add(14*24*time.Hour + time.Minute)}})
-		}, 120, "premium ▰▰▱▱ 62% left (14d)  ctx ▰▱▱▱ 34%  Claude Opus 5.5  12.3 AIC"},
+		}, 120, "premium ▰▰▱▱ 62% left (14d)  ctx ▰▱▱▱ 34%  Claude Opus 5.5 · high  12.3 AIC"},
+		{"model switch without effort clears it", func(m *meter) {
+			m.config([]acp.ConfigOption{{ID: "model", Category: "model", CurrentValue: "claude-haiku-4.5"}})
+			m.setModels(acp.Models{Current: "claude-haiku-4.5", Effort: "medium"})
+		}, 120, "claude-haiku-4.5"},
 		{"copilot unlimited has no window", func(m *meter) {
 			m.spend(spend.Spend{Calls: 1, AIC: 1, HasAIC: true, Quota: &spend.Quota{Unlimited: true, LeftPct: 100}})
 		}, 120, "1.0 AIC"},

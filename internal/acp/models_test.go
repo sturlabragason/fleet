@@ -78,3 +78,21 @@ func TestModelsFromLoad(t *testing.T) {
 		t.Errorf("models %+v", got)
 	}
 }
+
+func TestModelsEffort(t *testing.T) {
+	for _, c := range []struct{ name, result, want string }{
+		{"copilot", `{"models":{"currentModelId":"m"},"configOptions":[{"id":"reasoning_effort","category":"thought_level","type":"select","currentValue":"high"}]}`, "high"},
+		{"claude default names no level", `{"configOptions":[{"id":"effort","category":"thought_level","type":"select","currentValue":"default"}]}`, ""},
+		{"none", `{"models":{"currentModelId":"m"}}`, ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			var st SessionModelState
+			if err := json.Unmarshal([]byte(c.result), &st); err != nil {
+				t.Fatal(err)
+			}
+			if got := st.models().Effort; got != c.want {
+				t.Fatalf("effort = %q, want %q", got, c.want)
+			}
+		})
+	}
+}

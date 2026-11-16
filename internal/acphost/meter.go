@@ -18,10 +18,11 @@ import (
 // allowance in its events.jsonl, left out when unlimited); a window nobody
 // reported is left out, never guessed. Context fill comes from usage_update
 // (used/size), else from the spend reader; the model from the usage, else
-// the session's model; spend is the session's cost ($) or the spend reader's
+// the session's model, with the reasoning effort when the
+// agent reports one (an ACP "thought_level" config option); spend is the session's cost ($) or the spend reader's
 // short figure.
 //
-//	5h ▰▰▱▱ 60% left (4h56m)  7d ▰▱▱▱ 80% left (3d)  ctx ▰▱▱▱ 12%  Claude Opus 5.5  $1.20
+//	5h ▰▰▱▱ 60% left (4h56m)  7d ▰▱▱▱ 80% left (3d)  ctx ▰▱▱▱ 12%  Claude Opus 5.5 · high  $1.20
 
 // meterEvery is how often the host re-reads the spend reader (one stat when
 // the session file is unchanged); a finished turn reads at once.
@@ -51,6 +52,8 @@ type meter struct {
 	model      string
 	usageModel bool              // model came from a usage_update
 	names      map[string]string // model id → display name
+	effort     string            // reasoning effort, "" when not reported
+	effortSet  bool              // effort came from a config_option_update
 	cost       string            // the session cost a usage_update reported
 	spent      string            // the spend reader's short figure
 }
@@ -69,6 +72,15 @@ func (m *meter) setModels(ms acp.Models) {
 	if ms.Current != "" && !m.usageModel {
 		m.model = ms.Current
 	}
+	if !m.effortSet {
+		m.effort = ms.Effort
+	}
+}
+
+// config reads a config_option_update, which beats the session result: a
+// model switch during setup sends one with the new model's effort, or none.
+func (m *meter) config(opts []acp.ConfigOption) {
+	m.effort, m.effortSet = acp.Effort(opts), true
 }
 
 // usage reads a usage_update.
@@ -159,6 +171,9 @@ func (m *meter) items(pl palette, now time.Time) [][]seg {
 		name := m.model
 		if n := m.names[name]; n != "" {
 			name = n
+		}
+		if m.effort != "" {
+			name += " · " + m.effort
 		}
 		out = append(out, []seg{{name, sty{fg: pl.sub}}})
 	}
