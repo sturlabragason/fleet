@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/kagent"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/mail"
 )
 
 const kagentUsage = "usage: fleet kagent acp [--context CTX] [--agent NS/NAME] [--namespace NS] [--service SVC] [--port N] [--url URL] [--user ID]"
@@ -39,9 +41,30 @@ func cmdKagent(args []string) error {
 		StateDir: filepath.Join(logx.Home(), "kagent"),
 		Cluster:  *kctx,
 		Repo:     kagent.Repo,
+		Report:   kagentReport,
 	}
 	if *url == "" {
 		b.Connect = kagent.Forward{Context: *kctx, Namespace: *ns, Service: *svc, Port: *port}.Start
 	}
 	return b.Serve(ctx, os.Stdin, os.Stdout)
+}
+
+// kagentReport files a cluster agent's report as the fleet agent whose pane
+// runs this adapter; acp-host runs it in that pane, so TMUX_PANE names it.
+func kagentReport(_ context.Context, state, headline string) error {
+	if err := mail.CheckReport(headline); err != nil {
+		return fmt.Errorf("kagent report: %w", err)
+	}
+	f, err := openFleet()
+	if err != nil {
+		return fmt.Errorf("kagent report: %w", err)
+	}
+	me, err := f.Me("")
+	if err != nil {
+		return fmt.Errorf("kagent report: %w", err)
+	}
+	if _, err := f.Report(me, state, headline); err != nil {
+		return fmt.Errorf("kagent report: %w", err)
+	}
+	return nil
 }

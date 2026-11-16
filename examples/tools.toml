@@ -77,6 +77,10 @@ acp_from = "claude"  # --driver acp uses the built-in claude adapter (ADR-76)
 #   kind: Agent
 #   metadata: {name: claude, namespace: dev}
 #   spec: {harnessRef: {name: claude}}
+# The agent's sandbox has no network beyond the model: give it an EgressPolicy
+# for https://github.com that injects a push token (header Authorization,
+# prefix "Basic ", value base64 of x-access-token:<token>) and list it in the
+# Agent's egressPolicyRefs. On Talos, gVisor needs user.max_user_namespaces > 0.
 # [kagent-prod]
 # command = "{fleet}"
 # driver = "acp"

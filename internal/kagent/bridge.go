@@ -9,7 +9,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -31,6 +30,9 @@ type Bridge struct {
 	Cluster string
 	// Repo returns the origin URL and branch of a dir, for the preamble.
 	Repo func(ctx context.Context, dir string) (url, branch string)
+	// Report files a fleet report for the agent when its reply ends with a
+	// `fleet_report <state>: <headline>` line. Nil: no reports.
+	Report func(ctx context.Context, state, headline string) error
 
 	out     io.Writer
 	wmu     sync.Mutex
@@ -261,7 +263,7 @@ func (b *Bridge) update(id string, u acp.SessionUpdate) {
 }
 
 func (b *Bridge) say(id, text string) {
-	if strings.TrimSpace(text) == "" {
+	if text == "" {
 		return
 	}
 	b.update(id, acp.SessionUpdate{Kind: acp.UpdateAgentMessage, Content: raw(acp.TextBlock(text))})

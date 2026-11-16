@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"regexp"
 	"strings"
 
 	"github.com/sturlabragason/fleet/internal/acp"
@@ -15,6 +17,8 @@ type turn struct {
 	b      *Bridge
 	sid    string
 	said   bool   // agent text was shown this turn
+	art    string // the artifact the last text belongs to
+	reply  strings.Builder
 	state  string // the task's last state
 	final  *Task  // the task as last sent whole
 	status string // the last status message's text
@@ -77,13 +81,18 @@ func (b *Bridge) runTurn(ctx context.Context, s *session, p acp.PromptParams) (a
 	if err != nil {
 		return acp.PromptResult{}, err
 	}
-	return t.finish()
+	res, err := t.finish()
+	if err == nil && res.StopReason == acp.StopEndTurn {
+		b.fileReport(ctx, t.reply.String())
+	}
+	return res, err
 }
 
 // on handles one streamed event: the session learns its kagent ids before
 // the agent's text is shown.
 func (t *turn) on(s *session, ev Event) {
-	var ctxID, taskID, text string
+	var ctxID, taskID, text, art string
+	var cont bool
 	switch {
 	case ev.Task != nil:
 		ctxID, taskID, t.final = ev.Task.ContextID, ev.Task.ID, ev.Task
@@ -95,8 +104,10 @@ func (t *turn) on(s *session, ev Event) {
 			text = Text(m.Parts)
 		}
 	case ev.ArtifactUpdate != nil:
-		ctxID, taskID = ev.ArtifactUpdate.ContextID, ev.ArtifactUpdate.TaskID
-		text = Text(ev.ArtifactUpdate.Artifact.Parts)
+		u := ev.ArtifactUpdate
+		ctxID, taskID, text = u.ContextID, u.TaskID, Text(u.Artifact.Parts)
+		art, cont = u.Artifact.ArtifactID, u.Append
+		t.tools(u.Artifact.Parts)
 	case ev.Message != nil:
 		ctxID, t.state = ev.Message.ContextID, "completed"
 		text = Text(ev.Message.Parts)
@@ -115,7 +126,7 @@ func (t *turn) on(s *session, ev Event) {
 	if changed {
 		_ = b.save(st)
 	}
-	t.show(text)
+	t.show(text, art, cont)
 }
 
 func (t *turn) setState(st Status) {
@@ -127,15 +138,42 @@ func (t *turn) setState(st Status) {
 	}
 }
 
-func (t *turn) show(text string) {
-	if strings.TrimSpace(text) == "" {
+// show draws text as a new paragraph, unless cont appends it to art, the
+// artifact shown last.
+func (t *turn) show(text, art string, cont bool) {
+	if text == "" || (!t.said && strings.TrimSpace(text) == "") {
 		return
 	}
-	if t.said {
+	if t.said && (!cont || art == "" || art != t.art) {
 		text = "\n\n" + text
 	}
+	t.art = art
 	t.said = true
+	t.reply.WriteString(text)
 	t.b.say(t.sid, text)
+}
+
+// tools draws kagent's function_call and function_response data parts as
+// an ACP tool call and its completion.
+func (t *turn) tools(parts []Part) {
+	for _, p := range parts {
+		var d struct {
+			ID   string          `json:"id"`
+			Name string          `json:"name"`
+			Args json.RawMessage `json:"args"`
+		}
+		if p.Data == nil || json.Unmarshal(p.Data, &d) != nil || d.ID == "" {
+			continue
+		}
+		// A missing or non-string part-type matches no case.
+		switch p.Metadata["kagent.dev/a2a/part-type"] {
+		case "function_call":
+			t.b.update(t.sid, acp.SessionUpdate{Kind: acp.UpdateToolCall, ToolCallID: d.ID, Title: d.Name, Name: d.Name, RawInput: d.Args, Status: "in_progress"})
+		case "function_response":
+			t.b.update(t.sid, acp.SessionUpdate{Kind: acp.UpdateToolCallUpdate, ToolCallID: d.ID, Status: "completed"})
+		}
+		t.art = ""
+	}
 }
 
 // finish turns the task's end state into the prompt's stop reason. A task
@@ -143,9 +181,9 @@ func (t *turn) show(text string) {
 func (t *turn) finish() (acp.PromptResult, error) {
 	if !t.said && t.final != nil {
 		for _, a := range t.final.Artifacts {
-			t.show(Text(a.Parts))
+			t.show(Text(a.Parts), "", false)
 		}
-		t.show(t.status)
+		t.show(t.status, "", false)
 	}
 	switch t.state {
 	case "failed", "rejected":
@@ -178,6 +216,22 @@ func (t *turn) settle(s *session) {
 	}
 }
 
+// reportLine is a reply's last line asking fleet to file a report.
+var reportLine = regexp.MustCompile("^[\\s*`>]*fleet_report[\\s*`]+(done|blocked|question|progress)[*`]*:[\\s*`]*(.*?)[\\s*`]*$")
+
+// fileReport files a reply's report: its last non-empty line, when that is
+// a fleet_report line.
+func (b *Bridge) fileReport(ctx context.Context, reply string) {
+	reply = strings.TrimSpace(reply)
+	m := reportLine.FindStringSubmatch(reply[strings.LastIndex(reply, "\n")+1:])
+	if b.Report == nil || m == nil || m[2] == "" {
+		return
+	}
+	if err := b.Report(ctx, m[1], m[2]); err != nil {
+		slog.Warn("kagent report", "component", "kagent", "err", err)
+	}
+}
+
 func promptText(blocks []acp.ContentBlock) string {
 	var out []string
 	for _, c := range blocks {
@@ -200,7 +254,7 @@ func (b *Bridge) preamble(ctx context.Context, dir string) string {
 	}
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "[fleet] You run as a kagent Session in the Kubernetes cluster %s (agent %s), not on the user's machine. ", cluster, b.Gateway.Agent)
-	sb.WriteString("Fleet's MCP tools (fleet_report and the rest) and the user's local files are not reachable from here: answer in this conversation, and end with a one-line summary of what you did.")
+	sb.WriteString("Fleet's MCP tools and the user's local files are not reachable from here: answer in this conversation. When you finish, are blocked or need a decision, make the last line of your reply `fleet_report <done|blocked|question|progress>: <one-line headline>`; fleet files it as your report.")
 	if b.Repo != nil && dir != "" {
 		if url, branch := b.Repo(ctx, dir); url != "" {
 			fmt.Fprintf(&sb, " The code is %s", url)

@@ -29,9 +29,12 @@ type Gateway struct {
 	HTTP  *http.Client
 }
 
-// Part is one A2A message or artifact part; fleet reads only text.
+// Part is one A2A message or artifact part: text, or data such as kagent's
+// tool calls, which Metadata["kagent.dev/a2a/part-type"] names.
 type Part struct {
-	Text string `json:"text,omitempty"`
+	Text     string          `json:"text,omitempty"`
+	Data     json.RawMessage `json:"data,omitempty"`
+	Metadata map[string]any  `json:"metadata,omitempty"`
 }
 
 // Message is an A2A message.
@@ -78,11 +81,13 @@ type StatusUpdate struct {
 	Status    Status `json:"status"`
 }
 
-// ArtifactUpdate is a new or appended artifact.
+// ArtifactUpdate is a new artifact, or with Append more of one: kagent
+// streams a reply as one artifact in many appended chunks.
 type ArtifactUpdate struct {
 	TaskID    string   `json:"taskId"`
 	ContextID string   `json:"contextId"`
 	Artifact  Artifact `json:"artifact"`
+	Append    bool     `json:"append,omitempty"`
 }
 
 // State is a task state without its TASK_STATE_ prefix, lower case, with
@@ -96,15 +101,14 @@ func State(s string) string {
 	return s
 }
 
-// Text joins parts' text with newlines.
+// Text joins parts' text. kagent splits a reply into many text parts, so
+// they join without a separator.
 func Text(parts []Part) string {
-	var out []string
+	var sb strings.Builder
 	for _, p := range parts {
-		if p.Text != "" {
-			out = append(out, p.Text)
-		}
+		sb.WriteString(p.Text)
 	}
-	return strings.Join(out, "\n")
+	return sb.String()
 }
 
 type rpcRequest struct {

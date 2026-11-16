@@ -88,15 +88,20 @@ func status(state, text string) string {
 
 // recorder is the ACP client's handler: it keeps the agent's text.
 type recorder struct {
-	mu   sync.Mutex
-	text strings.Builder
+	mu      sync.Mutex
+	text    strings.Builder
+	tools   []string // "<kind> <id> <status>"
+	reports []string // "<state>: <headline>"
 }
 
 func (r *recorder) SessionUpdate(n acp.SessionNotification) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if n.Update.Kind == acp.UpdateAgentMessage {
-		r.text.WriteString(n.Update.Text())
+	switch u := n.Update; u.Kind {
+	case acp.UpdateAgentMessage:
+		r.text.WriteString(u.Text())
+	case acp.UpdateToolCall, acp.UpdateToolCallUpdate:
+		r.tools = append(r.tools, u.Kind+" "+u.ToolCallID+" "+u.Status)
 	}
 }
 
@@ -117,15 +122,21 @@ func start(t *testing.T, url, stateDir string) (*acp.Client, *recorder) {
 	t.Helper()
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
+	rec := &recorder{}
 	b := &Bridge{Gateway: Gateway{URL: url, Agent: "kagent/claude", User: "tester"}, StateDir: stateDir, Cluster: "dev",
-		Repo: func(context.Context, string) (string, string) { return "https://example.org/r.git", "fleet/a1" }}
+		Repo: func(context.Context, string) (string, string) { return "https://example.org/r.git", "fleet/a1" },
+		Report: func(_ context.Context, state, headline string) error {
+			rec.mu.Lock()
+			defer rec.mu.Unlock()
+			rec.reports = append(rec.reports, state+": "+headline)
+			return nil
+		}}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		_ = b.Serve(t.Context(), inR, outW)
 		outW.Close()
 	}()
-	rec := &recorder{}
 	cl := acp.NewClient(outR, inW, rec)
 	t.Cleanup(func() {
 		inW.Close()
@@ -192,6 +203,72 @@ func TestPromptStreamsAndContinues(t *testing.T) {
 	}
 	if err := cl2.ResumeSession(t.Context(), "kagent-unknown", "/work", nil); err == nil {
 		t.Error("resuming an unknown session should fail")
+	}
+}
+
+// TestStreamedReply replays the shape kagent v1.0.1 streams (captured live):
+// a reply as appended chunks of one artifact, tool calls as data parts, and
+// a report line at the end.
+func TestStreamedReply(t *testing.T) {
+	chunk := func(id, text string, app bool) string {
+		return fmt.Sprintf(`{"artifactUpdate":{"taskId":"t1","contextId":"c1","append":%t,"artifact":{"artifactId":%q,"parts":[{"text":%q}]}}}`, app, id, text)
+	}
+	tool := func(kind, data string) string {
+		return fmt.Sprintf(`{"artifactUpdate":{"taskId":"t1","contextId":"c1","artifact":{"artifactId":"x","parts":[{"data":%s,"metadata":{"kagent.dev/a2a/part-type":%q}}]}}}`, data, kind)
+	}
+	g := &gateway{t: t, reply: func(w http.ResponseWriter, _ *http.Request, _ call) {
+		sse(w,
+			`{"task":{"id":"t1","contextId":"c1","status":{"state":"TASK_STATE_SUBMITTED"}}}`,
+			chunk("a1", "I", false), chunk("a1", "'ll run", true), chunk("a1", " it.", true),
+			tool("function_call", `{"id":"tu1","name":"Bash","args":{"command":"echo hi"}}`),
+			tool("function_response", `{"id":"tu1","name":"Bash","response":{"result":"hi"}}`),
+			chunk("a2", "Printed", false), chunk("a2", " ", true), chunk("a2", "hi.", true), chunk("a2", "\n", true), chunk("a2", "fleet_report done: printed", true), chunk("a2", " hi", true),
+			`{"task":{"id":"t1","contextId":"c1","status":{"state":"TASK_STATE_COMPLETED"},"artifacts":[{"artifactId":"a1","parts":[{"text":"I"}]}]}}`)
+	}}
+	srv := httptest.NewServer(g)
+	defer srv.Close()
+	cl, rec := start(t, srv.URL, t.TempDir())
+	id, err := cl.NewSession(t.Context(), "/work", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.Prompt(t.Context(), id, "echo hi"); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := rec.String(), "I'll run it.\n\nPrinted hi.\nfleet_report done: printed hi"; got != want {
+		t.Errorf("agent text = %q, want %q", got, want)
+	}
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if got := strings.Join(rec.tools, "; "); got != "tool_call tu1 in_progress; tool_call_update tu1 completed" {
+		t.Errorf("tools = %q", got)
+	}
+	if got := strings.Join(rec.reports, "; "); got != "done: printed hi" {
+		t.Errorf("reports = %q", got)
+	}
+}
+
+func TestReportLine(t *testing.T) {
+	tests := []struct{ reply, want string }{
+		{"all good\nfleet_report done: fixed the parser", "done: fixed the parser"},
+		{"**fleet_report question:** which branch?", "question: which branch?"},
+		{"`fleet_report blocked: need a PAT`", "blocked: need a PAT"},
+		{"fleet_report progress: one\nmore\nfleet_report done: two\n\n", "done: two"},
+		{"Example: fleet_report done: x\nfleet_report blocked: need a PAT\nmore work to do", ""},
+		{"I can't call fleet_report here", ""},
+		{"fleet_report done:", ""},
+		{"fleet_report finished: x", ""},
+	}
+	for _, tt := range tests {
+		var got string
+		b := &Bridge{Report: func(_ context.Context, state, headline string) error {
+			got = state + ": " + headline
+			return nil
+		}}
+		b.fileReport(t.Context(), tt.reply)
+		if got != tt.want {
+			t.Errorf("%q: report %q, want %q", tt.reply, got, tt.want)
+		}
 	}
 }
 
