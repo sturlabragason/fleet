@@ -27,6 +27,7 @@ prompt_args = ["{prompt}"]
 patterns = "fake"
 `), 0o644)
 	t.Setenv("FLEET_CONFIG", filepath.Join(home, "no-config.toml"))
+	t.Setenv("GRAPHIFY_OUT", "") // prevent test's tmux from inheriting parent's graph
 	f, err := New(tc, home, "/nonexistent")
 	if err != nil {
 		t.Fatal(err)
@@ -66,5 +67,42 @@ patterns = "fake"
 	}
 	if strings.Contains(prompt, "GRAPHIFY_OUT") {
 		t.Errorf("playbook names the graph; ADR-141 dropped that line:\n%.300q", prompt)
+	}
+}
+
+// Regression: GRAPHIFY_OUT must not leak from parent agent to child when the child repo has no graph.
+func TestGraphUnsetWhenRepoHasNone(t *testing.T) {
+	home := t.TempDir()
+	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
+	t.Cleanup(func() { tc.KillServer() })
+	envOut := filepath.Join(home, "env.txt")
+	os.WriteFile(filepath.Join(home, "tools.toml"), []byte(`[pa]
+command = "sh"
+args = ["-c", "printf '%s' \"$GRAPHIFY_OUT\" > `+envOut+`; cat", "sh"]
+prompt_args = ["{prompt}"]
+patterns = "fake"
+`), 0o644)
+	t.Setenv("FLEET_CONFIG", filepath.Join(home, "no-config.toml"))
+	t.Setenv("GRAPHIFY_OUT", "/fake/parent/graph") // simulate fleet running inside an agent
+	f, err := New(tc, home, "/nonexistent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo, _ := filepath.EvalSymlinks(t.TempDir())
+	for _, args := range [][]string{{"init", "-q"}, {"-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x"}} {
+		c := exec.Command("git", args...)
+		c.Dir = repo
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	no := false
+	os.Remove(envOut)
+	if _, err := f.SpawnWith(SpawnOpts{Worktree: &no}, "g1", "pa", repo, "fix it"); err != nil {
+		t.Fatal(err)
+	}
+	env, _ := os.ReadFile(envOut)
+	if string(env) != "" {
+		t.Errorf("GRAPHIFY_OUT = %q in graph-less repo, want empty (parent had %q)", env, "/fake/parent/graph")
 	}
 }

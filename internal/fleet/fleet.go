@@ -547,6 +547,8 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 	env := append(p.EnvList(), sysx.OwnerEnv+"="+OwnerTag(f.Home, name))
 	if _, out, ok := graph.Find(f.Home, dir); ok {
 		env = append(env, "GRAPHIFY_OUT="+out) // the repo's code graph (DESIGN §6.15)
+	} else {
+		env = append(env, "GRAPHIFY_OUT=") // unset parent's graph when this repo has none
 	}
 	pane, err := f.T.Spawn(Session, WindowPrefix+name, dir, env, tools.ShellCommand(argv))
 	if err != nil {
