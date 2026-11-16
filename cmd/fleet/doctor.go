@@ -294,6 +294,8 @@ func checkOrphans(list func() ([]fleet.Orphan, error)) doctorCheck {
 	c := doctorCheck{Name: "orphans"}
 	orph, err := list()
 	switch {
+	case errors.Is(err, fleet.ErrNoOwnerTags):
+		c.Level, c.Detail = levelInfo, "not checked: "+err.Error()
 	case err != nil:
 		c.Level, c.Detail = levelWarn, "not checked: "+err.Error()
 	case len(orph) == 0:

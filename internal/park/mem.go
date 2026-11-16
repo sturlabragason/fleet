@@ -21,6 +21,10 @@ func Total() (uint64, error) { return memInfo("MemTotal:") }
 func memInfo(key string) (uint64, error) {
 	b, err := os.ReadFile(MemInfo)
 	if err != nil {
+		// No /proc (darwin): the kernel's own counters, when it has them.
+		if v, ok := sysMem(key); ok {
+			return v, nil
+		}
 		return 0, err
 	}
 	for l := range strings.SplitSeq(string(b), "\n") {

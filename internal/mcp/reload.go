@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/proc"
 	"github.com/sturlabragason/fleet/internal/sysx"
 )
 
@@ -112,7 +113,7 @@ func (s *Server) initReload() {
 	// have been replaced between exec and here.
 	self := s.selfExe
 	if self == "" {
-		self = "/proc/self/exe"
+		self = proc.SelfExe()
 	}
 	if fi, err := os.Stat(self); err == nil {
 		s.exeInfo = fi

@@ -73,7 +73,7 @@ type Server struct {
 	exeInfo  os.FileInfo // executable identity at start
 	failInfo os.FileInfo // last binary whose probe or exec failed
 	failAt   time.Time
-	selfExe  string        // running executable (default /proc/self/exe; tests set it)
+	selfExe  string        // running executable (default proc.SelfExe; tests set it)
 	pending  *resumedInput // input left over from the previous reload
 	noted    bool          // reload note already appended
 	// served is the hash of the instructions the client last got, inherited

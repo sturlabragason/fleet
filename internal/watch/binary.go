@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/proc"
 )
 
 // Binary follows the fleet binary on disk for a resident process: the
@@ -13,7 +14,7 @@ import (
 type Binary struct {
 	// Exe is the fleet binary on disk.
 	Exe string
-	// Self is where the running binary is stat'ed ("" = /proc/self/exe).
+	// Self is where the running binary is stat'ed ("" = proc.SelfExe).
 	Self string
 	// Reexec takes the process onto the new binary. It returns on failure
 	// (the old code keeps running), or after it has arranged the hand-over.
@@ -32,7 +33,7 @@ func (b *Binary) Init() {
 	}
 	self := b.Self
 	if self == "" {
-		self = "/proc/self/exe"
+		self = proc.SelfExe()
 	}
 	if fi, err := os.Stat(self); err == nil {
 		b.info = fi

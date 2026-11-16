@@ -1,13 +1,11 @@
-// Package proc finds and stops a process tree through /proc, so stopping
-// an agent also stops what its CLI started (DESIGN §7, ADR-44, #26).
+// Package proc finds and stops a process tree through /proc (ps(1) on
+// darwin, which has no /proc), so stopping an agent also stops what its CLI
+// started (DESIGN §7, ADR-44, #26).
 package proc
 
 import (
 	"os"
-	"path/filepath"
 	"slices"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -22,49 +20,16 @@ type Proc struct {
 	Start uint64
 }
 
-// root is /proc; a var so tests could point it elsewhere.
-var root = "/proc"
-
-// stat reads the parent pid, state and start time of pid.
-func stat(pid int) (ppid int, state byte, start uint64, ok bool) {
-	b, err := os.ReadFile(filepath.Join(root, strconv.Itoa(pid), "stat"))
-	if err != nil {
-		return 0, 0, 0, false
-	}
-	s := string(b)
-	i := strings.LastIndexByte(s, ')') // comm may hold spaces and parens
-	if i < 0 {
-		return 0, 0, 0, false
-	}
-	f := strings.Fields(s[i+1:])
-	if len(f) < 20 {
-		return 0, 0, 0, false
-	}
-	ppid, _ = strconv.Atoi(f[1])
-	start, _ = strconv.ParseUint(f[19], 10, 64)
-	return ppid, f[0][0], start, true
-}
-
 // Tree returns pid and all its descendants, pid first, leaving out a GUI
 // descendant and everything below it: a desktop app the agent opened for
 // the user outlives the agent. It is empty when pid is not running or
-// /proc can't be read.
+// the process table can't be read.
 func Tree(pid int) []Proc {
 	_, _, st, ok := stat(pid)
 	if pid <= 0 || !ok {
 		return nil
 	}
-	ents, _ := os.ReadDir(root)
-	kids := map[int][]Proc{}
-	for _, e := range ents {
-		p, err := strconv.Atoi(e.Name())
-		if err != nil {
-			continue
-		}
-		if pp, _, s, ok := stat(p); ok {
-			kids[pp] = append(kids[pp], Proc{p, s})
-		}
-	}
+	kids := children()
 	out := []Proc{{pid, st}}
 	for i := 0; i < len(out); i++ {
 		for _, k := range kids[out[i].PID] {

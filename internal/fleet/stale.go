@@ -3,7 +3,10 @@ package fleet
 import (
 	"os"
 	"sort"
+	"strconv"
 	"strings"
+
+	"github.com/sturlabragason/fleet/internal/proc"
 )
 
 // StaleHosts names the ACP agents whose host still runs a fleet binary other
@@ -11,8 +14,7 @@ import (
 // (ADR-111). A host holds the agent's process and its input box, so it moves
 // to the new build only when the agent is parked and woken.
 func (f *Fleet) StaleHosts() []string {
-	want, err := os.Stat(f.Exe)
-	if err != nil {
+	if _, err := os.Stat(f.Exe); err != nil {
 		return nil
 	}
 	var out []string
@@ -24,8 +26,11 @@ func (f *Fleet) StaleHosts() []string {
 		if err != nil || strings.TrimSpace(pid) == "" {
 			continue
 		}
-		got, err := os.Stat("/proc/" + strings.TrimSpace(pid) + "/exe")
-		if err != nil || (os.SameFile(got, want) && got.ModTime().Equal(want.ModTime())) {
+		n, err := strconv.Atoi(strings.TrimSpace(pid))
+		if err != nil {
+			continue
+		}
+		if runs, ok := proc.RunsExe(n, f.Exe); !ok || runs {
 			continue
 		}
 		out = append(out, name)

@@ -151,6 +151,9 @@ func TestDoctorStaleWatcher(t *testing.T) {
 }
 
 func TestCheckOrphans(t *testing.T) {
+	if c := checkOrphans(func() ([]fleet.Orphan, error) { return nil, fleet.ErrNoOwnerTags }); c.Level != levelInfo {
+		t.Errorf("no owner tags: %+v", c)
+	}
 	c := checkOrphans(func() ([]fleet.Orphan, error) { return nil, nil })
 	if c.Level != levelOK {
 		t.Errorf("no orphans: %+v", c)
