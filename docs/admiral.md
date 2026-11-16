@@ -100,7 +100,7 @@ Agents are not affected: they live on the board and in tmux, not in the admiral'
 
 ## Try it without tokens
 
-`fleet up --admiral-profile fake` puts a fake agent in the admiral pane. To exercise the MCP server directly:
+`fleet up --admiral-profile fake` puts a fake agent in the admiral pane, and `fleet spawn --fake <name>` starts fake workers that cycle through states and print scripted work; `fleet send <name> "!wait"` (or `!work`, `!error`, `!done`) holds one in a state. To exercise the MCP server directly:
 
 ```sh
 printf '%s\n' \

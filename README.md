@@ -19,7 +19,7 @@ fleet runs your Copilot CLI, Claude Code, agy and vibe sessions side by side, sh
 
 ## Why
 
-With twenty agent sessions open, the terminals aren't the problem. Your attention is:
+Once you run more than a few agent sessions, the hard part is keeping up with them:
 
 - You can't tell which agents are working, stuck, waiting on you or done without visiting each one.
 - Every answer and approval has to come from you, typed into the right window.
@@ -43,31 +43,31 @@ Linux is tested. macOS is built but not tested. Windows runs agents over ACP wit
 
 You need tmux 3.3 or newer and the agent CLIs you want to run. `fleet doctor` checks both and prints the fix for anything missing.
 
-## Quick start (fake agents, no tokens)
+## Quick start (Claude admiral)
 
-Fake agents are built into the binary. They cycle through states and print scripted work, so you can try everything without spending tokens.
+1. Install fleet (above) and check what's missing with `fleet doctor`.
+2. Install Claude Code and sign in once:
 
-```sh
-fleet up --admiral-profile fake --no-attach
-for n in api-auth web-nav infra-dns docs; do fleet spawn --fake $n; done
-fleet ls
-tmux -L fleet attach -t fleet:main
-```
+   ```sh
+   npm install -g @anthropic-ai/claude-code
+   claude          # sign in, then exit
+   ```
 
-```text
-$ fleet ls
-NAME         PROFILE  DRIVER  STATUS   FOR  PANE  LAST LINE
-api-auth     fake     tmux    working  3s   %2    ⠇ Thinking… step 8 of refactor auth middleware (esc to i
-web-nav      fake     tmux    waiting  11s  %3    Approve? [y/n]
-```
+3. Start fleet with a Claude admiral. fleet remembers the choice, so later a plain `fleet up` is enough:
 
-In the overview, select a tile and press `Enter` to put it on the wall. Click into a wall pane and type `y` to answer its prompt. `Alt+4` picks a 2×2 wall. `fleet send web-nav "!wait"` (or `!work`, `!error`, `!done`) holds a fake agent in one state. Drop `--admiral-profile fake` to get a real Copilot CLI admiral. `tmux -L fleet kill-server` stops everything.
+   ```sh
+   fleet up --admiral-profile claude
+   ```
 
-A real agent:
+4. Spawn a first agent, from another shell or by asking the admiral to do it:
 
-```sh
-fleet spawn api-auth claude ~/src/api "add rate limiting to /login"
-```
+   ```sh
+   fleet spawn api-auth claude ~/src/api "add rate limiting to /login"
+   ```
+
+   In a git repo the agent gets its own worktree, `~/src/api.wt/api-auth` on branch `fleet/api-auth`. It shows up as a tile in the overview; select it and press `Enter` to put it on the wall. `tmux -L fleet kill-server` stops everything.
+
+Without `--admiral-profile`, the admiral runs the Copilot CLI. Other tools and your own variants are profiles: [docs/profiles.md](docs/profiles.md); the admiral's setup is in [docs/admiral.md](docs/admiral.md). To try fleet without spending tokens, use the built-in fake agents: [docs/admiral.md](docs/admiral.md#try-it-without-tokens).
 
 ## What you get
 
