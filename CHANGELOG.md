@@ -7,6 +7,7 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
 ## 2026-11-16
+- A kagent agent can push to GitHub with a GitHub App instead of a long-lived token: put the App's ID, installation ID and private key in `~/.config/fleet/github-app/` and add `--github-secret <namespace>/<name>` to the profile's `acp` args. Fleet keeps a fresh one-hour token in that Secret for the cluster's EgressPolicy, and the key stays on your machine (ADR-145)
 - A kagent agent now files reports: it ends a reply with a `fleet_report <state>: <headline>` line and fleet files it, so the board, done-checks and auto-close work for it. Its streamed replies show as whole messages instead of one word per paragraph, and its tool calls show as tool calls (ADR-145)
 
 ## 2026-11-15

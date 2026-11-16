@@ -81,8 +81,11 @@ acp_from = "claude"  # --driver acp uses the built-in claude adapter (ADR-76)
 # for https://github.com that injects a push token (header Authorization,
 # prefix "Basic ", value base64 of x-access-token:<token>) and list it in the
 # Agent's egressPolicyRefs. On Talos, gVisor needs user.max_user_namespaces > 0.
+# With --github-secret, fleet fills that Secret with a one-hour GitHub App token
+# and renews it while the agent runs; the App's app-id, installation-id and
+# private-key.pem (mode 600) go in ~/.config/fleet/github-app/.
 # [kagent-prod]
 # command = "{fleet}"
 # driver = "acp"
 # acp_from = "kagent"
-# acp = ["--context", "prod", "--agent", "dev/claude"]
+# acp = ["--context", "prod", "--agent", "dev/claude", "--github-secret", "dev/github-push"]
