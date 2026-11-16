@@ -203,7 +203,7 @@ func TestDefaultCarriesStandingRules(t *testing.T) {
 	if !strings.Contains(d, "Your ADR number comes from your task prompt") {
 		t.Error("worker playbook lost the ADR-number rule")
 	}
-	if !strings.Contains(d, "CHANGELOG.md and DESIGN.md conflict at the top of today's section by construction") {
+	if !strings.Contains(d, "The repo's append-only docs (changelog, decision log) conflict by construction") {
 		t.Error("worker playbook lost the shared-file conflict rule")
 	}
 }
@@ -366,7 +366,7 @@ func TestResolveLayersOntoEveryLevel(t *testing.T) {
 func TestProAndStandardPushOnlyTheirBranch(t *testing.T) {
 	for _, l := range []Level{Pro, Standard} {
 		txt := Text(l)
-		for _, want := range []string{"git push -u origin fleet/<name>", "never push main", "go test ./<pkg>/...", "gh run watch"} {
+		for _, want := range []string{"git push -u origin fleet/<name>", "never push main", "run the changed packages' tests", "gh run watch"} {
 			if !strings.Contains(strings.ToLower(txt), strings.ToLower(want)) {
 				t.Errorf("%s playbook lost %q", l, want)
 			}
