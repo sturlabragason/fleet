@@ -65,8 +65,8 @@ func TestRunDispatch(t *testing.T) {
 	}{
 		{[]string{"info"}, "usage: fleet info <name>"},
 		{[]string{"info", "a", "b"}, "usage: fleet info <name>"},
-		{[]string{"send"}, "usage: fleet send [--force] [--resume] <name> \"text\""},
-		{[]string{"send", "--force", "--resume", "a"}, "usage: fleet send [--force] [--resume] <name> \"text\""},
+		{[]string{"send"}, "usage: fleet send [--force] [--resume] [--now] <name> \"text\""},
+		{[]string{"send", "--force", "--resume", "a"}, "usage: fleet send [--force] [--resume] [--now] <name> \"text\""},
 		{[]string{"close"}, "usage: fleet close <name> [--squad]"},
 		{[]string{"kill", "a", "b"}, "usage: fleet close <name> [--squad]"},
 		{[]string{"close", "--squad"}, "usage: fleet close <name> [--squad]"},
