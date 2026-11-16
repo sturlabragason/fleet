@@ -155,7 +155,7 @@ func (f *Fleet) park(name, reason string, force bool) error {
 
 // treeGrace is how long a pane's leftover processes get between SIGTERM
 // and SIGKILL.
-const treeGrace = 2 * time.Second
+var treeGrace = 2 * time.Second
 
 // KillPane kills a pane and every process that ran under it. tmux only
 // hangs up on the pane's own process, so children that ignore SIGHUP or

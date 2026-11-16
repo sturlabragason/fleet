@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/mail"
@@ -140,6 +141,8 @@ func TestAdmiralMailOpenPolicy(t *testing.T) {
 
 // A report from print's agent is typed into print's pane, not main's.
 func TestWakeLandsInOwningAdmiralPane(t *testing.T) {
+	GuardWait = 20 * time.Millisecond
+	t.Cleanup(func() { GuardWait = 1500 * time.Millisecond })
 	f := twoAdmirals(t)
 	spawnFor(t, f, "print", "p1")
 	idle := new(true)
