@@ -28,6 +28,9 @@ const (
 	// every tick would be an event and the watcher would cost five capture
 	// passes a second instead of the one docs/perf.md measures.
 	DefaultMinGap = 500 * time.Millisecond
+)
+
+var (
 	// StopEvery is how often Run asks whether the fleet is still up.
 	StopEvery = 5 * time.Second
 )

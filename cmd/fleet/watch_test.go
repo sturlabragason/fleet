@@ -232,6 +232,8 @@ func (a *fakeAdmiralFleet) lines() []string {
 // poll once the pane goes idle: the watcher owns the once-a-poll
 // housekeeping, so a wake is never left queued when no overview is open.
 func TestCmdWatchDeliversQueuedWake(t *testing.T) {
+	watch.StopEvery = 50 * time.Millisecond
+	t.Cleanup(func() { watch.StopEvery = 5 * time.Second })
 	a := newFakeAdmiralFleet(t)
 	f := a.f
 	if _, err := f.Report("a", "blocked", "need creds"); err != nil {

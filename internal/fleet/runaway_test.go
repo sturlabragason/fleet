@@ -81,6 +81,8 @@ func waitGone(pid int) bool {
 }
 
 func TestGuardReapsProcessesThatOutliveTheirAgent(t *testing.T) {
+	treeGrace = 100 * time.Millisecond
+	t.Cleanup(func() { treeGrace = 2 * time.Second })
 	guardNow(t, time.Hour)
 	f := guardFleet(t, "")
 	if _, err := f.Spawn("o1", "leak", f.Home, ""); err != nil {
