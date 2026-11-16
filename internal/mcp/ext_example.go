@@ -29,7 +29,7 @@ func exampleOf(s *Server) *exampleState {
 	return nil
 }
 
-const exampleRow = "| `fleet_example` | The example extension's tool: echoes `name` (DESIGN §15). |\n"
+const exampleRow = "| Example extension | `fleet_example` |\n"
 
 func init() {
 	Register(Extension{
@@ -42,7 +42,7 @@ func init() {
 		IdentityBound: []string{"fleet_example"},
 		Parity:        map[string]string{"example": "fleet_example"},
 		Instructions: func(text string) string {
-			const after = "| `fleet_access_revoke` |"
+			const after = "| Admirals |"
 			if i := strings.Index(text, after); i >= 0 {
 				j := i + strings.Index(text[i:], "\n") + 1
 				return text[:j] + exampleRow + text[j:]
