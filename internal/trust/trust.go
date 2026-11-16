@@ -8,6 +8,7 @@
 //	         projects["<dir>"] and projects["<repo main checkout>"]: trust + imports
 //	copilot  ~/.copilot/config.json, "trustedFolders": ["<dir>", …]
 //	vibe     <VIBE_HOME>/trusted_folders.toml (default ~/.vibe), trusted = […]
+//	pi       <PI_CODING_AGENT_DIR>/trust.json (default ~/.pi/agent), {"<dir>": true}
 //	agy      no trust store fleet can find; its dialog is answered on screen
 //
 // Every write merges into whatever is in the file right now and replaces it
@@ -42,6 +43,7 @@ var markers = map[string]marker{
 	"claude":  markClaude,
 	"copilot": markCopilot,
 	"vibe":    markVibe,
+	"pi":      markPi,
 }
 
 // Mark marks dir trusted for the tool that command runs. env is the agent's

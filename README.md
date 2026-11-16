@@ -3,7 +3,7 @@
   <img src="docs/img/lockup.svg" height="64" alt="fleet">
 </picture>
 
-fleet is a terminal UI for when you run several coding agents at once: every Copilot CLI, Claude Code, agy or vibe session in one tmux window, a status tile for each, and an admiral agent that can answer and act on them for you.
+fleet is a terminal UI for when you run several coding agents at once: every Copilot CLI, Claude Code, agy, vibe or pi session in one tmux window, a status tile for each, and an admiral agent that can answer and act on them for you.
 
 [![release](https://img.shields.io/github/v/release/sturlabragason/fleet)](https://github.com/sturlabragason/fleet/releases)
 [![ci](https://github.com/sturlabragason/fleet/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sturlabragason/fleet/actions/workflows/ci.yml)
@@ -38,7 +38,7 @@ Session switchers make moving between agents faster, but you still do all the su
 ## What it does today
 
 - **Spawn** agents from tool profiles into a dedicated tmux server (`tmux -L fleet`), one hidden window per agent.
-- **Status** for every agent (working, waiting, error, stuck, idle). Copilot and agy agents (every profile that runs them, claude-copilot included) run over the Agent Client Protocol (ACP), so their status, questions and answers come from the tool itself and their pane shows fleet's transcript of the session. Claude and vibe run in their own TUI, read from the bottom of the pane with per-tool regex patterns. Refreshed every second.
+- **Status** for every agent (working, waiting, error, stuck, idle). Copilot and agy agents (every profile that runs them, claude-copilot included) run over the Agent Client Protocol (ACP), so their status, questions and answers come from the tool itself and their pane shows fleet's transcript of the session. Claude, vibe and pi run in their own TUI, read from the bottom of the pane with per-tool regex patterns. Refreshed every second.
 - **Overview TUI**: coloured tiles sorted by attention (waiting agents first, longest wait first), arrow keys, mouse click, `Tab` through waiting agents.
 - **Live wall**: real, interactive tmux panes for the agents you are working with. Layouts 1, 2, 4, 6, 9 and main+stack, as caps rather than fixed shapes: the grid is sized to the window so panes stay readable, and a readability floor shows fewer panes rather than unreadable ones. The pane that needs attention gets the big slot. Click a pane to make it the `▶` target and the next card you pick from the overview goes there; from the overview, `p` pins a pane so it is never evicted and `u` undoes the last replace. Waiting and failing panes stay. Processes never restart.
 - **Copy out of any pane**: drag-select, double-click or triple-click copies to the system clipboard, even over an agent that asked for the mouse.
@@ -63,7 +63,7 @@ Planned, not built yet: a spawn wizard and approve/reject keys in the TUI, deskt
 - Linux (the only platform tested).
 - tmux 3.3 or newer. Developed and tested with tmux 3.8.
 - Go 1.26.10 or newer to build (see `go.mod`).
-- The agent CLIs you want to run (`copilot`, `claude`, `agy`, `vibe`) on your login `PATH`. Not needed for fake agents.
+- The agent CLIs you want to run (`copilot`, `claude`, `agy`, `vibe`, `pi`) on your login `PATH`. Not needed for fake agents.
 
 `fleet doctor` checks these: the tmux version, a UTF-8 locale, `~/.local/bin` on `PATH`, your config files and each profile's command, one line each with the fix.
 
@@ -256,7 +256,7 @@ Claude agents stay on tmux. From v1.1.0 a Claude profile can opt in to ACP throu
 
 ## Tool profiles
 
-A profile says how to start one tool variant. Built-ins: `copilot`, `claude`, `agy`, `vibe` and `fake`. Add or override profiles in `~/.fleet/tools.toml`:
+A profile says how to start one tool variant. Built-ins: `copilot`, `claude`, `agy`, `vibe`, `pi` and `fake`. Add or override profiles in `~/.fleet/tools.toml`:
 
 ```toml
 [claude-work]

@@ -31,6 +31,8 @@ func TestDefaultsAndArgv(t *testing.T) {
 		{"agy", true, "C", []string{"agy", "--conversation", "C"}, "agy"},
 		{"agy", false, "C", []string{"agy"}, "agy"},
 		{"vibe", true, "V", []string{"vibe", "--resume", "V"}, "vibe"},
+		{"pi", false, "P", []string{"pi", "--session-id", "P"}, "pi"},
+		{"pi", true, "P", []string{"pi", "--session-id", "P"}, "pi"},
 		{"fake", false, "", []string{"/bin/fleet", "fakeagent", "a1"}, "fake"},
 	}
 	for _, c := range cases {
@@ -185,6 +187,7 @@ func TestEveryProfileHasAutoMode(t *testing.T) {
 		"claude":         {"--permission-mode", "bypassPermissions"},
 		"agy":            {"--dangerously-skip-permissions"},
 		"vibe":           {"--auto-approve"},
+		"pi":             nil, // pi runs its tools without asking
 		"fake":           nil, // the fake agent never asks for permission
 		"kagent":         nil, // permissions are the kagent Agent's, in the cluster
 	}
@@ -1108,7 +1111,7 @@ func TestFamily(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, want := range map[string]string{"mine": FamilyClaude, "like": FamilyCopilot, "plain": "plain",
-		"copilot": FamilyCopilot, "claude-copilot": FamilyCopilot, "claude": FamilyClaude, "agy": FamilyAgy, "vibe": FamilyVibe, "fake": FamilyFake} {
+		"copilot": FamilyCopilot, "claude-copilot": FamilyCopilot, "claude": FamilyClaude, "agy": FamilyAgy, "vibe": FamilyVibe, "pi": FamilyPi, "fake": FamilyFake} {
 		if got := ps[name].Family(); got != want {
 			t.Errorf("%s: family %q, want %q", name, got, want)
 		}

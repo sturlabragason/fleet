@@ -20,6 +20,7 @@ func tmpHome(t *testing.T, home string) {
 	t.Setenv("HOME", home)
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	t.Setenv("VIBE_HOME", "")
+	t.Setenv("PI_CODING_AGENT_DIR", "")
 	t.Setenv("FLEET_HOME", filepath.Join(home, ".fleet"))
 }
 
@@ -395,7 +396,7 @@ func TestMarkUnknownTool(t *testing.T) {
 	if Supported("agy") {
 		t.Error("agy reported as supported")
 	}
-	for _, c := range []string{"claude", "/home/user/.local/bin/claude", "copilot", "vibe"} {
+	for _, c := range []string{"claude", "/home/user/.local/bin/claude", "copilot", "vibe", "pi"} {
 		if !Supported(c) {
 			t.Errorf("%s not supported", c)
 		}
@@ -480,5 +481,79 @@ func TestMarkCopilotRefusesAStrangeList(t *testing.T) {
 	b, _ := os.ReadFile(path)
 	if string(b) != seed {
 		t.Errorf("rewrote it anyway: %s", b)
+	}
+}
+
+func TestMarkPiTrustsTheRealPathAndKeepsTheRest(t *testing.T) {
+	home := t.TempDir()
+	tmpHome(t, home)
+	cfg := filepath.Join(home, ".pi", "agent")
+	if err := os.MkdirAll(cfg, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(cfg, "trust.json")
+	repo := filepath.Join(home, "repo")
+	link := filepath.Join(home, "link")
+	if err := os.Mkdir(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(repo, link); err != nil {
+		t.Fatal(err)
+	}
+	// A parent the user declined: the dir's own entry has to win over it.
+	repo, _ = filepath.EvalSymlinks(repo)
+	seed := fmt.Sprintf("{\n  %q: false,\n  \"/elsewhere\": true\n}\n", filepath.Dir(repo))
+	if err := os.WriteFile(path, []byte(seed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Mark("pi", nil, link); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := parseObj(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !root.isTrue(repo) || !root.isTrue("/elsewhere") || string(root[filepath.Dir(repo)]) != "false" || len(root) != 3 {
+		t.Errorf("trust.json = %s", b)
+	}
+	if r, err := Mark("pi", nil, repo); err != nil || r.Changed {
+		t.Errorf("second Mark: changed %v, err %v", r.Changed, err)
+	}
+}
+
+func TestMarkPiUsesItsAgentDir(t *testing.T) {
+	home := t.TempDir()
+	tmpHome(t, home)
+	cfg := filepath.Join(home, "pi-work")
+	if err := os.Mkdir(cfg, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	r, err := Mark("pi", map[string]string{"PI_CODING_AGENT_DIR": cfg}, "/w/repo")
+	if err != nil || r.File != filepath.Join(cfg, "trust.json") || !r.Changed {
+		t.Fatalf("Mark = %+v, %v", r, err)
+	}
+}
+
+func TestMarkPiRefusesABrokenFile(t *testing.T) {
+	home := t.TempDir()
+	tmpHome(t, home)
+	cfg := filepath.Join(home, ".pi", "agent")
+	if err := os.MkdirAll(cfg, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(cfg, "trust.json")
+	if err := os.WriteFile(path, []byte("{nope"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Mark("pi", nil, "/w/repo"); err == nil {
+		t.Fatal("a broken trust.json was overwritten")
+	}
+	if b, _ := os.ReadFile(path); string(b) != "{nope" {
+		t.Errorf("file changed: %q", b)
 	}
 }

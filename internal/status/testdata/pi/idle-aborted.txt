@@ -1,0 +1,40 @@
+ select-pane -T titles; capture-pane, which
+ copies history for the record; clear-pane,
+ for a fresh start; send-keys, for reaching
+ into a pane the way you reach to press
+ a button in another room — type into a pane
+ you are not looking at, command it at distance,
+ watch a distant terminal obey you while
+ you keep your eyes on metrics somewhere else.
+ This is the beginning of automation: sight
+ without location, will from anywhere.
+
+ S8:
+ Layouts can drift; a day of resizing
+ leaves panes like rooms after a party.
+ There is even simpler grace in pressing
+ prefix space and letting tiled decide
+ the fairest division of the current space —
+ let the algorithm govern; you have deadlines.
+ The five shapes between them cover most
+ of what a human wants: one wide and four
+ tiled below; a column; a row; a mosaic
+ of six cells fit together like a puzzle.
+
+ S9:
+ By the second week the chords arrive
+ without summoning: hands know the splits,
+ the zoom, the census, the rearrangement.
+ The window is your workspace, truly yours,
+ shaped and reshaped like clay by daily touch.
+ Panes are not screens divided into pieces;
+ they are attention divided by discipline,
+ given walls so each attention may persist
+
+ Operation aborted
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/home/user/web-nav (main)
+0.6%/1.0M (auto)                                                                            (ollama) glm-5.3-flash:cloud

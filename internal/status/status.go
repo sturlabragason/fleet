@@ -82,6 +82,15 @@ const (
 // before giving up), so that half mirrors agy's shipped pattern and is
 // untested until someone snaps one — ADR-42's accepted cost.
 //
+// pi draws its prompt box as a blank line between two rules, with no prompt
+// glyph, so it has no input pattern: a box fleet can't tell from the
+// transcript line by line is better unread than misread. Busy is its braille
+// spinner set into the box's top rule ("── ⠏ Working ──"); idle is the
+// context meter in its footer ("0.9%/1.0M (auto)"), shown busy or not, which
+// is why scan = 'window' lets working win first. Its dialogs (folder trust,
+// an extension's question) end in "↑↓ navigate  enter select"; an error ends
+// in its "/bug" hint.
+//
 // Copilot CLI (newer UI): busy = "● Working · … esc esc interrupt" in the
 // footer; idle = the mode footer ("Interactive · Allow All · / commands ·
 // space hold to record") with no "Working". Picker hints like "esc to cancel"
@@ -129,6 +138,13 @@ waiting = ['(?i)permission for the ', '(?i)allow once', '\[y/n\]', '(?i)approve'
 error = ['(?i)^\s*[⎣⎿]?\s*error: failed to', '(?i)^\s*⚠ (failed|error)']
 working = ['(?i)esc(/ctrl\+c)? to (interrupt|cancel)', '[\x{2800}-\x{28ff}]\s+\w+(…|\.\.\.)']
 idle = ['^[\s\x{a0}]*>[\s\x{a0}]*$', '(?i)/\d+k tokens \(']
+
+[pi]
+scan = 'window'
+waiting = ['^\s*Trust project folder\?', '↑↓ navigate +enter select']
+error = ['If this looks like a pi bug, /bug ', '^\s*Error: \d{3}: ']
+working = ['^─+ [\x{2800}-\x{28ff}] \w+']
+idle = ['(^|\s)\d+(\.\d+)?%/\d+(\.\d+)?[kM]?\s+\(']
 `
 
 // Set holds compiled patterns for one tool.

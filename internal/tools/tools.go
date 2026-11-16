@@ -372,6 +372,17 @@ resume = ["--resume", "{id}"]
 patterns = "vibe"
 family = "vibe"
 
+[pi]
+command = "pi"
+prompt_args = ["{prompt}"]
+mode_args = { auto = "" }
+launch_id = ["--session-id", "{id}"]
+resume = ["--session-id", "{id}"]
+session_path = "~/.pi/agent/sessions/*/*_{id}.jsonl"
+patterns = "pi"
+family = "pi"
+model_args = ["--model", "{model}"]
+
 [kagent]
 command = "{fleet}"
 family = "kagent"

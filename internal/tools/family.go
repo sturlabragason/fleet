@@ -9,6 +9,7 @@ const (
 	FamilyClaude  = "claude"
 	FamilyAgy     = "agy"
 	FamilyVibe    = "vibe"
+	FamilyPi      = "pi"
 	FamilyFake    = "fake"
 )
 

@@ -1,0 +1,40 @@
+ A workspace, like a jacket, should be tailored —
+ and here the tailor is your own two hands.
+
+ S2:
+ prefix z — and a pane swallows the window whole.
+ One moment you had four rooms and a chorus,
+ the next, a single cathedral of the current task.
+ The others did not die; they waited, folded,
+ like clothes in a drawer, like books on shelves.
+ Press z again and the whole arrangement
+ snaps back into being, unsnapped, restored.
+ Zoom is the art of leaving without leaving,
+ the way a reader lifts a page to better light
+ and knows exactly where to put it back.
+
+ S3:
+ There are days one pane deserves its own window.
+ break-pane, the letter b, evicts the cell
+ into its own room; join-pane invites it back,
+ anywhere, any arrangement, any window —
+ a pane is a citizen, movable by law,
+ residing wherever you decree tomorrow.
+ swap-pane trades two cells across the border,
+ left window trading right. The walls are soft
+ here, or rather the walls are nothing, only
+ habits, and habits are freely editable.
+
+ S4:
+ Learn display-panes — q — the brief numbers
+ that bloom in every cell when called.
+ Not just navigation: a census, a roll call
+ of everything currently running on your behalf —
+ htop counting cores, tail guarding a log,
+ a
+
+── ⠧ Working ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/home/user/web-nav (main)
+0.1%/1.0M (auto)                                                                            (ollama) glm-5.3-flash:cloud

@@ -10,6 +10,7 @@ A profile tells fleet how to start one tool variant: which command, which argume
 | `claude` | `claude` | `--session-id {id}` | `--resume {id}` | `claude` |
 | `agy` | `agy` | not supported | `--conversation {id}` | `agy` |
 | `vibe` | `vibe` | not supported | `--resume {id}` | `vibe` |
+| `pi` | `pi` | `--session-id {id}` | `--session-id {id}` | `pi` |
 | `fake` | `{fleet} fakeagent {name}` | not supported | none | `fake` |
 
 `fleet profiles` prints the effective list, including yours. Resume arguments are stored for park/wake, which is planned and not built yet.
@@ -27,12 +28,12 @@ Each `[section]` is a profile. A section with a built-in name overrides only the
 | `resume` | Arguments that resume a session by `{id}` (for park/wake, planned) |
 | `mode_args` | Starting modes, as an inline table of space-separated flags. Give every profile an `auto` key holding that tool's allow-all flag, or `mode = "auto"` in `config.toml` cannot reach it and your agents keep asking for permission (ADR-56). |
 | `context_args` | Extra arguments per effort level (`light`, `standard`, `pro`, and `leader` for a squad leader), as an inline table of space-separated flags. The built-in Copilot profiles use it to leave out built-in tools an agent at that level does not need (ADR-60). Setting it replaces the whole table, so `context_args = { light = "" }` turns it off for every level. |
-| `model_args` | Arguments that select a model, with `{model}`: `["--model", "{model}"]` on the built-in `copilot`, `claude-copilot` and `claude`, and inherited by your own profiles on those commands. The built-in `agy` has it too. Empty means the tool has no model flag (`vibe`); fleet then leaves its model alone and refuses a spawn that names one (ADR-100, ADR-112). |
+| `model_args` | Arguments that select a model, with `{model}`: `["--model", "{model}"]` on the built-in `copilot`, `claude-copilot` and `claude`, and inherited by your own profiles on those commands. The built-in `agy` and `pi` have it too. Empty means the tool has no model flag (`vibe`); fleet then leaves its model alone and refuses a spawn that names one (ADR-100, ADR-112). |
 | `default_model` | The model fleet pins when neither the spawn, `args` nor `extra_args` names one: `claude-opus-5.5` for Copilot, `opus` for Claude, none for `agy` (its own default). A spawn may name any model the profile's tool offers: `fleet models <profile>` (or `fleet_profiles` with `profile`) asks the tool's ACP server, and a model it doesn't list is refused rather than swapped (ADR-112). |
 | `acp_model_env` | The variable an `acp_command` adapter reads its model from (`ANTHROPIC_MODEL` on the built-in `claude`); fleet sets it to the pinned model. |
 | `prompt_args` | Arguments that carry the first prompt, with `{prompt}`, so the tool submits it itself instead of fleet pasting it |
-| `patterns` | Status pattern set: `copilot`, `claude`, `agy`, `vibe`, `fake` or your own. Defaults to the profile name. |
-| `family` | Which tool's fleet-side behaviour the profile gets: `copilot`, `claude`, `agy`, `vibe` or `fake`. It picks the admiral's MCP wiring, the spend parser, the context fill and Copilot's ACP session events. Defaults to the `patterns` value, so a new tool that behaves like Claude but needs its own status patterns sets `family = "claude"` with its own `patterns` (ADR-126). |
+| `patterns` | Status pattern set: `copilot`, `claude`, `agy`, `vibe`, `pi`, `fake` or your own. Defaults to the profile name. |
+| `family` | Which tool's fleet-side behaviour the profile gets: `copilot`, `claude`, `agy`, `vibe`, `pi` or `fake`. It picks the admiral's MCP wiring, the spend parser, the context fill and Copilot's ACP session events. Defaults to the `patterns` value, so a new tool that behaves like Claude but needs its own status patterns sets `family = "claude"` with its own `patterns` (ADR-126). |
 | `acp`, `acp_mode_args` | Arguments that start the tool's ACP server instead of its TUI, and its starting modes under ACP. Only a profile with `acp` or `acp_command` can run over ACP (DESIGN §7d). |
 | `acp_command` | The whole argv under ACP, replacing `command`, `args` and the peer, extra and context args. The built-in `claude` runs the pinned claude-agent-acp adapter here (DESIGN §7d, ADR-76). |
 | `acp_env` | Extra env under ACP only. `{command_path}` is the profile's `command` found in `~/.local/bin` or on PATH. |
@@ -127,6 +128,7 @@ Tools ask "do you trust this folder?" the first time they run somewhere new. Nob
 | `claude-personal`, `claude-work` | the same file under that profile's `CLAUDE_CONFIG_DIR` (`~/.claude-personal`, `~/.claude-work`) | the same keys |
 | `copilot`, `claude-copilot` | `~/.copilot/config.json` | the dir appended to `trustedFolders` |
 | `vibe` | `$VIBE_HOME/trusted_folders.toml` (default `~/.vibe`) | the dir added to `trusted`, removed from `untrusted` |
+| `pi` | `$PI_CODING_AGENT_DIR/trust.json` (default `~/.pi/agent`) | `"<dir>": true`, keyed by the dir's real path |
 | `agy` | — | no trust store on disk; the dialog is answered on screen instead |
 
 Every other key in those files is kept, and the file is rewritten under a lock and renamed into place, so a running agent writing its own config at the same moment cannot lose anything. A config dir that does not exist means you have never run that tool; fleet logs it and does not create one.
