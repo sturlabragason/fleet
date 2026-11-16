@@ -196,7 +196,7 @@ const nanoAIU = 1e9
 // model.model_call_success event, written now and then, whose line also
 // holds the whole request, so only the snapshot object is decoded.
 var (
-	quotaKey   = []byte(`"quotaSnapshots":`)
+	quotaKey    = []byte(`"quotaSnapshots":`)
 	callSuccess = []byte(`{"type":"model.model_call_success"`)
 )
 
