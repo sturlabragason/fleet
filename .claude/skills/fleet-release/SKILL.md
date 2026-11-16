@@ -54,7 +54,7 @@ Then, in order — stop at the first failure and report `blocked` with the outpu
 
 ```sh
 git status --short                         # must be empty
-make build && go vet ./... && go test ./...
+make build && go vet ./...                 # tests: main's CI run below (ADR-149)
 scripts/check-public.sh origin/main..$REL  # emails, messages, every added line, deny list, gitleaks
 scripts/check-public.sh --gh               # issue, comment and release text already on GitHub
 ```
