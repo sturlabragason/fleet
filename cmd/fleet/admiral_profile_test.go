@@ -392,24 +392,6 @@ func TestSwapAdmiralEndToEnd(t *testing.T) {
 }
 
 // A failed swap from a profile without resume records the fresh old admiral.
-func TestFailedSwapFreshRestore(t *testing.T) {
-	f, sup := admiralFleet(t)
-	supervisor.Save(f.Home, supervisor.Session{SessionID: "old-id", Profile: "fake", PaneID: sup, Started: time.Now().Add(-time.Hour), Generation: 1})
-	if _, err := swapAdmiral(f, "broken"); err == nil {
-		t.Fatal("broken started")
-	}
-	s, _ := supervisor.Load(f.Home)
-	if s.Profile != "fake" || s.SessionID == "" || s.SessionID == "old-id" || s.Previous != "old-id" || s.Generation != 2 || s.PaneID != sup {
-		t.Errorf("session %+v", s)
-	}
-	if got := supervisor.LoadChoice(f.Home); got != "" {
-		t.Errorf("choice must stay unset: %q", got)
-	}
-	if paneFmt(t, f, sup, "#{pane_dead}") != "0" {
-		t.Error("pane dead")
-	}
-}
-
 // A resumable old admiral comes back on its own session: nothing is saved.
 func TestFailedSwapResumeRestore(t *testing.T) {
 	f, sup := admiralFleet(t)

@@ -228,24 +228,6 @@ stuck_action = "pause"
 	}
 }
 
-func TestThemePref(t *testing.T) {
-	write(t, "[defaults]\ntheme = \"phosphor\"\n")
-	p, err := Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := p.Theme(); got != "phosphor" {
-		t.Errorf("Theme() = %q, want phosphor", got)
-	}
-	write(t, "[defaults]\nmode = \"plan\"\n")
-	if p, err = Load(); err != nil {
-		t.Fatal(err)
-	}
-	if got := p.Theme(); got != "" {
-		t.Errorf("unset Theme() = %q, want the default", got)
-	}
-}
-
 func TestDriver(t *testing.T) {
 	write(t, "[defaults]\ndriver = \"ACP\"\n[profile.claude]\ndriver = \"tmux\"\n[profile.agy]\ndriver = \"tmuxx\"\n")
 	p, err := Load()

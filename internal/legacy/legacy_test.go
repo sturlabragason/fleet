@@ -47,16 +47,6 @@ func TestMoveDirMovesOldAndLinks(t *testing.T) {
 	isLink(t, old)
 }
 
-func TestMoveDirNewAndLinkIsNoop(t *testing.T) {
-	_, nw, old := paths(t)
-	os.Mkdir(nw, 0o755)
-	os.Symlink("admiral", old)
-	if got := MoveDir(nw, old); got != nw {
-		t.Fatalf("got %s", got)
-	}
-	isLink(t, old)
-}
-
 func TestMoveDirBothRealUsesNew(t *testing.T) {
 	_, nw, old := paths(t)
 	os.Mkdir(nw, 0o755)

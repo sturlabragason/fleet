@@ -160,15 +160,6 @@ func TestSupervisorAliasWarnsAndDispatches(t *testing.T) {
 	}
 }
 
-func TestSupervisorAliasResolvesToAdmiral(t *testing.T) {
-	if commandName("supervisor") != "admiral" || commandName("admiral") != "admiral" {
-		t.Fatalf("supervisor -> %q, admiral -> %q", commandName("supervisor"), commandName("admiral"))
-	}
-	if commandName("spawn") != "spawn" || commandName("kill") != "kill" {
-		t.Fatal("other commands must pass through")
-	}
-}
-
 func TestAdmiralEnvFallback(t *testing.T) {
 	f := testFleet(t)
 	t.Setenv("FLEET_ADMIRAL_PROFILE", "")

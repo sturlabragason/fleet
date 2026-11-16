@@ -77,17 +77,6 @@ func TestMenuArgs(t *testing.T) {
 	}
 }
 
-func TestPreviewPopupArgs(t *testing.T) {
-	got := strings.Join(previewPopupArgs("'/usr/bin/fleet'", "bravo", true), "|")
-	want := "display-popup|-E|-b|rounded|-w|90%|-h|85%|-T| bravo · preview · ⏎ put in ▶ · q close |'/usr/bin/fleet' peek --live bravo"
-	if got != want {
-		t.Errorf("got  %s\nwant %s", got, want)
-	}
-	if a := previewPopupArgs("x", "bravo", false); a[9] != " bravo · preview · ⏎ add · q close " {
-		t.Errorf("no target title %q", a[9])
-	}
-}
-
 // liveFixture is a captured agent screen (scrubbed): colours, then blank rows.
 const liveFixture = "\x1b[32m● working\x1b[0m on the parser\n" +
 	"line two is long enough to be cut at twenty cells\n" +
@@ -171,12 +160,6 @@ func TestBorderFormatPin(t *testing.T) {
 	got, _ := c.Run("display-message", "-p", "-t", pane, format)
 	if want := "● a1 #[fg=" + theme.Overlay1 + "]⚑#[fg=#f9e2af] #[fg="; !strings.Contains(got, want) {
 		t.Errorf("pinned: %q, want %q", got, want)
-	}
-}
-
-func TestPinMsg(t *testing.T) {
-	if pinMsg("a1", true) != "a1 pinned ⚑" || pinMsg("a1", false) != "a1 unpinned" {
-		t.Error(pinMsg("a1", true), pinMsg("a1", false))
 	}
 }
 

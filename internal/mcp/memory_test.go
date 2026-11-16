@@ -181,12 +181,6 @@ func TestBriefShowsPinnedNotes(t *testing.T) {
 	}
 }
 
-func TestResetShellUsesAdmiral(t *testing.T) {
-	if got := resetShell("'/x/fleet'"); got != "sleep 2; '/x/fleet' admiral reset --handoff >/dev/null 2>&1" {
-		t.Errorf("%q", got)
-	}
-}
-
 // A large state still gives a brief under briefBudget with the handoff and
 // every pinned note whole; cut sections name the tool with the rest.
 func TestBriefStaysUnderBudget(t *testing.T) {

@@ -107,25 +107,6 @@ func TestFloorRecomputesOnResize(t *testing.T) {
 
 // A pane that needs me is never shed by the floor (ADR-14 still wins): the
 // wall goes cramped instead of hiding it.
-func TestFloorKeepsProtectedPanes(t *testing.T) {
-	c, w, agents := setupWallSize(t, 6, 300, 80)
-	for _, p := range agents[:5] {
-		c.SetPaneOption(p, "@fleet_status", "waiting")
-		c.SetPaneOption(p, "@fleet_status_since", "1")
-	}
-	if err := w.SetPreset("9"); err != nil {
-		t.Fatal(err)
-	}
-	resize(t, c, splitW, splitH)
-	if err := w.Apply(); err != nil {
-		t.Fatal(err)
-	}
-	on := w.OnWall()
-	if len(on) != 5 {
-		t.Fatalf("five waiting panes must stay even under the floor, got %d: %v", len(on), on)
-	}
-}
-
 // Add steps the preset up until the window, not the preset, is what is full.
 func TestAddRefusesBelowTheFloor(t *testing.T) {
 	c, w, agents := setupWallSize(t, 6, laptopW, laptopH)

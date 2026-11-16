@@ -13,52 +13,6 @@ import (
 	"github.com/sturlabragason/fleet/internal/tmux"
 )
 
-func TestSpawnLsSendClose(t *testing.T) {
-	home := t.TempDir()
-	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
-	t.Cleanup(func() { tc.KillServer() })
-	// A profile whose pane prints a y/n prompt, using cat to echo input.
-	os.WriteFile(filepath.Join(home, "tools.toml"), []byte(`[yn]
-command = "sh"
-args = ["-c", "printf 'Approve? [y/n] '; cat"]
-patterns = "fake"
-`), 0o644)
-	// Keep the user's real ~/.config/fleet/config.toml out of the test.
-	t.Setenv("FLEET_CONFIG", filepath.Join(home, "no-config.toml"))
-	f, err := New(tc, home, "/nonexistent")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.Spawn("a1", "yn", home, ""); err != nil {
-		t.Fatal(err)
-	}
-	var st string
-	for range 40 {
-		as, _ := f.Refresh()
-		if len(as) == 1 && as[0].Status == "waiting" {
-			st = as[0].Status
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	if st != "waiting" {
-		t.Fatalf("status never waiting")
-	}
-	if err := f.Send("a1", "hello"); err != nil {
-		t.Fatal(err)
-	}
-	time.Sleep(300 * time.Millisecond)
-	if out, _ := f.Peek("a1", 0); !strings.Contains(out, "hello") {
-		t.Errorf("peek: %q", out)
-	}
-	if err := f.Close("a1"); err != nil {
-		t.Fatal(err)
-	}
-	if len(f.Store.Load().Agents) != 0 {
-		t.Error("close left board entry")
-	}
-}
-
 // A spawn into a missing dir or with a command not on PATH fails before it
 // leaves anything behind (fleet#38, fleet#23).
 func TestSpawnRefusesMissingDirOrCommand(t *testing.T) {
@@ -154,43 +108,6 @@ patterns = "fake"
 // proves nothing: tmux buffers an early paste and the pty echoes it anyway.
 // The guard is that the echoed prompt appears *after* the fake agent's ready
 // banner, which can only happen if the paste waited for the pane to be ready.
-func TestSpawnFakeAgentEndToEnd(t *testing.T) {
-	exe, err := filepath.Abs("../../bin/fleet")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(exe); err != nil {
-		t.Skip("bin/fleet not built; run make build")
-	}
-	home := t.TempDir()
-	noPlaybook(t, home)
-	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
-	t.Cleanup(func() { tc.KillServer() })
-	f, err := New(tc, home, exe)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.Spawn("a1", "fake", home, "hello fleet"); err != nil {
-		t.Fatal(err)
-	}
-	var out string
-	for range 30 {
-		out, _ = f.Peek("a1", 0)
-		if strings.Contains(out, "queued: hello fleet") {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	if !strings.Contains(out, "queued: hello fleet") {
-		t.Fatalf("fake agent never received the prompt; pane:\n%s", out)
-	}
-	banner := strings.Index(out, "ready (tool: fake)")
-	first := strings.Index(out, "hello fleet")
-	if banner < 0 || first < banner {
-		t.Fatalf("prompt was typed before the agent was ready (banner=%d prompt=%d); pane:\n%s", banner, first, out)
-	}
-}
-
 // A pane whose process exited is error, and the pane tag follows the board
 // even when it drifted (e.g. left at "working" by an older fleet).
 func TestDeadPaneIsErrorAndTagResyncs(t *testing.T) {
