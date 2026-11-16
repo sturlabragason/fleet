@@ -5,3 +5,6 @@ Repo rules (fleet)
 - New external tool or optional feature: use the companion contract or an existing §15 seam (DESIGN.md §15 Extensions, ADR-126), never a new mechanism; `internal/companion/arch_test.go` enforces the first.
 - Behaviour changes update DESIGN.md (decisions as ADRs in §14) and, for CLI or MCP changes, the usage text and `internal/mcp/instructions.md`.
 - DESIGN.md, ADR numbers and CHANGELOG.md are shared by every fleet agent: use the ADR number in your task prompt, or take one with `fleet adr claim --for <your-name>`; never pick one by reading §14. Run `scripts/check-public.sh` before committing.
+- Locally build and vet with `go build ./... && go vet ./<pkg>/...`; the one test you fix runs as `nice go test -run TestX ./<pkg>/`, and offline or without CI the changed packages as `nice go test ./<pkg>/...`. The cheap check for `fleet merge` after green CI is `--check 'make build && go vet ./<pkg>/...'`.
+- The append-only docs are CHANGELOG.md (newest first, at the top of today's section) and DESIGN.md (§14 ADRs ascending); `.fleet/repo.toml` names them for `fleet merge`. Never pick an ADR number by reading DESIGN.md §14.
+- An HTML page for the user: `scripts/inline-html.py` inlines images, CSS and sibling pages, and `scripts/check-renders.sh page.html` proves it rendered.

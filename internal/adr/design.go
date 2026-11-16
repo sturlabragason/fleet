@@ -7,16 +7,15 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/sturlabragason/fleet/internal/worktree"
 )
 
-// entryRe matches a §14 ADR entry. They are bold paragraphs, not headings, and
-// a reference inside a line ("Amends ADR-29") must not count as an entry.
-var entryRe = regexp.MustCompile(`(?m)^\*\*ADR-([0-9]+)\b`)
-
-// Numbers returns the ADR numbers DESIGN.md text declares.
-func Numbers(text string) map[int]bool {
+// Numbers returns the ADR numbers text declares as entries: entry matches one
+// entry and its first group is the number (worktree.RepoConfig).
+func Numbers(text string, entry *regexp.Regexp) map[int]bool {
 	out := map[int]bool{}
-	for _, m := range entryRe.FindAllStringSubmatch(text, -1) {
+	for _, m := range entry.FindAllStringSubmatch(text, -1) {
 		if n, err := strconv.Atoi(m[1]); err == nil {
 			out[n] = true
 		}
@@ -28,34 +27,43 @@ func Numbers(text string) map[int]bool {
 // own merges landed before anyone pushed.
 var mainRefs = []string{"main", "origin/main"}
 
-// OnMain returns the ADR numbers in DESIGN.md on main, read from the repo
-// containing dir (worktrees share the ref, so a fleet worktree works).
+// OnMain returns the ADR numbers in the repo's ADR file (DESIGN.md unless
+// .fleet/repo.toml names another) on main, read from the repo containing dir
+// (worktrees share the ref, so a fleet worktree works).
 func OnMain(dir string) (map[int]bool, error) {
+	c, err := worktree.LoadRepoConfig(dir)
+	if err != nil {
+		return nil, err
+	}
 	var last error
 	for _, ref := range mainRefs {
-		out, err := exec.Command("git", "-C", dir, "show", ref+":DESIGN.md").Output()
+		out, err := exec.Command("git", "-C", dir, "show", ref+":"+c.ADRFile).Output()
 		if err == nil {
-			return Numbers(string(out)), nil
+			return Numbers(string(out), c.ADREntry), nil
 		}
 		last = err
 	}
-	return nil, fmt.Errorf("read DESIGN.md from %s in %s: %w", strings.Join(mainRefs, " or "), dir, last)
+	return nil, fmt.Errorf("read %s from %s in %s: %w", c.ADRFile, strings.Join(mainRefs, " or "), dir, last)
 }
 
-// numbersAt returns the ADR numbers DESIGN.md declares at rev; a rev without a
-// DESIGN.md declares none.
-func numbersAt(dir, rev string) map[int]bool {
-	out, err := exec.Command("git", "-C", dir, "show", rev+":DESIGN.md").Output()
+// numbersAt returns the ADR numbers the ADR file declares at rev; a rev
+// without the file declares none.
+func numbersAt(dir, rev string, c worktree.RepoConfig) map[int]bool {
+	out, err := exec.Command("git", "-C", dir, "show", rev+":"+c.ADRFile).Output()
 	if err != nil {
 		return map[int]bool{}
 	}
-	return Numbers(string(out))
+	return Numbers(string(out), c.ADREntry)
 }
 
-// BranchAdds returns the ADR entries HEAD's DESIGN.md declares that the merge
+// BranchAdds returns the ADR entries HEAD's ADR file declares that the merge
 // base with main does not: the numbers this branch introduces, lowest first.
 // An amendment to an existing ADR adds nothing.
 func BranchAdds(dir string) ([]int, error) {
+	c, err := worktree.LoadRepoConfig(dir)
+	if err != nil {
+		return nil, err
+	}
 	var last error
 	for _, ref := range mainRefs {
 		base, err := exec.Command("git", "-C", dir, "merge-base", "HEAD", ref).Output()
@@ -63,9 +71,9 @@ func BranchAdds(dir string) ([]int, error) {
 			last = err
 			continue
 		}
-		before := numbersAt(dir, strings.TrimSpace(string(base)))
+		before := numbersAt(dir, strings.TrimSpace(string(base)), c)
 		var adds []int
-		for n := range numbersAt(dir, "HEAD") {
+		for n := range numbersAt(dir, "HEAD", c) {
 			if !before[n] {
 				adds = append(adds, n)
 			}

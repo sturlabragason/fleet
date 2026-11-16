@@ -38,7 +38,7 @@ func cmdADR(args []string) error {
 	}
 	sub, rest := args[0], args[1:]
 	fs := flag.NewFlagSet("adr "+sub, flag.ContinueOnError)
-	dir := fs.String("C", ".", "directory inside the repo whose DESIGN.md holds the ADRs")
+	dir := fs.String("C", ".", "directory inside the repo whose ADR file (DESIGN.md, or [adr] in .fleet/repo.toml) holds the ADRs")
 	// Each subcommand takes only its own flags, so "adr release 51 --for x"
 	// fails instead of quietly ignoring half of what was typed.
 	forAgent, asJSON := new(string), new(bool)

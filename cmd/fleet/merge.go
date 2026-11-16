@@ -20,22 +20,27 @@ import (
 	"github.com/sturlabragason/fleet/internal/worktree"
 )
 
-// defaultMergeCheck is the repo's own gate (AGENTS.md): it must exit 0 on the
-// rebased branch and again on main after the merge.
-const defaultMergeCheck = "make build && go vet ./..." // tests run in CI (ADR-149)
-
 // cmdMerge rebases this worktree's branch onto main, runs the checks, merges
-// into the main checkout and runs them again (ADR-48). Exit 1: a conflict
-// outside CHANGELOG.md/DESIGN.md, or a failed check.
+// into the main checkout and runs them again (ADR-48). The check and the
+// append-only files come from the repo's .fleet/repo.toml (ADR-155). Exit 1: a
+// conflict outside the append-only files, or a failed check.
 func cmdMerge(args []string) error {
 	fs := flag.NewFlagSet("merge", flag.ContinueOnError)
 	dir := fs.String("C", ".", "directory inside the worktree to merge")
 	dry := fs.Bool("dry-run", false, "print the order this would take and stop")
 	asJSON := fs.Bool("json", false, "with --dry-run, print the plan as JSON")
-	check := fs.String("check", defaultMergeCheck, "shell command to run on the branch and on main (default: "+defaultMergeCheck+"; empty skips)")
+	check := fs.String("check", "", "shell command to run on the branch and on main (default: merge_check in "+
+		worktree.RepoConfigFile+", else "+worktree.DefaultMergeCheck+"; empty skips)")
 	retries := fs.Int("retries", 3, "attempts when main moves during the run")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	cfg, err := repoConfig(*dir)
+	if err != nil {
+		return fail(err)
+	}
+	if !flagSet(fs, "check") {
+		*check = cfg.MergeCheck
 	}
 	if *dry {
 		p, err := worktree.NewPlan(*dir, resultFiles()...)
@@ -71,16 +76,17 @@ func cmdMerge(args []string) error {
 			return fail(errors.New(adrFix(taken)))
 		}
 	}
-	opts := worktree.Options{Dir: *dir, Retries: *retries, Ignore: resultFiles(), Log: func(s string) {
+	opts := worktree.Options{Dir: *dir, Retries: *retries, Ignore: resultFiles(), AppendOnly: cfg.AppendOnly, Log: func(s string) {
 		fmt.Fprintln(os.Stderr, "fleet merge:", s)
 	}}
 	if strings.TrimSpace(*check) != "" {
 		// The default is fleet's own gate. In a repo without a Makefile it
 		// would fail before anything is merged, so say what to pass instead
 		// of merging untested work.
-		if *check == defaultMergeCheck && !hasMakefile(*dir) {
+		if *check == worktree.DefaultMergeCheck && !hasMakefile(*dir) {
 			return fail(fmt.Errorf("no Makefile here, so the default check (%s) can't run:\n"+
-				"  pass your repo's gate, e.g. --check 'go build ./... && go vet ./...', or --check '' to skip it", defaultMergeCheck))
+				"  set merge_check in %s, pass --check 'go build ./... && go vet ./...', or --check '' to skip it",
+				worktree.DefaultMergeCheck, worktree.RepoConfigFile))
 		}
 		opts.Check = func(d string) error { return shellCheck(d, *check) }
 	}
@@ -92,6 +98,26 @@ func cmdMerge(args []string) error {
 	fmt.Println("worktree and branch left in place; nothing pushed")
 	rebuildGraph(p.BaseDir)
 	return nil
+}
+
+// repoConfig reads the repo's merge conventions, with a one-line note when it
+// has none and fleet's own layout applies.
+func repoConfig(dir string) (worktree.RepoConfig, error) {
+	c, err := worktree.LoadRepoConfig(dir)
+	if err != nil {
+		return c, err
+	}
+	if !c.Found {
+		fmt.Fprintf(os.Stderr, "fleet merge: no %s; using fleet's defaults (check %q, append-only CHANGELOG.md and DESIGN.md)\n",
+			worktree.RepoConfigFile, c.MergeCheck)
+	}
+	return c, nil
+}
+
+func flagSet(fs *flag.FlagSet, name string) bool {
+	set := false
+	fs.Visit(func(f *flag.Flag) { set = set || f.Name == name })
+	return set
 }
 
 // graphAfterMerge: rebuild the code graph in the background when the build

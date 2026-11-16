@@ -1,0 +1,18 @@
+# This repo's conventions for fleet merge and fleet adr (ADR-155).
+
+# Run on the rebased branch and again on main after the merge.
+merge_check = "make build && go vet ./..."
+
+# Files every parallel agent appends to: a conflict there keeps both sides.
+[[append_only]]
+path = "CHANGELOG.md"
+order = "newest-first"
+
+[[append_only]]
+path = "DESIGN.md"
+order = "oldest-first"
+
+# Where ADR entries live; group 1 of entry is the number.
+[adr]
+file = "DESIGN.md"
+entry = '(?m)^\*\*ADR-([0-9]+)\b'

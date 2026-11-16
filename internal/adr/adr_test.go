@@ -7,7 +7,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/sturlabragason/fleet/internal/worktree"
 )
+
+var entry = worktree.DefaultRepoConfig().ADREntry
 
 const design = `# DESIGN
 
@@ -21,7 +25,7 @@ Why: because. See ADR-36.
 `
 
 func TestNumbersReadsBoldEntriesNotReferences(t *testing.T) {
-	got := Numbers(design)
+	got := Numbers(design, entry)
 	for _, n := range []int{41, 42} {
 		if !got[n] {
 			t.Errorf("ADR-%d missing from %v", n, got)
@@ -38,7 +42,7 @@ func TestNumbersReadsBoldEntriesNotReferences(t *testing.T) {
 // agent is already writing.
 func TestClaimStartsAboveTheSeedAndMain(t *testing.T) {
 	s := NewStore(t.TempDir())
-	n, err := s.Claim("a1", Numbers(design)) // ADR-42 is the fleet fingerprint
+	n, err := s.Claim("a1", Numbers(design, entry)) // ADR-42 is the fleet fingerprint
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +78,7 @@ func TestAClaimElsewhereDoesNotDisableTheSeed(t *testing.T) {
 	if _, err := s.Claim("other", map[int]bool{3: true}); err != nil {
 		t.Fatal(err)
 	}
-	n, err := s.Claim("a1", Numbers(design))
+	n, err := s.Claim("a1", Numbers(design, entry))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +90,7 @@ func TestAClaimElsewhereDoesNotDisableTheSeed(t *testing.T) {
 // ls must show the hand-outs before anyone has claimed: it is what a reviewer
 // reads to check a number is free.
 func TestListShowsTheSeedBeforeTheFirstClaim(t *testing.T) {
-	cs, err := NewStore(t.TempDir()).List(Numbers(design))
+	cs, err := NewStore(t.TempDir()).List(Numbers(design, entry))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,14 +103,14 @@ func TestListShowsTheSeedBeforeTheFirstClaim(t *testing.T) {
 // delete a claim: filtering happens on read, deleting only in Release.
 func TestAnotherRepoDoesNotDeleteLiveClaims(t *testing.T) {
 	s := NewStore(t.TempDir())
-	if _, err := s.Claim("a1", Numbers(design)); err != nil {
+	if _, err := s.Claim("a1", Numbers(design, entry)); err != nil {
 		t.Fatal(err)
 	}
 	// A second repo whose own DESIGN.md happens to contain ADR-47.
 	if _, err := s.Claim("other", map[int]bool{47: true}); err != nil {
 		t.Fatal(err)
 	}
-	cs, err := s.List(Numbers(design))
+	cs, err := s.List(Numbers(design, entry))
 	if err != nil {
 		t.Fatal(err)
 	}

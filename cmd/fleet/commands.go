@@ -190,18 +190,21 @@ var usage = `usage:
                                             profile, else claude-copilot), each with the layer that set it: --driver,
                                             [profile.<name>], [defaults], the tool profile or built-in;
                                             and the FLEET_* variables set here
-  fleet adr claim [--for AGENT] [-C dir]    take the next free ADR number for DESIGN.md §14 and print it;
+  fleet adr claim [--for AGENT] [-C dir]    take the next free ADR number (DESIGN.md §14, or [adr] in
+                                            .fleet/repo.toml) and print it;
                                             atomic, so parallel agents never pick the same one
   fleet adr ls [--json] [-C dir]            ADR numbers claimed but not yet on main
   fleet adr release <N> [-C dir]            give a number back (a claim also frees itself once its ADR is on main)
   fleet merge [-C dir] [--dry-run [--json]] [--check CMD] [--retries N]
                                             rebase this worktree's branch onto main, run the checks,
                                             merge into the local main checkout and run them again.
-                                            Conflicts in CHANGELOG.md or DESIGN.md keep both sides,
-                                            newest first; any other conflict aborts the rebase and
+                                            Conflicts in the append-only docs keep both sides in the
+                                            file's order; any other conflict aborts the rebase and
                                             exits 1, naming the files and the other worktree.
                                             Stops first if the branch's new ADR number is on main or
                                             another agent's claim: renumber via fleet adr claim.
+                                            The check and the docs come from .fleet/repo.toml, else
+                                            make build && go vet, CHANGELOG.md and DESIGN.md.
                                             --dry-run prints the order it would take. Never pushes,
                                             never removes the worktree
   fleet profiles                            list tool profiles (~/.fleet/tools.toml)
