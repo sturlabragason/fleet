@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/acphost"
+	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
 )
 
@@ -29,6 +30,13 @@ func (f *Fleet) retain(now time.Time) {
 	}
 	f.retainedAt = now
 	f.pruneACP(now)
+	if f.RotateEvents {
+		if ok, err := f.Store.RotateEvents(now.Add(-board.EventKeep)); err != nil {
+			logx.For("fleet").Warn("retention: events not rotated", "err", err)
+		} else if ok {
+			logx.For("fleet").Info("retention: rotated events.jsonl")
+		}
+	}
 }
 
 // pruneACP removes acp-host files of names that are neither agents nor

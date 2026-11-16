@@ -68,6 +68,8 @@ func cmdWatch(f *fleet.Fleet, args []string) error {
 	// agent, run somebody's done-check or claim a queued spawn it will
 	// exit before starting.
 	f.Housekeeping = true
+	// The one process that renames events.jsonl (ADR-154).
+	f.RotateEvents = true
 	if netwatch.Enabled() { // outages are held, then resumed (ADR-110)
 		f.NetProbe = netwatch.Probe
 	}
@@ -333,6 +335,7 @@ func hookBlockStop(f *fleet.Fleet, agent string, p status.Payload, now time.Time
 		return false
 	}
 	logx.For("status").Info("stop blocked: no report", "agent", agent)
+	f.Store.AppendEvent(board.Intervention(now, a, board.KindStopBlock, ""))
 	return true
 }
 

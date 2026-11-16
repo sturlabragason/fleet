@@ -614,27 +614,3 @@ func (b *Board) Sorted() []*Agent {
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
-
-// Event is one line of events.jsonl.
-type Event struct {
-	Time  time.Time `json:"t"`
-	Agent string    `json:"agent"`
-	From  string    `json:"from"`
-	To    string    `json:"to"`
-}
-
-// AppendEvent appends a transition to events.jsonl.
-func (s *Store) AppendEvent(e Event) {
-	f, err := os.OpenFile(filepath.Join(s.Dir, "events.jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return
-	}
-	data, _ := json.Marshal(e)
-	_, err = f.Write(append(data, '\n'))
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
-		logx.For("board").Warn("event not recorded", "agent", e.Agent, "err", err)
-	}
-}

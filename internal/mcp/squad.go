@@ -257,6 +257,9 @@ func (s *Server) squadClose(me string, a args) (string, error) {
 		}
 	}
 	if !a.Confirmed {
+		for _, n := range names {
+			s.F.Intervene(n, board.KindConfirmRefused, "squad_close")
+		}
 		msg := "not confirmed: call again with confirmed=true to close " + strings.Join(names, ", ")
 		if len(notes) > 0 {
 			msg += ". " + strings.Join(notes, "; ")

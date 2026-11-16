@@ -19,6 +19,7 @@ var CLIParity = map[string]string{
 	"ls":              "fleet_status",
 	"info":            "fleet_info",
 	"spend":           "fleet_status",
+	"stats":           "user: counts fleet's own interventions for tuning its policy (ADR-154); the admiral needs no tool",
 	"send":            "fleet_send",
 	"peek":            "fleet_peek",
 	"close":           "fleet_close",

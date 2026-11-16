@@ -88,6 +88,10 @@ var usage = `usage:
                                             the agents' own session files (AI credits for copilot, tokens
                                             for claude); no model is called. --today: the usage bar's
                                             figures per profile since midnight, with raw units
+  fleet stats [--since D] [--by kind|profile|model] [--json]
+                                            how often fleet's own policy acted on agents (stop blocks,
+                                            wakes, refused sends, done-checks, hook/screen disagreements),
+                                            counted from events.jsonl; --json: an object of counts
   fleet send [--force] [--resume] [--now] <name> ["text"]
                                             refused while the user is typing in that pane (keys
                                             there in the last 30 s, unsubmitted text in its box);
@@ -330,6 +334,7 @@ var statelessCmds = map[string]func(args []string) error{
 	"touching":  cmdTouching,
 	"exec":      cmdExec,
 	"adr":       cmdADR,
+	"stats":     cmdStats,
 	"merge":     cmdMerge,
 	"graph":     cmdGraph,
 	"acp-host":  cmdACPHost,
@@ -425,7 +430,8 @@ func cmdSend(f *fleet.Fleet, rest []string) error {
 		}
 		return nil
 	}
-	if r := f.SendBlocker(rest[0], true); r != "" && !force {
+	if r, code := f.SendBlock(rest[0], true); r != "" && !force {
+		f.Intervene(rest[0], board.KindSendRefused, code)
 		return fmt.Errorf("not sent: %s; fleet send --force types it anyway", r)
 	}
 	if now {

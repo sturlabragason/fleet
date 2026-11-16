@@ -136,7 +136,8 @@ func (s *Server) sendOne(a args, name string) (held bool, err error) {
 		}
 	}
 	if !a.Force {
-		if r := s.F.SendBlocker(name, a.Text != "" || slices.Contains(a.Keys, "Enter")); r != "" {
+		if r, code := s.F.SendBlock(name, a.Text != "" || slices.Contains(a.Keys, "Enter")); r != "" {
+			s.F.Intervene(name, board.KindSendRefused, code)
 			return false, fleet.UserError(r)
 		}
 	}
@@ -146,6 +147,7 @@ func (s *Server) sendOne(a args, name string) (held bool, err error) {
 			return false, err
 		}
 		if w != "" {
+			s.F.Intervene(name, board.KindConfirmRefused, "send")
 			return false, fleet.WaitingError(w)
 		}
 	}
@@ -207,6 +209,7 @@ func (s *Server) answer(a args) (string, error) {
 		return "", fmt.Errorf("option must be 1-9")
 	}
 	if !a.Confirmed {
+		s.F.Intervene(a.Name, board.KindConfirmRefused, "answer")
 		return "", fmt.Errorf("not confirmed: ask the user, then call again with confirmed=true")
 	}
 	var c fleet.Choice
@@ -315,6 +318,7 @@ func (s *Server) close(a args) (string, error) {
 		}
 	}
 	if !a.Confirmed {
+		s.F.Intervene(a.Name, board.KindConfirmRefused, "close")
 		return "", fmt.Errorf("not confirmed: ask the user, then call again with confirmed=true%s", note)
 	}
 	closed := ""

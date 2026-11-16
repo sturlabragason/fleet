@@ -158,6 +158,11 @@ func (f *Fleet) doneCheck(job checkJob, msgID, sum string) string {
 		}
 		cur.Card.Checked = res
 		recorded = true
+		verdict := "fail"
+		if res.Pass {
+			verdict = "pass"
+		}
+		f.Store.AppendEvent(board.Intervention(time.Now(), cur, board.KindDoneCheck, verdict))
 		return nil
 	}); err != nil {
 		logx.For("fleet").Warn("done-check not recorded", "agent", job.name, "err", err)

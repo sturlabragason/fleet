@@ -102,6 +102,9 @@ type Fleet struct {
 	Housekeeping bool
 	// retainedAt is the resident poll's last retention pass (retain.go).
 	retainedAt time.Time
+	// RotateEvents makes the retention pass rotate events.jsonl. Only the
+	// watcher sets it, so one process owns the rename (ADR-154).
+	RotateEvents bool
 	// FreeMem reads free memory for the guard; nil = /proc/meminfo (tests
 	// replace it).
 	FreeMem func() (uint64, error)
@@ -126,6 +129,7 @@ type Fleet struct {
 	wakeMu      sync.Mutex
 	wakeWarn    time.Time
 	lastCap     map[string]time.Time
+	disagree    map[string]string // agent -> last status_disagree recorded
 	caps        capCache
 	lastRecycle time.Time         // last recycle check (ADR-71)
 	globs       map[string]string // agent -> resolved session log (WatchPaths)
@@ -268,6 +272,7 @@ func (f *Fleet) SpawnWith(o SpawnOpts, name, profile, dir, prompt string) (*boar
 	}
 	if o.Model != "" {
 		if err := f.checkModel(profile, f.Profiles[profile], o.Model); err != nil {
+			f.Store.AppendEvent(board.Intervention(time.Now(), &board.Agent{Name: name, Profile: profile, Model: o.Model}, board.KindModelRefused, ""))
 			return nil, err
 		}
 	}

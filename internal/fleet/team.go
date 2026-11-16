@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
 )
 
@@ -97,11 +98,15 @@ func (f *Fleet) TeamSend(team, text string, confirmed bool) ([]Result, error) {
 		}
 		if !confirmed {
 			if w, err := f.Prompting(m); err != nil || w != "" {
+				if w != "" {
+					f.Intervene(m, board.KindConfirmRefused, "team_send")
+				}
 				rs = append(rs, Result{m, false, waitingNote(w, err)})
 				continue
 			}
 		}
-		if r := f.SendBlocker(m, true); r != "" {
+		if r, code := f.SendBlock(m, true); r != "" {
+			f.Intervene(m, board.KindSendRefused, code)
 			rs = append(rs, Result{m, false, "not sent: " + r + "; fleet_send name=" + m + " force=true types it anyway"})
 			continue
 		}

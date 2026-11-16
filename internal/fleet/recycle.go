@@ -76,6 +76,7 @@ func (f *Fleet) recycleScan(agents []board.Agent, now time.Time) {
 		for name := range due {
 			if a, ok := b.Agents[name]; ok && a.RecycleTold.IsZero() {
 				a.RecycleTold = now
+				f.Store.AppendEvent(board.Intervention(now, a, board.KindRecycleWake, ""))
 				tell = append(tell, name)
 			}
 		}

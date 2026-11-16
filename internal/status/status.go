@@ -228,10 +228,24 @@ func (s Set) Detect(text string) (Status, bool) {
 // Match is Detect plus the line that explains the status: for waiting, the
 // prompt (e.g. "Do you want to run this command?"), else the matching line.
 func (s Set) Match(text string) (Status, string, bool) {
+	st, line, _, ok := s.MatchRule(text)
+	return st, line, ok
+}
+
+// Rule names the pattern that decided a match: the list it is in (dead,
+// waiting, pending, working, error, idle; Menu is "menu") and its index
+// there, -1 for a built-in rule. The event log counts these (ADR-154).
+type Rule struct {
+	Kind  string
+	Index int
+}
+
+// MatchRule is Match plus the Rule that matched.
+func (s Set) MatchRule(text string) (Status, string, Rule, bool) {
 	lines := Tail(text, Window)
 	for _, l := range lines {
 		if deadPane.MatchString(l) {
-			return Error, strings.TrimSpace(l), true
+			return Error, strings.TrimSpace(l), Rule{"dead", -1}, true
 		}
 	}
 	last := -1 // last transcript line with content
@@ -247,15 +261,15 @@ func (s Set) Match(text string) (Status, string, bool) {
 	if last >= 0 {
 		skip[last] = false
 	}
-	for _, r := range s.Waiting {
+	for j, r := range s.Waiting {
 		for i, l := range lines {
 			if !skip[i] && r.MatchString(l) {
-				return Waiting, describe(lines, i, s.Waiting), true
+				return Waiting, describe(lines, i, s.Waiting), Rule{"waiting", j}, true
 			}
 		}
 	}
 	if l, ok := s.pending(lines, skip); ok {
-		return Waiting, PendingPrefix + l, true
+		return Waiting, PendingPrefix + l, Rule{"pending", -1}, true
 	}
 	if s.Scan == "window" {
 		// Claude, agy and vibe put the spinner and the error above the
@@ -265,8 +279,11 @@ func (s Set) Match(text string) (Status, string, bool) {
 			rs []*regexp.Regexp
 		}{{Working, s.Working}, {Error, s.Error}} {
 			for i := len(lines) - 1; i >= 0; i-- {
-				if !skip[i] && matchAny(c.rs, lines[i]) {
-					return c.st, clean(lines[i]), true
+				if skip[i] {
+					continue
+				}
+				if j := firstMatch(c.rs, lines[i]); j >= 0 {
+					return c.st, clean(lines[i]), Rule{string(c.st), j}, true
 				}
 			}
 		}
@@ -277,14 +294,12 @@ func (s Set) Match(text string) (Status, string, bool) {
 			st Status
 			rs []*regexp.Regexp
 		}{{Error, s.Error}, {Working, s.Working}, {Idle, s.Idle}} {
-			for _, r := range c.rs {
-				if r.MatchString(l) {
-					return c.st, clean(l), true
-				}
+			if j := firstMatch(c.rs, l); j >= 0 {
+				return c.st, clean(l), Rule{string(c.st), j}, true
 			}
 		}
 	}
-	return Unknown, "", false
+	return Unknown, "", Rule{}, false
 }
 
 // PendingPrefix starts waiting_for when the only reason is unsubmitted input.
@@ -365,12 +380,17 @@ func (s Set) pending(lines []string, skip []bool) (string, bool) {
 }
 
 func matchAny(rs []*regexp.Regexp, l string) bool {
-	for _, r := range rs {
+	return firstMatch(rs, l) >= 0
+}
+
+// firstMatch is the index of the first of rs that matches l, -1 for none.
+func firstMatch(rs []*regexp.Regexp, l string) int {
+	for i, r := range rs {
 		if r.MatchString(l) {
-			return true
+			return i
 		}
 	}
-	return false
+	return -1
 }
 
 // describe returns lines[i] cleaned of box borders, plus the next line when

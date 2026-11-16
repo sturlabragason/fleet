@@ -43,6 +43,7 @@ func (f *Fleet) resurface(agents []*board.Agent, now time.Time) {
 		for _, a := range b.Agents {
 			if due(a) {
 				a.ResurfacedAt = a.Report.At
+				f.Store.AppendEvent(board.Intervention(now, a, board.KindResurfaceWake, a.Report.State))
 				tell = append(tell, board.Agent{Name: a.Name, Report: &board.Report{State: a.Report.State, Summary: a.Report.Summary, At: a.Report.At}})
 			}
 		}

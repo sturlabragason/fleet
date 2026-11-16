@@ -94,10 +94,18 @@ func (f *Fleet) userBlocker(a *board.Agent) string {
 // that is not fleet's own pending paste. fleet_send, `fleet send` and a team
 // send refuse on it unless forced (ADR-61).
 func (f *Fleet) SendBlocker(name string, submit bool) string {
+	why, _ := f.SendBlock(name, submit)
+	return why
+}
+
+// SendBlock is SendBlocker plus a short code for the reason (user_typing,
+// interactive_open, draft), which the event log records instead of the
+// reason's text (ADR-154).
+func (f *Fleet) SendBlock(name string, submit bool) (why, code string) {
 	a, ok := f.Store.Load().Agents[name]
 	pane := f.paneOf(name)
 	if !ok || pane == "" {
-		return "" // Send itself says what is wrong
+		return "", "" // Send itself says what is wrong
 	}
 	open, last := userOn(f.clients(), pane)
 	if a.UserAt.After(last) {
@@ -105,16 +113,16 @@ func (f *Fleet) SendBlocker(name string, submit bool) string {
 	}
 	switch {
 	case !last.IsZero() && time.Since(last) < board.UserTyping:
-		return fmt.Sprintf("the user typed in %s's pane %s ago", name, sessions.Age(time.Since(last)))
+		return fmt.Sprintf("the user typed in %s's pane %s ago", name, sessions.Age(time.Since(last))), "user_typing"
 	case open && a.Interactive:
-		return fmt.Sprintf("%s is interactive and the user has its pane open", name)
+		return fmt.Sprintf("%s is interactive and the user has its pane open", name), "interactive_open"
 	}
 	if submit && !a.ACP() {
 		if in := f.draftIn(name, pane); in != "" {
-			return fmt.Sprintf("%s's input box holds unsubmitted text (%q)", name, status.Cut(in, 40))
+			return fmt.Sprintf("%s's input box holds unsubmitted text (%q)", name, status.Cut(in, 40)), "draft"
 		}
 	}
-	return ""
+	return "", ""
 }
 
 // draftIn returns the user's unsubmitted text in agent name's input box ("" =

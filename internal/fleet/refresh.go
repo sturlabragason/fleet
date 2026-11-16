@@ -131,10 +131,12 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 			// soft mark and nobody types into a pane the user is in.
 			if tell && nr == "1" && a.NoReportTold.Before(a.PromptAt) {
 				a.NoReportTold = now
+				f.Store.AppendEvent(board.Intervention(now, a, board.KindNoReportWake, ""))
 				silent = append(silent, stuckNote{name: a.Name, profile: a.Profile, pane: ids[a.Name], line: a.LastLine})
 			}
 			if tell && a.Stuck.Stuck() && !a.Stuck.Notified {
 				a.Stuck.Notified = true
+				f.Store.AppendEvent(board.Intervention(now, a, board.KindStuckWake, stuckCause(a.Stuck)))
 				stuck = append(stuck, stuckNote{name: a.Name, profile: a.Profile, pane: ids[a.Name], reason: a.Stuck.Reason, line: a.LastLine})
 			}
 		}
@@ -292,7 +294,7 @@ func (f *Fleet) classify(a *board.Agent, alive, dead bool, pane, ck string, now 
 	if t := status.Tail(text, 1); len(t) > 0 {
 		a.LastLine = t[0]
 	}
-	st, line, ok := f.Patterns[a.Patterns].Match(text)
+	st, line, rule, ok := f.Patterns[a.Patterns].MatchRule(text)
 	if ok && (st == status.Waiting || st == status.Error) && line != "" {
 		// waiting_for: the prompt, not the footer under it.
 		a.LastLine = line
@@ -301,7 +303,7 @@ func (f *Fleet) classify(a *board.Agent, alive, dead bool, pane, ck string, now 
 	// made of the rest of the pane: a picker nobody answers is waiting, not
 	// working, and its own question is the thing to answer (DESIGN §4).
 	if m, mok := f.Patterns[a.Patterns].Menu(text); mok {
-		st, ok = status.Waiting, true
+		st, rule, ok = status.Waiting, status.Rule{Kind: "menu", Index: -1}, true
 		if m.Question != "" {
 			a.LastLine = m.Question
 		}
@@ -324,7 +326,9 @@ func (f *Fleet) classify(a *board.Agent, alive, dead bool, pane, ck string, now 
 	// A hook the tool fired itself beats a guess from the screen, and beats
 	// the screen outright when it happened after the pane last changed
 	// (DESIGN §18 #3, ADR-49).
-	if hs, hok := f.hookState(a, ok); hok {
+	hs, hok := f.hookState(a, ok)
+	f.noteDisagree(a, hs.Status, st, rule, hok && ok && hs.Status != st, now)
+	if hok {
 		st = applyHook(a, hs)
 	}
 	st, a.Stuck = status.NextStuck(a.Stuck, status.StuckIn{
@@ -391,4 +395,13 @@ func (f *Fleet) tagPane(pane, st string, since time.Time) {
 	f.T.SetPaneOption(pane, "@fleet_status_since", strconv.FormatInt(since.UnixNano(), 10))
 	f.T.SetPaneOption(pane, "@fleet_color", c)
 	f.T.SetPaneOption(pane, "@fleet_glyph", g)
+}
+
+// stuckCause is the stuck rule that fired, for the event log: the reason
+// itself quotes the screen.
+func stuckCause(s *status.StuckState) string {
+	if s.ErrSeen >= status.ErrorRepeats {
+		return "repeated_error"
+	}
+	return "frozen"
 }

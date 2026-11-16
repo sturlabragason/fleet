@@ -20,6 +20,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/mail"
 	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/tools"
 	"github.com/sturlabragason/fleet/internal/update"
@@ -171,6 +172,9 @@ func (s *Server) contextWarning() string {
 	}
 	if !supervisor.HandoffDue(used, max) {
 		return ""
+	}
+	if s.F != nil {
+		s.F.Intervene(mail.BoxOf(s.Admiral), board.KindContextWarning, fmt.Sprintf("%d%%", supervisor.Pct(used, max)))
 	}
 	return fmt.Sprintf("\n\n[admiral context %d%%, %dk tokens: save anything pending with fleet_note, then call fleet_handoff]", supervisor.Pct(used, max), used/1000)
 }
