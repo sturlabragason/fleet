@@ -360,8 +360,9 @@ func TestResolveLayersOntoEveryLevel(t *testing.T) {
 	}
 }
 
-// Heavy checks run in CI on the agent's pushed branch (ADR-69): pro and
-// standard push only their own fleet/ branch and test locally by package.
+// Heavy checks run in CI on the agent's pushed branch (ADR-69, ADR-149): pro
+// and standard push only their own fleet/ branch and test locally by package
+// only when CI can't.
 func TestProAndStandardPushOnlyTheirBranch(t *testing.T) {
 	for _, l := range []Level{Pro, Standard} {
 		txt := Text(l)

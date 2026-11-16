@@ -22,7 +22,7 @@ import (
 
 // defaultMergeCheck is the repo's own gate (AGENTS.md): it must exit 0 on the
 // rebased branch and again on main after the merge.
-const defaultMergeCheck = "make build && go vet ./... && go test ./..."
+const defaultMergeCheck = "make build && go vet ./..." // tests run in CI (ADR-149)
 
 // cmdMerge rebases this worktree's branch onto main, runs the checks, merges
 // into the main checkout and runs them again (ADR-48). Exit 1: a conflict
@@ -80,7 +80,7 @@ func cmdMerge(args []string) error {
 		// of merging untested work.
 		if *check == defaultMergeCheck && !hasMakefile(*dir) {
 			return fail(fmt.Errorf("no Makefile here, so the default check (%s) can't run:\n"+
-				"  pass your repo's gate, e.g. --check 'go build ./... && go test ./...', or --check '' to skip it", defaultMergeCheck))
+				"  pass your repo's gate, e.g. --check 'go build ./... && go vet ./...', or --check '' to skip it", defaultMergeCheck))
 		}
 		opts.Check = func(d string) error { return shellCheck(d, *check) }
 	}

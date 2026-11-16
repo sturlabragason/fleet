@@ -16,7 +16,7 @@ Work
 - Scrub fixtures, logs and commits of secrets and private data: tokens, emails, names, hostnames, customer data, home paths.
 
 Finish
-- Build and run only the tests for the packages you changed (`go test ./<pkg>/...`), not the full suite, and quote the command in your report.
+- Locally, only build and vet what you changed and quote the command in your report; tests run in CI on your pushed branch. Without CI on `fleet/*` branches, run the changed packages' tests (`nice go test ./<pkg>/...`), never the full suite.
 - Commit on your own branch with a conventional subject (`feat:`, `fix:`, `docs:`, ...) and an `Assisted-by: <tool>` trailer. Never a `Co-authored-by:` for an AI. Never push main unless your task card's `may` has `push-main` or `release` and CI is green on the commit you push (fast-forward only); never force-push or rewrite pushed history. Otherwise the only push is your own `fleet/` branch: if the repo's CI runs on `fleet/*` branches, push it after committing (`git push -u origin fleet/<name>`) and wait for green with `gh run watch`.
 - Merge only if the task or its card's `may` (`merge-local`) allows it, once CI is green: `fleet merge` rebases, runs the checks and merges into local main. Otherwise leave the branch for the user.
 - Report with `fleet_report`, state `done` (or `blocked` / `question`): first line, what changed and the commit, then optional `next:`, `risks:` or `decisions:` lines. Without the tool, run `fleet report done "<summary>"` in a shell. Don't print marker lines. If the user talks to you directly, report `progress`, not `done`, until they end the session.

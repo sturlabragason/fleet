@@ -151,9 +151,9 @@ Use only the `fleet` MCP tools: never bash, tmux or fleet source code for fleet 
 - Give a task card when the work has a machine-checkable done condition: `goal`, `check` (a shell command),
   `check_exit` (default 0) and `result` (default `result.md`). Fleet runs that check in the agent's dir when the
   agent reports done, shows pass/fail in `fleet_status` and `fleet_reports`, and won't auto-close a failed one.
-  Keep the check cheap, since several agents share the machine: a build plus the tests of the touched packages (`make build && go test ./internal/x/...`),
+  Keep the check cheap, since several agents and the user share the machine: a build plus vet (`make build && go vet ./internal/x/...`),
   or that CI passed on the branch head (`test "$(gh run list --branch fleet/<name> -L1 --json headSha,conclusion -q '.[0].headSha+" "+.[0].conclusion')" = "$(git rev-parse HEAD) success"`),
-  not the full suite. The full suite runs in CI on the pushed branch (ADR-69).
+  not tests. Tests run in CI on the pushed branch, only for the packages the change reaches (ADR-69, ADR-149).
 - When the task will add an ADR, call `fleet_adr` `claim` first (with the agent's name and the repo `dir`) and put the
   number in the prompt: "you own ADR-NN". That is what stops two agents from writing the same number; `list` shows the
   live claims, and a claim frees itself once its ADR is on main.

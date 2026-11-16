@@ -75,7 +75,7 @@ Without `--admiral-profile`, the admiral runs the Copilot CLI. Other tools and y
 - **A live wall.** Real, interactive tmux panes in layouts of 1, 2, 4, 6 or 9, or main plus stack. The pane that needs you gets the big slot. `fleet up --monitors 2` puts the wall on a second screen.
 - **The admiral.** An agent with `fleet_*` MCP tools to read status, peek at screens, send prompts, answer, spawn and close. `fleet peek --summary <name>` gives it about five lines from a small model instead of a full screen. It shows how full its context is, and `Alt+R` hands it off to a fresh session. See [docs/admiral.md](docs/admiral.md).
 - **A worktree per agent.** Spawning into a git repo gives the agent `<repo>.wt/<name>` on branch `fleet/<name>`. `fleet touching` shows which other worktrees change the same files, and `fleet merge` rebases, checks and merges one into local main.
-- **Task cards.** `fleet spawn --goal "..." --check "go test ./..."` runs the check when the agent reports done and tells the admiral whether it passed.
+- **Task cards.** `fleet spawn --goal "..." --check "go build ./... && go vet ./..."` runs the check when the agent reports done and tells the admiral whether it passed.
 - **Spend per agent.** `fleet spend` shows AI credits or tokens per agent and the fleet total, read from the tools' own session files.
 - **Adopt sessions.** `fleet sessions` lists Copilot and Claude sessions started outside fleet, and `fleet adopt` resumes one as an agent.
 - **Teams, mail and squads.** Group agents with `fleet team`, let them message each other with `fleet mail`, and give a leader a squad of up to four agents with `fleet spawn --leader`.
