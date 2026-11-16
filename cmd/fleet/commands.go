@@ -79,7 +79,8 @@ var usage = `usage:
                                             --driver as for spawn
   fleet sessions [--all] [--json] [-n 20] [words...]
                                             list copilot/claude sessions to adopt, newest first
-  fleet ls [--json]                         the agents; DRIVER is acp or tmux
+  fleet ls [--json]                         the agents; DRIVER is acp or tmux, WHERE (shown once
+                                            an agent runs off this machine) local or cluster:CTX
                                             (--json: an array, each agent with "schema": 1)
   fleet info <name>                         one agent's facts, as fleet_info: driver (and ACP server),
                                             the fleet version that started it, status, git, session, spend
@@ -751,7 +752,11 @@ func (l lsAgent) MarshalJSON() ([]byte, error) {
 		return b, nil
 	}
 	var extra []byte
-	for _, kv := range [][2]string{{"team", l.Team}, {"team_color", l.TeamColor}} {
+	where := ""
+	if l.Where == "" {
+		where = l.WhereName() // "local"; a remote agent's own "where" is already in b (ADR-150)
+	}
+	for _, kv := range [][2]string{{"team", l.Team}, {"team_color", l.TeamColor}, {"where", where}} {
 		if kv[1] == "" {
 			continue
 		}
@@ -780,19 +785,30 @@ func writeLs(out io.Writer, as []*board.Agent, teams map[string]team.Info, asJSO
 		}
 		return e.Encode(ls)
 	}
-	withTeam := false
+	withTeam, withWhere := false, false
 	for _, a := range as {
 		if teams[a.Name].Team != "" {
 			withTeam = true
 		}
+		if a.Where != "" {
+			withWhere = true
+		}
+	}
+	where := func(a *board.Agent) string { return "" }
+	if withWhere {
+		where = func(a *board.Agent) string { return "\t" + a.WhereName() }
 	}
 	var buf bytes.Buffer
 	w := tabwriter.NewWriter(&buf, 0, 2, 2, ' ', 0)
 	if withTeam {
-		fmt.Fprintln(w, "NAME\tTEAM\tPROFILE\tDRIVER\tSTATUS\tFOR\tPANE\tLAST LINE")
+		fmt.Fprint(w, "NAME\tTEAM\tPROFILE\tDRIVER")
 	} else {
-		fmt.Fprintln(w, "NAME\tPROFILE\tDRIVER\tSTATUS\tFOR\tPANE\tLAST LINE")
+		fmt.Fprint(w, "NAME\tPROFILE\tDRIVER")
 	}
+	if withWhere {
+		fmt.Fprint(w, "\tWHERE")
+	}
+	fmt.Fprintln(w, "\tSTATUS\tFOR\tPANE\tLAST LINE")
 	colors := []string{""}
 	for _, a := range as {
 		ll := a.LastLine
@@ -809,7 +825,7 @@ func writeLs(out io.Writer, as []*board.Agent, teams map[string]team.Info, asJSO
 			name += "\t" + cell
 			colors = append(colors, ti.Color)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", name, a.Profile, a.DriverName(), a.Status, time.Since(a.StatusSince).Round(time.Second), a.PaneID, ll)
+		fmt.Fprintf(w, "%s\t%s\t%s%s\t%s\t%s\t%s\t%s\n", name, a.Profile, a.DriverName(), where(a), a.Status, time.Since(a.StatusSince).Round(time.Second), a.PaneID, ll)
 	}
 	w.Flush()
 	table := buf.String()

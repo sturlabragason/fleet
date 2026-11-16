@@ -16,6 +16,8 @@ header h1{font-size:16px;margin:0}
 .tile{background:var(--bg);border:1px solid var(--surface);border-left:6px solid var(--idle);border-radius:6px;padding:8px 10px;cursor:pointer;text-align:left;color:inherit;font:inherit;min-width:0}
 .tile:focus-visible,.tile.sel{outline:2px solid var(--select)}
 .tile .n{font-weight:bold}
+.tile.remote{border-style:dashed;border-left-style:solid}
+.tile .w{background:var(--sub);color:var(--crust);padding:0 4px;margin-left:6px;border-radius:3px}
 .tile .s,.tile .l,.tile .r{color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .st-working{border-left-color:var(--working)} .st-waiting{border-left-color:var(--waiting)}
 .st-error{border-left-color:var(--error)} .st-stuck{border-left-color:var(--stuck)} .st-gone{border-left-color:var(--gone)}
@@ -55,9 +57,10 @@ let open = null, peekTimer = null, menu = null, lastHTML = "";
 
 function tile(a) {
   const b = document.createElement("button");
-  b.className = "tile st-" + a.status + (a.name === open ? " sel" : "");
+  b.className = "tile st-" + a.status + (a.badge ? " remote" : "") + (a.name === open ? " sel" : "");
   const row = (cls, t) => { const d = document.createElement("div"); d.className = cls; d.textContent = t; b.appendChild(d); };
   row("n", a.name);
+  if (a.badge) { const w = document.createElement("span"); w.className = "w"; w.title = a.where; w.textContent = a.badge; b.lastChild.appendChild(w); }
   row("s", a.status + " · " + a.profile + (a.admiral ? " · " + a.admiral : ""));
   row("l", a.line || a.goal || "");
   if (a.report) row("r", "✉ " + a.report);

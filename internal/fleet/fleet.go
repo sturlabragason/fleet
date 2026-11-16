@@ -568,7 +568,10 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 		Leader: ex.Role.Leader, LeadBy: ex.Role.LeadBy, Interactive: ex.Role.Interactive, Driver: ex.Driver,
 		FleetVersion: Version}
 	if a.ACP() {
-		a.ACPServer = p.ACPLabel()
+		a.ACPServer, a.Where = p.ACPLabel(), p.Where()
+	}
+	if a.Where != "" {
+		f.T.SetPaneOption(pane, "@fleet_where", board.WhereBadge(a.Where)) // the badge on its pane border (ADR-150)
 	}
 	if goal != "" && secret != "" {
 		a.PromptAt = now // a spawn with a task: the turn it starts should end in a report (ADR-68)

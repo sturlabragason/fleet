@@ -1142,4 +1142,10 @@ func TestKagentClusterProfile(t *testing.T) {
 	if got := p.ACPArgv(Vars{Fleet: "/bin/fleet", Name: "a1"}, Launch{Mode: AutoMode}); !reflect.DeepEqual(got, want) || !p.HasACPMode(AutoMode) || p.Driver != "acp" {
 		t.Errorf("argv %q (want %q), auto %v, driver %q", got, want, p.HasACPMode(AutoMode), p.Driver)
 	}
+	// Where comes from the adapter, not the name (ADR-150).
+	for name, want := range map[string]string{"kagent-prod": "cluster:prod", "kagent": "cluster", "claude": ""} {
+		if got := ps[name].Where(); got != want {
+			t.Errorf("%s: where %q, want %q", name, got, want)
+		}
+	}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/keys"
 	"github.com/sturlabragason/fleet/internal/layout"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/theme"
 )
 
 // View renders the header and a card per agent wrapped to the pane. When the
@@ -316,6 +317,11 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 	if noReport != "" {
 		tgt, tw2 = tgt+noReportStyleOf(noReport).Render(" "+noReportMark), tw2+2
 	}
+	// The badge takes what the name (up to 8 cells), a team ◆ and the marks
+	// leave on line 1 (inner is w-4).
+	if wc := whereChip(a, w-13-tw2-min(ansi.StringWidth(a.Name), 8)); wc != "" {
+		tgt, tw2 = tgt+" "+wc, tw2+1+ansi.StringWidth(wc)
+	}
 	chip := m.ownerChip(a)
 	tw2 += ansi.StringWidth(chip)
 	inner := w - 4
@@ -410,6 +416,21 @@ func (m *Model) queueMark(name string) string {
 		return fmt.Sprintf(" #%d", n)
 	}
 	return ""
+}
+
+// whereChip is the badge of an agent that runs off this machine (ADR-150),
+// "☁ homelab" reversed on Subtext0 like its pane border, or the bare ☁ when
+// that is wider than w cells (at most 12); "" for a local one.
+func whereChip(a *board.Agent, w int) string {
+	b := board.WhereBadge(a.Where)
+	if b == "" {
+		return ""
+	}
+	if ansi.StringWidth(b) > min(w, 12) {
+		b = "☁"
+	}
+	st := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Crust)).Background(lipgloss.Color(theme.Subtext0)).Bold(true)
+	return st.Render(" " + b + " ")
 }
 
 // driverMark follows the profile on the tile's second line: "·acp" for an

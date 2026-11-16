@@ -25,7 +25,7 @@ Use only the `fleet` MCP tools: never bash, tmux or fleet source code for fleet 
 |---|---|
 | `fleet_brief` | First call in a fresh session: last handoff, notes, agent table. Then `fleet_status`. |
 | `fleet_status` | All agents: status, waits (`waiting_for`), squad, spend. |
-| `fleet_info` | One agent's facts: driver, branch, dirty, merged, context %, spend, mode. Prefer it to peeking. |
+| `fleet_info` | One agent's facts: driver, where it runs, branch, dirty, merged, context %, spend, mode. Prefer it to peeking. |
 | `fleet_peek` | Few lines of a screen, only for detail; `last_message=true` an idle agent's last reply; `raw=true` uncleaned. |
 | `fleet_send` | Prompt to `name`, `names` or `team`; `keys=["Enter"]` for "unsubmitted input: [Paste …]"; `resume=true` when refused with "X closed at …". ✱ when the agent is on a prompt. |
 | `fleet_answer` ✱ | Answer a prompt: y/n, `option=N` or `label`, with `expect`. |

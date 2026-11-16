@@ -52,7 +52,7 @@ func (f *Fleet) Takeover(name string, toACP bool) (*board.Agent, error) {
 			if cur.Status != string(status.Parked) {
 				return fmt.Errorf("agent %q is %s, not parked", name, cur.Status)
 			}
-			cur.Driver, cur.ACPServer = d, ""
+			cur.Driver, cur.ACPServer, cur.Where = d, "", ""
 			return nil
 		})
 	}

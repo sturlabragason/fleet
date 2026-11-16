@@ -178,6 +178,7 @@ func (f *Fleet) Info(name string) (string, error) {
 		kv("interactive", "the user typed in its pane "+now.Sub(a.UserAt).Round(time.Second).String()+" ago; not auto-closed for now")
 	}
 	kv("driver", DriverLine(a, f.Profiles[a.Profile]))
+	kv("where", a.WhereName())
 	if a.FleetVersion != "" {
 		kv("fleet version", a.FleetVersion+" (started the agent)")
 	}

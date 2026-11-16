@@ -524,7 +524,7 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		// Not Select: Lavender means "target slot" and nothing else (ADR-37).
 		{"set-option", "-g", "pane-active-border-style", "fg=" + theme.Text},
 		{"set-option", "-g", "pane-border-format",
-			" #{?#{==:#{@role},sup},#[fg=#{?" + fleet.MultiOption + ",#{@fleet_admiral_color}," + theme.Supervisor + "}]#[bold]admiral#{?" + fleet.MultiOption + ", #{@fleet_admiral_name},}#[default]#{?@fleet_admiral_profile,#[fg=" + theme.Muted + "] · #{@fleet_admiral_profile}#[default],}#{?" + fleet.MultiOption + ",#{?@fleet_admiral_unread,#[fg=" + theme.Waiting + "] · ● #{@fleet_admiral_unread}#[default],},}#{?@fleet_admiral_ext,#[fg=" + theme.Waiting + "] · #{@fleet_admiral_ext}#[default],}#{?@fleet_ctx,#[fg=#{@fleet_ctx_color}] · ctx #{@fleet_ctx}#[default],},#{?#{==:#{@role},ov},#[fg=" + theme.Text + "]#[bold]overview#[default]," + targetMark + ownerMark + "#[fg=#{?@fleet_color,#{@fleet_color},default}]#{@fleet_glyph} #{@fleet_agent}" + pinMark + noReportMark + "#{?@fleet_team, #[fg=#{@fleet_team_color}]◆,} #[fg=" + theme.Muted + "]#{@fleet_status}#[default]" + nextOutMark + "}} "},
+			" #{?#{==:#{@role},sup},#[fg=#{?" + fleet.MultiOption + ",#{@fleet_admiral_color}," + theme.Supervisor + "}]#[bold]admiral#{?" + fleet.MultiOption + ", #{@fleet_admiral_name},}#[default]#{?@fleet_admiral_profile,#[fg=" + theme.Muted + "] · #{@fleet_admiral_profile}#[default],}#{?" + fleet.MultiOption + ",#{?@fleet_admiral_unread,#[fg=" + theme.Waiting + "] · ● #{@fleet_admiral_unread}#[default],},}#{?@fleet_admiral_ext,#[fg=" + theme.Waiting + "] · #{@fleet_admiral_ext}#[default],}#{?@fleet_ctx,#[fg=#{@fleet_ctx_color}] · ctx #{@fleet_ctx}#[default],},#{?#{==:#{@role},ov},#[fg=" + theme.Text + "]#[bold]overview#[default]," + targetMark + ownerMark + "#[fg=#{?@fleet_color,#{@fleet_color},default}]#{@fleet_glyph} #{@fleet_agent}" + pinMark + noReportMark + "#{?@fleet_team, #[fg=#{@fleet_team_color}]◆,}" + whereMark + " #[fg=" + theme.Muted + "]#{@fleet_status}#[default]" + nextOutMark + "}} "},
 		// Unfocused panes recede one step (Overlay2, 5.8:1 on Base: still
 		// readable, so an emphasised pane you are not in stays legible).
 		{"set-option", "-g", "window-style", "fg=" + theme.Overlay2 + ",bg=" + theme.Base},
@@ -653,6 +653,10 @@ var (
 	// nextOutMark ends the title of the pane a card would evict (no target,
 	// full wall).
 	nextOutMark string
+	// whereMark is the badge of an agent that runs off this machine
+	// (@fleet_where, ADR-150): "☁ homelab" reversed on Subtext0, a neutral
+	// ink no team or status colour uses, before the status word.
+	whereMark string
 	// ownerMark is the owner chip on an agent's border while several
 	// admirals exist (@fleet_owner is only set then, DESIGN §6.12).
 	ownerMark string
@@ -665,6 +669,7 @@ func init() {
 			"#{?#{==:#{@fleet_noreport},user}, #[fg=" + theme.Muted + "]…#[fg=#{?@fleet_color,#{@fleet_color},default}],}"
 		pinMark = "#{?@fleet_pin, #[fg=" + theme.Overlay1 + "]⚑#[fg=#{?@fleet_color,#{@fleet_color},default}],}"
 		ownerMark = "#{?" + fleet.MultiOption + ",#{?@fleet_owner,#[fg=" + theme.Crust + "#,bg=#{@fleet_owner_color}#,bold] #{@fleet_owner} #[default] ,},}"
+		whereMark = "#{?@fleet_where, #[fg=" + theme.Crust + "#,bg=" + theme.Subtext0 + "#,bold] #{@fleet_where} #[default],}"
 		nextOutMark = "#{?#{==:#{pane_id},#{@fleet_next_out}}, #[fg=" + theme.Gone + "]· next out#[default],}"
 	})
 }

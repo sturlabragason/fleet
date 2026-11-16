@@ -125,6 +125,10 @@ type Agent struct {
 	// "claude-agent-acp@0.103.0". "" on a tmux agent or one started before
 	// v1.2.0.
 	ACPServer string `json:"acp_server,omitempty"`
+	// Where is where the agent runs (ADR-150): "" on this machine, else
+	// "<kind>:<target>" from its profile's driver, as "cluster:admin@homelab"
+	// for a kagent agent (tools.Profile.Where).
+	Where string `json:"where,omitempty"`
 	// FleetVersion is the fleet build that last started the agent's window
 	// (spawn, wake or adopt; ADR-77). "" before v1.2.0.
 	FleetVersion string `json:"fleet_version,omitempty"`
@@ -147,6 +151,31 @@ func (a *Agent) DriverName() string {
 		return DriverACP
 	}
 	return "tmux"
+}
+
+// WhereName is Where, or "local" for an agent on this machine.
+func (a *Agent) WhereName() string {
+	if a.Where == "" {
+		return "local"
+	}
+	return a.Where
+}
+
+// WhereBadge is the short badge of a remote agent, "☁ homelab" for
+// "cluster:admin@homelab": the target after its last "@" or "/", else the
+// kind. "" for a local agent.
+func WhereBadge(where string) string {
+	if where == "" {
+		return ""
+	}
+	kind, target, _ := strings.Cut(where, ":")
+	if i := strings.LastIndexAny(target, "@/"); i >= 0 && i < len(target)-1 {
+		target = target[i+1:]
+	}
+	if target == "" {
+		target = kind
+	}
+	return "☁ " + target
 }
 
 // Card is a spawn's task card: what the task is, how fleet checks it is

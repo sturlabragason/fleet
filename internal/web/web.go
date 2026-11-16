@@ -189,6 +189,10 @@ type Tile struct {
 	Goal    string    `json:"goal,omitempty"`
 	Admiral string    `json:"admiral,omitempty"`
 	Report  string    `json:"report,omitempty"`
+	// Where and Badge mark an agent that runs off this machine (ADR-150):
+	// "cluster:admin@homelab" and "☁ homelab"; both empty for a local one.
+	Where string `json:"where,omitempty"`
+	Badge string `json:"badge,omitempty"`
 }
 
 // View is what /events pushes: every agent, and whether the watcher that
@@ -203,7 +207,7 @@ func (s *Server) view() View {
 	v := View{Schema: board.Schema, Agents: []Tile{}}
 	for _, a := range s.F.Store.Load().Sorted() {
 		t := Tile{Name: a.Name, Status: a.Status, Since: a.StatusSince, Line: a.LastLine,
-			Profile: a.Profile, Goal: a.Goal, Admiral: a.Admiral}
+			Profile: a.Profile, Goal: a.Goal, Admiral: a.Admiral, Where: a.Where, Badge: board.WhereBadge(a.Where)}
 		if a.Report != nil {
 			first, _, _ := strings.Cut(a.Report.Summary, "\n")
 			t.Report = a.Report.State + ": " + first

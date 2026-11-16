@@ -752,3 +752,26 @@ func sgrBlinks(s string) bool {
 	}
 	return false
 }
+
+// An agent that runs off this machine carries its badge on line 1 of its
+// card, and the card keeps its height (ADR-150).
+func TestRemoteBadgeOnTile(t *testing.T) {
+	zone.NewGlobal()
+	m := New(&fakeBE{}, "")
+	m.Update(tea.WindowSizeMsg{Width: 160, Height: 9})
+	a := &board.Agent{Name: "k1", Profile: "kagent-homelab", Status: "working", Driver: board.DriverACP, Where: "cluster:admin@homelab"}
+	tile := m.tile(a, m.cfg.TileW)
+	if l1 := strings.Split(ansi.Strip(tile), "\n")[1]; !strings.Contains(l1, "k1  ☁ homelab ") {
+		t.Errorf("line 1 %q", l1)
+	}
+	m.teams = map[string]team.Info{"k1": {Team: "alpha", Color: "#89b4fa"}}
+	for _, w := range []int{m.cfg.TileW, 26} {
+		if tile := m.tile(a, w); strings.Count(tile, "\n") != layout.Default.TileH-1 {
+			t.Errorf("width %d: the badge wrapped line 1:\n%s", w, ansi.Strip(tile))
+		}
+	}
+	a.Where = ""
+	if strings.Contains(m.tile(a, m.cfg.TileW), "☁") {
+		t.Error("a local agent has a badge")
+	}
+}

@@ -41,6 +41,22 @@ func TestLsTeamColumn(t *testing.T) {
 	}
 }
 
+// WHERE appears once an agent runs off this machine; the JSON says where
+// every agent runs (ADR-150).
+func TestLsWhere(t *testing.T) {
+	as := []*board.Agent{{Name: "a1", Profile: "fake", Status: "idle"}, {Name: "k1", Profile: "kagent-homelab", Status: "working", Driver: board.DriverACP, Where: "cluster:admin@homelab"}}
+	var plain, js bytes.Buffer
+	writeLs(&plain, as, nil, false)
+	if lines := strings.Split(plain.String(), "\n"); !strings.HasPrefix(lines[0], "NAME  PROFILE         DRIVER  WHERE                  STATUS") ||
+		!strings.Contains(lines[1], "tmux    local ") || !strings.Contains(lines[2], "acp     cluster:admin@homelab  working") {
+		t.Errorf("table:\n%s", plain.String())
+	}
+	writeLs(&js, as, nil, true)
+	if strings.Count(js.String(), `"where": "local"`) != 1 || strings.Count(js.String(), `"where": "cluster:admin@homelab"`) != 1 {
+		t.Errorf("json:\n%s", js.String())
+	}
+}
+
 func TestConfirmClose(t *testing.T) {
 	for in, want := range map[string]bool{"y\n": true, "YES\n": true, "\n": false, "n\n": false, "sure\n": false, "": false} {
 		var out bytes.Buffer
