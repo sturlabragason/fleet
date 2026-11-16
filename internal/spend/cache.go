@@ -94,6 +94,9 @@ func (c *Cache) File(path string, k Kind) (Spend, bool) {
 	if ctx > 0 {
 		e.acc.Context = ctx
 	}
+	if r.add.Quota != nil {
+		e.acc.Quota = r.add.Quota
+	}
 	e.last = r.lastID
 	e.off = off + r.consumed
 	e.size, e.mod = st.Size(), st.ModTime()

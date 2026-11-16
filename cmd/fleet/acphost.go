@@ -14,7 +14,10 @@ import (
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/acphost"
+	"github.com/sturlabragason/fleet/internal/board"
+	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/spend"
 	"github.com/sturlabragason/fleet/internal/sysx"
 	"golang.org/x/term"
 )
@@ -90,6 +93,12 @@ func cmdACPHost(args []string) error {
 		SessionID: *session, Prompt: prompt, OnPromptSent: sent, CopilotEvents: *copilotEvents,
 		Mode: *mode, Model: *model, MCP: mcp, Meta: meta, Profile: *profile,
 		Out: os.Stdout, In: os.Stdin,
+	}
+	// The usage footer reads spend as fleet spend does (ADR-151).
+	if f, err := fleet.Open(); err == nil {
+		cfg.Spend = func(sid string) (spend.Spend, bool) {
+			return f.SpendOf(&board.Agent{Name: name, Profile: *profile, SessionID: sid, Driver: board.DriverACP})
+		}
 	}
 	// A terminal gets the input line: raw key presses, so Esc cancels and
 	// Ctrl-C never stops the agent (ADR-82).

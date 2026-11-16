@@ -73,6 +73,8 @@ type view struct {
 	scroll                int   // lines scrolled back from the bottom
 	page                  int   // body height at the last draw, for PgUp
 
+	meter meter // the usage footer (ADR-151)
+
 	bordered bool // tmux's pane border names the agent: no header row
 	focus    int  // 1 focused, -1 not, 0 not reported (hints shown)
 
@@ -398,9 +400,12 @@ func (v *view) frame(w, h int) (rows []string, cx, cy int) {
 	if h >= 3 && !v.bordered {
 		top = append(top, v.header(w))
 	}
-	var hint string
+	var hint, foot string
 	if h >= 8 && v.focus >= 0 {
 		hint = v.hint(w)
+	}
+	if h >= 4 {
+		foot = v.footer(w)
 	}
 	input, cx, crow := v.input(w, inputRows(h))
 	// The rule above the input only shows scrolled back, to say so.
@@ -414,6 +419,9 @@ func (v *view) frame(w, h int) (rows []string, cx, cy int) {
 	bottom = append(bottom, input...)
 	if hint != "" {
 		bottom = append(bottom, hint)
+	}
+	if foot != "" {
+		bottom = append(bottom, foot)
 	}
 	bodyH := max(h-len(top)-len(bottom), 0)
 	v.page = bodyH
@@ -435,6 +443,9 @@ func (v *view) frame(w, h int) (rows []string, cx, cy int) {
 	}
 	v.inY = len(rows) - len(input) + 1
 	if hint != "" {
+		v.inY--
+	}
+	if foot != "" {
 		v.inY--
 	}
 	return rows, cx, v.inY + crow

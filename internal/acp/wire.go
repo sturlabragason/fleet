@@ -324,6 +324,7 @@ const (
 	UpdateToolCallUpdate = "tool_call_update"
 	UpdatePlan           = "plan"
 	UpdateModeChange     = "current_mode_update"
+	UpdateUsage          = "usage_update" // context fill and cost (ACP unstable)
 )
 
 // SessionUpdate is one update, flattened over its kinds. Content is a single
@@ -342,6 +343,38 @@ type SessionUpdate struct {
 	// its arguments.
 	Name     string          `json:"name,omitempty"`
 	RawInput json.RawMessage `json:"rawInput,omitempty"`
+	// Used and Size are a usage_update's context tokens and window, Cost
+	// its session cost so far; Meta carries claude-agent-acp's
+	// "_claude/rateLimit" and "_claude/model".
+	Used int64           `json:"used,omitempty"`
+	Size int64           `json:"size,omitempty"`
+	Cost *Cost           `json:"cost,omitempty"`
+	Meta json.RawMessage `json:"_meta,omitempty"`
+}
+
+// Cost is a usage_update's cumulative session cost.
+type Cost struct {
+	Amount   float64 `json:"amount"`
+	Currency string  `json:"currency"`
+}
+
+// RateLimit is one subscription window claude-agent-acp forwards from
+// Claude Code's rate_limit_event (SDKRateLimitInfo).
+type RateLimit struct {
+	Type        string  `json:"rateLimitType"` // five_hour, seven_day, seven_day_opus, ...
+	Utilization float64 `json:"utilization"`   // used: 0..1, or percent above 1
+	ResetsAt    int64   `json:"resetsAt"`      // unix seconds
+}
+
+// UsageMeta reads a usage_update's _meta: the rate-limit window it
+// carries (nil when none) and the model the usage belongs to.
+func (u SessionUpdate) UsageMeta() (rl *RateLimit, model string) {
+	var m struct {
+		RL    *RateLimit `json:"_claude/rateLimit"`
+		Model string     `json:"_claude/model"`
+	}
+	_ = json.Unmarshal(u.Meta, &m) // a _meta fleet can't read is no _meta
+	return m.RL, m.Model
 }
 
 // SubagentTool is the tool agy starts a subagent with.

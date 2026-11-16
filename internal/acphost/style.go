@@ -115,14 +115,14 @@ func parseHex(s string) (color.RGBA, bool) {
 // status, Supervisor for the person giving orders, inks for hierarchy.
 type palette struct {
 	text, sub, dim, faint, rule, band, head string
-	working, waiting, err, you              string
+	working, waiting, err, you, ok          string
 }
 
 func themePalette() palette {
 	return palette{
 		text: theme.Text, sub: theme.Subtext0, dim: theme.Overlay1, faint: theme.Overlay0,
 		rule: theme.Surface1, band: theme.Surface0, head: theme.Mantle,
-		working: theme.Working, waiting: theme.Waiting, err: theme.Error, you: theme.Supervisor,
+		working: theme.Working, waiting: theme.Waiting, err: theme.Error, you: theme.Supervisor, ok: theme.Idle,
 	}
 }
 

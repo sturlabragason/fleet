@@ -19,6 +19,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/acp"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/proc"
+	"github.com/sturlabragason/fleet/internal/spend"
 	"github.com/sturlabragason/fleet/internal/status"
 )
 
@@ -63,6 +64,9 @@ type Config struct {
 	// Bordered is set when tmux's pane border already names the agent and
 	// its status: the pane then has no header row of its own.
 	Bordered bool
+	// Spend reads the session's spend for the usage footer (ADR-151); nil
+	// shows only what the agent reports over ACP.
+	Spend func(sessionID string) (spend.Spend, bool)
 }
 
 // agentConn is the part of *acp.Client the host uses.
@@ -140,6 +144,7 @@ type host struct {
 	bg    context.Context
 	stopC chan struct{}
 	once  sync.Once
+	kick  chan struct{} // re-read the footer's spend now
 
 	mu        sync.Mutex
 	conn      agentConn
@@ -192,7 +197,7 @@ func run(ctx context.Context, cfg Config, start starter, tr stateTracker) error 
 	bg, cancelBg := context.WithCancel(context.Background())
 	defer cancelBg()
 	h := &host{cfg: cfg, home: cfg.Home, tr: tr, tx: tx, out: cfg.Out, bg: bg,
-		stopC: make(chan struct{}), titles: map[string]string{}, subs: map[string]string{}}
+		stopC: make(chan struct{}), kick: make(chan struct{}, 1), titles: map[string]string{}, subs: map[string]string{}}
 	if h.out == nil {
 		h.out = io.Discard
 	}
@@ -333,6 +338,12 @@ func (h *host) setup() error {
 	if err := c.UseModel(h.bg, id, h.cfg.Model); err != nil {
 		return fmt.Errorf("session model: %w", err)
 	}
+	if m, ok := c.(interface{ Models() acp.Models }); ok && h.con != nil {
+		h.con.setMeter(func(mt *meter) { mt.setModels(m.Models()) })
+	}
+	if h.con != nil && h.cfg.Spend != nil {
+		go h.meterLoop(id)
+	}
 	h.mu.Lock()
 	h.sid, h.caps, h.ready = id, caps, true
 	h.emit(Entry{Kind: KindSession, SessionID: id, Text: how}, true)
@@ -433,6 +444,10 @@ func (h *host) SessionUpdate(n acp.SessionNotification) {
 			return // fleet records its own prompts
 		}
 		h.collect(KindUser, u.Text())
+	case acp.UpdateUsage:
+		if h.con != nil {
+			h.con.setMeter(func(m *meter) { m.usage(u) })
+		}
 	case acp.UpdateToolCall, acp.UpdateToolCallUpdate:
 		h.flush()
 		title := u.Title
@@ -711,6 +726,10 @@ func (h *host) sendBy(text, by string) {
 			}
 		}
 		h.apply(h.tr.PromptDone(r.StopReason, err))
+		select {
+		case h.kick <- struct{}{}:
+		default:
+		}
 		if h.inflight == 0 {
 			h.sendQueued()
 		}

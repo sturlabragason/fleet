@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -424,5 +425,45 @@ func TestSourcePi(t *testing.T) {
 	p := tools.Profile{FamilyKey: tools.FamilyPi, SessionPath: filepath.Join(data, "*", "*_{id}.jsonl")}
 	if got, k := Source(p, "SID"); got != path || k != Pi {
 		t.Errorf("source %q %q, want %q pi", got, k, path)
+	}
+}
+
+// Copilot writes its account's quota now and then on a
+// model.model_call_success line that also holds the whole request; the
+// latest snapshot wins and survives later usage records.
+func TestCopilotQuota(t *testing.T) {
+	snap := func(left int, unlimited bool) string {
+		u := "false"
+		if unlimited {
+			u = "true"
+		}
+		return `{"type":"model.model_call_success","data":{"requestMessages":[{"content":"x"}],"quotaSnapshots":{"chat":{"remainingPercentage":100},"premium_interactions":{"isUnlimitedEntitlement":` + u +
+			`,"remainingPercentage":` + strconv.Itoa(left) + `,"resetDate":"2026-12-01T00:00:00Z"}},"provider":"copilot"}}` + "\n"
+	}
+	usage := `{"type":"session.usage_record","id":"u1","data":{"usage":{"model":"m","inputTokens":10,"outputTokens":1,"maxPromptTokens":100}}}` + "\n"
+	tests := []struct {
+		name string
+		log  string
+		want *Quota
+	}{
+		{"none", usage, nil},
+		{"capped", snap(80, false) + snap(62, false) + usage, &Quota{LeftPct: 62, Resets: time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)}},
+		{"unlimited", snap(100, true), &Quota{Unlimited: true, LeftPct: 100, Resets: time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "events.jsonl")
+			if err := os.WriteFile(path, []byte(tc.log), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			got, ok := NewCache().File(path, Copilot)
+			if !ok {
+				t.Fatal("not read")
+			}
+			if (got.Quota == nil) != (tc.want == nil) || got.Quota != nil && !got.Quota.Resets.Equal(tc.want.Resets) ||
+				got.Quota != nil && (got.Quota.LeftPct != tc.want.LeftPct || got.Quota.Unlimited != tc.want.Unlimited) {
+				t.Fatalf("quota %+v want %+v", got.Quota, tc.want)
+			}
+		})
 	}
 }

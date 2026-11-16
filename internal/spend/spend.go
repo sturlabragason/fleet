@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/sturlabragason/fleet/internal/tools"
 )
@@ -38,6 +39,18 @@ type Spend struct {
 	// latest value, not a sum. Only `fleet spend --json` carries it; fleet
 	// info has its own context figure.
 	Context int `json:"context_pct,omitempty"`
+	// Quota is the Copilot account's premium allowance at the last call
+	// that reported it (nil: never reported). Like Model it is the latest
+	// value, not a sum.
+	Quota *Quota `json:"quota,omitempty"`
+}
+
+// Quota is a Copilot premium-request allowance: unlimited, or the percent
+// left until it resets (monthly).
+type Quota struct {
+	Unlimited bool      `json:"unlimited,omitempty"`
+	LeftPct   float64   `json:"left_pct"`
+	Resets    time.Time `json:"resets,omitzero"`
 }
 
 // Total is every token the agent was billed for.
@@ -165,7 +178,7 @@ const (
 func parserFor(k Kind) (parser, bool) {
 	switch k {
 	case Copilot:
-		return parser{tags: [][]byte{[]byte(`"session.usage_record"`), []byte(`"session.compaction_complete"`)}, line: copilotLine}, true
+		return parser{tags: [][]byte{[]byte(`"session.usage_record"`), []byte(`"session.compaction_complete"`), quotaKey}, line: copilotLine}, true
 	case Claude:
 		return parser{tags: [][]byte{[]byte(`"output_tokens"`), []byte(`"cost-state"`), []byte(`"compact_boundary"`)}, line: claudeLine}, true
 	case ACP:
@@ -179,7 +192,37 @@ func parserFor(k Kind) (parser, bool) {
 // nanoAIU is how many nano AI units make one AI credit.
 const nanoAIU = 1e9
 
+// quotaKey and callSuccess find Copilot's quota snapshot: a
+// model.model_call_success event, written now and then, whose line also
+// holds the whole request, so only the snapshot object is decoded.
+var (
+	quotaKey   = []byte(`"quotaSnapshots":`)
+	callSuccess = []byte(`{"type":"model.model_call_success"`)
+)
+
+func copilotQuota(b []byte) (record, bool) {
+	i := bytes.Index(b, quotaKey)
+	if i < 0 || !bytes.HasPrefix(b, callSuccess) {
+		return record{}, false
+	}
+	var snaps struct {
+		Premium *struct {
+			Unlimited bool      `json:"isUnlimitedEntitlement"`
+			Left      float64   `json:"remainingPercentage"`
+			Reset     time.Time `json:"resetDate"`
+		} `json:"premium_interactions"`
+	}
+	if json.NewDecoder(bytes.NewReader(b[i+len(quotaKey):])).Decode(&snaps) != nil || snaps.Premium == nil {
+		return record{}, false
+	}
+	p := snaps.Premium
+	return record{sp: Spend{Quota: &Quota{Unlimited: p.Unlimited, LeftPct: p.Left, Resets: p.Reset}}}, true
+}
+
 func copilotLine(b []byte) (record, bool) {
+	if bytes.HasPrefix(b, callSuccess) {
+		return copilotQuota(b)
+	}
 	var ev struct {
 		Type string `json:"type"`
 		Data struct {
@@ -435,15 +478,18 @@ func scan(p parser, buf []byte, lastID string) result {
 		if r.id != "" {
 			out.lastID = r.id
 		}
-		model, ctx := r.sp.Model, out.add.Context
+		model, ctx, quota := r.sp.Model, out.add.Context, out.add.Quota
 		if r.sp.Context > 0 {
 			ctx = r.sp.Context
+		}
+		if r.sp.Quota != nil {
+			quota = r.sp.Quota
 		}
 		out.add.Add(r.sp)
 		if model != "" {
 			out.add.Model = model
 		}
-		out.add.Context = ctx
+		out.add.Context, out.add.Quota = ctx, quota
 	}
 	return out
 }
