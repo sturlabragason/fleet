@@ -5,11 +5,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
-
-	"github.com/sturlabragason/fleet/internal/ghapp"
 )
 
 func TestGitHubSecretManifest(t *testing.T) {
@@ -42,15 +43,15 @@ func TestGitHubSecretManifest(t *testing.T) {
 func TestKeepToken(t *testing.T) {
 	tests := []struct {
 		name     string
-		mintErr  error
+		getErr   error
 		writeErr error
 		wantErr  bool
 		after    time.Duration
 		writes   int
 	}{
-		{"refreshes ten minutes before expiry", nil, nil, false, 51 * time.Minute, 2},
-		{"not before", nil, nil, false, 49 * time.Minute, 1},
-		{"first mint fails", errors.New("401"), nil, true, time.Hour, 0},
+		{"refreshes every 30 minutes", nil, nil, false, 61 * time.Minute, 3},
+		{"not before", nil, nil, false, 29 * time.Minute, 1},
+		{"first get fails", errors.New("no token"), nil, true, time.Hour, 0},
 		{"first write fails", nil, errors.New("forbidden"), true, time.Hour, 0},
 	}
 	for _, tc := range tests {
@@ -58,9 +59,7 @@ func TestKeepToken(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				ctx, cancel := context.WithCancel(t.Context())
 				defer cancel()
-				mint := func(context.Context) (ghapp.Token, error) {
-					return ghapp.Token{Value: "ghs", Expires: time.Now().Add(time.Hour)}, tc.mintErr
-				}
+				get := func(context.Context) (string, error) { return "ghs", tc.getErr }
 				writes := 0
 				write := func(context.Context, string) error {
 					if tc.writeErr == nil {
@@ -68,7 +67,7 @@ func TestKeepToken(t *testing.T) {
 					}
 					return tc.writeErr
 				}
-				err := KeepToken(ctx, mint, write)
+				err := KeepToken(ctx, get, write)
 				if (err != nil) != tc.wantErr {
 					t.Fatalf("err = %v", err)
 				}
@@ -80,6 +79,48 @@ func TestKeepToken(t *testing.T) {
 				cancel()
 				synctest.Wait()
 			})
+		})
+	}
+}
+
+func TestTokenSources(t *testing.T) {
+	dir := t.TempDir()
+	file := func(name, body string, mode os.FileMode) string {
+		t.Helper()
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(body), mode); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(p, mode); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	tests := []struct {
+		name    string
+		get     func(context.Context) (string, error)
+		want    string
+		wantErr string
+	}{
+		{"command", TokenCmd("printf 'ghs_abc\\n'"), "ghs_abc", ""},
+		{"command fails", TokenCmd("echo boom >&2; exit 3"), "", "boom"},
+		{"command prints two words", TokenCmd("echo hunter2 extra"), "", "one token on one line"},
+		{"file", TokenFile(file("ok", "ghp_abc\n", 0o600)), "ghp_abc", ""},
+		{"file readable by group", TokenFile(file("open", "ghp_abc", 0o640)), "", "chmod 600"},
+		{"no file", TokenFile(filepath.Join(dir, "missing")), "", "no GitHub token"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.get(t.Context())
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) || strings.Contains(err.Error(), "hunter2") {
+					t.Fatalf("err = %v, want %q and no token", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil || got != tc.want {
+				t.Fatalf("got %q, %v", got, err)
+			}
 		})
 	}
 }

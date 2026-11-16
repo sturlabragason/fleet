@@ -275,6 +275,10 @@ fleet spawn api-auth claude-work ~/src/api "add rate limiting to /login"
 
 Agents start through `bash -lc`, so shell aliases don't apply; make a profile instead. More in [docs/profiles.md](docs/profiles.md) and [examples/tools.toml](examples/tools.toml).
 
+### GitHub access for kagent
+
+An agent in a Kubernetes cluster (the `kagent` profile) pushes through a kagent EgressPolicy, which adds the GitHub credential on the way out. Add `--github-secret <namespace>/<name>` to the profile's `acp` args. Fleet then keeps a token in that Secret while the agent runs. The token comes from `--github-token-cmd` (for example a one-hour GitHub App token from the `gh token` extension) or from `~/.config/fleet/github-token`. [docs/kagent-github.md](docs/kagent-github.md) covers the cluster side, a two-click GitHub App setup script and a ruleset that keeps the token off your default branch.
+
 ## The admiral and its MCP tools
 
 `fleet up` starts the admiral under the `copilot` profile unless you say otherwise (`--admiral-profile NAME`, `$FLEET_ADMIRAL_PROFILE`, an `[admiral]` entry in your config, or `Alt+P` while running). It talks to `fleet mcp`, a stdio MCP server, with these tools:
