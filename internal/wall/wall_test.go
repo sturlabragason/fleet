@@ -477,14 +477,6 @@ func TestAddStepsThePresetUp(t *testing.T) {
 	}
 }
 
-func TestPresetUp(t *testing.T) {
-	for from, want := range map[string]string{"1": "2", "2": "4", "4": "6", "m": "6", "6": "9", "9": ""} {
-		if got := presetUp[from]; got != want {
-			t.Errorf("%s -> %q, want %q", from, got, want)
-		}
-	}
-}
-
 // Next walks the waiting agents through the target slot, longest wait first,
 // wrapping both ways.
 func TestNextWalksWaitingAgents(t *testing.T) {

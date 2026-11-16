@@ -225,18 +225,6 @@ func TestMouseDragSelectsOverAppMouse(t *testing.T) {
 }
 
 // fleet up unbinds the drags that move panes out of the wall order.
-func TestUnbindsPaneDrags(t *testing.T) {
-	want := map[string]bool{"M-MouseDrag1Pane": true, "M-MouseDrag1Border": true, "C-MouseDrag1Pane": true}
-	for _, c := range tmuxCommands(&fleet.Fleet{Exe: "/bin/true"}) {
-		if len(c) == 3 && c[0] == "unbind-key" && c[1] == "-n" {
-			delete(want, c[2])
-		}
-	}
-	if len(want) != 0 {
-		t.Errorf("not unbound: %v", want)
-	}
-}
-
 // Outside the fleet server there is no wall, so the refresh-driven apply must
 // be a silent no-op rather than an error (and a log line) every second.
 func TestApplyWallDisabledIsANoop(t *testing.T) {

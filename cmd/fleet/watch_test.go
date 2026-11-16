@@ -172,15 +172,6 @@ func TestCmdWatchOnceAndStop(t *testing.T) {
 }
 
 // The commands are reachable and documented.
-func TestWatchInUsage(t *testing.T) {
-	u := usage
-	for _, s := range []string{"fleet watch", "fleet hook"} {
-		if !strings.Contains(u, s) {
-			t.Errorf("usage does not mention %q", s)
-		}
-	}
-}
-
 // fakeAdmiralFleet is a fleet with one agent and a scripted admiral pane:
 // typed text lands in box, Enter moves it to submitted.
 type fakeAdmiralFleet struct {

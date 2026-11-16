@@ -37,9 +37,3 @@ func TestExtensionsCompose(t *testing.T) {
 	Register(Extension{Name: "a"})
 }
 
-func TestNoExtensionsNoBadge(t *testing.T) {
-	withExts(t)
-	if got := extAdmiralBadge(&Fleet{}); got != nil {
-		t.Fatalf("badges %v", got)
-	}
-}

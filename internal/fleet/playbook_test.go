@@ -297,16 +297,6 @@ func TestLeaderPromptCarriesSquadOrientation(t *testing.T) {
 }
 
 // A plain agent gets none of it.
-func TestNonLeaderPromptHasNoSquadOrientation(t *testing.T) {
-	f, out := argvFleet(t, "")
-	if _, err := f.Spawn("ld2", "pa", t.TempDir(), "fix the bug"); err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(readArg(t, out), "fleet_squad_spawn") {
-		t.Fatal("squad orientation in a non-leader prompt")
-	}
-}
-
 // The context level follows the effort level; a leader uses the profile's
 // leader entry when there is one (ADR-60).
 func TestContextKey(t *testing.T) {

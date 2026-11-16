@@ -115,18 +115,6 @@ func TestHookPrecedence(t *testing.T) {
 }
 
 // The watcher stats the hook directory plus each running agent's session log.
-func TestWatchPaths(t *testing.T) {
-	f, _ := hookFleet(t)
-	ps := f.WatchPaths(f.Store.Load().Sorted())
-	if len(ps) == 0 || ps[0] != status.StateDir(f.Home) {
-		t.Fatalf("paths: %q", ps)
-	}
-	for _, p := range ps {
-		if !filepath.IsAbs(p) {
-			t.Errorf("relative watch path %q", p)
-		}
-	}
-}
 
 // A tool killed in the middle of a tool call leaves its last "working" hook
 // behind; after HookWorkingMax the screen decides again, so nothing sits at

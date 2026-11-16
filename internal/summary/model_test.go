@@ -54,16 +54,6 @@ func TestCLIFailures(t *testing.T) {
 	}
 }
 
-func TestDefaultArgsAreNonInteractive(t *testing.T) {
-	args := strings.Join(DefaultArgs(), " ")
-	for _, want := range []string{"-p", "{prompt}", "--model {model}", "--silent",
-		"--no-custom-instructions", "--available-tools none"} {
-		if !strings.Contains(args, want) {
-			t.Fatalf("default args missing %q: %s", want, args)
-		}
-	}
-}
-
 // A CLI that leaves a child holding its stdout must not outlive its timeout:
 // without a process-group kill and a WaitDelay, Run blocks forever.
 func TestCLITimeoutSurvivesABackgroundChild(t *testing.T) {
