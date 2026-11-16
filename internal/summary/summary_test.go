@@ -174,7 +174,7 @@ func TestPromptCarriesScreenMessageAndTask(t *testing.T) {
 		}
 	}
 	// Only the recent part of a long screen is paid for.
-	long := Prompt(Input{Agent: "a1", Screen: strings.Repeat("x", ScreenChars*2) + "END"})
+	long := Prompt("", Input{Agent: "a1", Screen: strings.Repeat("x", ScreenChars*2) + "END"})
 	if len(long) > ScreenChars+2000 || !strings.Contains(long, "END") {
 		t.Fatalf("long screen not trimmed to its tail: %d chars", len(long))
 	}
@@ -193,6 +193,13 @@ func TestHashChangesWithTheScreen(t *testing.T) {
 		if Hash(other) == a {
 			t.Fatalf("hash collision with %+v", other)
 		}
+	}
+	in := Input{Screen: "one", Status: "working"}
+	if (&Summarizer{Instructions: DefaultPrompt}).hash(in) != a {
+		t.Fatal("the default prompt changed the hash")
+	}
+	if (&Summarizer{Instructions: "other prompt"}).hash(in) == a {
+		t.Fatal("a changed prompt kept the cached hash")
 	}
 }
 

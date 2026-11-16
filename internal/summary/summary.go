@@ -70,6 +70,9 @@ type Summarizer struct {
 	// MinInterval is the shortest gap between model calls for one agent;
 	// 0 means DefaultMinInterval, NoRateLimit means none.
 	MinInterval time.Duration
+	// Instructions is the prompt text before the input; "" means
+	// DefaultPrompt.
+	Instructions string
 	// Now is the clock (tests replace it).
 	Now func() time.Time
 
@@ -103,6 +106,16 @@ func Hash(in Input) string {
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 
+// hash is Hash(in), plus the instructions when they are not the default, so
+// a changed [summary] prompt makes a new summary instead of serving the cache.
+func (s *Summarizer) hash(in Input) string {
+	p := strings.TrimSpace(s.Instructions)
+	if p == "" || p == strings.TrimSpace(DefaultPrompt) {
+		return Hash(in)
+	}
+	return Hash(Input{Screen: Hash(in), LastMessage: p})
+}
+
 // Summarize returns a summary of one agent. A cached summary for the same
 // hash never calls the model. Within MinInterval of the last call, a changed
 // screen reuses the cached text (marked stale) rather than paying again. Any
@@ -112,7 +125,7 @@ func (s *Summarizer) Summarize(ctx context.Context, in Input) (Result, error) {
 	if in.Agent == "" {
 		return Result{}, fmt.Errorf("summary: agent name is required")
 	}
-	hash := Hash(in)
+	hash := s.hash(in)
 	// rec may be an attempt-only record: it then carries the time of a
 	// failed call and no text.
 	rec, haveRec := s.load(in.Agent)
@@ -148,7 +161,7 @@ func (s *Summarizer) Summarize(ctx context.Context, in Input) (Result, error) {
 	if model == nil {
 		return s.failed(in.Agent, now, cached, haveCache, fmt.Errorf("summary: no model configured"))
 	}
-	text, err := model.Summarize(ctx, Prompt(in))
+	text, err := model.Summarize(ctx, Prompt(s.Instructions, in))
 	if err != nil {
 		logx.For("summary").Warn("model call failed", "agent", in.Agent, "err", err)
 		return s.failed(in.Agent, now, cached, haveCache, err)

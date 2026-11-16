@@ -133,6 +133,11 @@ ready_timeout = "15s"
 # args = ["-p", "{prompt}", "--model", "{model}", "--silent", "--no-custom-instructions", "--available-tools", "none", "--disable-builtin-mcps", "--log-level", "none", "--no-color"]
 # min_interval = "30s"   # at most one model call per agent per interval ("0" = no limit)
 # timeout = "45s"
+# The instructions sent before the agent's name, board status, task, last message
+# and screen. One line; write \n for a line break. The reply is still cut to 5
+# lines and cleaned of markdown. Default (shortened): "You are reading the
+# terminal screen of one AI coding agent in a fleet. Write at most 5 short lines..."
+# prompt = "Say in one line what this agent is doing and what it waits for."
 
 [profile.copilot]
 # WARNING: "autopilot" for Copilot launches `--allow-all --autopilot`.

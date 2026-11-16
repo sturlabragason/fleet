@@ -18,6 +18,7 @@ type Summary struct {
 	MinInterval time.Duration // shortest gap between calls for one agent
 	// ("0" in the file means summary.NoRateLimit: no gap at all)
 	Timeout time.Duration // how long one call may take
+	Prompt  string        // instruction text before the agent's input
 }
 
 // DefaultSummary is the built-in configuration: Haiku 5.5 through the
@@ -30,6 +31,7 @@ func DefaultSummary() Summary {
 		Args:        summary.DefaultArgs(),
 		MinInterval: summary.DefaultMinInterval,
 		Timeout:     summary.DefaultTimeout,
+		Prompt:      summary.DefaultPrompt,
 	}
 }
 
@@ -47,6 +49,9 @@ func applySummary(s Summary, sec map[string]conf.Value) Summary {
 	}
 	if v := strings.TrimSpace(conf.Str(sec, "model")); v != "" {
 		s.Model = v
+	}
+	if v := strings.TrimSpace(conf.Str(sec, "prompt")); v != "" {
+		s.Prompt = v
 	}
 	if v := strings.TrimSpace(conf.Str(sec, "command")); v != "" {
 		s.Command = v

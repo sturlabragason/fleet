@@ -29,7 +29,7 @@ func (f *Fleet) Summarizer() (*summary.Summarizer, error) {
 		if m == nil {
 			m = &summary.CLI{Command: cfg.Command, Args: cfg.Args, Model: cfg.Model, Timeout: cfg.Timeout}
 		}
-		f.summarizer = &summary.Summarizer{Model: m, Dir: filepath.Join(f.Home, "peek-cache"), MinInterval: cfg.MinInterval}
+		f.summarizer = &summary.Summarizer{Model: m, Dir: filepath.Join(f.Home, "peek-cache"), MinInterval: cfg.MinInterval, Instructions: cfg.Prompt}
 	}
 	return f.summarizer, nil
 }

@@ -13,7 +13,10 @@ const ScreenChars = 6000
 // MessageChars caps the agent's last message and its task line.
 const MessageChars = 2000
 
-const instructions = `You are reading the terminal screen of one AI coding agent in a fleet.
+// DefaultPrompt is the instruction text in front of every summary input. The
+// [summary] prompt key replaces it; the output contract (at most MaxLines
+// lines, cleaned by Clean) holds either way.
+const DefaultPrompt = `You are reading the terminal screen of one AI coding agent in a fleet.
 Write at most 5 short lines of plain text. No markdown, no numbering, no
 bullets, no preamble. Cover, one per line and only when there is something to
 say: what the agent is doing right now; what it is waiting for (a prompt, a
@@ -21,13 +24,17 @@ question, another agent, nothing); any error or failure visible on the screen.
 Never invent progress that is not on the screen. Do not quote the screen back.
 Do not use any tools: answer directly.`
 
-// Prompt builds the model prompt for one agent.
-func Prompt(in Input) string {
+// Prompt builds the model prompt for one agent from the instruction text
+// ("" means DefaultPrompt) and the agent's input.
+func Prompt(instructions string, in Input) string {
+	if strings.TrimSpace(instructions) == "" {
+		instructions = DefaultPrompt
+	}
 	var b strings.Builder
-	b.WriteString(instructions)
+	b.WriteString(strings.TrimRight(instructions, "\n"))
 	fmt.Fprintf(&b, "\n\nAgent: %s", in.Agent)
 	if in.Status != "" {
-		fmt.Fprintf(&b, "\nScraped status: %s", in.Status)
+		fmt.Fprintf(&b, "\nBoard status: %s", in.Status)
 	}
 	if t := strings.TrimSpace(in.Task); t != "" {
 		fmt.Fprintf(&b, "\nTask: %s", tail(t, MessageChars))

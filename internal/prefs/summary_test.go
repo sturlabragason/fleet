@@ -3,6 +3,7 @@ package prefs
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,5 +53,28 @@ timeout = "20s"
 	}
 	if off := loadWith(t, "[summary]\nenabled = false\n").Summary(); off.Enabled {
 		t.Fatal("enabled = false ignored")
+	}
+}
+
+func TestSummaryPromptOverride(t *testing.T) {
+	in := summary.Input{Agent: "a1", Status: "working", Screen: "make test"}
+	tests := []struct {
+		name, body, want string
+	}{
+		{"default", "", summary.DefaultPrompt},
+		{"blank keeps default", "[summary]\nprompt = \"  \"\n", summary.DefaultPrompt},
+		{"override", "[summary]\nprompt = \"Say what it does.\\nOne line.\"\n", "Say what it does.\nOne line."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := loadWith(t, tt.body).Summary()
+			if s.Prompt != tt.want {
+				t.Fatalf("Prompt = %q, want %q", s.Prompt, tt.want)
+			}
+			got := summary.Prompt(s.Prompt, in)
+			if !strings.HasPrefix(got, strings.TrimRight(tt.want, "\n")+"\n\nAgent: a1\nBoard status: working") {
+				t.Fatalf("prompt = %q", got)
+			}
+		})
 	}
 }
