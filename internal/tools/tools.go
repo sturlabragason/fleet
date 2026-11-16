@@ -398,15 +398,18 @@ func Path(home string) string { return filepath.Join(home, "tools.toml") }
 func Load(home string) (map[string]Profile, error) { return LoadWith(home, nil) }
 
 // LoadWith is Load plus a third override layer (the [profile.<name>] sections
-// of the local preferences file, already re-keyed to profile names).
+// of the local preferences file, already re-keyed to profile names). A
+// tools.toml that does not parse is skipped, not fatal: the profiles come
+// back without it, together with the error naming the file and line, so a
+// broken file can't stop every fleet command (and every agent hook).
 func LoadWith(home string, local conf.Doc) (map[string]Profile, error) {
 	def, err := conf.Parse(Defaults)
 	if err != nil {
 		return nil, err
 	}
-	user, err := conf.ParseFile(Path(home))
-	if err != nil {
-		return nil, fmt.Errorf("tools.toml: %w", err)
+	user, userErr := conf.ParseFile(Path(home))
+	if userErr != nil {
+		user, userErr = nil, fmt.Errorf("%s: %w", Path(home), userErr)
 	}
 	out := map[string]Profile{}
 	for i, d := range []conf.Doc{def, user, local} {
@@ -492,7 +495,7 @@ func LoadWith(home string, local conf.Doc) (map[string]Profile, error) {
 		}
 		out[name] = p
 	}
-	return out, nil
+	return out, userErr
 }
 
 // inheritACP fills the acp keys p leaves unset from b (acp_from).

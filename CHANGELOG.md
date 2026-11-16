@@ -7,6 +7,7 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
 ## 2026-11-16
+- A tool profile in `~/.fleet/tools.toml` can split an array or inline table over several lines, and a tools.toml that doesn't parse no longer blocks every agent's tool calls: fleet runs on the built-in profiles and the admiral and `fleet doctor` name the broken file and line (ADR-147)
 - A kagent agent can push to GitHub with a short-lived token: add `--github-secret <namespace>/<name>` to the profile's `acp` args and fleet keeps a token in that Secret for the cluster's EgressPolicy, from `--github-token-cmd` (for example a GitHub App token from `gh token`) or a token file. See docs/kagent-github.md (ADR-146)
 - A kagent agent now files reports: it ends a reply with a `fleet_report <state>: <headline>` line and fleet files it, so the board, done-checks and auto-close work for it. Its streamed replies show as whole messages instead of one word per paragraph, and its tool calls show as tool calls (ADR-145)
 

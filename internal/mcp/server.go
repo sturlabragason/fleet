@@ -317,7 +317,7 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		case s.Agent != "":
 			text += s.unreadSuffix()
 		case p.Name != "fleet_handoff" && p.Name != "fleet_admiral_profile":
-			text += s.contextWarning() + s.reportsSuffix() + extSuffix(s)
+			text += s.contextWarning() + s.toolsWarning() + s.reportsSuffix() + extSuffix(s)
 		}
 		if s.Reloaded && !s.noted {
 			s.noted = true

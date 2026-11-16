@@ -30,6 +30,29 @@ func hookTestFleet(t *testing.T) *fleet.Fleet {
 	return f
 }
 
+// A tools.toml block that doesn't parse must not break the hook: it once made
+// every pretooluse exit 1, which blocked every tool call of every agent.
+func TestCmdHookBrokenToolsToml(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FLEET_CONFIG", filepath.Join(home, "no-config.toml"))
+	broken := "[kagent-x]\ncommand = \"fleet\"\nacp = [\"--context\", \"x\",\n"
+	if err := os.WriteFile(filepath.Join(home, "tools.toml"), []byte(broken), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
+	t.Cleanup(func() { tc.KillServer() })
+	f, err := fleet.New(tc, home, "/nonexistent")
+	if err != nil {
+		t.Fatalf("fleet.New with a broken tools.toml: %v", err)
+	}
+	if err := cmdHook(f, []string{"pretooluse", "--agent", "a1"}); err != nil {
+		t.Fatal(err)
+	}
+	if s, ok := status.ReadState(status.StateDir(home), "a1"); !ok || s.Status != status.Working {
+		t.Fatalf("state: %+v ok=%v", s, ok)
+	}
+}
+
 // `fleet hook <event> --agent NAME` is what a tool's own hook runs; it writes
 // the state file the watcher stats.
 func TestCmdHook(t *testing.T) {

@@ -62,3 +62,36 @@ func TestBoolAndDur(t *testing.T) {
 		}
 	}
 }
+
+func TestParseMultiLine(t *testing.T) {
+	for _, c := range []struct {
+		name, in string
+		key      string
+		want     any
+	}{
+		{"array split over two lines", "[kagent-x]\nacp = [\"--context\", \"x\",\n  \"--agent\", \"kagent/claude\"]\nafter = \"y\"\n",
+			"acp", []string{"--context", "x", "--agent", "kagent/claude"}},
+		{"one item per line, comments, trailing comma", "[p]\nargs = [\n  \"a\", # first\n  '[b]',\n]\n",
+			"args", []string{"a", "[b]"}},
+		{"inline table over lines", "[p]\nenv = {\n  A = \"1\",\n  B = '2' }\n",
+			"env", map[string]string{"A": "1", "B": "2"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			d, err := Parse(c.in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, sec := range d {
+				if v, ok := sec[c.key]; ok && !reflect.DeepEqual(v, c.want) {
+					t.Fatalf("%s = %#v, want %#v", c.key, v, c.want)
+				} else if ok {
+					return
+				}
+			}
+			t.Fatalf("%s missing in %v", c.key, d)
+		})
+	}
+	if _, err := Parse("a = 1\nb = [\"x\",\n\"y\"\n"); err == nil || err.Error() != "line 2: unterminated array" {
+		t.Fatalf("err = %v, want line 2: unterminated array", err)
+	}
+}

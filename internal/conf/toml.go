@@ -1,6 +1,7 @@
 // Package conf parses the small TOML subset fleet uses for its data files:
 // [section] headers (dotted names allowed), key = "string", key = ["a", "b"],
-// key = { K = "v" }, numbers/bools as raw strings, and # comments.
+// key = { K = "v" }, numbers/bools as raw strings, and # comments. An array
+// or inline table may span several lines, with comments and a trailing comma.
 package conf
 
 import (
@@ -32,10 +33,17 @@ func ParseFile(path string) (Doc, error) {
 func Parse(s string) (Doc, error) {
 	d := Doc{"": {}}
 	sec := ""
-	for n, raw := range strings.Split(s, "\n") {
-		line := strings.TrimSpace(stripComment(raw))
+	lines := strings.Split(s, "\n")
+	for n := 0; n < len(lines); n++ {
+		start := n
+		line := strings.TrimSpace(stripComment(lines[n]))
 		if line == "" {
 			continue
+		}
+		// A value whose brackets are still open continues on the next lines.
+		for open(line) > 0 && n+1 < len(lines) && strings.Contains(line, "=") {
+			n++
+			line += " " + strings.TrimSpace(stripComment(lines[n]))
 		}
 		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
 			sec = strings.Trim(strings.TrimSpace(line[1:len(line)-1]), `"`)
@@ -46,15 +54,36 @@ func Parse(s string) (Doc, error) {
 		}
 		k, v, ok := strings.Cut(line, "=")
 		if !ok {
-			return nil, fmt.Errorf("line %d: expected key = value", n+1)
+			return nil, fmt.Errorf("line %d: expected key = value", start+1)
 		}
 		val, err := parseValue(strings.TrimSpace(v))
 		if err != nil {
-			return nil, fmt.Errorf("line %d: %w", n+1, err)
+			return nil, fmt.Errorf("line %d: %w", start+1, err)
 		}
 		d[sec][strings.Trim(strings.TrimSpace(k), `"`)] = val
 	}
 	return d, nil
+}
+
+// open counts the [ and { in s not yet closed, outside quotes.
+func open(s string) int {
+	depth := 0
+	var q rune
+	for i, r := range s {
+		switch {
+		case q != 0:
+			if r == q && (q == '\'' || !escaped(s, i)) {
+				q = 0
+			}
+		case r == '"' || r == '\'':
+			q = r
+		case r == '[' || r == '{':
+			depth++
+		case r == ']' || r == '}':
+			depth--
+		}
+	}
+	return depth
 }
 
 func stripComment(s string) string {

@@ -156,7 +156,10 @@ func New(t *tmux.Client, home, exe string) (*Fleet, error) {
 	}
 	ps, err := tools.LoadWith(home, pr.ToolsDoc())
 	if err != nil {
-		return nil, err
+		// Same for tools.toml: hooks and every other command still need to
+		// run. The built-in profiles load; fleet doctor and the admiral's
+		// tool results name the broken line.
+		logx.For("fleet").Error("tools.toml", "err", err)
 	}
 	return &Fleet{T: t, Store: board.NewStore(home), Home: home, Exe: exe, Profiles: ps, Patterns: status.Load(home), Prefs: pr, Teams: team.NewStore(home)}, nil
 }
