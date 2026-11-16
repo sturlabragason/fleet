@@ -13,7 +13,9 @@ import (
 // user's extra_args name is pinned again (so an ACP adapter's model
 // variable follows it), else the profile's default_model (Opus for the
 // built-in Copilot and Claude profiles); a tool with no model flag, or a
-// profile with no default_model, keeps the tool's own default.
+// profile with no default_model, keeps the tool's own default. A profile
+// with model_family takes the newest model of that family its tool lists
+// instead of default_model (ADR-157).
 func (f *Fleet) pickModel(profile string, p tools.Profile, named string) (string, error) {
 	if named != "" {
 		if !p.HasModelFlag() {
@@ -27,7 +29,7 @@ func (f *Fleet) pickModel(profile string, p tools.Profile, named string) (string
 	if own := tools.ModelArg(p.Args, f.Prefs.For(profile).ExtraArgs); own != "" {
 		return own, nil
 	}
-	return p.DefaultModel, nil
+	return f.familyModel(profile, p), nil
 }
 
 // AdmiralModel is p set up to run its model as an admiral: the one its args

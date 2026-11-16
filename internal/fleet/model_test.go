@@ -205,3 +205,41 @@ func TestCheckModelAgainstTheToolsList(t *testing.T) {
 		t.Errorf("lm: %+v %v", pm, err)
 	}
 }
+
+// ADR-157: model_family picks the newest listed id of that family by
+// version number; other families and variants are ignored, and with
+// nothing to pick the pinned default_model stays.
+func TestNewestOfFamily(t *testing.T) {
+	tests := []struct {
+		name string
+		ids  []string
+		want string
+	}{
+		{"newest by number, not text", []string{"claude-opus-4.9", "claude-opus-5.10", "claude-opus-5.5"}, "claude-opus-5.10"},
+		{"more parts is newer", []string{"claude-opus-5", "claude-opus-5.1"}, "claude-opus-5.1"},
+		{"other families and variants ignored", []string{"claude-sonnet-9", "claude-opus-6-fast", "claude-opus-5.6-1m", "gpt-7", "claude-opus-5.6"}, "claude-opus-5.6"},
+		{"empty list keeps the pin", nil, "claude-opus-5.5"},
+		{"no match keeps the pin", []string{"gpt-7"}, "claude-opus-5.5"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := NewestOfFamily(tc.ids, "claude-opus", "claude-opus-5.5"); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+
+	f, _ := argvFleet(t, "")
+	p := tools.Profile{Name: "lm", Command: "sh", Patterns: "fake", ModelArgs: []string{"--model", "{model}"},
+		DefaultModel: "claude-opus-5.5", ModelFamily: "claude-opus", ACP: []string{"--acp"}}
+	f.ModelProbe = func(string, tools.Profile) (acp.Models, error) {
+		return acp.Models{Available: []acp.ModelInfo{{ModelID: "claude-opus-5.5"}, {ModelID: "claude-opus-5.6"}}}, nil
+	}
+	if m, err := f.pickModel("lm", p, ""); err != nil || m != "claude-opus-5.6" {
+		t.Errorf("model_family: %q %v, want claude-opus-5.6", m, err)
+	}
+	p.ModelFamily = ""
+	if m, _ := f.pickModel("lm", p, ""); m != "claude-opus-5.5" {
+		t.Errorf("no model_family: %q, want the pin", m)
+	}
+}

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -98,7 +100,54 @@ func (f *Fleet) ProfileModels(profile string) (ProfileModels, error) {
 		return out, nil
 	}
 	out.Listed, out.Current, out.Models = true, ms.Current, dedupe(ms.Available)
+	if p.ModelFamily != "" {
+		out.Default, _ = f.pickModel(profile, p, "")
+	}
 	return out, nil
+}
+
+// familyModel is p's default model: the newest of its model_family the
+// tool lists, else default_model (ADR-157).
+func (f *Fleet) familyModel(profile string, p tools.Profile) string {
+	if p.ModelFamily == "" || !p.HasACP() {
+		return p.DefaultModel
+	}
+	ms, err := f.probe(profile, p, p.DefaultModel)
+	if err != nil {
+		logx.For("fleet").Warn("models: can't ask the tool for its newest model; using default_model", "profile", profile, "family", p.ModelFamily, "err", err)
+		return p.DefaultModel
+	}
+	return NewestOfFamily(ms.IDs(), p.ModelFamily, p.DefaultModel)
+}
+
+// NewestOfFamily is the id in ids that is family, a dash and a version of
+// dot-separated numbers ("claude-opus-5.5"), with the highest version;
+// pin when none is. Variants such as "claude-opus-5.5-fast" don't count.
+func NewestOfFamily(ids []string, family, pin string) string {
+	best, bestV := pin, []int(nil)
+	for _, id := range ids {
+		v, ok := familyVersion(id, family)
+		if ok && (bestV == nil || slices.Compare(v, bestV) > 0) {
+			best, bestV = id, v
+		}
+	}
+	return best
+}
+
+func familyVersion(id, family string) ([]int, bool) {
+	rest, ok := strings.CutPrefix(id, family+"-")
+	if !ok || rest == "" {
+		return nil, false
+	}
+	var v []int
+	for part := range strings.SplitSeq(rest, ".") {
+		n, err := strconv.Atoi(part)
+		if err != nil || n < 0 {
+			return nil, false
+		}
+		v = append(v, n)
+	}
+	return v, true
 }
 
 func dedupe(in []acp.ModelInfo) []acp.ModelInfo {
@@ -136,6 +185,14 @@ func (f *Fleet) checkModel(profile string, p tools.Profile, model string) error 
 // probeModels asks profile's tool, with model applied ("" = the profile's
 // own), for its models; a fresh answer is reused for modelCacheTTL.
 func (f *Fleet) probeModels(profile string, p tools.Profile, model string) (acp.Models, error) {
+	if model == "" {
+		model, _ = f.pickModel(profile, p, "")
+	}
+	return f.probe(profile, p, model)
+}
+
+// probe is probeModels with model as given.
+func (f *Fleet) probe(profile string, p tools.Profile, model string) (acp.Models, error) {
 	key := profile + "\x00" + model
 	f.modelCache.mu.Lock()
 	if c, ok := f.modelCache.m[key]; ok && time.Since(c.at) < modelCacheTTL {
@@ -146,9 +203,6 @@ func (f *Fleet) probeModels(profile string, p tools.Profile, model string) (acp.
 	probe := f.ModelProbe
 	if probe == nil {
 		probe = f.acpProbe
-	}
-	if model == "" {
-		model, _ = f.pickModel(profile, p, "")
 	}
 	ms, err := probe(profile, p.WithModel(model))
 	if err != nil {

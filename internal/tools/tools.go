@@ -122,6 +122,10 @@ type Profile struct {
 	// args nor extra_args name one, so the agent never runs the tool's own
 	// default (ADR-100). Empty = leave the tool's default.
 	DefaultModel string
+	// ModelFamily, when set ("claude-opus"), makes the default the newest
+	// model in that family the tool lists over ACP, by version number;
+	// default_model is the fallback (ADR-157). Empty = default_model as is.
+	ModelFamily string
 	// ACPModelEnv is the variable an acp_command adapter reads its model
 	// from (ANTHROPIC_MODEL); WithModel sets it.
 	ACPModelEnv string
@@ -517,8 +521,13 @@ func LoadWith(home string, local conf.Doc) (map[string]Profile, error) {
 		if p.ModelArgs == nil {
 			p.ModelArgs = b.ModelArgs
 		}
+		// model_family comes only with default_model, so an own
+		// default_model is never overridden by the base's family.
 		if p.DefaultModel == "" {
 			p.DefaultModel = b.DefaultModel
+			if p.ModelFamily == "" {
+				p.ModelFamily = b.ModelFamily
+			}
 		}
 		if p.PromptNote == "" {
 			p.PromptNote = b.PromptNote
@@ -669,6 +678,9 @@ func apply(p *Profile, sec map[string]conf.Value) {
 	}
 	if v, ok := sec["default_model"]; ok {
 		p.DefaultModel, _ = v.(string)
+	}
+	if v, ok := sec["model_family"]; ok {
+		p.ModelFamily, _ = v.(string)
 	}
 	if v, ok := sec["acp_model_env"]; ok {
 		p.ACPModelEnv, _ = v.(string)

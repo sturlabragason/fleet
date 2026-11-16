@@ -57,3 +57,20 @@ func TestFooter(t *testing.T) {
 		})
 	}
 }
+
+func TestUnknownWindowShown(t *testing.T) {
+	now := time.Now()
+	v := newView(io.Discard, nil, colorprofile.Ascii, "a1", "")
+	for _, w := range []struct {
+		typ  string
+		util float64
+	}{{"overage", 0.5}, {"five_hour", 0.4}, {"a_new_window", 0.1}} {
+		meta, _ := json.Marshal(map[string]any{"_claude/rateLimit": map[string]any{"rateLimitType": w.typ, "utilization": w.util, "resetsAt": now.Add(time.Hour + 30*time.Second).Unix()}})
+		v.meter.usage(acp.SessionUpdate{Kind: acp.UpdateUsage, Meta: meta})
+	}
+	got := strings.TrimSpace(ansi.Strip(v.footer(200)))
+	want := "5h ▰▰▱▱ 60% left (1h00m)  a_new_window ▱▱▱▱ 90% left (1h00m)  overage ▰▰▱▱ 50% left (1h00m)"
+	if got != want {
+		t.Fatalf("footer\n got %q\nwant %q", got, want)
+	}
+}

@@ -36,7 +36,8 @@ type window struct {
 }
 
 // windowOrder and windowLabel are the windows the footer knows how to name,
-// in the order shown. A type not listed (overage) is left out.
+// in the order shown. A type not listed (overage) is shown by its raw name
+// after them (ADR-157).
 var (
 	windowOrder = []string{"five_hour", "seven_day", "seven_day_opus", "seven_day_sonnet", "copilot_premium"}
 	windowLabel = map[string]string{"five_hour": "5h", "seven_day": "7d", "seven_day_opus": "7d opus",
@@ -95,12 +96,16 @@ func (m *meter) usage(u acp.SessionUpdate) {
 	if model != "" {
 		m.model, m.usageModel = model, true
 	}
-	if rl != nil && windowLabel[rl.Type] != "" {
+	if rl != nil && rl.Type != "" {
 		used := rl.Utilization
 		if used <= 1 {
 			used *= 100
 		}
-		w := window{label: windowLabel[rl.Type], used: int(used + 0.5)}
+		label := windowLabel[rl.Type]
+		if label == "" {
+			label = rl.Type
+		}
+		w := window{label: label, used: int(used + 0.5)}
 		if rl.ResetsAt > 0 {
 			w.resets = time.Unix(rl.ResetsAt, 0)
 		}
@@ -149,7 +154,12 @@ func (m *meter) items(pl palette, now time.Time) [][]seg {
 		}
 		return len(windowOrder)
 	}
-	sort.Slice(keys, func(i, j int) bool { return rank(keys[i]) < rank(keys[j]) })
+	sort.Slice(keys, func(i, j int) bool {
+		if ri, rj := rank(keys[i]), rank(keys[j]); ri != rj {
+			return ri < rj
+		}
+		return keys[i] < keys[j]
+	})
 	for _, k := range keys {
 		w := m.windows[k]
 		if !w.resets.IsZero() && !w.resets.After(now) {
