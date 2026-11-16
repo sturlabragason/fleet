@@ -125,6 +125,13 @@ type Profile struct {
 	// ACPModelEnv is the variable an acp_command adapter reads its model
 	// from (ANTHROPIC_MODEL); WithModel sets it.
 	ACPModelEnv string
+
+	// PromptNote is appended after the worker playbook for this profile's
+	// agents: the tool's own quirks, kept out of the shared text (ADR-156).
+	PromptNote string
+	// EffortPrefix starts a message that runs one turn at higher effort
+	// ("ultrathink" for Claude Code); fleet_info shows it (ADR-156).
+	EffortPrefix string
 }
 
 // HasACP reports whether the profile can run under the acp driver.
@@ -283,6 +290,10 @@ const copilotContext = `context_args = { light = "` + copilotLean + copilotNoAge
 	`pro = "` + copilotLean + ` --disable-builtin-mcps", ` +
 	`leader = "` + copilotLean + ` --disable-builtin-mcps" }`
 
+// copilotNote is the copilot family's prompt_note (ADR-156).
+const copilotNote = "Copilot: if your MCP tools are deferred, load the fleet tools in your first response with one `tool_search_tool` call, pattern `^fleet-peer-fleet_`, never later. " +
+	"In autopilot, end every done, blocked or question report with `fleet_report` and `task_complete` in the same response (it only ends the turn; a reply resumes you), never one after the other."
+
 // Defaults are the built-in profiles. {fleet} is the fleet executable, {name}
 // the agent name, {peer_mcp}/{peer_mcp_claude} the agent's peer MCP config,
 // {hooks} its status-hook settings and {plugin} its fleet plugin dir.
@@ -307,6 +318,7 @@ user_mcp_off = ["--disable-mcp-server", "{server}"]
 acp = ["--acp"]
 acp_mode_args = { auto = "--allow-all", autopilot = "--allow-all" }
 driver = "acp"
+prompt_note = "` + copilotNote + `"
 ` + copilotContext + `
 ` + copilotModels + `
 
@@ -328,6 +340,7 @@ user_mcp_config = "~/.copilot/mcp-config.json"
 user_mcp_off = ["--disable-mcp-server", "{server}"]
 acp = ["--acp"]
 acp_mode_args = { auto = "--allow-all", autopilot = "--allow-all" }
+prompt_note = "` + copilotNote + `"
 ` + copilotContext + `
 ` + copilotModels + `
 
@@ -346,6 +359,7 @@ hook_args = ["--settings", "{hooks}"]
 plugin_args = ["--plugin-dir", "{plugin}"]
 patterns = "claude"
 family = "claude"
+effort_prefix = "ultrathink"
 acp_command = ["npx", "-y", "@agentclientprotocol/claude-agent-acp@` + ClaudeACPVersion + `"]
 acp_modes = { default = "default", auto = "bypassPermissions", bypass = "bypassPermissions", accept-edits = "acceptEdits", plan = "plan" }
 acp_env = { CLAUDE_CODE_EXECUTABLE = "{command_path}", ANTHROPIC_MODEL = "` + ClaudeModel + `" }
@@ -506,6 +520,12 @@ func LoadWith(home string, local conf.Doc) (map[string]Profile, error) {
 		if p.DefaultModel == "" {
 			p.DefaultModel = b.DefaultModel
 		}
+		if p.PromptNote == "" {
+			p.PromptNote = b.PromptNote
+		}
+		if p.EffortPrefix == "" {
+			p.EffortPrefix = b.EffortPrefix
+		}
 		out[name] = p
 	}
 	return out, userErr
@@ -652,6 +672,12 @@ func apply(p *Profile, sec map[string]conf.Value) {
 	}
 	if v, ok := sec["acp_model_env"]; ok {
 		p.ACPModelEnv, _ = v.(string)
+	}
+	if v, ok := sec["prompt_note"]; ok {
+		p.PromptNote, _ = v.(string)
+	}
+	if v, ok := sec["effort_prefix"]; ok {
+		p.EffortPrefix, _ = v.(string)
 	}
 }
 

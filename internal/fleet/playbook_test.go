@@ -77,6 +77,27 @@ func TestSpawnPrependsPlaybook(t *testing.T) {
 	}
 }
 
+// A profile's prompt_note follows the playbook for its agents only (ADR-156).
+func TestPromptNoteAppended(t *testing.T) {
+	f, out := argvFleet(t, "")
+	noted := f.Profiles["pa"]
+	noted.PromptNote = "Tool note."
+	f.Profiles["pn"] = noted
+	light := playbook.Text(playbook.Light)
+	for i, c := range []struct{ profile, want string }{
+		{"pn", playbook.Compose(strings.TrimRight(light, "\n")+"\n\nTool note.", "fix the bug")},
+		{"pa", playbook.Compose(light, "fix the bug")},
+	} {
+		os.Remove(out)
+		if _, err := f.Spawn(fmt.Sprintf("pn%d", i), c.profile, t.TempDir(), "fix the bug"); err != nil {
+			t.Fatal(err)
+		}
+		if got := readArg(t, out); got != c.want {
+			t.Errorf("%s prompt:\n%.300q\nwant\n%.300q", c.profile, got, c.want)
+		}
+	}
+}
+
 // The suite is hermetic: a spawn into a temp dir reads no layer from above
 // the temp root, even when the home directory the walk stops at is not an
 // ancestor of it (a symlinked home, or a test that sets HOME) and TMPDIR sits

@@ -410,6 +410,10 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	switch {
 	case pr.Playbook && prompt != "":
 		text, src := playbook.Resolve(lvl, f.Home, dir)
+		// The profile's note carries its tool's quirks, for its agents only (ADR-156).
+		if n := strings.TrimSpace(p.PromptNote); n != "" {
+			text = strings.TrimRight(text, "\n") + "\n\n" + n
+		}
 		if lead != "" {
 			text = strings.TrimRight(text, "\n") + "\n\n" + lead
 		}

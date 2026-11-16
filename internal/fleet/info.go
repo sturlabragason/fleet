@@ -178,6 +178,9 @@ func (f *Fleet) Info(name string) (string, error) {
 		kv("interactive", "the user typed in its pane "+now.Sub(a.UserAt).Round(time.Second).String()+" ago; not auto-closed for now")
 	}
 	kv("driver", DriverLine(a, f.Profiles[a.Profile]))
+	if ep := f.Profiles[a.Profile].EffortPrefix; ep != "" {
+		kv("effort prefix", ep+" (start a message with it to run that turn at higher effort)")
+	}
 	kv("where", a.WhereName())
 	if a.FleetVersion != "" {
 		kv("fleet version", a.FleetVersion+" (started the agent)")

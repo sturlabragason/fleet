@@ -97,12 +97,14 @@ func TestSpawnPassesDriver(t *testing.T) {
 	}
 }
 
-// Every admiral tool has its own row in the prompt's Tools table, so the
-// admiral knows when to use it (ADR-86).
+// Every admiral tool is named in the prompt's Tools table, grouped by job;
+// when to use it lives in its own description (ADR-86, ADR-156).
 func TestEveryToolInPromptTable(t *testing.T) {
+	_, sec, _ := strings.Cut(Instructions, "## Tools\n")
+	sec, _, _ = strings.Cut(sec, "\n## ")
 	for _, name := range ToolNames() {
-		if !strings.Contains(Instructions, "| `"+name+"`") {
-			t.Errorf("%s has no row in the Tools table of instructions.md", name)
+		if !strings.Contains(sec, "`"+name+"`") {
+			t.Errorf("%s is not named in the Tools table of instructions.md", name)
 		}
 	}
 }
