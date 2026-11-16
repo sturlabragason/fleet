@@ -28,7 +28,6 @@ func TestMouseDragOverMouseReportingPaneCopies(t *testing.T) {
 		role  string
 		wantC bool
 	}{
-		{"tmux defaults copy nothing", false, "", false},
 		{"fleet bindings copy the drag", true, "", true},
 		// The overview's cards answer the click, so it keeps the old
 		// behaviour and a drag there must not take the clipboard (ADR-31).

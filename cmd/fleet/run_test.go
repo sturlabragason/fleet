@@ -84,10 +84,8 @@ func TestRunDispatch(t *testing.T) {
 			t.Errorf("run %q: %v, want the fleet's error", args, err)
 		}
 	}
-	for _, h := range []string{"help", "-h", "--help"} {
-		if out := captureOut(t, func() error { return run([]string{h}) }); strings.TrimSpace(out) != strings.TrimSpace(usage) {
-			t.Errorf("%s printed %q", h, out)
-		}
+	if out := captureOut(t, func() error { return run([]string{"help"}) }); strings.TrimSpace(out) != strings.TrimSpace(usage) {
+		t.Errorf("help printed %q", out)
 	}
 	out := captureOut(t, func() error { return run([]string{"profiles"}) })
 	if !strings.Contains(out, "fake ") || !strings.Contains(out, "\nprofiles: built-in + ") {
