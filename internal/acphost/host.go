@@ -736,24 +736,48 @@ func (h *host) sendBy(text, by string) {
 	}()
 }
 
+var errNotReady = errors.New("session not ready")
+
+// sendNow sends text (may be empty) and the held prompts now, as one
+// prompt (ADR-152). A running turn is cancelled first and the prompt
+// follows at once rather than when the turn returns: a stuck turn may
+// never return.
+func (h *host) sendNow(text, by string) error {
+	h.mu.Lock()
+	if !h.ready || h.stopping || h.exited {
+		h.mu.Unlock()
+		return errNotReady
+	}
+	if text != "" && by != ByPane {
+		text = stripMarks(text)
+	}
+	n, busy := len(h.queued), h.inflight > 0
+	h.mu.Unlock()
+	if n == 0 && text == "" {
+		return errors.New("nothing queued")
+	}
+	if busy {
+		if err := h.cancelTurn(by); err != nil {
+			return fmt.Errorf("cancel turn: %w", err)
+		}
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if text != "" { // queued only now, so a failed cancel sends nothing
+		h.queued = append(h.queued, queuedPrompt{text, by})
+	}
+	h.sendQueued() // the held ones may already be gone with the cancelled turn's return
+	return nil
+}
+
 // cancel sends session/cancel and answers open questions "cancelled", as
 // ACP asks of a client that cancels.
 func (h *host) cancel(by string) error {
+	err := h.cancelTurn(by)
+	if errors.Is(err, errNotReady) {
+		return err
+	}
 	h.mu.Lock()
-	c, sid := h.conn, h.sid
-	h.mu.Unlock()
-	if c == nil || sid == "" {
-		return errors.New("session not ready")
-	}
-	err := c.Cancel(sid)
-	h.mu.Lock()
-	if by != "" {
-		h.flush()
-		h.emit(Entry{Kind: KindCancel, By: by}, true)
-	}
-	for len(h.questions) > 0 {
-		h.resolveBy(h.questions[0], acp.CancelledOutcome(), "cancelled", by)
-	}
 	var back []string // Esc in the pane: what it typed returns to the box
 	if by == ByPane && h.con != nil {
 		kept := h.queued[:0]
@@ -770,6 +794,28 @@ func (h *host) cancel(by string) error {
 	h.mu.Unlock()
 	if len(back) > 0 {
 		h.con.restore(strings.Join(back, "\n\n"))
+	}
+	return err
+}
+
+// cancelTurn sends session/cancel, records it and answers open questions
+// "cancelled". The held prompts stay held.
+func (h *host) cancelTurn(by string) error {
+	h.mu.Lock()
+	c, sid := h.conn, h.sid
+	h.mu.Unlock()
+	if c == nil || sid == "" {
+		return errNotReady
+	}
+	err := c.Cancel(sid)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if by != "" {
+		h.flush()
+		h.emit(Entry{Kind: KindCancel, By: by}, true)
+	}
+	for len(h.questions) > 0 {
+		h.resolveBy(h.questions[0], acp.CancelledOutcome(), "cancelled", by)
 	}
 	return err
 }

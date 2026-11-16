@@ -176,6 +176,8 @@ func (h *host) altKey(b byte) {
 		fn = (*editor).delWordFwd
 	case 0x7f, 0x08:
 		fn = (*editor).delWordBack
+	case 'M': // Alt-Shift-m: tmux keeps Alt-m for the wall
+		h.paneSendNow()
 	}
 	if fn != nil {
 		h.con.edit(fn)
@@ -399,6 +401,18 @@ func (h *host) paneCancel() {
 	}
 	if err := h.cancel(ByPane); err != nil {
 		h.say("! cancel: " + err.Error())
+	}
+}
+
+// paneSendNow is Alt-M: the box and the held prompts go now, cancelling a
+// running turn first (ADR-152).
+func (h *host) paneSendNow() {
+	text := strings.TrimSpace(h.con.take())
+	if err := h.sendNow(text, ByPane); err != nil {
+		if text != "" {
+			h.con.restore(text)
+		}
+		h.say("! send now: " + err.Error())
 	}
 }
 

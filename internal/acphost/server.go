@@ -97,6 +97,8 @@ func (h *host) handle(req Request) Response {
 		err = h.answer(req.Option, req.OptionID, "")
 	case OpCancel:
 		err = h.cancel("")
+	case OpSendNow:
+		err = h.sendNow(req.Text, "")
 	case OpState, OpStop, OpTake:
 	default:
 		err = fmt.Errorf("unknown op %q", req.Op)

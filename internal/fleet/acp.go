@@ -363,6 +363,23 @@ func (f *Fleet) acpSend(name, text string) error {
 	return nil
 }
 
+// SendNow sends text (may be empty) and the prompts an ACP agent's host
+// holds now, cancelling its running turn first (ADR-152).
+func (f *Fleet) SendNow(name, text string) error {
+	if !f.isACP(name) {
+		return fmt.Errorf("%s does not run over ACP: send now needs an ACP agent", name)
+	}
+	if _, err := f.Pane(name); err != nil {
+		return err
+	}
+	logx.For("fleet").Info("send now", "agent", name, "bytes", len(text), "driver", "acp")
+	if _, err := f.acpCall(name, acphost.Request{Op: acphost.OpSendNow, Text: text}); err != nil {
+		return err
+	}
+	f.notePrompt(name)
+	return nil
+}
+
 // QueuedTaker is what an agent's fleet_wait polls for prompts held by its
 // ACP host while its turn stays open in the wait: each call takes them out
 // of the host's queue. nil for an agent that does not run over ACP.

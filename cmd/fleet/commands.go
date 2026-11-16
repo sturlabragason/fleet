@@ -88,11 +88,13 @@ var usage = `usage:
                                             the agents' own session files (AI credits for copilot, tokens
                                             for claude); no model is called. --today: the usage bar's
                                             figures per profile since midnight, with raw units
-  fleet send [--force] [--resume] <name> "text"
+  fleet send [--force] [--resume] [--now] <name> ["text"]
                                             refused while the user is typing in that pane (keys
                                             there in the last 30 s, unsubmitted text in its box);
                                             --force types it anyway; --resume brings back an agent
-                                            closed in the last 24 h (its last session and card)
+                                            closed in the last 24 h (its last session and card);
+                                            --now (ACP): cancel the running turn and send the held
+                                            prompts and text at once, without text just the held ones
   fleet peek <name> [--raw] [-n 200]
   fleet peek --summary <name>               about 5 lines from a cheap model: what it is doing, what it
                                             waits for, any error (cached per screen; [summary] in config.toml)
@@ -395,13 +397,16 @@ func cmdInfo(f *fleet.Fleet, rest []string) error {
 }
 
 func cmdSend(f *fleet.Fleet, rest []string) error {
-	force, resume := false, false
-	for len(rest) > 0 && (rest[0] == "--force" || rest[0] == "--resume") {
-		force, resume = force || rest[0] == "--force", resume || rest[0] == "--resume"
+	force, resume, now := false, false, false
+	for len(rest) > 0 && (rest[0] == "--force" || rest[0] == "--resume" || rest[0] == "--now") {
+		force, resume, now = force || rest[0] == "--force", resume || rest[0] == "--resume", now || rest[0] == "--now"
 		rest = rest[1:]
 	}
+	if now && len(rest) == 1 { // flush the held prompts only
+		return f.SendNow(rest[0], "")
+	}
 	if len(rest) < 2 {
-		return fmt.Errorf("usage: fleet send [--force] [--resume] <name> \"text\"")
+		return fmt.Errorf("usage: fleet send [--force] [--resume] [--now] <name> \"text\"")
 	}
 	text := strings.Join(rest[1:], " ")
 	if err := f.ClosedError(rest[0], "use fleet send --resume"); err != nil {
@@ -419,6 +424,9 @@ func cmdSend(f *fleet.Fleet, rest []string) error {
 	}
 	if r := f.SendBlocker(rest[0], true); r != "" && !force {
 		return fmt.Errorf("not sent: %s; fleet send --force types it anyway", r)
+	}
+	if now {
+		return f.SendNow(rest[0], text)
 	}
 	return f.Send(rest[0], text)
 }

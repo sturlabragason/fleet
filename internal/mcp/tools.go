@@ -57,7 +57,8 @@ var baseToolDefs = []tool{
 		"text": str("text to send"), "keys": strList("key names: Enter, Escape, Up, Down, Left, Right, Tab, BTab, Space, BSpace, 1-9, y, n"),
 		"confirmed": map[string]any{"type": "boolean", "description": "only when an agent is waiting on a prompt (text or keys would answer it), after the user said yes"},
 		"force":     map[string]any{"type": "boolean", "description": "type even though the user is typing in that pane (it merges into their input and submits it); only after the user said so"},
-		"resume":    map[string]any{"type": "boolean", "description": "name only, with text: the agent closed; resume its last session, then send"}})},
+		"resume":    map[string]any{"type": "boolean", "description": "name only, with text: the agent closed; resume its last session, then send"},
+		"now":       map[string]any{"type": "boolean", "description": "ACP agents, no keys: cancel the running turn (it looks stuck) and send the prompts it holds plus text at once; text may be empty"}})},
 	{"fleet_answer", "Answer an agent's prompt: answer y/n, option N of a numbered menu, or label for a menu whose options are not numbered on screen (fleet_status lists the options either way). Ask the user first; set confirmed=true only after an explicit yes, and pass expect = the question the user confirmed.", obj([]string{"name", "confirmed"}, map[string]any{
 		"name": str("agent name"), "answer": map[string]any{"type": "string", "enum": []string{"y", "n"}, "description": "y = option 1, n = the first option starting with No; plain y/n when there is no menu"},
 		"option": map[string]any{"type": "integer", "minimum": 1, "maximum": 9, "description": "menu option number; pass exactly one of answer, option or label"},
@@ -136,6 +137,9 @@ type args struct {
 	Rule bool
 	// Resume brings a closed agent back for a fleet_send (ADR-95).
 	Resume bool
+	// Now makes a fleet_send to an ACP agent cancel its turn and send the
+	// held prompts at once (ADR-152).
+	Now bool
 	// Interactive marks a fleet_spawn the user talks to directly (ADR-61).
 	Interactive         bool
 	LastMessage         bool `json:"last_message"`

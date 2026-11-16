@@ -712,12 +712,17 @@ func (v *view) input(w, n int) ([]string, int, int) {
 // maxQueued is how many held prompts the pane lists above the input.
 const maxQueued = 3
 
-// queue lists the held prompts, one line each, newest last. Caller holds mu.
+// queue lists the held prompts under a count and the key that sends them
+// now, one line each, newest last. Caller holds mu.
 func (v *view) queue(w int) []string {
 	q := v.queued
-	var out []string
+	if len(q) == 0 {
+		return nil
+	}
+	head := []seg{{fmt.Sprintf("  %d queued", len(q)), sty{fg: v.pal.sub}}, {" · ", sty{fg: v.pal.faint}},
+		{"Alt-M", sty{fg: v.pal.sub}}, {" send now", sty{fg: v.pal.dim}}}
+	out := []string{v.paintLine(segLine{segs: clipSegs(head, w)}, w)}
 	if len(q) > maxQueued {
-		out = append(out, v.paintLine(segLine{segs: []seg{{fmt.Sprintf("  … %d more queued", len(q)-maxQueued), sty{fg: v.pal.dim}}}}, w))
 		q = q[len(q)-maxQueued:]
 	}
 	for _, t := range q {

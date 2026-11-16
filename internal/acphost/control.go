@@ -39,6 +39,9 @@ const (
 	OpPrompt = "prompt" // Text: send as a prompt (held until the running turn ends)
 	OpAnswer = "answer" // Option: 1-based option number, or OptionID
 	OpCancel = "cancel" // cancel the running turn (session/cancel)
+	// OpSendNow sends Text (optional) and the held prompts now as one
+	// prompt, cancelling a running turn first (ADR-152).
+	OpSendNow = "send-now"
 	OpState  = "state"  // no change; the response carries the host's state
 	OpStop   = "stop"   // close the session, stop the child and exit
 	// OpTake hands over the prompts held during the running turn and drops

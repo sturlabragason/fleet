@@ -884,3 +884,29 @@ func TestTakeHandsQueuedPromptsOver(t *testing.T) {
 		t.Fatalf("user entries = %q", users)
 	}
 }
+
+func TestSendNowCancelsStuckTurnAndSendsQueued(t *testing.T) {
+	r := startRig(t, Config{Prompt: "go"}, acp.AgentCapabilities{})
+	r.waitStatus("working")
+	stuck := make(chan struct{}) // the turn ignores the cancel until released
+	r.conn.turns <- func(handler) acp.StopReason { <-stuck; return acp.StopCancelled }
+	for _, text := range []string{"one", "two"} {
+		if _, err := r.call(Request{Op: OpPrompt, Text: text}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := r.call(Request{Op: OpSendNow, Text: "three"}); err != nil {
+		t.Fatal(err)
+	}
+	calls := func() string { return strings.Join(r.conn.Calls(), "|") }
+	r.waitFor(func() bool { return strings.Contains(calls(), "cancel|prompt one\n\ntwo\n\nthree") }, "cancel, then the held prompts at once")
+	close(stuck)
+	r.conn.turns <- func(handler) acp.StopReason { return acp.StopEndTurn }
+	r.waitStatus("idle")
+	if strings.Count(calls(), "prompt one") != 1 {
+		t.Fatalf("held prompts sent twice: %s", calls())
+	}
+	if resp, _ := r.call(Request{Op: OpSendNow}); resp.OK || resp.Err != "nothing queued" {
+		t.Fatalf("send now with nothing held = %+v", resp)
+	}
+}

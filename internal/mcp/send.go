@@ -70,8 +70,11 @@ func (s *Server) send(a args) (string, error) {
 	if n != 1 {
 		return "", fmt.Errorf("pass exactly one of name, names or team")
 	}
-	if a.Text == "" && len(a.Keys) == 0 {
+	if a.Text == "" && len(a.Keys) == 0 && !a.Now {
 		return "", fmt.Errorf("text or keys is required")
+	}
+	if a.Now && (len(a.Keys) > 0 || a.Resume) {
+		return "", fmt.Errorf("now takes text only, no keys or resume")
 	}
 	if err := fleet.CheckKeys(a.Keys); err != nil {
 		return "", err
@@ -127,7 +130,7 @@ func (s *Server) sendOne(a args, name string) (held bool, err error) {
 	if err := s.F.ClosedError(name, "pass resume=true"); err != nil {
 		return false, err
 	}
-	if len(a.Keys) == 0 && a.Text != "" {
+	if len(a.Keys) == 0 && a.Text != "" && !a.Now {
 		if held, err := s.F.HoldForQueued(name, a.Text); held || err != nil {
 			return held, err
 		}
@@ -145,6 +148,9 @@ func (s *Server) sendOne(a args, name string) (held bool, err error) {
 		if w != "" {
 			return false, fleet.WaitingError(w)
 		}
+	}
+	if a.Now {
+		return false, s.F.SendNow(name, a.Text)
 	}
 	if len(a.Keys) == 0 {
 		return false, s.F.Send(name, a.Text)
