@@ -61,6 +61,15 @@ Copying works in the admiral and agent panes:
 
 The text is on the system clipboard as soon as you let go, so `Ctrl+Shift+V` pastes it straight back into a pane; there is no `Ctrl+Shift+C` step. Fleet takes the left-button drag for tmux even though the agent's own TUI asks for the mouse, which is why selecting works at all here (DESIGN.md ADR-38); clicks, the wheel and the right-click menu still go to the agent. The overview pane is the exception: its cards answer clicks, so dragging there selects nothing.
 
+## Two monitors
+
+```sh
+fleet up --monitors 2    # this terminal: the admiral, full screen
+                         # a new terminal window: overview + wall, full screen
+```
+
+Drag the new window to the second screen. If no window opens (fleet tries `$FLEET_TERMINAL`, then `$TERMINAL`, then Ptyxis, GNOME Terminal, kitty, foot, Alacritty, WezTerm, Ghostty, Konsole, xterm), run `fleet wall attach` in a second terminal yourself. Every wall key (`Alt+1/2/4/6/9/m`, `Alt+X`, `Alt+w`) and the overview work from either screen, and each screen keeps its own size. Closing either window only detaches it: agents keep running; `fleet up` brings back the admiral's screen and `fleet wall attach` the wall's. `fleet up --monitors 1` puts the admiral back in `fleet:main` and closes the wall's window (ADR-108).
+
 ## Planned
 
 None of these are bound yet: park and wake (`z` / `w`), approve and reject at a y/n prompt (the obvious `a` / `x` are already taken by add-pane and take-off-wall), sending a prompt (`s`), a spawn wizard (`n`), filtering tiles (`/`) and focus sessions (`f`). See [DESIGN.md §5](../DESIGN.md#keyboard-yes-arrow-driven).
