@@ -11,7 +11,7 @@
 [![platforms](https://img.shields.io/badge/platform-linux%20%7C%20macOS%20%7C%20windows-informational)](docs/install.md#platforms)
 [![license](https://img.shields.io/github/license/sturlabragason/fleet)](LICENSE)
 
-fleet runs your Copilot CLI, Claude Code, agy and vibe sessions side by side, shows each one as a status tile, puts the ones you are working with on a wall of live panes, and gives one agent, the admiral, the tools to report on the rest and act for you.
+fleet runs your Copilot CLI, Claude Code, agy, vibe and Pi sessions side by side, shows each one as a status tile, puts the ones you are working with on a wall of live panes, and gives one agent, the admiral, the tools to report on the rest and act for you.
 
 ![fleet: the admiral on the left, a tile per agent top right, a 2×2 wall of live agent panes below. Two agents ask for approval, they are answered, and work resumes](docs/img/demo.gif)
 
@@ -71,7 +71,7 @@ Without `--admiral-profile`, the admiral runs the Copilot CLI. Other tools and y
 
 ## What you get
 
-- **Status tiles.** Every agent is working, waiting, error, stuck or idle, refreshed every second and sorted so the ones waiting on you come first. Copilot and agy report status over the Agent Client Protocol ([docs/acp.md](docs/acp.md)); Claude and vibe are read from their screen.
+- **Status tiles.** Every agent is working, waiting, error, stuck or idle, refreshed every second and sorted so the ones waiting on you come first. Copilot and agy report status over the Agent Client Protocol ([docs/acp.md](docs/acp.md)); Claude and vibe are read from their screen, and Pi reports through a small extension fleet loads into it.
 - **A live wall.** Real, interactive tmux panes in layouts of 1, 2, 4, 6 or 9, or main plus stack. The pane that needs you gets the big slot. `fleet up --monitors 2` puts the wall on a second screen.
 - **The admiral.** An agent with `fleet_*` MCP tools to read status, peek at screens, send prompts, answer, spawn and close. `fleet peek --summary <name>` gives it about five lines from a small model instead of a full screen. It shows how full its context is, and `Alt+R` hands it off to a fresh session. See [docs/admiral.md](docs/admiral.md).
 - **A worktree per agent.** Spawning into a git repo gives the agent `<repo>.wt/<name>` on branch `fleet/<name>`. `fleet touching` shows which other worktrees change the same files, and `fleet merge` rebases, checks and merges one into local main.
@@ -108,7 +108,7 @@ The mouse works: click a pane to type in it, drag to copy to the system clipboar
 
 ## Tool profiles
 
-A profile says how to start one tool variant. Built-in profiles include `copilot`, `claude`, `claude-copilot`, `agy`, `vibe` and `fake`. Add your own in `~/.fleet/tools.toml`:
+A profile says how to start one tool variant. Built-in profiles include `copilot`, `claude`, `claude-copilot`, `agy`, `vibe`, `pi` and `fake`. Add your own in `~/.fleet/tools.toml`:
 
 ```toml
 [claude-work]
@@ -130,6 +130,7 @@ Agents start through `bash -lc`, so shell aliases don't apply; make a profile in
 | [docs/admiral.md](docs/admiral.md) | The admiral, its MCP tools, squads, the confirmation rule |
 | [docs/acp.md](docs/acp.md) | ACP agents: typing into them, takeover, upgrading from before v1.0.0 |
 | [docs/profiles.md](docs/profiles.md) | Tool profiles and status patterns |
+| [docs/pi.md](docs/pi.md) | Running Pi agents |
 | [docs/keys.md](docs/keys.md) | Every key, the mouse, two monitors |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Logs, state files, common problems |
 | [docs/architecture.md](docs/architecture.md) | How the packages fit together |

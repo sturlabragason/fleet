@@ -487,7 +487,7 @@ func (f *Fleet) launchVars(name, id string, p tools.Profile, pr prefs.Spawn, fen
 	status.DropHookSubs(f.Home, name)
 	if p.UsesPlugin(acp) {
 		dir := tools.PluginDir(f.Home, name)
-		pl := tools.Plugin{Exe: f.Exe, Name: name, MCP: p.PluginMCP, NoStatus: acp}
+		pl := tools.Plugin{Exe: f.Exe, Name: name, MCP: p.PluginMCP, NoStatus: acp, Pi: p.Family() == tools.FamilyPi}
 		if err := tools.WritePlugin(dir, pl); err != nil {
 			logx.For("fleet").Warn("plugin dir; starting without it", "agent", name, "dir", dir, "err", err)
 		} else {

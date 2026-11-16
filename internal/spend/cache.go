@@ -159,12 +159,12 @@ func Source(p tools.Profile, sessionID string) (string, Kind) {
 	switch Kind(p.Family()) {
 	case Copilot:
 		return p.SubagentLogPath(sessionID), Copilot
-	case Claude:
+	case Claude, Pi:
 		// The session path is a glob over project directories. The same id
 		// can sit under two of them when the agent changed directory, so
 		// take the one still being written to.
 		if m := newest(p.SessionMatches(sessionID)); m != "" {
-			return m, Claude
+			return m, Kind(p.Family())
 		}
 	}
 	return "", ""

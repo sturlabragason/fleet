@@ -10,6 +10,7 @@ A profile tells fleet how to start one tool variant: which command, which argume
 | `claude` | `claude` | `--session-id {id}` | `--resume {id}` | `claude` |
 | `agy` | `agy` | not supported | `--conversation {id}` | `agy` |
 | `vibe` | `vibe` | not supported | `--resume {id}` | `vibe` |
+| `pi` | `pi` | `--session-id {id}` | `--session {id}` | `pi` ([docs/pi.md](pi.md)) |
 | `fake` | `{fleet} fakeagent {name}` | not supported | none | `fake` |
 
 `fleet profiles` prints the effective list, including yours. Resume arguments are stored for park/wake, which is planned and not built yet.
@@ -31,16 +32,16 @@ Each `[section]` is a profile. A section with a built-in name overrides only the
 | `default_model` | The model fleet pins when neither the spawn, `args` nor `extra_args` names one: `claude-opus-5.5` for Copilot, `opus` for Claude, none for `agy` (its own default). A spawn may name any model the profile's tool offers: `fleet models <profile>` (or `fleet_profiles` with `profile`) asks the tool's ACP server, and a model it doesn't list is refused rather than swapped (ADR-112). |
 | `acp_model_env` | The variable an `acp_command` adapter reads its model from (`ANTHROPIC_MODEL` on the built-in `claude`); fleet sets it to the pinned model. |
 | `prompt_args` | Arguments that carry the first prompt, with `{prompt}`, so the tool submits it itself instead of fleet pasting it |
-| `patterns` | Status pattern set: `copilot`, `claude`, `agy`, `vibe`, `fake` or your own. Defaults to the profile name. |
-| `family` | Which tool's fleet-side behaviour the profile gets: `copilot`, `claude`, `agy`, `vibe` or `fake`. It picks the admiral's MCP wiring, the spend parser, the context fill and Copilot's ACP session events. Defaults to the `patterns` value, so a new tool that behaves like Claude but needs its own status patterns sets `family = "claude"` with its own `patterns` (ADR-126). |
+| `patterns` | Status pattern set: `copilot`, `claude`, `agy`, `vibe`, `pi`, `fake` or your own. Defaults to the profile name. |
+| `family` | Which tool's fleet-side behaviour the profile gets: `copilot`, `claude`, `agy`, `vibe`, `pi` or `fake`. It picks the admiral's MCP wiring, the spend parser, the context fill and Copilot's ACP session events. Defaults to the `patterns` value, so a new tool that behaves like Claude but needs its own status patterns sets `family = "claude"` with its own `patterns` (ADR-126). |
 | `acp`, `acp_mode_args` | Arguments that start the tool's ACP server instead of its TUI, and its starting modes under ACP. Only a profile with `acp` or `acp_command` can run over ACP (DESIGN §7d). |
 | `acp_command` | The whole argv under ACP, replacing `command`, `args` and the peer, extra and context args. The built-in `claude` runs the pinned claude-agent-acp adapter here (DESIGN §7d, ADR-76). |
 | `acp_env` | Extra env under ACP only. `{command_path}` is the profile's `command` found in `~/.local/bin` or on PATH. |
 | `acp_modes` | Fleet mode → ACP session mode, set with `session/set_mode` before the first prompt; `default` is used when no mode is set. |
 | `user_mcp_config` | The tool's file of user-global MCP servers (`~/.copilot/mcp-config.json`, `~/.claude.json`). |
 | `user_mcp_off` | Arguments that switch those servers off for a worker, added after the peer and plugin args under both drivers. Holding `{server}`, they repeat per server (`["--disable-mcp-server", "{server}"]`); without it they are added once. Claude's is `["--disallowedTools=mcp__{server}"]`. `[]` keeps every server. `keep_mcp` in `config.toml` keeps named ones (ADR-91). |
-| `plugin_args` | Arguments that load fleet's per-agent plugin (hooks, and fleet-peer for Copilot), with `{plugin}` the plugin dir: `["--plugin-dir", "{plugin}"]` on the built-in `copilot`, `claude-copilot` and `claude`. Inherited like `peer_args`; `[]` turns the plugin off (ADR-99). |
-| `plugin_mcp` | `true`: fleet-peer goes in the plugin's `.mcp.json` instead of `peer_args` (Copilot). |
+| `plugin_args` | Arguments that load fleet's per-agent plugin (hooks, and fleet-peer for Copilot), with `{plugin}` the plugin dir: `["--plugin-dir", "{plugin}"]` on the built-in `copilot`, `claude-copilot` and `claude`; `["-e", "{plugin}/fleet-state.ts"]` on `pi`, whose plugin dir holds one Pi extension instead (ADR-148). Inherited like `peer_args`; `[]` turns the plugin off (ADR-99). |
+| `plugin_mcp` | `true`: fleet-peer goes in the plugin's `.mcp.json` instead of `peer_args` (Copilot), or is registered by the Pi extension (`pi`). |
 | `native_binary` | `true`: start the Copilot CLI's native binary directly, under tmux and ACP, instead of the Node launcher `copilot` on PATH; saves about 65 MB per agent. **This skips the launcher's version pick and auto-update**: the agent runs whatever native binary npm last installed until you update with `npm install -g @github/copilot`. When fleet can't find the binary it logs why and starts the launcher. Default off. |
 | `acp_meta` | `claude`: send the plugin and write fence in `session/new` `_meta.claudeCode.options` (the claude-agent-acp adapter). |
 | `acp_mcp` | `session`: pass the peer MCP server in the ACP session's `mcpServers` instead of `peer_args`. |

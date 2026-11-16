@@ -82,6 +82,13 @@ const (
 // before giving up), so that half mirrors agy's shipped pattern and is
 // untested until someone snaps one — ADR-42's accepted cost.
 //
+// Pi's working rules are herdr's (Apache-2.0, github.com/herdrdev/herdr,
+// src/detect/manifests/pi.toml), without its bare "Working..." match, which
+// the transcript can show. Its footer ("↑8.2k ↓211 6.6%/128k (auto)", the
+// context fill) is always drawn, so it means idle once no spinner is on
+// screen. Pi asks no permission, so there is no waiting rule: its extension
+// reports a dialog over `fleet hook` (ADR-148).
+//
 // Copilot CLI (newer UI): busy = "● Working · … esc esc interrupt" in the
 // footer; idle = the mode footer ("Interactive · Allow All · / commands ·
 // space hold to record") with no "Working". Picker hints like "esc to cancel"
@@ -129,6 +136,11 @@ waiting = ['(?i)permission for the ', '(?i)allow once', '\[y/n\]', '(?i)approve'
 error = ['(?i)^\s*[⎣⎿]?\s*error: failed to', '(?i)^\s*⚠ (failed|error)']
 working = ['(?i)esc(/ctrl\+c)? to (interrupt|cancel)', '[\x{2800}-\x{28ff}]\s+\w+(…|\.\.\.)']
 idle = ['^[\s\x{a0}]*>[\s\x{a0}]*$', '(?i)/\d+k tokens \(']
+
+[pi]
+scan = 'window'
+working = ['^── [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] Working ─', '^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] Working$']
+idle = ['\d%/\d+(\.\d+)?[kM]?(\s|$)']
 `
 
 // Set holds compiled patterns for one tool.

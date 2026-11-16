@@ -42,6 +42,11 @@ var hookEvents = map[string]Status{
 	"sessionstart":        Working,
 	"precompact":          Working,
 	"sessionend":          Idle,
+	// Pi's events, from fleet's Pi extension (ADR-148). agent_settled, not
+	// agent_end: Pi may still retry, compact or run a queued message.
+	"agentstart":    Working,
+	"agentsettled":  Idle,
+	"uipromptstart": Waiting,
 	// permissionrequest is left out: Copilot fires it before --allow-all
 	// approves the call (seen live, ADR-99), so it would show "waiting"
 	// for the length of every command. The screen, the ACP protocol and
@@ -50,8 +55,8 @@ var hookEvents = map[string]Status{
 
 // HookEvents are the event names `fleet hook` knows, for the CLI's usage text.
 func HookEvents() []string {
-	return []string{"agentstop", "notification", "posttooluse", "posttoolusefailure", "precompact", "pretooluse",
-		"sessionend", "sessionstart", "stop", "subagentstart", "subagentstop", "userpromptsubmit", "userpromptsubmitted"}
+	return []string{"agent_settled", "agent_start", "agentstop", "notification", "posttooluse", "posttoolusefailure", "precompact", "pretooluse",
+		"sessionend", "sessionstart", "stop", "subagentstart", "subagentstop", "ui_prompt_start", "userpromptsubmit", "userpromptsubmitted"}
 }
 
 // SubagentEvent reports whether event starts or stops a subagent.

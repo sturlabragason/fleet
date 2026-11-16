@@ -154,6 +154,8 @@ type Kind string
 const (
 	Copilot Kind = tools.FamilyCopilot
 	Claude  Kind = tools.FamilyClaude
+	// Pi is a Pi session file (~/.pi/agent/sessions/*/<ts>_<id>.jsonl, ADR-148).
+	Pi Kind = tools.FamilyPi
 	// ACP is fleet's own transcript of an ACP agent (~/.fleet/acp/<name>.jsonl),
 	// for a tool that keeps no usage log fleet can read (agy): one usage
 	// entry per turn, from the session/prompt response.
@@ -168,6 +170,8 @@ func parserFor(k Kind) (parser, bool) {
 		return parser{tags: [][]byte{[]byte(`"output_tokens"`), []byte(`"cost-state"`), []byte(`"compact_boundary"`)}, line: claudeLine}, true
 	case ACP:
 		return parser{tags: [][]byte{[]byte(`"kind":"usage"`)}, line: acpLine}, true
+	case Pi:
+		return parser{tags: [][]byte{[]byte(`"usage":{`)}, line: piLine}, true
 	}
 	return parser{}, false
 }
@@ -344,6 +348,54 @@ func acpLine(b []byte) (record, bool) {
 	}
 	return record{sp: Spend{Calls: 1, Input: in, Output: u.OutputTokens,
 		CacheRead: u.CachedReadTokens, CacheWrite: u.CachedWriteTokens}}, true
+}
+
+// piLine reads a Pi session entry that carries usage: an assistant message
+// (one call), a usage entry (cache warming and the like), or the summary
+// call of a compaction or branch summary. Pi keeps each token kind apart,
+// so nothing is taken out of input. Its cost in dollars is not kept: Spend
+// has no unit for it.
+func piLine(b []byte) (record, bool) {
+	type usage struct {
+		Input      int64 `json:"input"`
+		Output     int64 `json:"output"`
+		CacheRead  int64 `json:"cacheRead"`
+		CacheWrite int64 `json:"cacheWrite"`
+	}
+	var e struct {
+		Type    string `json:"type"`
+		ID      string `json:"id"`
+		Model   string `json:"model"`
+		Usage   *usage `json:"usage"`
+		Message struct {
+			Role  string `json:"role"`
+			Model string `json:"model"`
+			Usage *usage `json:"usage"`
+		} `json:"message"`
+	}
+	if json.Unmarshal(b, &e) != nil {
+		return record{}, false
+	}
+	u, sp := e.Usage, Spend{Model: e.Model}
+	switch e.Type {
+	case "message":
+		if e.Message.Role != "assistant" {
+			return record{}, false
+		}
+		u, sp = e.Message.Usage, Spend{Calls: 1, Model: e.Message.Model}
+	case "compaction":
+		sp.Compactions = 1
+	case "usage", "branch_summary":
+	default:
+		return record{}, false
+	}
+	if u != nil {
+		sp.Input, sp.Output, sp.CacheRead, sp.CacheWrite = u.Input, u.Output, u.CacheRead, u.CacheWrite
+	}
+	if !sp.Any() && sp.Compactions == 0 {
+		return record{}, false
+	}
+	return record{sp: sp, id: e.ID}, true
 }
 
 // result is what one pass over a buffer found.

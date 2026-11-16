@@ -125,3 +125,49 @@ func containsRun(l, run []string) bool {
 	}
 	return false
 }
+
+// Pi's plugin is one extension file loaded with -e: it reports Pi's turn
+// events to `fleet hook` and, with MCP, registers fleet-peer (ADR-148).
+func TestWritePluginPi(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FLEET_CONFIG", filepath.Join(home, "nonexistent.toml"))
+	ps, err := Load(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := ps["pi"]
+	dir := filepath.Join(home, "plugins", "a1")
+	if err := WritePlugin(dir, Plugin{Exe: `/opt/my "fleet"`, Name: "a1", MCP: p.PluginMCP, Pi: p.Family() == FamilyPi}); err != nil {
+		t.Fatal(err)
+	}
+	ents, _ := os.ReadDir(dir)
+	if len(ents) != 1 || ents[0].Name() != PiExtension {
+		t.Fatalf("plugin dir %v, want only %s", ents, PiExtension)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, PiExtension))
+	ts := string(b)
+	for _, want := range []string{`const exe = "/opt/my \"fleet\"";`, `const agent = "a1";`,
+		`pi.on("agent_start"`, `pi.on("agent_settled"`, `pi.on("ui_prompt_start"`, `hook("ui_prompt_start")`,
+		`stdio: "ignore"`, `pi.registerMcpServer("fleet-peer", { command: exe, args: ["mcp", "--agent", agent], exposure: "direct" })`} {
+		if !strings.Contains(ts, want) {
+			t.Errorf("extension lacks %s:\n%s", want, ts)
+		}
+	}
+	if err := WritePlugin(dir, Plugin{Exe: "/bin/fleet", Name: "a1", Pi: true}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, PiExtension)); strings.Contains(string(b), "registerMcpServer") {
+		t.Error("extension registers fleet-peer without MCP")
+	}
+
+	v := AgentVars("/bin/fleet", "a1", "SID").WithPlugin(dir, p)
+	argv, embedded := p.Argv(v, Launch{Mode: AutoMode, Prompt: "-do it"})
+	want := []string{"pi", "-e", filepath.Join(dir, PiExtension), "--session-id", "SID", "--", "-do it"}
+	if !slices.Equal(argv, want) || !embedded {
+		t.Errorf("argv %q, want %q", argv, want)
+	}
+	argv, _ = p.Argv(v, Launch{Resume: true})
+	if want := []string{"pi", "-e", filepath.Join(dir, PiExtension), "--session", "SID"}; !slices.Equal(argv, want) {
+		t.Errorf("resume argv %q, want %q", argv, want)
+	}
+}

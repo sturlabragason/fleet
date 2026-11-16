@@ -37,10 +37,16 @@ type Plugin struct {
 	// NoStatus makes the hooks keep subagents only: an ACP agent's host
 	// owns its status file.
 	NoStatus bool
+	// Pi writes Pi's extension (PiExtension) instead of a Claude-format
+	// plugin; MCP then registers fleet-peer from it (ADR-148).
+	Pi bool
 }
 
 // files are the plugin's files by path relative to its dir.
 func (pl Plugin) files() map[string][]byte {
+	if pl.Pi {
+		return map[string][]byte{PiExtension: piFile(pl.Exe, pl.Name, pl.MCP)}
+	}
 	js := func(v any) []byte {
 		b, _ := json.MarshalIndent(v, "", "  ")
 		return append(b, '\n')

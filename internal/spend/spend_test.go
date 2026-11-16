@@ -396,3 +396,33 @@ func TestSourceByFamily(t *testing.T) {
 		t.Errorf("no family: source %q", got)
 	}
 }
+
+// A Pi session file (captured, content scrubbed): two assistant calls, a
+// cache-warming usage entry and a compaction's summary call (ADR-148).
+func TestPiSession(t *testing.T) {
+	got, ok := NewCache().File("testdata/pi-session.jsonl", Pi)
+	if !ok {
+		t.Fatal("pi session not read")
+	}
+	want := Spend{Calls: 2, Input: 2*8194 + 20000, Output: 211 + 384 + 300, CacheRead: 50000, CacheWrite: 100,
+		Compactions: 1, Model: "qwen3-agent:4b", Uncredited: 87383}
+	if got != want {
+		t.Fatalf("got %+v want %+v", got, want)
+	}
+}
+
+// Pi keeps a session as <timestamp>_<id>.jsonl under a per-directory dir.
+func TestSourcePi(t *testing.T) {
+	data := t.TempDir()
+	path := filepath.Join(data, "--tmp-x--", "2026-11-16T15-07-20-471Z_SID.jsonl")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p := tools.Profile{FamilyKey: tools.FamilyPi, SessionPath: filepath.Join(data, "*", "*_{id}.jsonl")}
+	if got, k := Source(p, "SID"); got != path || k != Pi {
+		t.Errorf("source %q %q, want %q pi", got, k, path)
+	}
+}

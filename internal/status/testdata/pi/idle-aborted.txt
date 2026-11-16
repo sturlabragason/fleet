@@ -1,0 +1,18 @@
+
+ Wait, the function parameters require the command as a string. Since the user didn't specify any timeout, I can omit
+ the timeout parameter. Let me make sure the syntax is correct. The bash function's argument is a JSON object with
+ "command" and optionally "timeout". So the arguments would be {"command": "ls"}.
+
+ Yes, that should do it. Let me structure the tool call accordingly.
+
+
+ $ ls
+
+
+ Operation aborted
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/tmp/pismoke (main)
+↑16k ↓595 6.8%/128k (auto)                                                                                qwen3-agent:4b

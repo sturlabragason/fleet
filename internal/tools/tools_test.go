@@ -187,6 +187,7 @@ func TestEveryProfileHasAutoMode(t *testing.T) {
 		"vibe":           {"--auto-approve"},
 		"fake":           nil, // the fake agent never asks for permission
 		"kagent":         nil, // permissions are the kagent Agent's, in the cluster
+		"pi":             nil, // Pi never asks for permission (ADR-148)
 	}
 	if len(ps) != len(want) {
 		t.Errorf("built-in profiles %v; a new one needs an auto mode too", Names(ps))

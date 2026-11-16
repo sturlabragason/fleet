@@ -24,6 +24,10 @@ func TestEventState(t *testing.T) {
 		{"userPromptSubmitted", Working, true},
 		{"postToolUseFailure", Working, true},
 		{"permissionRequest", "", false},
+		{"agent_start", Working, true},
+		{"agent_settled", Idle, true},
+		{"ui_prompt_start", Waiting, true},
+		{"agent_end", "", false},
 		{"CompletelyMadeUp", "", false},
 		{"", "", false},
 	} {
