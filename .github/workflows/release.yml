@@ -36,15 +36,15 @@ concurrency:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     env:
       DRY_RUN: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
 
@@ -107,7 +107,7 @@ jobs:
             git push origin "refs/tags/$V"
           fi
 
-      - uses: goreleaser/goreleaser-action@v6
+      - uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: "~> v2"
@@ -158,7 +158,7 @@ jobs:
           subject-path: out/*
 
       - if: env.DRY_RUN == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fleet-${{ steps.ver.outputs.version }}-dry-run
           path: out/

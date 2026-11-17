@@ -22,10 +22,10 @@ jobs:
   # The pre-push hook's check, run for pushes from any clone and for PRs.
   # Private deny patterns and allowed emails come from repository secrets, never the tree.
   public:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: check-public tests (private deny cases use the PUBLIC_DENY and PUBLIC_LEAK_SAMPLES secrets)
@@ -68,13 +68,13 @@ jobs:
           scripts/check-public.sh "${args[@]}" "${range[@]}"
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -104,13 +104,13 @@ jobs:
   # against the commit it replaced (ADR-134). Old findings stay until fixed.
   lint:
     if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -129,19 +129,19 @@ jobs:
           else
             echo "args=--new-from-merge-base=origin/main" >>"$GITHUB_OUTPUT"
           fi
-      - uses: golangci/golangci-lint-action@v8
+      - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.15.0
           args: ${{ steps.base.outputs.args }}
 
   race:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -164,11 +164,11 @@ jobs:
   # extension seam compiled and tested, so a refactor that breaks one fails
   # here before a downstream overlay finds it.
   extexample:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -181,16 +181,16 @@ jobs:
   # The portable Windows fleet.exe: build it like make build, smoke-test what
   # runs without tmux, keep it as an artifact.
   windows:
-    runs-on: windows-latest
+    runs-on: windows-2025
     timeout-minutes: 20
     defaults:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -273,7 +273,7 @@ jobs:
           npm install -g --no-fund --no-audit @anthropic-ai/claude-code "@agentclientprotocol/claude-agent-acp@$acp"
           command -v claude npx
           scripts/windows-smoke.sh --claude bin/fleet.exe
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: fleet-windows-amd64
           path: bin/fleet.exe
@@ -281,10 +281,10 @@ jobs:
   # install.sh (ADR-78): lint it, then install the latest release with it, as
   # a user would: curl on ubuntu, busybox sh and wget in alpine.
   install:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: shellcheck -s sh install.sh
       - name: install with curl into a temp HOME
         run: |
