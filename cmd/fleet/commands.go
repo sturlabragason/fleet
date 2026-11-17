@@ -132,7 +132,11 @@ var usage = `usage:
   fleet team send <team> "text"             paste into every running member
   fleet team show|hide <team>               put running members on the wall / take them off
   fleet team close <team> [--yes]           close every member (asks y/N unless --yes)
-  fleet mcp [--agent NAME] [--rules-in-prompt]
+  fleet connect claude-desktop [--name ADMIRAL] [--config PATH] [--print|--dry-run] [--remove]
+                                            add fleet to Claude Desktop as a pane-less admiral (default
+                                            desktop, ADR-159): backs up and merges claude_desktop_config.json,
+                                            keeping other servers; --print shows the result, --remove takes it out
+  fleet mcp [--agent NAME] [--admiral NAME] [--rules-in-prompt]
                                             stdio MCP server: admiral tools, or the agent peer tools
                                             with --agent or when run inside an agent pane; re-execs itself
                                             in place when the fleet binary changes (--probe: self-check);
@@ -154,7 +158,8 @@ var usage = `usage:
                                             own mailbox; else the admiral's), max 10m; prints the
                                             headlines, marks nothing read. Exit 0 on news, 2 on timeout
   fleet admiral [--name N] [--json]         admiral session, context fill, generation, uptime
-  fleet admiral add NAME [--profile P]      start another admiral beside main (DESIGN §6.12)
+  fleet admiral add NAME [--profile P]      start another admiral beside main (DESIGN §6.12);
+                                            --external registers one with no pane, for an MCP client (ADR-159)
   fleet admiral ls                          admirals with their agents and unread reports
   fleet admiral close NAME                  close one; its agents and unread reports go back to main
   fleet admiral min NAME                    minimize an admiral pane (main or another), or restore it
@@ -369,6 +374,7 @@ var fleetCmds = map[string]func(f *fleet.Fleet, args []string) error{
 	"takeover":  cmdTakeover,
 	"team":      cmdTeam,
 	"mcp":       cmdMCP,
+	"connect":   cmdConnect,
 	"mail":      cmdMail,
 	"access":    cmdAccess,
 	"report":    cmdReport,

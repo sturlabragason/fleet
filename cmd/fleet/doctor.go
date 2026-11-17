@@ -132,6 +132,9 @@ func doctor(env doctorEnv) []doctorCheck {
 	if env.companions != nil {
 		cs = append(cs, checkCompanions(env.companions())...)
 	}
+	if c, ok := checkDesktop(env.userHome, env.getenv); ok && env.userHome != "" {
+		cs = append(cs, c)
+	}
 	if c, ok := checkGraphs(graph.List(env.home), env.userHome, time.Now()); ok {
 		cs = append(cs, c)
 	}

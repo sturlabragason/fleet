@@ -24,6 +24,9 @@ type Admiral struct {
 	// Slot is the colour slot, 1 or 2 (0 is main): stable once chosen, and
 	// the lowest free slot is reused first.
 	Slot int `json:"slot"`
+	// External: the admiral is an MCP client outside tmux (Claude Desktop,
+	// ADR-159). It has no pane, so fleet never starts, resets or swaps one.
+	External bool `json:"external,omitempty"`
 }
 
 var nameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$`)
@@ -132,9 +135,26 @@ func updateRegistry(home string, fn func([]Admiral) ([]Admiral, error)) error {
 	return os.Rename(tmp, registryPath(home))
 }
 
+// IsExternal reports whether name is a registered external admiral.
+func IsExternal(home, name string) bool {
+	a, ok := Find(home, name)
+	return ok && a.External
+}
+
 // Add registers an admiral under max admirals in all (main counts) and
 // gives it the lowest free colour slot. It returns the entry.
 func Add(home, name, profile string, max int) (Admiral, error) {
+	return add(home, Admiral{Name: name, Profile: profile}, max)
+}
+
+// AddExternal registers a pane-less admiral for an MCP client outside tmux
+// (ADR-159), under the same max as Add.
+func AddExternal(home, name string, limit int) (Admiral, error) {
+	return add(home, Admiral{Name: name, External: true}, limit)
+}
+
+func add(home string, in Admiral, limit int) (Admiral, error) {
+	name := in.Name
 	if err := ValidName(name); err != nil {
 		return Admiral{}, err
 	}
@@ -147,14 +167,15 @@ func Add(home, name, profile string, max int) (Admiral, error) {
 			}
 			used[a.Slot] = true
 		}
-		if max > 0 && len(as)+1 >= max {
-			return nil, fmt.Errorf("at most %d admirals ([admiral] max in config.toml)", max)
+		if limit > 0 && len(as)+1 >= limit {
+			return nil, fmt.Errorf("at most %d admirals ([admiral] max in config.toml)", limit)
 		}
 		slot := 1
 		for used[slot] {
 			slot++
 		}
-		out = Admiral{Name: name, Profile: strings.TrimSpace(profile), Slot: slot}
+		out = in
+		out.Profile, out.Slot = strings.TrimSpace(in.Profile), slot
 		return append(as, out), nil
 	})
 	return out, err

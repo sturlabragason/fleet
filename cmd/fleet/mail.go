@@ -280,6 +280,11 @@ func cmdMCP(f *fleet.Fleet, args []string) error {
 	if err != nil {
 		return err
 	}
+	if *agent == "" && supervisor.IsExternal(f.Home, *adm) {
+		// An external admiral is never the agent of a tmux pane it was
+		// started from (Claude Desktop launched in a fleet pane, ADR-159).
+		me = ""
+	}
 	if err := extMCP(f, resolveAdmiralName(*adm, os.Getenv, nil), *agent); err != nil {
 		return err
 	}
@@ -293,9 +298,16 @@ func cmdMCP(f *fleet.Fleet, args []string) error {
 		}
 	}
 	s := mcp.NewAdmiral(f, wall.New(f.T, fleet.Session), name)
-	if me != "" {
+	switch {
+	case me != "":
 		s = mcp.NewAgent(f, me)
-	} else {
+	case supervisor.IsExternal(f.Home, name):
+		// An external admiral (Claude Desktop, ADR-159) runs while the
+		// tmux fleet may be down: it leaves the queue and the memory
+		// guard to the overview and the tmux admirals' servers.
+		s.External = true
+		runExtOpen(f)
+	default:
 		// The admiral's server drains the spawn queue and runs the memory
 		// guard, so neither needs the overview TUI to be running (§7, §7a).
 		f.DrainQueue = true

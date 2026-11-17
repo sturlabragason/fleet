@@ -34,8 +34,9 @@ var cliToolDefs = []tool{
 		"dir": str("the repo (absolute)"), "prune": map[string]any{"type": "boolean", "description": "remove the prunable worktrees"}, "confirmed": confirmedProp})},
 	{"fleet_branches", "A repo's fleet/ branches on origin, merged or not, and the agent on each. prune=true deletes the merged ones no live, parked or recently closed agent is on, from origin: ask the user first, confirmed=true only after an explicit yes.", obj([]string{"dir"}, map[string]any{
 		"dir": str("the repo (absolute)"), "prune": map[string]any{"type": "boolean", "description": "delete the merged branches from origin"}, "confirmed": confirmedProp})},
-	{"fleet_admiral_add", "Start another admiral beside main (its own pane, agents and reports), only when the user asks. fleet_admirals lists them.", obj([]string{"name"}, map[string]any{
-		"name": str("new admiral name"), "profile": str("tool profile (default: main's), see fleet_profiles")})},
+	{"fleet_admiral_add", "Start another admiral beside main (its own pane, agents and reports), only when the user asks. fleet_admirals lists them. client=claude-desktop instead adds a pane-less admiral that the user drives from Claude Desktop: it writes Claude Desktop's config (backed up first), so it needs confirmed=true.", obj([]string{"name"}, map[string]any{
+		"name": str("new admiral name"), "profile": str("tool profile (default: main's), see fleet_profiles"),
+		"client": map[string]any{"type": "string", "enum": []string{"claude-desktop"}, "description": "an MCP client outside tmux to hook up as this admiral (ADR-159)"}, "confirmed": confirmedProp})},
 	{"fleet_admiral_close", "Close another admiral (main only, only when the user asks): its pane closes and its agents and unread reports come to main.", obj([]string{"name"}, map[string]any{
 		"name": str("admiral name, see fleet_admirals")})},
 	{"fleet_changes", "What's new in fleet: the running version and its latest changelog lines, newest first. Use when the user asks what changed, or after [fleet updated] or [fleet upgraded itself].", obj(nil, map[string]any{
@@ -150,6 +151,9 @@ func (s *Server) cliCall(name string, a args) (string, error) {
 	case "fleet_admiral_add":
 		if strings.TrimSpace(a.Name) == "" {
 			return "", fmt.Errorf("name is required")
+		}
+		if a.Client != "" {
+			return s.connectClient(a)
 		}
 		argv := []string{"admiral", "add", a.Name}
 		if a.Profile != "" {

@@ -169,6 +169,9 @@ type args struct {
 	// CLI-backed tools (ADR-86): fleet_takeover's acp, fleet_touching's
 	// files and graph, fleet_worktrees' and fleet_branches' prune.
 	ACP   bool `json:"acp"`
+	// Client is fleet_admiral_add's MCP client for an external admiral
+	// (ADR-159).
+	Client string
 	Files []string
 	Graph bool
 	Prune bool
@@ -453,6 +456,9 @@ func (s *Server) accessDecideCall(a args) (string, error) {
 }
 
 func (s *Server) handoffCall(a args) (string, error) {
+	if s.External {
+		return "", errExternalReplace
+	}
 	if err := need(strings.TrimSpace(a.Summary.Text), "summary"); err != nil {
 		return "", err
 	}

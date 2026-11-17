@@ -14,6 +14,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/mail"
 	"github.com/sturlabragason/fleet/internal/status"
+	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/sysx"
 
 	"github.com/sturlabragason/fleet/internal/tmux"
@@ -58,11 +59,21 @@ const BadgeOption = "@fleet_reports"
 // or a leader whose squad member reported (ADR-53). One queue, one try
 // counter and one lock per box, all under mail/<box>/.
 func (f *Fleet) wakeBox(box, id, from, state, line string) {
+	if f.externalBox(box) {
+		return
+	}
 	p := f.wakePath(box)
 	if err := appendLine(p, wakeEntry{id: id, from: from, state: state, line: line}.raw()); err != nil {
 		logx.For("mail").Error("wake not queued", "box", box, "err", err)
 	}
 	f.DeliverWakeTo(box)
+}
+
+// externalBox reports whether box is the mailbox of an external admiral
+// (ADR-159): it has no pane to type a wake into, so its reports wait for
+// fleet_reports or fleet_wait.
+func (f *Fleet) externalBox(box string) bool {
+	return box != mail.Admiral && mail.IsAdmiralBox(box) && supervisor.IsExternal(f.Home, mail.AdmiralOf(box))
 }
 
 func (f *Fleet) wakePath(box string) string {
@@ -314,6 +325,9 @@ func (f *Fleet) deliverWakeTo(box string, snap *tmux.Snapshot) {
 	unread := f.unreadFor(box)
 	if box == mail.Admiral {
 		f.syncBadge(snap)
+	}
+	if f.externalBox(box) {
+		return
 	}
 	if off, _ := f.Offline(); off {
 		// The admiral can't take a turn offline; the queue waits and its

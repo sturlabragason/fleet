@@ -58,6 +58,10 @@ type Server struct {
 	// Admiral is the admiral this server speaks for: "" is main, and the
 	// only one before several admirals existed (DESIGN §6.12).
 	Admiral string
+	// External: Admiral is an MCP client outside tmux with no pane
+	// (ADR-159): short instructions, a shorter fleet_wait, no reset, no
+	// profile swap, no context warning.
+	External bool
 
 	// Hot reload (DESIGN §6.9). Zero values get real defaults in Serve.
 	// ExePath is the executable to watch (default F.Exe; "" disables reload).
@@ -163,7 +167,7 @@ func NewAdmiral(f *fleet.Fleet, w *wall.Wall, admiral string) *Server {
 // contextWarning is appended to tool results once the admiral's context
 // is at or above the handoff threshold ("" otherwise).
 func (s *Server) contextWarning() string {
-	if s.Fill == nil {
+	if s.Fill == nil || s.External {
 		return ""
 	}
 	used, max, ok := s.Fill()

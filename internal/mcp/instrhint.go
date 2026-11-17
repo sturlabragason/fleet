@@ -30,7 +30,7 @@ func instructionsHash(text string) string {
 // rulesText is the instructions the client holds: what initialize sends, or
 // for an admiral with the rules in its system prompt, those rules.
 func (s *Server) rulesText() string {
-	if s.Agent == "" && s.RulesInPrompt {
+	if s.Agent == "" && (s.RulesInPrompt || s.External) {
 		return Instructions
 	}
 	return s.instructions()

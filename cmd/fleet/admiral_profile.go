@@ -275,6 +275,9 @@ func cmdAdmiralRestart(f *fleet.Fleet, args []string) error {
 func runSwap(f *fleet.Fleet, name string) error { return runSwapOf(f, supervisor.Main, name) }
 
 func runSwapOf(f *fleet.Fleet, adm, name string) error {
+	if err := refuseExternal(f, adm, "swap the profile of"); err != nil {
+		return err
+	}
 	msg, err := swapAdmiralOf(f, adm, name)
 	if err != nil {
 		f.T.Run("display-message", "-d", "8000", "-l", err.Error())

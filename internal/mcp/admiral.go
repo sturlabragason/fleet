@@ -12,6 +12,9 @@ import (
 // admiralHeader is the first line of fleet_status and fleet_brief
 // (DESIGN §6.10): `admiral: claude-personal · session 3f2a91c · gen 3`.
 func (s *Server) admiralHeader() string {
+	if s.External {
+		return "admiral " + s.Me() + ": external MCP client, no pane"
+	}
 	cur := supervisor.CurrentOf(s.F.Home, s.F.T, fleet.Session+":main", s.Me())
 	line := admiralLine(cur)
 	if s.Admiral != "" || len(supervisor.Admirals(s.F.Home)) > 0 { // several admirals: say which one you are
@@ -42,6 +45,9 @@ func admiralLine(cur supervisor.Session) string {
 // schedules the swap; it returns at once because the swap replaces the pane
 // this server runs in.
 func (s *Server) admiralProfile(name, summary string) (string, error) {
+	if s.External {
+		return "", errExternalReplace
+	}
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", fmt.Errorf("profile is required")

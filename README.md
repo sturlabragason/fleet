@@ -81,6 +81,7 @@ Without `--admiral-profile`, the admiral runs the Copilot CLI. Other tools and y
 - **Teams, mail and squads.** Group agents with `fleet team`, let them message each other with `fleet mail`, and give a leader a squad of up to four agents with `fleet spawn --leader`.
 - **Memory without a model.** `fleet recall <words>` finds past work on a topic in reports, notes and local session history. `fleet day` lists what waits on you and what got done.
 - **Park and wake.** `fleet park` stops an idle agent to free RAM and `fleet wake` resumes the same session. `max_working` in config queues spawns past a limit.
+- **Claude Desktop as an admiral.** `fleet connect claude-desktop` adds fleet to Claude Desktop's config as a second admiral named `desktop`, with its own agents and reports. Quit and reopen Desktop, then ask it for `fleet_status`. The tmux fleet still has to be up for spawns. See [docs/admiral.md](docs/admiral.md#claude-desktop).
 - **Optional integrations.** [cass](https://github.com/Dicklesworthstone/coding_agent_session_search), [graphify](https://github.com/Graphify-Labs/graphify) and `gh` are used when installed, configured under `[integrations.<name>]`. `fleet doctor` shows which features each one turns on.
 
 Every command is in `fleet --help`. What changed lately: [CHANGELOG.md](CHANGELOG.md), or `Alt+g` in the app.

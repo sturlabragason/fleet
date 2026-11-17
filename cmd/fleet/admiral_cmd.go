@@ -108,7 +108,7 @@ func ensureAdmirals(f *fleet.Fleet) {
 		}
 	}
 	for _, a := range supervisor.Admirals(f.Home) {
-		if have[a.Name] {
+		if have[a.Name] || a.External {
 			continue
 		}
 		if _, err := newAdmiralPane(f, a.Name, a.Profile); err != nil {
@@ -121,10 +121,18 @@ func ensureAdmirals(f *fleet.Fleet) {
 func cmdAdmiralAdd(f *fleet.Fleet, args []string) error {
 	fs := flag.NewFlagSet("admiral add", flag.ContinueOnError)
 	prof := fs.String("profile", "", "tool profile (default: main's)")
+	external := fs.Bool("external", false, "register a pane-less admiral for an MCP client outside tmux (ADR-159)")
 	if err := fs.Parse(reorderFlags(args)); err != nil || fs.NArg() != 1 {
-		return fmt.Errorf("usage: fleet admiral add NAME [--profile P]")
+		return fmt.Errorf("usage: fleet admiral add NAME [--profile P | --external]")
 	}
 	name := fs.Arg(0)
+	if *external {
+		if _, err := supervisor.AddExternal(f.Home, name, f.Prefs.AdmiralMax()); err != nil {
+			return err
+		}
+		fmt.Printf("admiral %s registered, external: serve it with fleet mcp --admiral %s\n", name, name)
+		return nil
+	}
 	if !f.T.HasSession(fleet.Session) {
 		return fmt.Errorf("fleet is not up; run fleet up")
 	}
@@ -183,6 +191,9 @@ func cmdAdmiralLs(f *fleet.Fleet) error {
 		pane, err := admiralPane(f, n)
 		if err != nil {
 			pane = "-"
+		}
+		if supervisor.IsExternal(f.Home, n) {
+			prof, pane = "external", "-"
 		}
 		fmt.Printf("%-16s %-18s %-5s %d agents · %d unread\n", n, prof, pane, owned[n], by[n])
 	}
@@ -287,7 +298,12 @@ func cmdAdmiralAct(f *fleet.Fleet, args []string) error {
 		_, err := f.T.Run(pickPopupArgsOf(f, adm)...)
 		return err
 	}
-	names := f.AdmiralNames()
+	var names []string
+	for _, n := range f.AdmiralNames() {
+		if !supervisor.IsExternal(f.Home, n) { // no pane to reset or swap (ADR-159)
+			names = append(names, n)
+		}
+	}
 	if len(names) == 1 {
 		return run(supervisor.Main)
 	}

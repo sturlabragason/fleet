@@ -200,6 +200,9 @@ func (s *Server) wait(box, readWith string, a args, prompts func() []string) (st
 	} else if d > WaitNoProgress {
 		o.Timeout = WaitNoProgress
 	}
+	if s.External && o.Timeout > WaitExternal {
+		o.Timeout = WaitExternal
+	}
 	start := time.Now()
 	ctx, cancel := s.interruptible()
 	defer cancel()

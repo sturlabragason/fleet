@@ -98,6 +98,23 @@ Fleet doesn't compact the admiral's chat; it replaces it ([DESIGN.md §6.5, ADR-
 
 Agents are not affected: they live on the board and in tmux, not in the admiral's chat.
 
+## Claude Desktop
+
+Claude Desktop can be a second admiral, `desktop`, with its own agents and reports (ADR-159):
+
+```sh
+fleet connect claude-desktop --print   # show the config it would write
+fleet connect claude-desktop           # write it (the old file is backed up first)
+```
+
+Then quit Claude Desktop completely and open it again. It finds the config in `~/Library/Application Support/Claude/` on macOS and `~/.config/Claude/` on Linux (unofficial builds); `--config PATH` points elsewhere. Your other MCP servers stay. `fleet connect claude-desktop --remove` takes fleet out again; `fleet admiral close desktop` then hands its agents to main.
+
+What is different from a tmux admiral:
+
+- Nothing types into Desktop. Reports wait until the chat calls `fleet_reports` or `fleet_wait` (at most 50 s per call there), and every tool result says how many are unread.
+- No handoff or profile swap: start a new chat instead. `fleet_note` keeps what should outlive the chat.
+- Spawning needs the tmux fleet up (`fleet up`).
+
 ## Try it without tokens
 
 `fleet up --admiral-profile fake` puts a fake agent in the admiral pane, and `fleet spawn --fake <name>` starts fake workers that cycle through states and print scripted work; `fleet send <name> "!wait"` (or `!work`, `!error`, `!done`) holds one in a state. To exercise the MCP server directly:

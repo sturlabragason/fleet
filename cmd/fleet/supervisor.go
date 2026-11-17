@@ -66,6 +66,15 @@ func admiralEnv(key string) string {
 // display shows msg literally on the fleet client (no format/strftime expansion).
 func display(f *fleet.Fleet, msg string) { f.T.Run("display-message", "-l", msg) }
 
+// refuseExternal stops a reset or profile swap aimed at an external admiral:
+// it has no pane, and acting on one would hit another admiral's (ADR-159).
+func refuseExternal(f *fleet.Fleet, adm, verb string) error {
+	if supervisor.IsExternal(f.Home, adm) {
+		return fmt.Errorf("admiral %s is external (an MCP client outside tmux): fleet cannot %s it; start a new chat in that client instead", adm, verb)
+	}
+	return nil
+}
+
 func mainTarget() string { return fleet.Session + ":main" }
 
 func cmdSupervisor(f *fleet.Fleet, args []string) error {
@@ -117,7 +126,7 @@ func cmdSupervisor(f *fleet.Fleet, args []string) error {
 	}
 	asJSON := len(args) > 0 && args[0] == "--json"
 	if len(args) > 0 && !asJSON {
-		return fmt.Errorf("usage: fleet admiral [--name N] [--json] | add NAME [--profile P] | ls | close NAME | give AGENT --to NAME | reset [--name N] [--handoff] | profile [--name N] [NAME|--pick] | restart [--name N]")
+		return fmt.Errorf("usage: fleet admiral [--name N] [--json] | add NAME [--profile P | --external] | ls | close NAME | give AGENT --to NAME | reset [--name N] [--handoff] | profile [--name N] [NAME|--pick] | restart [--name N]")
 	}
 	s := supervisor.CurrentOf(f.Home, f.T, mainTarget(), adm)
 	used, max, ok := supervisor.Fill(supervisor.CopilotHome(), s.SessionID)
@@ -181,6 +190,9 @@ func resetSupervisor(f *fleet.Fleet, handoff bool) (int, error) {
 
 // resetSupervisorOf is resetSupervisor for admiral adm.
 func resetSupervisorOf(f *fleet.Fleet, adm string, handoff bool) (int, error) {
+	if err := refuseExternal(f, adm, "reset"); err != nil {
+		return 0, err
+	}
 	log := logx.For("admiral")
 	draft, pending := holdForDraft(f, adm)
 	defer restoreDraft(f, adm, draft, pending)

@@ -46,3 +46,31 @@ func TestAdmiralHeader(t *testing.T) {
 		t.Errorf("brief: %q", br)
 	}
 }
+
+// ADR-159: an external admiral (Claude Desktop) has no pane, so the tools
+// that replace one are refused before they touch tmux, and it gets the
+// short instructions with the full rules behind fleet_instructions.
+func TestExternalAdmiral(t *testing.T) {
+	s, pct, resets := memServer(t)
+	s.Admiral, s.External = "desktop", true
+	swaps := 0
+	s.SwapProfile = func(string) error { swaps++; return nil }
+	*pct = 99
+	for tool, a := range map[string]map[string]any{
+		"fleet_handoff":         {"summary": "x"},
+		"fleet_admiral_profile": {"profile": "copilot"},
+	} {
+		if out, isErr := callText(t, s, tool, a); !isErr || !strings.Contains(out, "external") {
+			t.Errorf("%s: %q", tool, out)
+		}
+	}
+	if *resets != 0 || swaps != 0 {
+		t.Errorf("resets %d swaps %d, want none", *resets, swaps)
+	}
+	if st, _ := callText(t, s, "fleet_status", nil); !strings.HasPrefix(st, "admiral desktop: external") || strings.Contains(st, "fleet_handoff]") {
+		t.Errorf("status: %q", st)
+	}
+	if s.instructions() != ExternalPointer || !strings.Contains(s.currentInstructions(), Instructions) {
+		t.Error("external admiral: want the pointer at initialize and the full rules from fleet_instructions")
+	}
+}

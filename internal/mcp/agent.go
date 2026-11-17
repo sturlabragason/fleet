@@ -29,6 +29,9 @@ func (s *Server) instructions() string {
 		}
 		return AgentInstructions
 	}
+	if s.External {
+		return ExternalPointer
+	}
 	if s.RulesInPrompt {
 		return RulesPointer
 	}

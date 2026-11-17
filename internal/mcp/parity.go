@@ -28,6 +28,7 @@ var CLIParity = map[string]string{
 	"takeover":        "fleet_takeover",
 	"team":            "fleet_team",
 	"mcp":             "infra: the MCP server itself",
+	"connect":         "fleet_admiral_add",
 	"mail":            "agent: agent-to-agent mail (peer tools); the admiral reads it with fleet_access limit=N",
 	"access":          "fleet_access_decide",
 	"report":          "agent: an agent's report (peer tool fleet_report)",
