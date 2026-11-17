@@ -102,6 +102,7 @@ type stubConn struct {
 	modeErr  error           // SetMode fails with it, when set
 	modelErr error           // UseModel fails with it, when set
 	mcp      []acp.MCPServer // the last session call's servers
+	steerOut string          // set: the agent advertises steering and Steer answers it
 }
 
 func newStubConn(caps acp.AgentCapabilities) *stubConn {
@@ -119,7 +120,15 @@ func (c *stubConn) Calls() []string {
 }
 func (c *stubConn) Initialize(ctx context.Context, ev bool) (acp.InitializeResult, error) {
 	c.call(fmt.Sprintf("initialize %v", ev))
-	return acp.InitializeResult{ProtocolVersion: 1, AgentCapabilities: c.caps}, nil
+	res := acp.InitializeResult{ProtocolVersion: 1, AgentCapabilities: c.caps}
+	if c.steerOut != "" {
+		res.Meta = json.RawMessage(`{"steering":{"supported":true}}`)
+	}
+	return res, nil
+}
+func (c *stubConn) Steer(ctx context.Context, id string, blocks []acp.ContentBlock) (string, error) {
+	c.call("steer " + blocks[0].Text)
+	return c.steerOut, nil
 }
 func (c *stubConn) NewSession(ctx context.Context, cwd string, mcp []acp.MCPServer) (string, error) {
 	c.mu.Lock()
@@ -229,6 +238,14 @@ func startRig(t *testing.T, cfg Config, caps acp.AgentCapabilities) *rig {
 // startRigGated holds session/new until gate closes (nil: no wait).
 func startRigGated(t *testing.T, cfg Config, caps acp.AgentCapabilities, gate chan struct{}) *rig {
 	t.Helper()
+	c := newStubConn(caps)
+	c.gate = gate
+	return startRigOn(t, cfg, c)
+}
+
+// startRigOn runs a host on conn.
+func startRigOn(t *testing.T, cfg Config, conn *stubConn) *rig {
+	t.Helper()
 	t.Setenv("FLEET_CONFIG", filepath.Join(t.TempDir(), "none.toml"))
 	// unix socket paths are short-limited; keep home short.
 	home, err := os.MkdirTemp("", "ah")
@@ -236,8 +253,7 @@ func startRigGated(t *testing.T, cfg Config, caps acp.AgentCapabilities, gate ch
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.RemoveAll(home) })
-	r := &rig{t: t, home: home, conn: newStubConn(caps), out: &syncBuf{}, errC: make(chan error, 1), fin: make(chan struct{})}
-	r.conn.gate = gate
+	r := &rig{t: t, home: home, conn: conn, out: &syncBuf{}, errC: make(chan error, 1), fin: make(chan struct{})}
 	cfg.Home, cfg.Out = home, r.out
 	if cfg.Name == "" {
 		cfg.Name = "a1"
@@ -260,7 +276,7 @@ func startRigGated(t *testing.T, cfg Config, caps acp.AgentCapabilities, gate ch
 		case <-time.After(10 * time.Second):
 		}
 	})
-	if gate != nil {
+	if conn.gate != nil {
 		r.waitFor(func() bool { _, err := Call(home, cfg.Name, Request{Op: OpState}, time.Second); return err == nil }, "socket")
 		return r
 	}

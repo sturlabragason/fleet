@@ -42,8 +42,11 @@ const (
 	// OpSendNow sends Text (optional) and the held prompts now as one
 	// prompt, cancelling a running turn first (ADR-152).
 	OpSendNow = "send-now"
-	OpState  = "state"  // no change; the response carries the host's state
-	OpStop   = "stop"   // close the session, stop the child and exit
+	// OpSteer delivers Text to the running turn now and says how in
+	// Response.Delivery; Steer is the profile's acp_steer (ADR-158).
+	OpSteer = "steer"
+	OpState = "state" // no change; the response carries the host's state
+	OpStop  = "stop"  // close the session, stop the child and exit
 	// OpTake hands over the prompts held during the running turn and drops
 	// them from the queue: an agent blocked in fleet_wait reads them there
 	// instead of after a turn that will not end on its own.
@@ -56,7 +59,29 @@ type Request struct {
 	Text     string `json:"text,omitempty"`
 	Option   int    `json:"option,omitempty"`
 	OptionID string `json:"option_id,omitempty"`
+	Steer    string `json:"steer,omitempty"` // OpSteer: SteerPrompt, SteerCancel or ""
 }
+
+// How a tool takes a message mid-turn without acp.MethodSteer: the
+// profile's acp_steer (ADR-158).
+const (
+	SteerPrompt = "prompt" // a second session/prompt joins the running turn (agy)
+	SteerCancel = "cancel" // cancel the turn and send the text at once (default)
+)
+
+// InterruptNote opens a steer that had to stop the running turn, so the
+// agent knows why its turn ended and what may be half done (ADR-158).
+const InterruptNote = "[fleet] Your previous turn was stopped to deliver this steer. " +
+	"What it already did is still in the conversation; a step that was running when it " +
+	"stopped may not have finished, so check it before you rely on it. Then continue with this:\n\n"
+
+// What OpPrompt or OpSteer did with the text (Response.Delivery).
+const (
+	DeliverySteered     = "steered"     // added to the running turn; nothing stopped
+	DeliveryInterrupted = "interrupted" // the turn was cancelled and the text sent at once
+	DeliverySent        = "sent"        // no turn ran: sent as a new prompt
+	DeliveryQueued      = "queued"      // held until the session is ready or the turn returns
+)
 
 // Response answers one Request, one JSON line.
 type Response struct {
@@ -66,6 +91,7 @@ type Response struct {
 	SessionID string    `json:"session_id,omitempty"`
 	Question  *Question `json:"question,omitempty"` // the open permission request
 	Queued    []string  `json:"queued,omitempty"`   // OpTake: the prompts taken, oldest first
+	Delivery  string    `json:"delivery,omitempty"` // OpPrompt, OpSteer: one of the Delivery values
 }
 
 // Question is an open permission request as fleet shows it.

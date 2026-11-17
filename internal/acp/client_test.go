@@ -229,3 +229,36 @@ func TestSessionMethods(t *testing.T) {
 		<-errc
 	}
 }
+
+// Steer sends the claude-agent-acp steering request with the
+// promptRequired opt-in and returns its outcome; Steering reads the
+// capability from initialize's top-level _meta.
+func TestSteer(t *testing.T) {
+	for _, tc := range []struct {
+		meta string
+		want bool
+	}{{`{"steering":{"supported":true}}`, true}, {`{"steering":{}}`, false}, {``, false}, {`"x"`, false}} {
+		if got := (InitializeResult{Meta: json.RawMessage(tc.meta)}).Steering(); got != tc.want {
+			t.Errorf("Steering(%s) = %v", tc.meta, got)
+		}
+	}
+	cl, p := newPair(t, &recHandler{})
+	type res struct {
+		out string
+		err error
+	}
+	rc := make(chan res, 1)
+	go func() {
+		out, err := cl.Steer(context.Background(), "s1", []ContentBlock{TextBlock("fix")})
+		rc <- res{out, err}
+	}()
+	m := p.recv()
+	want := `{"sessionId":"s1","prompt":[{"type":"text","text":"fix"}],"_meta":{"steering":{"idleBehavior":"promptRequired"}}}`
+	if m.Method != MethodSteer || string(m.Params) != want {
+		t.Errorf("got %s %s", m.Method, m.Params)
+	}
+	p.reply(m.ID, `{"outcome":"injected"}`)
+	if r := <-rc; r.err != nil || r.out != SteerInjected {
+		t.Errorf("Steer = %q, %v", r.out, r.err)
+	}
+}

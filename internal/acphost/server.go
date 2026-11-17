@@ -86,12 +86,13 @@ func (h *host) serveConn(c net.Conn) {
 // handle runs one control request.
 func (h *host) handle(req Request) Response {
 	var err error
+	var delivery string
 	switch req.Op {
 	case OpPrompt:
 		if req.Text == "" {
 			err = errors.New("empty prompt")
 		} else {
-			err = h.prompt(req.Text, "")
+			delivery, err = h.prompt(req.Text, "")
 		}
 	case OpAnswer:
 		err = h.answer(req.Option, req.OptionID, "")
@@ -99,11 +100,18 @@ func (h *host) handle(req Request) Response {
 		err = h.cancel("")
 	case OpSendNow:
 		err = h.sendNow(req.Text, "")
+	case OpSteer:
+		if req.Text == "" {
+			err = errors.New("empty prompt")
+		} else {
+			delivery, err = h.steer(req.Text, req.Steer)
+		}
 	case OpState, OpStop, OpTake:
 	default:
 		err = fmt.Errorf("unknown op %q", req.Op)
 	}
 	resp := h.snapshot()
+	resp.Delivery = delivery
 	if req.Op == OpTake {
 		resp.Queued = h.take()
 	}

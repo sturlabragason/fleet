@@ -49,6 +49,7 @@ Each `[section]` is a profile. A section with a built-in name overrides only the
 | `acp_meta` | `claude`: send the plugin and write fence in `session/new` `_meta.claudeCode.options` (the claude-agent-acp adapter). |
 | `acp_mcp` | `session`: pass the peer MCP server in the ACP session's `mcpServers` instead of `peer_args`. |
 | `acp_unset_env` | Env vars removed before the ACP server starts (the built-in `claude` drops API keys and OAuth tokens). |
+| `acp_steer` | How a message steers a working agent (ADR-158): `cancel` (default) cancels the turn and resends with a note; `prompt` sends a second `session/prompt`, which the tool folds into the running turn (built-in `agy`). An agent that advertises ACP steering (claude-agent-acp) is steered natively either way. |
 | `acp_from` | Take every unset `acp*` key from another profile, for example `acp_from = "claude"` on a per-account Claude profile. |
 | `driver` | `acp` or `tmux`: how agents of this profile run unless config.toml or `--driver` says otherwise. `acp` on the built-in `copilot` and `agy`. Unset, a profile whose `command` is `copilot` or `agy` (claude-copilot, your own copilot profiles) defaults to `acp` and takes the built-in's acp keys if it sets none; every other profile defaults to tmux (ADR-74 (i)). |
 

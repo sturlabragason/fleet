@@ -366,7 +366,7 @@ func (h *host) submit(line string) {
 	if n, nerr := strconv.Atoi(line); open && nerr == nil {
 		err = h.answer(n, "", ByPane)
 	} else {
-		err = h.prompt(line, ByPane)
+		_, err = h.prompt(line, ByPane)
 	}
 	if err != nil {
 		h.say("! " + err.Error())

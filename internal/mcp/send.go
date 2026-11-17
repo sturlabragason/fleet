@@ -76,6 +76,9 @@ func (s *Server) send(a args) (string, error) {
 	if a.Now && (len(a.Keys) > 0 || a.Resume) {
 		return "", fmt.Errorf("now takes text only, no keys or resume")
 	}
+	if a.Queue && (a.Now || len(a.Keys) > 0) {
+		return "", fmt.Errorf("queue takes text only, no keys or now")
+	}
 	if err := fleet.CheckKeys(a.Keys); err != nil {
 		return "", err
 	}
@@ -83,14 +86,11 @@ func (s *Server) send(a args) (string, error) {
 		return s.resume(a)
 	}
 	if a.Name != "" {
-		held, err := s.sendOne(a, a.Name)
+		d, err := s.sendOne(a, a.Name)
 		if err != nil {
 			return "", err
 		}
-		if held {
-			return fleet.HeldNote(a.Name), nil
-		}
-		return "sent to " + a.Name, nil
+		return fleet.DeliveryNote(a.Name, d), nil
 	}
 	names := a.Names
 	if a.Team != "" {
@@ -105,59 +105,63 @@ func (s *Server) send(a args) (string, error) {
 	}
 	var b strings.Builder
 	for _, name := range names {
-		held, err := s.sendOne(a, name)
+		d, err := s.sendOne(a, name)
 		if err != nil {
 			fmt.Fprintf(&b, "%s: skipped (%v)\n", name, err)
 			continue
 		}
-		if held {
-			fmt.Fprintf(&b, "%s: queued, delivered when it starts\n", name)
-			continue
-		}
-		fmt.Fprintf(&b, "%s: sent\n", name)
+		fmt.Fprintf(&b, "%s: %s\n", name, fleet.DeliveryWord(d))
 	}
 	return strings.TrimRight(b.String(), "\n"), nil
 }
 
-// sendOne sends to one agent. Text or keys to an agent on a prompt need
+// sendOne sends to one agent and says what happened to the text (a
+// fleet.DeliveryNote value). Text or keys to an agent on a prompt need
 // confirmed=true: Enter on a picker approves it (ADR-9). Text or keys to a
 // pane the user is typing in need force=true (ADR-61). Text alone to a
-// queued agent is held for its start (held=true, fleet#33).
-func (s *Server) sendOne(a args, name string) (held bool, err error) {
+// queued agent is held for its start (fleet#33); to a working agent it
+// steers the running turn unless queue=true (ADR-158).
+func (s *Server) sendOne(a args, name string) (string, error) {
 	if err := s.scope(name); err != nil {
-		return false, err
+		return "", err
 	}
 	if err := s.F.ClosedError(name, "pass resume=true"); err != nil {
-		return false, err
+		return "", err
 	}
 	if len(a.Keys) == 0 && a.Text != "" && !a.Now {
-		if held, err := s.F.HoldForQueued(name, a.Text); held || err != nil {
-			return held, err
+		held, err := s.F.HoldForQueued(name, a.Text)
+		if err != nil {
+			return "", err
+		}
+		if held {
+			return fleet.DeliveryHeld, nil
 		}
 	}
 	if !a.Force {
 		if r, code := s.F.SendBlock(name, a.Text != "" || slices.Contains(a.Keys, "Enter")); r != "" {
 			s.F.Intervene(name, board.KindSendRefused, code)
-			return false, fleet.UserError(r)
+			return "", fleet.UserError(r)
 		}
 	}
 	if !a.Confirmed {
 		w, err := s.F.Prompting(name)
 		if err != nil {
-			return false, err
+			return "", err
 		}
 		if w != "" {
 			s.F.Intervene(name, board.KindConfirmRefused, "send")
-			return false, fleet.WaitingError(w)
+			return "", fleet.WaitingError(w)
 		}
 	}
-	if a.Now {
-		return false, s.F.SendNow(name, a.Text)
+	switch {
+	case a.Now:
+		return "", s.F.SendNow(name, a.Text)
+	case len(a.Keys) > 0:
+		return "", s.F.SendKeys(name, a.Text, a.Keys)
+	case a.Queue:
+		return s.F.Queue(name, a.Text)
 	}
-	if len(a.Keys) == 0 {
-		return false, s.F.Send(name, a.Text)
-	}
-	return false, s.F.SendKeys(name, a.Text, a.Keys)
+	return s.F.Steer(name, a.Text)
 }
 
 // resume is fleet_send resume=true: a closed agent of the caller's comes

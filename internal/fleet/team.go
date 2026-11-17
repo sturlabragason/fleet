@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/sturlabragason/fleet/internal/acphost"
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
 )
@@ -13,16 +14,19 @@ import (
 type Result struct {
 	Agent string
 	OK    bool
-	Note  string // why it was skipped
+	Note  string // why it was skipped, or how a send was delivered
 }
 
-// FormatResults renders results as one line: "sent: a1, a2; skipped: a3 (not running)".
+// FormatResults renders results as one line: "sent: a1, a2 (steered); skipped: a3 (not running)".
 func FormatResults(verb string, rs []Result) string {
 	var ok, skip []string
 	for _, r := range rs {
-		if r.OK {
+		switch {
+		case r.OK && r.Note != "" && r.Note != DeliveryWord(acphost.DeliverySent):
+			ok = append(ok, r.Agent+" ("+r.Note+")")
+		case r.OK:
 			ok = append(ok, r.Agent)
-		} else {
+		default:
 			skip = append(skip, r.Agent+" ("+r.Note+")")
 		}
 	}
@@ -81,7 +85,7 @@ func (f *Fleet) TeamList() []TeamRow {
 	return out
 }
 
-// TeamSend sends text to every running member with Send (safer submit).
+// TeamSend steers text to every running member (Steer, ADR-158).
 // Unless confirmed, a member on a prompt is skipped: Enter would answer it.
 func (f *Fleet) TeamSend(team, text string, confirmed bool) ([]Result, error) {
 	ms, err := f.Teams.Members(team)
@@ -110,11 +114,12 @@ func (f *Fleet) TeamSend(team, text string, confirmed bool) ([]Result, error) {
 			rs = append(rs, Result{m, false, "not sent: " + r + "; fleet_send name=" + m + " force=true types it anyway"})
 			continue
 		}
-		if err := f.Send(m, text); err != nil {
+		d, err := f.Steer(m, text)
+		if err != nil {
 			rs = append(rs, Result{m, false, err.Error()})
 			continue
 		}
-		rs = append(rs, Result{Agent: m, OK: true})
+		rs = append(rs, Result{Agent: m, OK: true, Note: DeliveryWord(d)})
 	}
 	logx.For("fleet").Info("team send", "team", team, "bytes", len(text), "members", len(ms))
 	return rs, nil

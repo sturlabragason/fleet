@@ -676,7 +676,8 @@ var (
 // SubmitWait, it presses Enter once more, then gives up with an error.
 func (f *Fleet) Send(name, text string) error {
 	if f.isACP(name) {
-		return f.acpSend(name, text)
+		_, err := f.acpSend(name, text)
+		return err
 	}
 	p, err := f.Pane(name)
 	if err != nil {

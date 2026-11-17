@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -92,13 +93,16 @@ var usage = `usage:
                                             how often fleet's own policy acted on agents (stop blocks,
                                             wakes, refused sends, done-checks, hook/screen disagreements),
                                             counted from events.jsonl; --json: an object of counts
-  fleet send [--force] [--resume] [--now] <name> ["text"]
+  fleet send [--force] [--resume] [--now|--queue] <name> ["text"]
                                             refused while the user is typing in that pane (keys
                                             there in the last 30 s, unsubmitted text in its box);
                                             --force types it anyway; --resume brings back an agent
                                             closed in the last 24 h (its last session and card);
-                                            --now (ACP): cancel the running turn and send the held
-                                            prompts and text at once, without text just the held ones
+                                            text to a working ACP agent steers its running turn
+                                            now (ADR-158) and says how; --queue (ACP) holds it
+                                            until the turn ends; --now (ACP): cancel the running turn
+                                            and send the held prompts and text at once, without text
+                                            just the held ones
   fleet peek <name> [--raw] [-n 200]
   fleet peek --summary <name>               about 5 lines from a cheap model: what it is doing, what it
                                             waits for, any error (cached per screen; [summary] in config.toml)
@@ -405,16 +409,17 @@ func cmdInfo(f *fleet.Fleet, rest []string) error {
 }
 
 func cmdSend(f *fleet.Fleet, rest []string) error {
-	force, resume, now := false, false, false
-	for len(rest) > 0 && (rest[0] == "--force" || rest[0] == "--resume" || rest[0] == "--now") {
-		force, resume, now = force || rest[0] == "--force", resume || rest[0] == "--resume", now || rest[0] == "--now"
+	flags := map[string]bool{}
+	for len(rest) > 0 && slices.Contains([]string{"--force", "--resume", "--now", "--queue"}, rest[0]) {
+		flags[rest[0]] = true
 		rest = rest[1:]
 	}
-	if now && len(rest) == 1 { // flush the held prompts only
+	force, resume, now, queue := flags["--force"], flags["--resume"], flags["--now"], flags["--queue"]
+	if now && len(rest) == 1 && !queue { // flush the held prompts only
 		return f.SendNow(rest[0], "")
 	}
-	if len(rest) < 2 {
-		return fmt.Errorf("usage: fleet send [--force] [--resume] [--now] <name> \"text\"")
+	if len(rest) < 2 || (now && queue) {
+		return fmt.Errorf("%s", sendUsage)
 	}
 	text := strings.Join(rest[1:], " ")
 	if err := f.ClosedError(rest[0], "use fleet send --resume"); err != nil {
@@ -437,8 +442,19 @@ func cmdSend(f *fleet.Fleet, rest []string) error {
 	if now {
 		return f.SendNow(rest[0], text)
 	}
-	return f.Send(rest[0], text)
+	send := f.Steer
+	if queue {
+		send = f.Queue
+	}
+	d, err := send(rest[0], text)
+	if err != nil {
+		return err
+	}
+	fmt.Println(fleet.DeliveryNote(rest[0], d))
+	return nil
 }
+
+const sendUsage = `usage: fleet send [--force] [--resume] [--now|--queue] <name> "text"`
 
 func cmdClose(f *fleet.Fleet, rest []string) error {
 	squad := false

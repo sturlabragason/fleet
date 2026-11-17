@@ -113,6 +113,10 @@ type Profile struct {
 	// ACPMeta is "claude" when the adapter takes the plugin dir and the
 	// settings in session/new _meta.claudeCode.options (ADR-99).
 	ACPMeta string
+	// ACPSteer is how the tool takes a message mid-turn when it does not
+	// advertise ACP steering: "prompt" (a second session/prompt joins the
+	// turn) or "cancel", the default (fleet cancels the turn and resends).
+	ACPSteer string
 
 	// ModelArgs select a model on the tool's command line, with {model}
 	// ("--model", "{model}"). Empty = the tool has no model flag and fleet
@@ -381,6 +385,7 @@ family = "agy"
 model_args = ["--model", "{model}"]
 acp = ["acp"]
 acp_mode_args = { auto = "--dangerously-skip-permissions" }
+acp_steer = "prompt"  # a prompt mid-turn joins the running turn (agy 1.5.9, ADR-158)
 driver = "acp"
 
 [vibe]
@@ -419,6 +424,7 @@ patterns = "fake"
 family = "fake"
 ready = "fakeagent .+ ready"
 acp = ["--acp"]
+acp_steer = "prompt"  # the fake steers on a second prompt, like agy
 acp_mode_args = { auto = "" }
 `
 
@@ -566,6 +572,9 @@ func inheritACP(p, b Profile) Profile {
 	if p.ACPMeta == "" {
 		p.ACPMeta = b.ACPMeta
 	}
+	if p.ACPSteer == "" {
+		p.ACPSteer = b.ACPSteer
+	}
 	if p.ACPModelEnv == "" {
 		p.ACPModelEnv = b.ACPModelEnv
 	}
@@ -663,6 +672,9 @@ func apply(p *Profile, sec map[string]conf.Value) {
 	}
 	if v, ok := sec["acp_mcp"]; ok {
 		p.ACPMCP, _ = v.(string)
+	}
+	if v := conf.Str(sec, "acp_steer"); v != "" {
+		p.ACPSteer = v
 	}
 	if v, ok := sec["acp_unset_env"]; ok {
 		p.ACPUnsetEnv, _ = v.([]string)

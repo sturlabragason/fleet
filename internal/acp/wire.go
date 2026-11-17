@@ -1,6 +1,5 @@
-// Package acp is fleet's client for the Agent Client Protocol: JSON-RPC 2.0,
-// one JSON object per line, over the stdin and stdout of a tool's ACP server
-// (`copilot --acp`, `agy acp`). Stdlib only (DESIGN §7d, ADR-74).
+// Package acp is fleet's client for the Agent Client Protocol: JSON-RPC 2.0, one JSON
+// object per line, over a tool's ACP server's stdio. Stdlib only (DESIGN §7d, ADR-74).
 //
 // This file holds the wire types: the subset of ACP protocol version 1 fleet
 // sends or reads, plus Copilot's opt-in session events. Fields fleet does not
@@ -107,6 +106,7 @@ type InitializeResult struct {
 	AgentCapabilities AgentCapabilities `json:"agentCapabilities"`
 	AgentInfo         *Implementation   `json:"agentInfo,omitempty"`
 	AuthMethods       json.RawMessage   `json:"authMethods,omitempty"`
+	Meta              json.RawMessage   `json:"_meta,omitempty"` // see Steering
 }
 
 // AgentCapabilities is what fleet reads from initialize: whether a session

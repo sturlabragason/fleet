@@ -52,13 +52,14 @@ var baseToolDefs = []tool{
 		"raw":          map[string]any{"type": "boolean", "description": "screen as captured, with borders"},
 		"last_message": map[string]any{"type": "boolean", "description": "the agent's last reply from its session log (Copilot, Claude, ACP), at most 4000 chars; other tools get the end of the screen, headed (from the screen)"},
 		"summary":      map[string]any{"type": "boolean", "description": "about 5 lines from a cheap model instead of screen text (cached per screen)"}})},
-	{"fleet_send", "Send an ordinary prompt or follow-up text (pastes, presses Enter, re-presses it if the paste stays unsubmitted). Target exactly one of name, names or team; several targets get one line each. keys presses allowed keys instead of Enter (text+keys: paste, no Enter, then keys); text or keys to an agent on a prompt need confirmed=true (Enter would answer it). Refused while the user is typing in that pane (a key press there in the last 30 s, an interactive agent whose pane they have open, or unsubmitted text in its input box): wait or ask the user; force=true types anyway. An agent closed in the last 24 h is refused with when it closed: resume=true resumes its last session with its card, team and owner, then sends text (queued over max_working). keys=[\"Enter\"] submits a pane showing \"unsubmitted input: [Paste …]\". now=true: an ACP agent working with no progress and a queued prompt has its turn cancelled and the queue sent at once.", obj(nil, map[string]any{
+	{"fleet_send", "Send an ordinary prompt or follow-up text (pastes, presses Enter, re-presses it if the paste stays unsubmitted). Target exactly one of name, names or team; several targets get one line each. keys presses allowed keys instead of Enter (text+keys: paste, no Enter, then keys); text or keys to an agent on a prompt need confirmed=true (Enter would answer it). Refused while the user is typing in that pane (a key press there in the last 30 s, an interactive agent whose pane they have open, or unsubmitted text in its input box): wait or ask the user; force=true types anyway. An agent closed in the last 24 h is refused with when it closed: resume=true resumes its last session with its card, team and owner, then sends text (queued over max_working). keys=[\"Enter\"] submits a pane showing \"unsubmitted input: [Paste …]\". Text to a working agent steers it now: the result says \"steered\" (added to its running turn, or for a tool that takes no input mid-turn, turn stopped and text sent with a note), \"queued\" (it gets it when the turn ends) or \"sent\" (it was idle). queue=true holds text for the end of the turn instead (an FYI or a next task). now=true: an ACP agent working with no progress and a queued prompt has its turn cancelled and the queue sent at once.", obj(nil, map[string]any{
 		"name": str("agent name"), "names": strList("several agent names"), "team": str("send to every member of this team"),
 		"text": str("text to send"), "keys": strList("key names: Enter, Escape, Up, Down, Left, Right, Tab, BTab, Space, BSpace, 1-9, y, n"),
 		"confirmed": map[string]any{"type": "boolean", "description": "only when an agent is waiting on a prompt (text or keys would answer it), after the user said yes"},
 		"force":     map[string]any{"type": "boolean", "description": "type even though the user is typing in that pane (it merges into their input and submits it); only after the user said so"},
 		"resume":    map[string]any{"type": "boolean", "description": "name only, with text: the agent closed; resume its last session, then send"},
-		"now":       map[string]any{"type": "boolean", "description": "ACP agents, no keys: cancel the running turn (it looks stuck) and send the prompts it holds plus text at once; text may be empty"}})},
+		"now":       map[string]any{"type": "boolean", "description": "ACP agents, no keys: cancel the running turn (it looks stuck) and send the prompts it holds plus text at once; text may be empty"},
+		"queue":     map[string]any{"type": "boolean", "description": "text only: an ACP agent that is working gets it when its turn ends instead of being steered now"}})},
 	{"fleet_answer", "Answer an agent's prompt: answer y/n, option N of a numbered menu, or label for a menu whose options are not numbered on screen (fleet_status lists the options either way). Ask the user first; set confirmed=true only after an explicit yes, and pass expect = the question the user confirmed.", obj([]string{"name", "confirmed"}, map[string]any{
 		"name": str("agent name"), "answer": map[string]any{"type": "string", "enum": []string{"y", "n"}, "description": "y = option 1, n = the first option starting with No; plain y/n when there is no menu"},
 		"option": map[string]any{"type": "integer", "minimum": 1, "maximum": 9, "description": "menu option number; pass exactly one of answer, option or label"},
@@ -140,6 +141,9 @@ type args struct {
 	// Now makes a fleet_send to an ACP agent cancel its turn and send the
 	// held prompts at once (ADR-152).
 	Now bool
+	// Queue makes a fleet_send hold text for the end of the running turn
+	// instead of steering it (ADR-158).
+	Queue bool
 	// Interactive marks a fleet_spawn the user talks to directly (ADR-61).
 	Interactive         bool
 	LastMessage         bool `json:"last_message"`

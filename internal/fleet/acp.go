@@ -350,17 +350,19 @@ func acpSocketFits(home, name string) error {
 	return nil
 }
 
-// acpSend sends text as a prompt (queued by the host while a turn runs).
-func (f *Fleet) acpSend(name, text string) error {
+// acpSend sends text as a prompt (queued by the host while a turn runs)
+// and returns the host's Delivery: "" from a host older than ADR-158.
+func (f *Fleet) acpSend(name, text string) (string, error) {
 	if _, err := f.Pane(name); err != nil {
-		return err
+		return "", err
 	}
 	logx.For("fleet").Info("send", "agent", name, "bytes", len(text), "driver", "acp")
-	if _, err := f.acpCall(name, acphost.Request{Op: acphost.OpPrompt, Text: text}); err != nil {
-		return err
+	resp, err := f.acpCall(name, acphost.Request{Op: acphost.OpPrompt, Text: text})
+	if err != nil {
+		return "", err
 	}
 	f.notePrompt(name)
-	return nil
+	return resp.Delivery, nil
 }
 
 // SendNow sends text (may be empty) and the prompts an ACP agent's host
@@ -408,7 +410,8 @@ var ACPTakeTimeout = 2 * time.Second
 func (f *Fleet) acpKeys(name, text string, keys []string) error {
 	switch {
 	case text != "" && len(keys) == 1 && keys[0] == "Enter":
-		return f.acpSend(name, text)
+		_, err := f.acpSend(name, text)
+		return err
 	case text == "" && len(keys) == 1 && keys[0] == "Escape":
 		if _, err := f.Pane(name); err != nil {
 			return err

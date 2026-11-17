@@ -78,6 +78,7 @@ type agentConn interface {
 	SetMode(ctx context.Context, id, mode string) error
 	UseModel(ctx context.Context, id, model string) error
 	PromptBlocks(ctx context.Context, id string, blocks []acp.ContentBlock) (acp.PromptResult, error)
+	Steer(ctx context.Context, id string, blocks []acp.ContentBlock) (string, error)
 	Cancel(id string) error
 	CloseSession(ctx context.Context, id string) error
 	Done() <-chan struct{}
@@ -150,6 +151,7 @@ type host struct {
 	conn      agentConn
 	sid       string
 	caps      acp.AgentCapabilities
+	steering  bool // the agent serves acp.MethodSteer (ADR-158)
 	ready     bool
 	stopping  bool
 	exited    bool
@@ -345,7 +347,7 @@ func (h *host) setup() error {
 		go h.meterLoop(id)
 	}
 	h.mu.Lock()
-	h.sid, h.caps, h.ready = id, caps, true
+	h.sid, h.caps, h.ready, h.steering = id, caps, true, res.Steering()
 	h.emit(Entry{Kind: KindSession, SessionID: id, Text: how}, true)
 	queue := h.pending
 	h.pending = nil
@@ -590,15 +592,15 @@ func (h *host) answer(n int, id, by string) error {
 // queuedPrompt is a prompt held until the running turn ends.
 type queuedPrompt struct{ text, by string }
 
-// prompt sends text as a prompt. Before the session is ready it is queued
-// and sent once it is; during a turn it is held and sent when the turn
-// ends, as a second session/prompt would cancel the running turn (copilot
-// does) rather than steer it.
-func (h *host) prompt(text, by string) error {
+// prompt sends text as a prompt and says how (a Delivery value). Before
+// the session is ready it is queued and sent once it is; during a turn it
+// is held and sent when the turn ends, as a second session/prompt would
+// cancel the running turn (copilot does) rather than steer it.
+func (h *host) prompt(text, by string) (string, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.stopping || h.exited {
-		return errors.New("agent is stopping")
+		return "", errors.New("agent is stopping")
 	}
 	if by != ByPane {
 		text = stripMarks(text)
@@ -608,7 +610,7 @@ func (h *host) prompt(text, by string) error {
 			h.emit(Entry{Kind: KindUser, Text: shown(text) + "  (queued until the session is ready)"}, false)
 		}
 		h.pending = append(h.pending, text)
-		return nil
+		return DeliveryQueued, nil
 	}
 	if h.inflight > 0 {
 		h.queued = append(h.queued, queuedPrompt{text, by})
@@ -616,10 +618,10 @@ func (h *host) prompt(text, by string) error {
 			h.emit(Entry{Kind: KindUser, Text: shown(text) + "  (queued until the turn ends)"}, false)
 		}
 		h.showQueue()
-		return nil
+		return DeliveryQueued, nil
 	}
 	h.sendBy(text, by)
-	return nil
+	return DeliverySent, nil
 }
 
 // showQueue draws the held prompts above the input box. Caller holds mu.

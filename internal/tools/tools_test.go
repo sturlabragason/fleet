@@ -719,6 +719,10 @@ acp_env = { ANTHROPIC_MODEL = "haiku", CLAUDE_CODE_EXECUTABLE = "{command_path}"
 [bad]
 command = "x"
 acp_from = "nope"
+
+[agy-work]
+command = "agy"
+acp_from = "agy"
 `), 0o644)
 	ps, err := Load(home)
 	if err != nil {
@@ -737,6 +741,9 @@ acp_from = "nope"
 	}
 	if ps["bad"].HasACP() {
 		t.Error("acp_from an unknown profile gave an ACP server")
+	}
+	if s := ps["agy-work"].ACPSteer; s != "prompt" {
+		t.Errorf("agy-work acp_steer = %q, want agy's prompt (ADR-158)", s)
 	}
 }
 

@@ -44,9 +44,10 @@ var squadToolDefs = []tool{
 	{"fleet_squad_peek", "Show the last N lines (default 20, max 80) of one of your agents' screens.", obj([]string{"name"}, map[string]any{
 		"name": str("squad agent name"), "lines": map[string]any{"type": "integer", "description": "lines to return (default 20, max 80)"},
 		"raw": map[string]any{"type": "boolean", "description": "screen as captured, with borders"}})},
-	{"fleet_squad_send", "Send a prompt or follow-up to one of your agents, or \"*\" for all of them. An agent sitting on a permission prompt is refused: you may not answer prompts, report it to the admiral instead. Refused while its input box holds unsubmitted text or the user is typing in its pane; force=true types anyway.", obj([]string{"name", "text"}, map[string]any{
+	{"fleet_squad_send", "Send a prompt or follow-up to one of your agents, or \"*\" for all of them. An agent sitting on a permission prompt is refused: you may not answer prompts, report it to the admiral instead. Refused while its input box holds unsubmitted text or the user is typing in its pane; force=true types anyway. Text to a working agent steers its running turn now; queue=true holds it for the end of the turn.", obj([]string{"name", "text"}, map[string]any{
 		"name": str("squad agent name, or * for all of them"), "text": str("text to send"),
-		"force": map[string]any{"type": "boolean", "description": "type even though its input box holds text or the user is typing there (it merges into that text and submits it); never answers a prompt"}})},
+		"force": map[string]any{"type": "boolean", "description": "type even though its input box holds text or the user is typing there (it merges into that text and submits it); never answers a prompt"},
+		"queue": map[string]any{"type": "boolean", "description": "an ACP agent that is working gets the text when its turn ends instead of being steered now"}})},
 	{"fleet_squad_reports", "Read your agents' reports (done, blocked, question, progress) without marking them read; fleet_inbox is where you mark them read. name=<agent> shows only that agent's.", obj(nil, map[string]any{
 		"name": str("only this squad agent's reports"), "limit": map[string]any{"type": "integer", "description": "how many to show (default 20)"}})},
 	{"fleet_squad_close", "Stop one of your agents and take it off the board, or with name=\"*\" all of them. Your call, not the user's: once its work is merged or no longer needed (fleet_squad_info shows it), pass confirmed=true and it closes on the first call; the reply still names any uncommitted or unmerged work left behind. confirmed=false only lists that work and closes nothing.", obj([]string{"name", "confirmed"}, map[string]any{
@@ -218,12 +219,12 @@ func (s *Server) squadSend(me string, a args) (string, error) {
 			r.OK, r.Note = false, "not in your squad"
 		} else if m.Status == string(status.Waiting) {
 			r.OK, r.Note = false, "on a prompt; report it to the admiral, you may not answer prompts"
-		} else if held, err := s.sendOne(args{Name: n, Text: a.Text, Force: a.Force}, n); err != nil {
+		} else if d, err := s.sendOne(args{Name: n, Text: a.Text, Force: a.Force, Queue: a.Queue}, n); err != nil {
 			r.OK, r.Note = false, err.Error()
-		} else if held && len(names) == 1 {
-			return fleet.HeldNote(n), nil
-		} else if held {
-			r.Agent += " (queued: delivered when it starts)"
+		} else if len(names) == 1 {
+			return fleet.DeliveryNote(n, d), nil
+		} else if w := fleet.DeliveryWord(d); w != "sent" {
+			r.Agent += " (" + w + ")"
 		}
 		rs = append(rs, r)
 	}

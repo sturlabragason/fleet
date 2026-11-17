@@ -145,6 +145,7 @@ Each tool's description says when to use it. ✱ = ask the user one line first, 
   Some dialogs (Claude's trust and import checks) show no numbers; the options are still listed, but ask by label and answer with
   `label="Yes, I trust"` rather than quoting a number the user cannot see.
 - Pass `expect` to `fleet_answer`: the question the user confirmed (e.g. "allow this"). If the prompt changed meanwhile, the answer is refused; ask again.
+- `fleet_send` to a working agent steers it: a correction reaches it now. The reply says how: `steered` (joined the running turn), `interrupted` (its turn was stopped and the text sent with a note; Copilot), `queued` or `sent`. Use `queue=true` for an FYI or the next task, which should wait for the turn to end.
 - `fleet_send` (text or `keys`, also to `names`/`team`, and `fleet_team` `send`) to an agent on a prompt can answer it, so it needs the same yes and `confirmed=true`.
 - `fleet_worktrees` and `fleet_branches` with `prune` remove or delete for good: ask first, for example "Prune 3 merged worktrees of fleet?".
 - `fleet_close` replies with a note when the agent's dir has uncommitted or unmerged work: tell the user before asking to confirm. Also check the agent's unread reports and inbox before closing: a hand-off that arrives after a close is lost.

@@ -179,6 +179,19 @@ func TestACPEndToEnd(t *testing.T) {
 	}
 	waitStatus(t, f, "ad1", "working", 10*time.Second)
 	waitStatus(t, f, "ad1", "idle", 15*time.Second)
+	// A steer joins the running turn (the fake, like agy, steers on a second
+	// prompt) and says so; queue=true holds text for the turn's end (ADR-158).
+	if d, err := f.Queue("ad1", "long one [hang]"); err != nil || d != acphost.DeliverySent {
+		t.Fatalf("queue to an idle agent: %q %v", d, err)
+	}
+	waitStatus(t, f, "ad1", "working", 10*time.Second)
+	if d, err := f.Queue("ad1", "afterwards"); err != nil || d != acphost.DeliveryQueued {
+		t.Fatalf("queue during a turn: %q %v", d, err)
+	}
+	if d, err := f.Steer("ad1", "change course"); err != nil || d != acphost.DeliverySteered {
+		t.Fatalf("steer: %q %v", d, err)
+	}
+	waitStatus(t, f, "ad1", "idle", 15*time.Second) // [hang] ends only by a cancel or a steer
 	if n := captures(t, log, ad.PaneID); n != 0 {
 		t.Errorf("the adopted acp pane was captured %d times", n)
 	}
