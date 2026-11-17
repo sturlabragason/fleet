@@ -15,6 +15,7 @@ You are the api-service. Subagents write the code; you keep the brief, the check
 Copy `brief-template.md` (next to this file) to `.work/briefs/<slug>.md` and fill it in. The done-check is mandatory and machine-checkable:
 `make build && go vet ./<changed pkgs>/...` (exit 0) plus any feature-specific command; the tests and `-race` of the packages the change reaches run in CI on the pushed `fleet/<name>` branch (ADR-69, ADR-149), the full suite on main.
 `make test` always exits 0 by design, so never use it as the gate.
+For a feature that adds an ADR or touches more than one package, run the `review-firewall` skill on the brief (its "Plans" section) before the builder, write the result to `.work/briefs/<slug>.review.md` and fold the answers into the brief. Small features skip it.
 
 ## 3. Build
 - Dispatch the **fleet-builder** agent with the brief path and full context (it starts fresh). Background mode if you have other work; otherwise sync.
