@@ -292,14 +292,14 @@ func TestAutoCloseReadOnlyAndNonGit(t *testing.T) {
 	if note, _ := f.Report("c", "done", "review"); note != "auto-closing" || len(closed) != 2 {
 		t.Fatalf("pre-existing dirt: %q %v", note, closed)
 	}
+	// Its own change sends the done back to it (ADR-160), not to the admiral.
 	os.WriteFile(filepath.Join(dir, "g"), []byte("mine"), 0o644)
-	f.Mail().Inbox(mail.Admiral, false, 0)
+	var told []string
+	f.Tell = func(n, text string) error { told = append(told, n); return nil }
+	woken := len(*pasted)
 	note, _ := f.Report("c", "done", "again")
-	if note != "not auto-closed: uncommitted changes by the agent: g" || len(closed) != 2 {
-		t.Fatalf("own change: %q %v", note, closed)
-	}
-	if last := (*pasted)[len(*pasted)-1]; !strings.HasSuffix(last, "("+note+")") {
-		t.Fatalf("admiral line lacks the reason: %q", last)
+	if !strings.Contains(note, "uncommitted changes by the agent: g") || len(closed) != 2 || len(told) != 1 || len(*pasted) != woken {
+		t.Fatalf("own change: %q closed %v told %v", note, closed, told)
 	}
 }
 

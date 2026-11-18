@@ -144,7 +144,10 @@ func cmdReport(f *fleet.Fleet, args []string) error {
 		return err
 	}
 	out := "reported " + state + " to the admiral"
-	if note != "" {
+	switch {
+	case fleet.Refused(note):
+		out = note
+	case note != "":
 		out += " (" + note + ")"
 	}
 	fmt.Println(out)

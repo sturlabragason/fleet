@@ -68,6 +68,9 @@ type Fleet struct {
 	// CloseLater schedules closing an agent after its report returns; nil =
 	// tmux run-shell (tests replace it).
 	CloseLater func(name string) error
+	// Tell delivers fleet's own reply to an agent, such as a refused done
+	// (ADR-160); nil = Queue (tests replace it).
+	Tell func(name, text string) error
 	// Clients lists the attached tmux clients (active pane, last key
 	// press); nil = tmux list-clients (tests replace it, ADR-61).
 	Clients func() []ClientSeen

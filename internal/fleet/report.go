@@ -15,9 +15,18 @@ import (
 // "report" message in the admiral's mailbox and the latest report on the
 // board. done, blocked and question wake an idle admiral. On done with
 // auto_close_done, note is "auto-closing" or "not auto-closed: <reason>".
+// A done that leaves the agent's own work behind is refused first (ADR-160):
+// it is filed as progress and the note is fleet's reply to the agent, or as
+// blocked when the agent can't finish it itself.
 func (f *Fleet) Report(me, state, summary string) (note string, err error) {
 	if err := f.onBoard(me); err != nil {
 		return "", err
+	}
+	reply := ""
+	if state == "done" {
+		if g := f.doneGate(me, summary); g.state != "" {
+			state, summary, reply = g.state, g.summary, g.reply
+		}
 	}
 	// A squad member reports to its leader, everyone else to the admiral
 	// (ADR-53). The leader's own reports still go up to the admiral.
@@ -35,6 +44,10 @@ func (f *Fleet) Report(me, state, summary string) (note string, err error) {
 	})
 	if err != nil {
 		return "", err
+	}
+	if reply != "" {
+		f.tell(me, reply)
+		return reply, nil
 	}
 	if state == "done" {
 		// With a done-check the verdict decides, so the wake waits for it

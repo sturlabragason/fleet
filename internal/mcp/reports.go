@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/sturlabragason/fleet/internal/board"
+	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/mail"
 )
 
@@ -36,7 +37,10 @@ func (s *Server) report(me string, a args) (string, error) {
 		to = "your leader " + up
 	}
 	out := "reported " + a.State + " to " + to
-	if note != "" {
+	switch {
+	case fleet.Refused(note):
+		out = note
+	case note != "":
 		out += " (" + note + ")"
 	}
 	return out, nil

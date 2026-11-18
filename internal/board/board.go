@@ -86,6 +86,9 @@ type Agent struct {
 	// wake reuses for the context args (ADR-60). "" on a started agent
 	// means adopted, or started by an older fleet.
 	Effort string `json:"effort,omitempty"`
+	// DoneBounces counts the done reports fleet sent back because the
+	// agent's own work was left behind (ADR-160).
+	DoneBounces int `json:"done_bounces,omitempty"`
 	// Model is the model the agent runs (ADR-100). A queued agent keeps the
 	// model its spawn named, "" being none; once started it holds the model
 	// fleet launched it with, which wake reuses. "" on a started agent

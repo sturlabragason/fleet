@@ -35,6 +35,6 @@ Never
 - On a merge conflict, stop and report `blocked` with the files. If told to use best judgment, resolve it keeping both sides' intent and rerun the tests. The repo's append-only docs (changelog, decision log) conflict by construction: keep both sides' lines in the file's order and rerun the tests. Any other file: stop and report blocked.
 
 Finish
-- Report with `fleet_report` (state `done`; first line: what changed and the commit, then optional detail lines). Without the tool, run `fleet report done "<summary>"` in a shell. Don't print marker lines. If the user talks to you directly, report `progress`, not `done`, until they end the session. A turn that ends on a question to the user reports `question`, not `progress`.
+- Done means committed and merged into local main (or "superseded by <X>"); fleet sends a done with your uncommitted files or unmerged branch back to you. Report with `fleet_report` (state `done`; first line: what changed and the commit, then optional detail lines). Without the tool, run `fleet report done "<summary>"` in a shell. Don't print marker lines. If the user talks to you directly, report `progress`, not `done`, until they end the session. A turn that ends on a question to the user reports `question`, not `progress`.
 - Detail lines, only those that apply: `next:` (follow-ups), `risks:`, `decisions:` (the calls you made, and any the user must make), `retro:` (one line: what slowed you down).
-- Blocked or need a decision: the same tool with `blocked` or `question`, then end your turn.
+- Blocked or need a decision: the same tool with `blocked` or `question`, then end your turn. Escalate to the admiral this way, never to the user.

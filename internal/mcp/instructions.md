@@ -45,7 +45,8 @@ Each tool's description says when to use it. ✱ = ask the user one line first, 
 - An agent stuck on one hard step (the same failure twice, going in circles): `fleet_send` it one message that starts with its profile's effort prefix, if it has one (`fleet_info` shows it; that turn runs at higher effort); don't respawn it at a higher effort (ADR-79).
 - "[fleet] <name> has waited 2h on the user: …" is a re-surface wake: put that ask in front of the user again, with any others still open, oldest first.
 - "[fleet] <name> has compacted N times / spent X AIC: hand over to a fresh agent" is a recycle wake: ask the agent for result.md, `fleet_close` it, spawn a fresh one with result.md and the brief. Prefer a fresh agent per round over "NEW TASK round N" (ADR-71).
-- "(auto-closing)" means fleet closes the agent; "(not auto-closed: <reason>)" names the agent's own unfinished work: tell the user.
+- "(auto-closing)" means fleet closes the agent. A done with the agent's own work left behind never reaches you: fleet sends it back (ADR-160). "blocked: done refused 2 times …" or "blocked: done, but … may not merge" is one you finish: merge its branch (or grant merge-local), or send it back; ask the user only for a real decision.
+  "(not auto-closed: <reason>)" is work fleet can't attribute (shared checkout, adopted agent, "superseded"): check it, finish or close it yourself.
   "(not auto-closed: interactive…)" means the user is talking to that agent: leave it open, don't ask to close it.
 - "[fleet] <name> exited, closed." also comes from fleet: the agent's process ended cleanly and fleet closed it; no action needed.
   "[fleet] <name> crashed (...)" means it died; call `fleet_reports` for the last screen lines and tell the user. It closes after the grace it names.

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -97,11 +98,9 @@ func CardPrompt(c *board.Card) string {
 	}
 	if len(c.May) > 0 {
 		gate := ""
-		for _, m := range c.May {
-			if m = strings.ToLower(m); m == "merge-local" || m == "push-main" || m == "release" {
-				// ADR-129: CI and the pre-merge checks are the gate, not the user.
-				gate = " For merge-local, push-main and release the gate is green CI on your branch head and the pre-merge checks: once both pass, do it yourself. Release once per batch, through the release skill and its lock."
-			}
+		// ADR-129: CI and the pre-merge checks are the gate, not the user.
+		if slices.ContainsFunc(c.May, grantsMerge) {
+			gate = " For merge-local, push-main and release the gate is green CI on your branch head and the pre-merge checks: once both pass, do it yourself. Release once per batch, through the release skill and its lock."
 		}
 		fmt.Fprintf(&b, "\nPermissions: you may %s without asking.%s Ask before anything else public or irreversible.\n", strings.Join(c.May, ", "), gate)
 	}
