@@ -181,8 +181,8 @@ func TestBriefShowsPinnedNotes(t *testing.T) {
 	}
 }
 
-// A large state still gives a brief under briefBudget with the handoff and
-// every pinned note whole; cut sections name the tool with the rest.
+// A large state still gives a brief under briefBudget with the handoff
+// whole; cut sections name the tool with the rest.
 func TestBriefStaysUnderBudget(t *testing.T) {
 	s, _, _ := memServer(t)
 	home := s.F.Home
@@ -224,13 +224,30 @@ func TestBriefStaysUnderBudget(t *testing.T) {
 		t.Error("older notes should have been cut")
 	}
 
-	// Pinned notes over half the budget are still shown whole, with a warning.
+	// Pinned notes past what fits are cut, with a warning and the offset
+	// fleet_brief file=pinned reads the rest from.
 	for i := range 30 {
 		callText(t, s, "fleet_note", map[string]any{"text": fmt.Sprintf("BIG-%d %s", i, strings.Repeat("y", 300)), "pin": true})
 	}
-	out, _ = s.brief()
-	if !strings.Contains(out, "BIG-0 ") || !strings.Contains(out, "BIG-29 ") || !strings.Contains(out, "ask the user which rules to retire") ||
-		!strings.Contains(out, "## Unread reports\nnone\n") || !strings.Contains(out, "## Agents\nno agents\n") {
+	out, _ = callText(t, s, "fleet_brief", nil)
+	if len(out) > briefBudget {
+		t.Errorf("big pinned brief is %d bytes, budget %d", len(out), briefBudget)
+	}
+	if !strings.Contains(out, "BIG-0 ") || strings.Contains(out, "BIG-29 ") || !strings.Contains(out, "ask the user which rules to retire") ||
+		!strings.Contains(out, "## Agents\nno agents\n") {
 		t.Errorf("big pinned brief:\n%s", out)
+	}
+	_, rest, ok := strings.Cut(out, "fleet_brief file=pinned offset=")
+	if !ok {
+		t.Fatalf("no pointer to the cut pinned notes:\n%s", out)
+	}
+	var off int
+	fmt.Sscanf(rest, "%d", &off)
+	more, _ := callText(t, s, "fleet_brief", map[string]any{"file": "pinned", "offset": off})
+	if !strings.Contains(more, "BIG-29 ") || !strings.Contains(more, "; end") {
+		t.Errorf("file=pinned from the brief's offset:\n%s", more)
+	}
+	if first := strings.SplitN(more, "\n", 3)[1]; strings.Contains(out, first+"\n") {
+		t.Errorf("file=pinned repeats a note the brief showed: %s", first)
 	}
 }

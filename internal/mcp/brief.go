@@ -10,19 +10,29 @@ import (
 )
 
 // briefBudget keeps fleet_brief inline: an MCP client saves a larger tool
-// result to a file the admiral may have no tool to read (Copilot CLI's limit
-// is about 20 KB). The handoff and pinned notes are never cut; the other
-// sections share what they leave and each falls back to a pointer.
+// result to a file (Copilot CLI's limit is about 20 KB), which the admiral
+// can only read back with fleet_brief file=…. The handoff comes first and
+// whole (it is capped when written); the pinned notes get what fits after
+// briefReserve; the other sections share the rest, and each cut one names
+// the tool with the rest.
 const briefBudget = 12 << 10
 
-// pinnedWarn is when the pinned section alone crowds out the rest of the
+// briefNotices is kept from the sections for the admiral header and the
+// notices the server appends to any tool reply (unread reports, upgrades).
+const briefNotices = 1 << 10
+
+// briefReserve is kept from the pinned notes for the other sections' short
+// forms and some of their lines.
+const briefReserve = 2 << 10
+
+// pinnedWarn is when the pinned notes alone crowd out the rest of the
 // brief and the admiral should ask the user to retire rules.
 const pinnedWarn = briefBudget / 2
 
 // maxBriefNotes is the most recent notes the brief shows when they fit.
 const maxBriefNotes = 30
 
-// brief is the handoff and every pinned note in full, then the unread report
+// brief is the handoff, the pinned notes that fit, then the unread report
 // headlines, extensions, routes, recent notes and agents within briefBudget.
 func (s *Server) brief() (string, error) {
 	var head strings.Builder
@@ -32,15 +42,8 @@ func (s *Server) brief() (string, error) {
 		head.WriteString("## Handoff\nnone\n\n")
 	}
 	pinned := supervisor.Pinned(s.F.Home)
-	if len(pinned) > 0 {
-		p := strings.Join(pinned, "\n")
-		head.WriteString("## Pinned\n" + p + "\n")
-		if len(p) > pinnedWarn {
-			fmt.Fprintf(&head, "(pinned notes are %.1f KB, crowding the rest of this brief out: ask the user which rules to retire; unpin by deleting the line from ~/.fleet/pinned.log)\n", float64(len(p))/1024)
-		}
-		head.WriteString("\n")
-	}
-	left := briefBudget - head.Len()
+	head.WriteString(pinnedBrief(pinned, briefBudget-briefNotices-briefReserve-head.Len()))
+	left := briefBudget - briefNotices - head.Len()
 	take := func(full, short string) string {
 		if len(full) <= left || len(full) <= len(short) {
 			left -= len(full)
@@ -144,5 +147,38 @@ func (s *Server) notesBrief(pinned []string, room int) string {
 	}
 	b.WriteString(more)
 	b.WriteString("\n")
+	return b.String()
+}
+
+// pinnedBrief is the pinned notes that fit in room, in file order; the cut
+// ones are named by the offset fleet_brief file=pinned reads them from.
+func pinnedBrief(pinned []string, room int) string {
+	if len(pinned) == 0 {
+		return ""
+	}
+	size := 0
+	for _, p := range pinned {
+		size += len(p) + 1
+	}
+	var warn string
+	if size > pinnedWarn {
+		warn = fmt.Sprintf("(pinned notes are %.1f KB, crowding the rest of this brief out: ask the user which rules to retire; unpin by deleting the line from ~/.fleet/pinned.log)\n", float64(size)/1024)
+	}
+	const h = "## Pinned\n"
+	room -= len(h) + len(warn) + 120
+	n, used := 0, 0
+	for n < len(pinned) && used+len(pinned[n])+1 <= room {
+		used += len(pinned[n]) + 1
+		n++
+	}
+	var b strings.Builder
+	b.WriteString(h)
+	for _, p := range pinned[:n] {
+		b.WriteString(p + "\n")
+	}
+	if n < len(pinned) {
+		fmt.Fprintf(&b, "(%d more pinned notes, %.1f KB, not shown: read them with fleet_brief file=pinned offset=%d)\n", len(pinned)-n, float64(size-used)/1024, used)
+	}
+	b.WriteString(warn + "\n")
 	return b.String()
 }

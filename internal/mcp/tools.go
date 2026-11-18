@@ -103,7 +103,10 @@ var baseToolDefs = []tool{
 		"text": str("the note, one line"), "agent": str("optional agent the note is about"),
 		"pin":  map[string]any{"type": "boolean", "description": "a standing rule, always shown in fleet_brief"},
 		"rule": map[string]any{"type": "boolean", "description": "a rule every agent follows: added to the user's worker playbook layer (fleet rule)"}})},
-	{"fleet_brief", "Start-of-session brief, kept under 12 KB: the last handoff and pinned notes in full, unread report headlines, the agents, the request routes and the recent notes that fit. Each cut section names the tool with the rest. Call first in a fresh session, then fleet_status.", obj(nil, map[string]any{})},
+	{"fleet_brief", "Start-of-session brief, kept under 12 KB: the last handoff, the pinned notes, unread report headlines, the agents, the request routes and the recent notes that fit. Each cut section names the tool with the rest. Call first in a fresh session, then fleet_status. file= reads instead of briefing: a tool reply your client saved to a file (\"saved to /…copilot-tool-output…\"; you have no other tool to read it) or file=pinned for every pinned note, in 8 KB pages from offset (each page names the next offset), or only the lines matching query.", obj(nil, map[string]any{
+		"file":   str("the saved tool reply's full path, or pinned"),
+		"offset": map[string]any{"type": "integer", "description": "byte offset of the page to read (default 0)"},
+		"query":  str("with file: only the lines containing this text, with their offsets")})},
 	{"fleet_access", "List agent-to-agent access: the agent_mail policy, then every explicit pair with its state (pending, granted, denied), who asked, who decided and why. limit=N adds the last N messages between agents.", obj(nil, map[string]any{
 		"limit": map[string]any{"type": "integer", "description": "also show the last N agent-to-agent messages"}})},
 	{"fleet_access_decide", "Grant, deny or revoke access between two agents. Ask the user first; set confirmed=true only after an explicit yes.", obj([]string{"a", "b", "action", "confirmed"}, map[string]any{
@@ -125,10 +128,13 @@ type args struct {
 	To, From, Reason, Decision, A, B, State string
 	// Label picks a menu option by its text, for menus whose options are
 	// not numbered on screen (fleet_answer).
-	Label                      string
-	SessionID                  string `json:"session_id"`
-	Lines, Limit, Option       int
-	Number                     int
+	Label                string
+	SessionID            string `json:"session_id"`
+	Lines, Limit, Option int
+	Number               int
+	// File and Offset are fleet_brief's reader of a saved tool reply.
+	File                       string
+	Offset                     int
 	Confirmed, All, Raw, Force bool
 	// Leader makes a fleet_spawn a squad leader; Squad closes a leader's
 	// squad with it (ADR-53).
@@ -168,13 +174,13 @@ type args struct {
 	TimeoutS int `json:"timeout_s"`
 	// CLI-backed tools (ADR-86): fleet_takeover's acp, fleet_touching's
 	// files and graph, fleet_worktrees' and fleet_branches' prune.
-	ACP   bool `json:"acp"`
+	ACP bool `json:"acp"`
 	// Client is fleet_admiral_add's MCP client for an external admiral
 	// (ADR-159).
 	Client string
-	Files []string
-	Graph bool
-	Prune bool
+	Files  []string
+	Graph  bool
+	Prune  bool
 	// Days is fleet_recall's window (ADR-119).
 	Days int
 	// Route is fleet_spawn's request route; Fields are fleet_route set's
@@ -285,7 +291,10 @@ func (s *Server) statusCall(args) (string, error) {
 	return s.admiralHeader() + "\n" + st, err
 }
 
-func (s *Server) briefCall(args) (string, error) {
+func (s *Server) briefCall(a args) (string, error) {
+	if a.File != "" {
+		return s.readFile(a)
+	}
 	br, err := s.brief()
 	return s.admiralHeader() + "\n" + br, err
 }

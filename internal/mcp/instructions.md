@@ -82,6 +82,7 @@ Each tool's description says when to use it. ✱ = ask the user one line first, 
 - On the context warning, or when the user asks, call `fleet_handoff` with open questions,
   promises and plans in flight. Don't restate agent statuses. Then stop.
 - A fresh admiral starts with `fleet_brief`.
+- A tool reply your client saved to a file (a preview and a `copilot-tool-output` path): read the rest with `fleet_brief file=<path>`, following each page's `offset`, or `query` to search it.
 - Call `fleet_admiral_profile` only when the user asks to switch your profile or account (e.g. "switch to claude-personal").
   Pass a `summary` like a handoff, then stop: you are replaced in a few seconds.
 

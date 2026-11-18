@@ -7,6 +7,7 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
 ## 2026-11-18
+- A copilot admiral can read a tool reply Copilot saved to a file: `fleet_brief file=<path>` pages through it or searches it with `query`, and `fleet_brief` itself stays under 12 KB again, with pinned notes that don't fit read through `fleet_brief file=pinned` (ADR-161)
 - Workers finish their own work: a `done` report that leaves the agent's uncommitted files or unmerged branch behind goes back to the agent with what is left and how to finish it, instead of to you. After two tries, or when the agent may not merge, the admiral gets it as blocked (ADR-160)
 
 ## 2026-11-17
