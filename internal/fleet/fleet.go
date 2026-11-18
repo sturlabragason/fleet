@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/acp"
@@ -105,6 +106,9 @@ type Fleet struct {
 	Housekeeping bool
 	// retainedAt is the resident poll's last retention pass (retain.go).
 	retainedAt time.Time
+	// pagesAt and pagesBusy pace the decision-page answer check (pages.go).
+	pagesAt   time.Time
+	pagesBusy atomic.Bool
 	// RotateEvents makes the retention pass rotate events.jsonl. Only the
 	// watcher sets it, so one process owns the rename (ADR-154).
 	RotateEvents bool

@@ -204,7 +204,7 @@ mode_args = { autopilot = "--allow-all --autopilot", plan = "--plan" }
 # root = "fleet-exec"    # remote dir, under the remote home, for worktree copies
 
 # Companion CLIs fleet calls (ADR-126): cass, gh, rsync, ssh, summary,
-# clipboard, terminal. `fleet doctor` lists each with what is off without it;
+# clipboard, terminal, artifact (decision-page answers, ADR-163). `fleet doctor` lists each with what is off without it;
 # fleet never installs one. Lookup: the tool's env variable (FLEET_CASS,
 # FLEET_TERMINAL) > path here > PATH. path = "auto" (default), "off", or a
 # binary, optionally with arguments. Other keys belong to the adapter.
