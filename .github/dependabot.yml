@@ -1,12 +1,7 @@
+# Go modules get Dependabot security updates only (a repository setting): version
+# bumps of the pre-1.0 Charm libraries break the build and need a person (ADR-162).
 version: 2
 updates:
-  - package-ecosystem: gomod
-    directory: /
-    schedule:
-      interval: weekly
-    groups:
-      go:
-        patterns: ["*"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
