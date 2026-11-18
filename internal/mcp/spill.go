@@ -86,7 +86,11 @@ func spillPath(file string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("temp dir: %w", err)
 	}
-	if rel, err := filepath.Rel(root, resolved); err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+	if rel, err := filepath.Rel(root, resolved); err != nil || !filepath.IsLocal(rel) {
+		return "", refuse
+	}
+	// The temp dir is shared: a FIFO or device there would block the server.
+	if fi, err := os.Stat(resolved); err != nil || !fi.Mode().IsRegular() {
 		return "", refuse
 	}
 	return resolved, nil

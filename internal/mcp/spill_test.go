@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -55,7 +56,11 @@ func TestBriefReadsSavedReply(t *testing.T) {
 	_ = os.Symlink(filepath.Join(s.F.Home, "pinned.log"), link)
 	plain := filepath.Join(tmp, "notes.txt")
 	_ = os.WriteFile(plain, []byte("secret"), 0o600)
-	for _, f := range []string{outside, link, plain, "relative-copilot-tool-output.txt", filepath.Join(tmp, "..", filepath.Base(outside))} {
+	fifo := filepath.Join(tmp, "3-copilot-tool-output-fifo")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{outside, link, plain, fifo, "relative-copilot-tool-output.txt", filepath.Join(tmp, "..", filepath.Base(outside))} {
 		if out, isErr := callText(t, s, "fleet_brief", map[string]any{"file": f}); !isErr || strings.Contains(out, "secret") {
 			t.Errorf("%s was not refused: %s", f, out)
 		}

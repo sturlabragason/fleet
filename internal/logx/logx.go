@@ -23,9 +23,11 @@ func Home() string {
 	return filepath.Join(h, ".fleet")
 }
 
-// Init opens the log file. Safe to call more than once.
+// Init makes the fleet home private and opens the log file. Safe to call
+// more than once.
 func Init() {
 	once.Do(func() {
+		privateHome(Home())
 		dir := filepath.Join(Home(), "logs")
 		_ = os.MkdirAll(dir, 0o755)
 		f, err := openRotator(filepath.Join(dir, "fleet.log"))
@@ -38,3 +40,13 @@ func Init() {
 
 // For returns a logger tagged with the component name.
 func For(component string) *slog.Logger { return base.With("component", component) }
+
+// privateHome creates home as 0700, or drops group and other access from an
+// existing one, so mail, notes and pane captures under it stay with the
+// user (ADR-162). A home the user doesn't own is left as it is.
+func privateHome(home string) {
+	_ = os.MkdirAll(home, 0o700)
+	if fi, err := os.Stat(home); err == nil && fi.IsDir() && fi.Mode().Perm()&0o077 != 0 {
+		_ = os.Chmod(home, fi.Mode().Perm()&^0o077)
+	}
+}
