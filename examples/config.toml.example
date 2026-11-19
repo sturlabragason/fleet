@@ -14,6 +14,11 @@
 # `fleet up` again — the tmux chrome is re-set and the overview pane restarts,
 # agents keep running.
 # theme = "lane"
+# Start-up banner (ADR-171): `fleet up` draws the fleet mark in with a short
+# animation, any key skips it. false keeps it still (reduced motion). It is
+# off anyway in CI, under NO_COLOR or FLEET_NO_ANIM, inside tmux and when the
+# output is not a terminal.
+# animation = true
 # Tool profile for fleet_spawn and fleet_squad_spawn calls that name none
 # (see `fleet profiles`). Unset: claude-copilot, whatever tool the admiral runs.
 # Re-read on every spawn. The spawn reply always names the profile and model.

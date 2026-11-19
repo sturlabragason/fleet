@@ -123,6 +123,7 @@ type Prefs struct {
 	profiles     map[string]map[string]conf.Value
 	maxWorking   int
 	theme        string
+	still        bool
 	profile      string
 	admiral      string
 	admiralMax   int
@@ -180,6 +181,10 @@ func (p *Prefs) Theme() string {
 	return p.theme
 }
 
+// Animation is [defaults] animation: false asks for a still start-up banner
+// (reduced motion, ADR-171). Unset is true.
+func (p *Prefs) Animation() bool { return p == nil || !p.still }
+
 // DefaultProfile is [defaults] profile: the tool profile a fleet_spawn or
 // fleet_squad_spawn uses when the call names none. "" = unset, the call
 // must name one.
@@ -208,6 +213,9 @@ func Load() (*Prefs, error) {
 			p.maxWorking = n
 		}
 		p.theme = strings.TrimSpace(conf.Str(sec, "theme"))
+		if v, ok := conf.Bool(sec, "animation"); ok {
+			p.still = !v
+		}
 		p.profile = strings.TrimSpace(conf.Str(sec, "profile"))
 		if p.agentMail, err = parseAgentMail(sec); err != nil {
 			return nil, fmt.Errorf("%s: %w", path, err)

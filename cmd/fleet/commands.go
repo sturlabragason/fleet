@@ -36,7 +36,8 @@ func loadTheme() error {
 }
 
 var usage = `usage:
-  fleet up                                  start/attach the fleet (admiral + overview + wall)
+  fleet up                                  start/attach the fleet (admiral + overview + wall); the mark
+                                            animates while it starts (any key skips; --no-anim stills it)
   fleet [--admiral-profile NAME] up [--no-attach]
                                             run the admiral under profile NAME (alone: fleet up); default
                                             $FLEET_ADMIRAL_PROFILE, last choice, [admiral] profile, copilot
@@ -254,6 +255,7 @@ var usage = `usage:
                                             what is on the board, sessions run outside fleet
   fleet changes [--json]                    what's new in fleet: its latest features, newest first (Alt-g)
   fleet version                             the release tag and commit this binary was built from
+  fleet logo [--no-anim]                    play the start-up banner again (ADR-171)
   fleet update [--check | --now]            auto-upgrade state of a release install; --check asks GitHub for
                                             the latest release, --now installs it at once (ADR-114)
   fleet doctor [--json]                     pre-flight check: tmux version, UTF-8 locale, ~/.local/bin on
@@ -288,6 +290,8 @@ local preferences (never committed): ~/.config/fleet/config.toml ($FLEET_CONFIG 
   are re-read live, so a change takes effect without restarting fleet;
   [defaults] theme picks the TUI palette: lane (default), catppuccin,
   stealth, neon-drive, phosphor or graphite -- set it and run fleet up again;
+  [defaults] animation = false keeps the start-up banner still (also
+  FLEET_NO_ANIM=1, NO_COLOR, CI, not a terminal, or inside tmux);
   see examples/config.toml.example`
 
 // openFleet is fleet.Open; tests point it at a throwaway socket.
@@ -356,6 +360,7 @@ var statelessCmds = map[string]func(args []string) error{
 	"kagent":    cmdKagent,
 	"version":   cmdVersion,
 	"--version": cmdVersion,
+	"logo":      cmdLogo,
 	"doctor":    cmdDoctor,
 }
 

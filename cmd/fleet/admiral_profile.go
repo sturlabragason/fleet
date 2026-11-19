@@ -196,7 +196,7 @@ func parseUpArgs(args []string) (noAttach bool, prof string, monitors int, err e
 	return *na, *ap, *mo, nil
 }
 
-const upUsage = "fleet up [--no-attach] [--admiral-profile NAME] [--monitors 1|2]"
+const upUsage = "fleet up [--no-attach] [--no-anim] [--admiral-profile NAME] [--monitors 1|2]"
 
 // topLevelProfile handles `fleet --admiral-profile NAME [up ...]`: the flag
 // alone means up; with up it is passed on; any other command is an error.

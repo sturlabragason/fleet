@@ -212,10 +212,13 @@ func disableUserMCPArgs(path string) []string {
 func cmdUp(f *fleet.Fleet, args []string) error {
 	t := f.T
 	log := logx.For("up")
+	args, still := cutFlag(args, "--no-anim")
 	noAttach, explicit, monitors, err := parseUpArgs(args)
 	if err != nil {
 		return err
 	}
+	bannerDone, bannerStop := startBanner(still || noAttach)
+	defer bannerStop()
 	prof, warns, err := resolveAdmiralProfile(explicit, f.Profiles, os.Getenv, supervisor.LoadChoice(f.Home), f.Prefs.AdmiralProfile())
 	if err != nil {
 		return err
@@ -296,6 +299,7 @@ func cmdUp(f *fleet.Fleet, args []string) error {
 		return nil
 	}
 	t.Run("select-window", "-t", target)
+	bannerDone()
 	return attachTmux("attach-session", "-t", target)
 }
 
