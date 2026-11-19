@@ -100,7 +100,7 @@ var Bindings = []Binding{
 		Desc:  "put the next/previous waiting agent into the ▶ pane (or onto the wall)",
 		Hints: map[Scope]string{ScopeOverview: "Tab next waiting", ScopeTarget: "Tab next waiting"}},
 	{Group: Overview, Key: "w",
-		Desc: "waits on you: open asks, questions, prompts, unread reports and queues, oldest first (⏎ show, r answer)"},
+		Desc: "waits on you, as a tree of section, context and agent or thread: ⏎ show, Space peek, r answer or resume, d done, p pause, l let go, x/L mark and let go, 1-4 section, / filter, c context, T flat, G by context; click folds and acts"},
 	{Group: Overview, Key: "r",
 		Desc: "answer the selected agent's prompt or question: pick 1-9, y/n or t to type; confirm, refused if the prompt changed"},
 	{Group: Overview, Key: "Esc",

@@ -25,6 +25,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/theme"
+	"github.com/sturlabragason/fleet/internal/waits"
 	"github.com/sturlabragason/fleet/internal/watch"
 )
 
@@ -149,7 +150,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/api/peek" && r.Method == http.MethodGet:
 		s.peek(w, r)
 	case r.URL.Path == "/api/waits" && r.Method == http.MethodGet:
-		writeJSON(w, http.StatusOK, s.F.Waits(time.Now()))
+		writeJSON(w, http.StatusOK, waits.Only(s.F.Waits(time.Now()), waits.Waiting))
 	case r.URL.Path == "/api/send" && r.Method == http.MethodPost:
 		s.act(w, r, s.send)
 	case r.URL.Path == "/api/keys" && r.Method == http.MethodPost:

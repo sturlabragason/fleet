@@ -131,6 +131,15 @@ func (b *backend) Pending(name string) (fleet.Pending, error) { return b.f.Pendi
 func (b *backend) Reply(name string, r fleet.Reply, expect string) (string, error) {
 	return b.f.Reply(name, r, expect)
 }
+
+// DoneWait and ThreadAction are the w tree's actions (ADR-168).
+func (b *backend) DoneWait(it waits.Item) (string, error) {
+	t, err := b.f.DoneWait(it)
+	return t.Line(), err
+}
+func (b *backend) ThreadAction(id, action, reason string) error {
+	return b.f.ThreadAction(id, action, reason)
+}
 func (b *backend) OfflineSince() time.Time {
 	if off, since := b.f.Offline(); off {
 		return since

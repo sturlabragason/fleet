@@ -16,14 +16,21 @@ import (
 // Waits is everything waiting on the user, oldest first (ADR-167): agents on
 // a prompt, an open question or block, or idle with no report, the admirals'
 // unread reports, the todo store's open items and agent queues (ADR-164),
-// and what extensions add. A todo store that fails is logged and left out.
+// and what extensions add, plus the agents that wait on nothing (running,
+// open, quiet) for the w view's tree (ADR-168); waits.Only(…, waits.Waiting)
+// is the flat list. A todo store that fails is logged and left out.
 func (f *Fleet) Waits(now time.Time) []waits.Item {
-	in := waits.Input{Agents: f.Store.Load().Sorted()}
+	in := waits.Input{Agents: f.Store.Load().Sorted(), Ctx: map[string]string{}}
 	names := f.AdmiralNames()
 	for _, n := range names {
 		in.Reports = append(in.Reports, f.Mail().Peek(mail.BoxOf(n))...)
 	}
 	_, err := TodoDo(func(ctx context.Context, s todo.Store) error {
+		for _, a := range in.Agents {
+			if c := s.Context(WorkDir(a)); c != "" {
+				in.Ctx[a.Name] = c
+			}
+		}
 		for _, n := range names {
 			its, err := s.Admiral(ctx, n)
 			if err != nil {
@@ -53,4 +60,21 @@ func (f *Fleet) Waits(now time.Time) []waits.Item {
 		}
 	}
 	return waits.Build(in, now)
+}
+
+// DoneWait completes the todo item behind a w row (d, ADR-168) and logs the
+// done note for the admiral that owns it: the row's admiral, or the owner of
+// the agent whose queue it is in.
+func (f *Fleet) DoneWait(it waits.Item) (todo.Item, error) {
+	if !it.Todo() {
+		return todo.Item{}, fmt.Errorf("%s is not a todo item", it.Kind)
+	}
+	adm := it.Source
+	if it.Kind == waits.Queue {
+		adm = ""
+		if a, ok := f.Store.Load().Agents[it.Agent]; ok {
+			adm = a.Owner()
+		}
+	}
+	return f.DoneItem(adm, it.Agent, it.Ref, "from the overview")
 }

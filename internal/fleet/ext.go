@@ -2,6 +2,7 @@ package fleet
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/sturlabragason/fleet/internal/todo"
@@ -24,6 +25,10 @@ type Extension struct {
 	// Waits adds items to the "waits on you" list (ADR-167), e.g. open
 	// threads with their next step.
 	Waits func(f *Fleet) []waits.Item
+	// ThreadAction applies resume, pause or letgo (with a one-line reason)
+	// to the thread id from the w view (ADR-168); the first extension that
+	// sets it is used.
+	ThreadAction func(f *Fleet, id, action, reason string) error
 }
 
 var exts []Extension
@@ -79,4 +84,24 @@ func TodoDo(fn func(ctx context.Context, s todo.Store) error) (ok bool, err erro
 		}
 	}
 	return false, nil
+}
+
+// Thread actions the w view sends to Extension.ThreadAction (ADR-168).
+const (
+	ThreadResume = "resume"
+	ThreadPause  = "pause"
+	ThreadLetGo  = "letgo"
+)
+
+// ErrNoThreads is ThreadAction in a build with no threads extension.
+var ErrNoThreads = errors.New("thread actions need a threads extension, which this build does not have")
+
+// ThreadAction runs the registered extension's thread action.
+func (f *Fleet) ThreadAction(id, action, reason string) error {
+	for _, e := range exts {
+		if e.ThreadAction != nil {
+			return e.ThreadAction(f, id, action, reason)
+		}
+	}
+	return ErrNoThreads
 }

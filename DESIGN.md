@@ -438,7 +438,7 @@ The bottom tmux status line and the overview header show a short hint in plain w
 | Overview | `a / +` | add the selected agent as a new pane (more slots if full) |
 | Overview | `Space` | preview the selected agent in a popup (⏎ there puts it in ▶) |
 | Overview | `Tab / Shift-Tab` | put the next/previous waiting agent into the ▶ pane (or onto the wall) |
-| Overview | `w` | waits on you: open asks, questions, prompts, unread reports and queues, oldest first (⏎ show, r answer) |
+| Overview | `w` | waits on you, as a tree of section, context and agent or thread: ⏎ show, Space peek, r answer or resume, d done, p pause, l let go, x/L mark and let go, 1-4 section, / filter, c context, T flat, G by context; click folds and acts |
 | Overview | `r` | answer the selected agent's prompt or question: pick 1-9, y/n or t to type; confirm, refused if the prompt changed |
 | Overview | `Esc` | clear the ▶ target |
 | Overview | `u` | undo the last replace (again: redo) |
@@ -719,6 +719,8 @@ Drag a card onto a pane (tmux sends the release to the pane the drag started in)
 **`r`: answer.** On the selected tile (or a `w` row), fleet reads what the agent waits on (`Fleet.Pending`: the picker's question and options, the waiting line, or with nothing on screen the open question's report) and shows it exactly. `1`-`9` pick an option, `y`/`n` pick the Yes/No option (or send yes/no where there is no picker), `t` types a short reply (no picker only, at most 200 characters). Every answer asks to confirm (`⏎`/`y` send, `esc`/`n` back). `Fleet.Reply` sends it only if the prompt, question and options, is still exactly what was shown (`Gate`; a picker answer then goes through `Choose` with its own `expect` check) and `SendBlocker` finds the user is not typing in that pane (ADR-61); a typed reply goes through `Deliver`, so it lands on the agent's queue (ADR-164). A refusal keeps the view open on the prompt as it is now, with the reason.
 
 Out of scope: acting on todo items from the list (mark done, let go), a header count of waiting items, the web page's own waits panel (the endpoint is there).
+
+**`w` as a tree (ADR-168, built).** `w` opens a tree by default: section (Waiting on you, Running, Open with nobody on it, Quiet, Paused; docs/design/thread-board.md), then the user's context, then the agent, thread or admiral the rows belong to, then the rows. Running, Quiet and Paused start folded; a folded section shows its first three parents. Agents that wait on nothing come in as rows: `working` is Running, idle is Open, idle for 48 h or more is Quiet. `waits.Item` carries `Section`, `Ctx` and `Parent` (omitempty); `GET /api/waits` keeps serving the Waiting section only. Above the rows: the section counts, the context chips (`c` or a click filters to one) and the mode keys; at the bottom, the action keys as buttons. Keys: `⏎` puts the row's agent in ▶ (on a group, folds it), `Space` peeks, `r` answers an agent or resumes a thread, `d` marks a todo item done (`Fleet.DoneWait`, which logs the done note like `fleet_note done=`), `p` pauses a thread, `l` lets it go with a one-line reason, `x` marks threads and `L` lets the marked go with one reason, `1`-`4` jump to a section and unfold it, `/` filters as you type, `←`/`→` fold and unfold, `T` toggles the flat list, `G` puts context before section, `esc` clears the filter, then closes. Mouse: a click on a group folds it, on a row selects it, a second click within 400 ms puts its agent in ▶; chips and key labels are buttons; the wheel moves. Thread actions go through `fleet.Extension.ThreadAction(f, id, action, reason)`; a build without a threads extension says so.
 
 ## 5f. Web view: `fleet web` (ADR-66, alpha)
 
@@ -2548,6 +2550,16 @@ Trade-offs of the amendment: a session's place in the tree is fixed when it open
 **Rejected.** A second header count: computing the list each second would query the todo store every poll; the list loads only while open. Header hint items for `w`/`r`: the overview hint is already full at 180 columns; the keys are in `?`. Text replies to a picker: a paste into a menu does not answer it.
 
 **Trade-offs.** The list is as fresh as one overview poll. A thread shows only in a build whose extension fills `Waits`. Exact-match gating refuses an answer when a prompt's text changes in a harmless way (a timer in the line); the view then shows the new text and the user confirms again.
+
+**ADR-168: the `w` list becomes a tree of section, context and parent, with todo and thread actions** (§5g; extends ADR-126, ADR-164, ADR-167) — accepted 2026-11-19.
+
+**Context.** The flat `w` list answers "what waits on me" but not "what can I drop": running, open and quiet work is not in it, rows of one agent or context are scattered by age, and nothing on a row can be done from the list. The thread board (docs/design/thread-board.md) specified the sections and actions; the option chosen of three (tree in `w`, a todo popup, a docked column) was the one that adds no new surface.
+
+**Decision.** (1) `internal/waits.Build` also returns the agents that wait on nothing, as Running, Open or Quiet rows, and every item carries `Section`, `Ctx` (its own, else its agent's dir context from the todo store) and `Parent` (the agent, else the source); `waits.Only` gives one section, so the flat list and `/api/waits` stay "waits on you". (2) The overview's `w` draws a tree of those three levels with folds, chips, a filter and click zones (bubblezone, already in use); `T` keeps the flat list. (3) Actions: `d` completes a todo item through the existing `DoneItem`; resume, pause and let go call a new `ThreadAction` hook on the existing `fleet.Extension` seam, since threads live in an extension (ADR-126). Keys are a handler table, so a footer label click and a key run the same code.
+
+**Rejected.** A popup (`fleet todo`) or a docked column: a second place for the same list, and a column changes overview geometry. A thread action interface in `internal/fleet` per action: one hook with an action name keeps the seam to one field. Folding Open: it is the "can I drop this" section and stays visible.
+
+**Trade-offs.** Agent rows make the list larger, so Running and Quiet start folded and the counts sit in the title. Section rules for agents are simpler than the thread board's (no 3-day ask demotion); threads from an extension set their own section. Thread actions do nothing in the default build.
 
 **ADR-169: estimates are agent wall-clock time, measured, never human dev-days** (§4, extends ADR-35) — accepted 2026-11-19.
 

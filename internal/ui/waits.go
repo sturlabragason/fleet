@@ -1,12 +1,11 @@
 package ui
 
 import (
-	"fmt"
+	"slices"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
@@ -21,23 +20,60 @@ type WaitsBackend interface {
 	Reply(name string, r fleet.Reply, expect string) (string, error)
 }
 
-// waitsView is the "waits on you" list that replaces the tiles while open.
+// WaitsActor is what the w view's actions need (ADR-168): d marks a todo
+// done, r/p/l resume, pause or let go a thread. Optional.
+type WaitsActor interface {
+	DoneWait(it waits.Item) (string, error)
+	ThreadAction(id, action, reason string) error
+}
+
+// waitsView is the w view that replaces the tiles while open: a tree of
+// section, context and parent (ADR-168), or the flat "waits on you" list
+// (ADR-167) after T.
 type waitsView struct {
-	items  []waits.Item
+	all    []waits.Item // everything Waits returned, oldest first
 	loaded bool
+	rows   []wrow
 	sel    int
 	off    int
+	flat   bool            // T: the flat list of section Waiting
+	byCtx  bool            // G: context, then section
+	ctx    string          // the context chip shown; "" is all
+	filter string          // /: rows whose text holds it
+	folded map[string]bool // a group row's fold, where the user changed it
+	marked map[string]bool // x: thread ids to let go with L
+	input  *wInput         // typing a filter or a let-go reason
+	click  wclick          // the last row clicked, for a double click
+}
+
+// wInput is a line being typed: the filter, or the reason for letting the
+// threads in refs go.
+type wInput struct {
+	letgo bool
+	refs  []string
+	text  string
+}
+
+type wclick struct {
+	row int
+	at  time.Time
 }
 
 type waitsMsg []waits.Item
 
-// openWaits is w: open the list and load it.
+// waitsActedMsg is an action's outcome and the list read after it.
+type waitsActedMsg struct {
+	info  string
+	items []waits.Item
+}
+
+// openWaits is w: open the view and load it.
 func (m *Model) openWaits() tea.Cmd {
 	if _, ok := m.be.(WaitsBackend); !ok {
 		m.msg = "w needs fleet's backend"
 		return nil
 	}
-	m.wv = &waitsView{}
+	m.wv = &waitsView{folded: map[string]bool{}, marked: map[string]bool{}}
 	return m.loadWaits()
 }
 
@@ -51,56 +87,286 @@ func (m *Model) loadWaits() tea.Cmd {
 	return func() tea.Msg { return waitsMsg(wb.Waits()) }
 }
 
-// setWaits keeps the cursor on the same item when the list changes.
+// set takes a new list and keeps the cursor on the same row. Marks of
+// threads no longer listed (let go) are dropped; a failed let-go keeps its.
 func (v *waitsView) set(items []waits.Item) {
-	var cur waits.Item
-	if v.sel < len(v.items) {
-		cur = v.items[v.sel]
+	v.all, v.loaded = items, true
+	listed := map[string]bool{}
+	for _, it := range items {
+		listed[it.Ref] = true
 	}
-	v.items, v.loaded = items, true
-	v.sel = min(v.sel, max(len(items)-1, 0))
-	for i, it := range items {
-		if it.Kind == cur.Kind && it.Source == cur.Source && it.Ask == cur.Ask {
-			v.sel = i
-			break
+	for id := range v.marked {
+		if !listed[id] {
+			delete(v.marked, id)
 		}
 	}
+	v.rebuild()
+}
+
+// cur is the selected row, if any.
+func (v *waitsView) cur() (wrow, bool) {
+	if v.sel < 0 || v.sel >= len(v.rows) {
+		return wrow{}, false
+	}
+	return v.rows[v.sel], true
+}
+
+// waitsKeys are the w view's keys; a footer label click runs the same.
+var waitsKeys = map[string]func(m *Model) tea.Cmd{
+	"esc":    (*Model).waitsEsc,
+	"q":      (*Model).closeWaits,
+	"w":      (*Model).closeWaits,
+	"ctrl+c": func(*Model) tea.Cmd { return tea.Quit },
+	"up":     func(m *Model) tea.Cmd { m.wv.move(-1); return nil },
+	"k":      func(m *Model) tea.Cmd { m.wv.move(-1); return nil },
+	"down":   func(m *Model) tea.Cmd { m.wv.move(1); return nil },
+	"j":      func(m *Model) tea.Cmd { m.wv.move(1); return nil },
+	"pgup":   func(m *Model) tea.Cmd { m.wv.move(-max(m.h/2, 1)); return nil },
+	"pgdown": func(m *Model) tea.Cmd { m.wv.move(max(m.h/2, 1)); return nil },
+	"home":   func(m *Model) tea.Cmd { m.wv.sel = 0; return nil },
+	"g":      func(m *Model) tea.Cmd { m.wv.sel = 0; return nil },
+	"end":    func(m *Model) tea.Cmd { m.wv.sel = max(len(m.wv.rows)-1, 0); return nil },
+	"left":   func(m *Model) tea.Cmd { m.wv.fold(true); return nil },
+	"right":  func(m *Model) tea.Cmd { m.wv.fold(false); return nil },
+	"enter":  (*Model).waitsEnter,
+	" ":      (*Model).waitsPeek,
+	"space":  (*Model).waitsPeek,
+	"r":      (*Model).waitsAnswer,
+	"d":      (*Model).waitsDone,
+	"p":      func(m *Model) tea.Cmd { return m.threadAct(fleet.ThreadPause, "") },
+	"l":      (*Model).waitsLetGo,
+	"x":      (*Model).waitsMark,
+	"L":      (*Model).waitsLetGoMarked,
+	"/":      func(m *Model) tea.Cmd { m.wv.input = &wInput{text: m.wv.filter}; return nil },
+	"T":      func(m *Model) tea.Cmd { m.wv.flat = !m.wv.flat; m.wv.rebuild(); return nil },
+	"G":      func(m *Model) tea.Cmd { m.wv.byCtx = !m.wv.byCtx; m.wv.rebuild(); return nil },
+	"c":      func(m *Model) tea.Cmd { m.wv.nextCtx(); return nil },
+	"1":      func(m *Model) tea.Cmd { m.wv.jump(waits.Waiting); return nil },
+	"2":      func(m *Model) tea.Cmd { m.wv.jump(waits.Running); return nil },
+	"3":      func(m *Model) tea.Cmd { m.wv.jump(waits.Open); return nil },
+	"4":      func(m *Model) tea.Cmd { m.wv.jump(waits.Quiet); return nil },
 }
 
 func (m *Model) waitsKey(k string) tea.Cmd {
-	v := m.wv
-	switch k {
-	case "esc", "q", "w":
-		m.wv = nil
-	case "ctrl+c":
-		return tea.Quit
-	case "up", "k":
-		v.sel = max(v.sel-1, 0)
-	case "down", "j":
-		v.sel = min(v.sel+1, max(len(v.items)-1, 0))
-	case "home", "g":
-		v.sel = 0
-	case "end", "G":
-		v.sel = max(len(v.items)-1, 0)
-	case "enter", "r":
-		if v.sel >= len(v.items) {
-			return nil
-		}
-		it := v.items[v.sel]
-		if it.Agent == "" || m.agent(it.Agent) == nil {
-			m.msg = it.Source + " is not an agent on the board"
-			return nil
-		}
-		m.sel = it.Agent
-		m.saveCursor()
-		if k == "r" {
-			return m.openAnswer(it.Agent)
-		}
-		m.wv = nil
-		m.reveal()
-		return m.show()
+	if m.wv.input != nil {
+		return m.waitsInputKey(k)
+	}
+	if h := waitsKeys[k]; h != nil {
+		return h(m)
 	}
 	return nil
+}
+
+func (m *Model) closeWaits() tea.Cmd { m.wv = nil; return nil }
+
+// waitsEsc clears the filter first, then closes.
+func (m *Model) waitsEsc() tea.Cmd {
+	if m.wv.filter != "" {
+		m.wv.filter = ""
+		m.wv.rebuild()
+		return nil
+	}
+	return m.closeWaits()
+}
+
+func (v *waitsView) move(d int) {
+	v.sel = min(max(v.sel+d, 0), max(len(v.rows)-1, 0))
+}
+
+// waitsInputKey edits the line being typed: the filter applies as it is
+// typed, a reason lets the threads go on ⏎.
+func (m *Model) waitsInputKey(k string) tea.Cmd {
+	v, in := m.wv, m.wv.input
+	switch k {
+	case "esc":
+		v.input = nil
+		if !in.letgo {
+			v.filter = ""
+			v.rebuild()
+		}
+		return nil
+	case "enter":
+		v.input = nil
+		if in.letgo {
+			return m.letGo(in.refs, in.text)
+		}
+		return nil
+	case "backspace":
+		r := []rune(in.text)
+		in.text = string(r[:max(len(r)-1, 0)])
+	case "space":
+		in.text += " "
+	default:
+		if r := []rune(k); len(r) != 1 || len([]rune(in.text)) >= 200 {
+			return nil
+		}
+		in.text += k
+	}
+	if !in.letgo {
+		v.filter = in.text
+		v.rebuild()
+	}
+	return nil
+}
+
+// item is the selected row's item; ok false on a group row.
+func (m *Model) item() (waits.Item, bool) {
+	r, ok := m.wv.cur()
+	if !ok || r.item == nil {
+		return waits.Item{}, false
+	}
+	return *r.item, true
+}
+
+// boardAgent selects the row's agent on the overview, or says why not.
+func (m *Model) boardAgent(it waits.Item) bool {
+	if it.Agent == "" || m.agent(it.Agent) == nil {
+		m.msg, m.msgAt = it.Source+" is not an agent on the board", m.now()
+		return false
+	}
+	m.sel = it.Agent
+	m.saveCursor()
+	return true
+}
+
+// waitsEnter folds a group row, or puts the row's agent in ▶.
+func (m *Model) waitsEnter() tea.Cmd {
+	r, ok := m.wv.cur()
+	if !ok {
+		return nil
+	}
+	if r.item == nil {
+		m.wv.toggle(r)
+		return nil
+	}
+	if !m.boardAgent(*r.item) {
+		return nil
+	}
+	m.wv = nil
+	m.reveal()
+	return m.show()
+}
+
+func (m *Model) waitsPeek() tea.Cmd {
+	if it, ok := m.item(); ok && m.boardAgent(it) {
+		return m.preview()
+	}
+	return nil
+}
+
+// waitsAnswer is r: resume a thread, else answer the row's agent.
+func (m *Model) waitsAnswer() tea.Cmd {
+	it, ok := m.item()
+	if !ok {
+		return nil
+	}
+	if it.Kind == waits.Thread {
+		return m.threadAct(fleet.ThreadResume, "")
+	}
+	if !m.boardAgent(it) {
+		return nil
+	}
+	return m.openAnswer(it.Agent)
+}
+
+// waitsDone is d: complete the row's todo item.
+func (m *Model) waitsDone() tea.Cmd {
+	it, ok := m.item()
+	if !ok || !it.Todo() {
+		m.msg, m.msgAt = "d marks a todo item done; this row is not one", m.now()
+		return nil
+	}
+	return m.waitsAct(func(a WaitsActor) (string, error) {
+		line, err := a.DoneWait(it)
+		return "done " + line, err
+	})
+}
+
+// thread is the selected row's thread id, or a message saying it is none.
+func (m *Model) thread() (string, bool) {
+	it, ok := m.item()
+	if !ok || it.Kind != waits.Thread || it.Ref == "" {
+		m.msg, m.msgAt = "p, l, x and r resume act on thread rows", m.now()
+		return "", false
+	}
+	return it.Ref, true
+}
+
+func (m *Model) threadAct(action, reason string) tea.Cmd {
+	id, ok := m.thread()
+	if !ok {
+		return nil
+	}
+	return m.waitsAct(func(a WaitsActor) (string, error) {
+		return action + " " + id, a.ThreadAction(id, action, reason)
+	})
+}
+
+func (m *Model) waitsLetGo() tea.Cmd {
+	if id, ok := m.thread(); ok {
+		m.wv.input = &wInput{letgo: true, refs: []string{id}}
+	}
+	return nil
+}
+
+func (m *Model) waitsMark() tea.Cmd {
+	if id, ok := m.thread(); ok {
+		if m.wv.marked[id] {
+			delete(m.wv.marked, id)
+		} else {
+			m.wv.marked[id] = true
+		}
+		m.wv.move(1)
+	}
+	return nil
+}
+
+// waitsLetGoMarked is L: ask one reason for every marked thread still listed.
+func (m *Model) waitsLetGoMarked() tea.Cmd {
+	var refs []string
+	for _, it := range m.wv.all {
+		if it.Kind == waits.Thread && m.wv.marked[it.Ref] && !slices.Contains(refs, it.Ref) {
+			refs = append(refs, it.Ref)
+		}
+	}
+	if len(refs) == 0 {
+		m.msg, m.msgAt = "x marks thread rows; nothing is marked", m.now()
+		return nil
+	}
+	m.wv.input = &wInput{letgo: true, refs: refs}
+	return nil
+}
+
+func (m *Model) letGo(refs []string, reason string) tea.Cmd {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "let go from the overview"
+	}
+	return m.waitsAct(func(a WaitsActor) (string, error) {
+		for _, id := range refs {
+			if err := a.ThreadAction(id, fleet.ThreadLetGo, reason); err != nil {
+				return "", err
+			}
+		}
+		return "let go " + strings.Join(refs, " "), nil
+	})
+}
+
+// waitsAct runs an action off the UI loop and reloads the list after it.
+func (m *Model) waitsAct(do func(a WaitsActor) (string, error)) tea.Cmd {
+	a, ok := m.be.(WaitsActor)
+	wb, _ := m.be.(WaitsBackend)
+	if !ok || wb == nil {
+		m.msg, m.msgAt = "this action needs fleet's backend", m.now()
+		return nil
+	}
+	return func() tea.Msg {
+		info, err := do(a)
+		if err != nil {
+			info = err.Error()
+		}
+		return waitsActedMsg{info: info, items: wb.Waits()}
+	}
 }
 
 func (m *Model) agent(name string) *board.Agent {
@@ -110,62 +376,4 @@ func (m *Model) agent(name string) *board.Agent {
 		}
 	}
 	return nil
-}
-
-// waitsLines draws the list: a title line, a column header, then one dense
-// row per item (age, kind, source, ask), oldest first.
-func (m *Model) waitsLines() []string {
-	v := m.wv
-	dim := lipgloss.NewStyle().Foreground(colIdle)
-	title := lipgloss.NewStyle().Bold(true).Foreground(colText)
-	head := fmt.Sprintf(" %s  %d", title.Render("Waits on you"), len(v.items))
-	if len(v.items) > 0 {
-		head += dim.Render(" · oldest " + board.Age(m.now().Sub(v.items[0].Since)))
-	}
-	keysHint := "⏎ show · r answer · ↑↓ move · esc close"
-	head += strings.Repeat(" ", max(2, m.w-ansi.StringWidth(head)-ansi.StringWidth(keysHint)-1)) + dim.Render(keysHint)
-	lines := []string{head}
-	switch {
-	case !v.loaded:
-		return append(lines, dim.Render(" loading…"))
-	case len(v.items) == 0:
-		return append(lines, dim.Render(" Nothing waits on you."))
-	}
-	const ageW, kindW = 5, 10
-	srcW := min(18, max(8, m.w/6))
-	lines = append(lines, dim.Render(fmt.Sprintf("  %-*s %-*s %-*s %s", ageW, "AGE", kindW, "KIND", srcW, "SOURCE", "ASK")))
-	rows := max(m.h-1-len(lines), 1)
-	v.off = min(max(v.off, v.sel-rows+1), v.sel)
-	v.off = max(min(v.off, len(v.items)-rows), 0)
-	for i := v.off; i < min(v.off+rows, len(v.items)); i++ {
-		it := v.items[i]
-		mark, txt := "  ", lipgloss.NewStyle().Foreground(colText)
-		if i == v.sel {
-			mark = lipgloss.NewStyle().Foreground(colSelect).Bold(true).Render("› ")
-			txt = txt.Bold(true)
-		}
-		src := it.Source
-		if it.Answerable() {
-			src += " ●"
-		}
-		row := mark + dim.Render(fmt.Sprintf("%-*s ", ageW, board.Age(m.now().Sub(it.Since)))) +
-			lipgloss.NewStyle().Foreground(kindColor(it.Kind)).Render(fmt.Sprintf("%-*s ", kindW, ansi.Truncate(it.Kind, kindW, "…"))) +
-			fmt.Sprintf("%-*s ", srcW, ansi.Truncate(src, srcW, "…")) + txt.Render(it.Ask)
-		lines = append(lines, row)
-	}
-	return lines
-}
-
-// kindColor reuses the status roles: what blocks is the error colour, what
-// asks is the waiting colour, the rest is muted text.
-func kindColor(k string) lipgloss.Color {
-	switch k {
-	case waits.Blocked:
-		return colError
-	case waits.Prompt, waits.Question, waits.NoReport, "ask":
-		return colWaitA
-	case waits.Report, "promise", "request":
-		return colText
-	}
-	return colIdle
 }

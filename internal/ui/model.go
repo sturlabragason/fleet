@@ -187,6 +187,11 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 		if m.wv != nil {
 			m.wv.set(msg)
 		}
+	case waitsActedMsg:
+		m.msg, m.msgAt = msg.info, m.now()
+		if m.wv != nil {
+			m.wv.set(msg.items)
+		}
 	case pendingMsg:
 		m.gotPending(msg)
 	case replyMsg:
@@ -215,6 +220,9 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 		return m, m.key(msg.String())
 	case tea.MouseMsg:
 		m.touch() // the pointer is over the overview: hold the order still
+		if m.wv != nil && m.ans == nil {
+			return m, m.waitsMouse(msg)
+		}
 		if extViewOpen(m) || m.wv != nil || m.ans != nil {
 			return m, nil
 		}

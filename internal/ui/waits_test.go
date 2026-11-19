@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -15,17 +16,40 @@ import (
 
 // waitsBE is fakeBE with the w/r backend: bravo waits on a picker, and
 // Reply refuses once the prompt on screen is no longer what the user saw.
+// Its actions are recorded in acts and drop the item from the list.
 type waitsBE struct {
 	fakeBE
 	prompt  fleet.Pending
 	replies []string // "name|option|yn|text|expect"
+	acts    []string // "done ref" or "action id reason"
+	gone    map[string]bool
 }
 
 func (b *waitsBE) Waits() []waits.Item {
-	return []waits.Item{
-		{Kind: "ask", Source: "main", Ask: "reply to the Teams thread", Since: time.Now().Add(-48 * time.Hour)},
-		{Kind: waits.Prompt, Source: "bravo", Agent: "bravo", Ask: "Approve? [y/n]", Since: time.Now().Add(-time.Minute)},
+	all := []waits.Item{
+		{Kind: "ask", Source: "main", Ask: "reply to the Teams thread", Since: time.Now().Add(-48 * time.Hour), Ref: "aaaa1111", Section: waits.Waiting, Parent: "main", Ctx: "work"},
+		{Kind: waits.Thread, Source: "notes", Ask: "review the draft", Since: time.Now().Add(-5 * time.Hour), Ref: "th-notes", Section: waits.Quiet, Parent: "notes", Ctx: "home"},
+		{Kind: waits.Thread, Source: "deck", Ask: "slides 6-9", Since: time.Now().Add(-4 * time.Hour), Ref: "th-deck", Section: waits.Quiet, Parent: "deck", Ctx: "work"},
+		{Kind: waits.Working, Source: "alpha", Agent: "alpha", Ask: "build it", Since: time.Now().Add(-time.Hour), Section: waits.Running, Parent: "alpha"},
+		{Kind: waits.Prompt, Source: "bravo", Agent: "bravo", Ask: "Approve? [y/n]", Since: time.Now().Add(-time.Minute), Section: waits.Waiting, Parent: "bravo", Ctx: "work"},
 	}
+	var out []waits.Item
+	for _, it := range all {
+		if !b.gone[it.Ref] {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+func (b *waitsBE) DoneWait(it waits.Item) (string, error) {
+	b.acts = append(b.acts, "done "+it.Ref)
+	b.gone[it.Ref] = true
+	return it.Ref, nil
+}
+func (b *waitsBE) ThreadAction(id, action, reason string) error {
+	b.acts = append(b.acts, strings.TrimSpace(action+" "+id+" "+reason))
+	b.gone[id] = true
+	return nil
 }
 func (b *waitsBE) Pending(string) (fleet.Pending, error) { return b.prompt, nil }
 func (b *waitsBE) Reply(name string, r fleet.Reply, expect string) (string, error) {
@@ -46,6 +70,10 @@ func run(m *Model, k string) {
 		msg = tea.KeyMsg{Type: tea.KeyEsc}
 	case "down":
 		msg = tea.KeyMsg{Type: tea.KeyDown}
+	case "backspace":
+		msg = tea.KeyMsg{Type: tea.KeyBackspace}
+	case " ":
+		msg = tea.KeyMsg{Type: tea.KeySpace, Runes: []rune(" ")}
 	}
 	_, cmd := m.Update(msg)
 	for cmd != nil {
@@ -66,9 +94,10 @@ func TestWaitsAnswerFlow(t *testing.T) {
 	m.setAgents(as)
 
 	run(m, "w")
+	run(m, "T")
 	v := ansi.Strip(m.View())
-	if !strings.Contains(v, "Waits on you  2 · oldest 2d") || strings.Index(v, "Teams thread") > strings.Index(v, "Approve?") {
-		t.Fatalf("waits view, oldest first:\n%s", v)
+	if !strings.Contains(v, "Waits on you  flat · oldest 2d") || strings.Index(v, "Teams thread") > strings.Index(v, "Approve?") || strings.Contains(v, "build it") {
+		t.Fatalf("flat waits view, waiting only, oldest first:\n%s", v)
 	}
 	run(m, "down")
 	run(m, "r")
@@ -102,6 +131,82 @@ func TestWaitsAnswerFlow(t *testing.T) {
 	}
 }
 
+// TestWaitsTree: the tree groups section, context and parent, folds
+// Running and Quiet, and its keys act on the right rows.
+func TestWaitsTree(t *testing.T) {
+	be := &waitsBE{gone: map[string]bool{}}
+	zone.NewGlobal()
+	m := New(be, "")
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	as, _ := be.Refresh()
+	m.setAgents(as)
+	run(m, "w")
+	v := ansi.Strip(m.View())
+	for _, want := range []string{"▾ WAITING ON YOU  2", "▾ work  2", "◆ bravo", "Approve?", "● r answer", "d done", "▸ RUNNING  1   ⠋ alpha", "▸ QUIET  2", "■ 2 waiting on you", "[all 5]"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("tree misses %q:\n%s", want, v)
+		}
+	}
+	if strings.Contains(v, "build it") || strings.Contains(v, "slides 6-9") {
+		t.Fatalf("Running and Quiet start folded:\n%s", v)
+	}
+
+	// d on the ask completes it and the list reloads.
+	m.wv.sel = rowOf(t, m, "reply to the Teams thread")
+	run(m, "d")
+	if len(be.acts) != 1 || be.acts[0] != "done aaaa1111" || strings.Contains(ansi.Strip(m.View()), "Teams thread") {
+		t.Fatalf("d: acts %q\n%s", be.acts, ansi.Strip(m.View()))
+	}
+
+	// 4 opens Quiet; x marks both threads and L lets them go with one reason.
+	run(m, "4")
+	if !strings.Contains(ansi.Strip(m.View()), "slides 6-9") {
+		t.Fatalf("4 jumps to Quiet and unfolds it:\n%s", ansi.Strip(m.View()))
+	}
+	for _, ask := range []string{"review the draft", "slides 6-9"} {
+		m.wv.sel = rowOf(t, m, ask)
+		run(m, "x")
+	}
+	for _, k := range []string{"L", "o", "l", "d", "enter"} {
+		run(m, k)
+	}
+	if len(be.acts) != 3 || !strings.Contains(strings.Join(be.acts, ","), "letgo th-notes old") || !strings.Contains(strings.Join(be.acts, ","), "letgo th-deck old") {
+		t.Fatalf("L: acts %q", be.acts)
+	}
+
+	// p on a row that is no thread says so and does nothing.
+	m.wv.sel = rowOf(t, m, "Approve? [y/n]")
+	run(m, "p")
+	if len(be.acts) != 3 || !strings.Contains(m.msg, "thread rows") {
+		t.Fatalf("p on a prompt row: acts %q msg %q", be.acts, m.msg)
+	}
+
+	// A filter keeps matching rows; G puts context first.
+	for _, k := range []string{"/", "a", "p", "p", "r", "enter"} {
+		run(m, k)
+	}
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "Approve?") || strings.Contains(v, "RUNNING") || !strings.Contains(v, "/appr") {
+		t.Fatalf("filter:\n%s", v)
+	}
+	run(m, "esc")
+	run(m, "G")
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "by context") || strings.Index(v, "work") > strings.Index(v, "WAITING ON YOU") {
+		t.Fatalf("G groups by context first:\n%s", v)
+	}
+}
+
+// rowOf is the index of the item row whose ask is ask.
+func rowOf(t *testing.T, m *Model, ask string) int {
+	t.Helper()
+	for i, r := range m.wv.rows {
+		if r.item != nil && r.item.Ask == ask {
+			return i
+		}
+	}
+	t.Fatalf("no row %q", ask)
+	return 0
+}
+
 func TestAnswerTypedReply(t *testing.T) {
 	be := &waitsBE{prompt: fleet.Pending{Question: "Teal or blue?", Report: "question"}}
 	zone.NewGlobal()
@@ -130,5 +235,46 @@ func TestAnswerNeedsBackend(t *testing.T) {
 	run(m, "r")
 	if m.wv != nil || m.ans != nil {
 		t.Fatal("w and r opened without a backend for them")
+	}
+}
+
+// TestWaitsClicks: a click on a section unfolds it, a chip filters by
+// context and a footer label is its key.
+func TestWaitsClicks(t *testing.T) {
+	be := &waitsBE{gone: map[string]bool{}}
+	zone.NewGlobal()
+	m := New(be, "")
+	m.Update(tea.WindowSizeMsg{Width: 140, Height: 30})
+	run(m, "w")
+	click := func(id string) {
+		t.Helper()
+		m.View()
+		deadline := time.Now().Add(2 * time.Second)
+		for zone.Get(id).IsZero() { // zones register asynchronously
+			if time.Now().After(deadline) {
+				t.Fatalf("no zone %s", id)
+			}
+			time.Sleep(time.Millisecond)
+		}
+		z := zone.Get(id)
+		m.Update(tea.MouseMsg{X: z.StartX, Y: z.StartY, Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft})
+	}
+	running := -1
+	for i, r := range m.wv.rows {
+		if r.level == lvlSection && r.name == waits.Running {
+			running = i
+		}
+	}
+	click("wrow" + strconv.Itoa(running))
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "build it") || m.wv.sel != running {
+		t.Fatalf("a click on RUNNING selects and unfolds it:\n%s", v)
+	}
+	click("wchip:home")
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "[home 1]") || strings.Contains(v, "Approve?") {
+		t.Fatalf("the home chip shows only home:\n%s", v)
+	}
+	click("wkey:T")
+	if !m.wv.flat {
+		t.Fatal("the T label is a button")
 	}
 }

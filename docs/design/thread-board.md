@@ -7,7 +7,8 @@ surface, not how they are derived.
 
 Written 2026-11-16 from the live thread view of one real fleet home (110 open threads, 54
 artifacts) and a clickable mockup built from that data. Status: design, not built. Its "Waiting on
-you" rank is built as the overview's `w` list over `internal/waits` (DESIGN.md §5g, ADR-167).
+you" rank is built as the overview's `w` list over `internal/waits` (DESIGN.md §5g, ADR-167), and
+the sections and the TUI actions as the `w` tree (ADR-168).
 
 ## The question the view answers
 

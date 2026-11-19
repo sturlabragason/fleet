@@ -2,7 +2,10 @@
 // is waiting on the user, oldest first, one line each. It is pure data built
 // from the board, the todo store (ADR-164), the admirals' unread reports and
 // what extensions add (threads), so the overview's w view and the web
-// mirror's /api/waits draw the same list.
+// mirror's /api/waits draw the same list. Each item also carries its
+// section, context and parent, so the w view's tree (ADR-168) can group the
+// list together with the work that does not wait on the user: running, open
+// and quiet agents and threads.
 package waits
 
 import (
@@ -26,7 +29,25 @@ const (
 	Report   = "report"    // an unread report in an admiral's box
 	Queue    = "queue"     // a pending item in an agent's queue
 	Thread   = "thread"    // an open thread with a next step (extensions)
+	Working  = "working"   // an agent at work (section Running)
+	Idle     = "idle"      // an agent idle with nothing asked (Open or Quiet)
 )
+
+// Sections of the tree, in the order of the user's attention
+// (docs/design/thread-board.md). Paused threads come from extensions only.
+const (
+	Waiting = "waiting"
+	Running = "running"
+	Open    = "open"
+	Quiet   = "quiet"
+	Paused  = "paused"
+)
+
+// Sections is every section in rank order.
+var Sections = []string{Waiting, Running, Open, Quiet, Paused}
+
+// QuietAfter is how long an idle agent sits before it counts as Quiet.
+const QuietAfter = 48 * time.Hour
 
 // Item is one thing waiting on the user.
 type Item struct {
@@ -36,6 +57,25 @@ type Item struct {
 	Ask    string    `json:"ask"`             // one line
 	Since  time.Time `json:"since"`
 	Ref    string    `json:"ref,omitempty"` // todo or thread id
+	// Section is one of Sections; Build sets Waiting where it is empty.
+	Section string `json:"section,omitempty"`
+	Ctx     string `json:"ctx,omitempty"`    // the user's context (ADR-164)
+	Parent  string `json:"parent,omitempty"` // the agent, thread or admiral it belongs to
+}
+
+// Todo reports whether d (mark done) applies: an item of the todo store.
+func (i Item) Todo() bool { return i.Ref != "" && i.Kind != Thread }
+
+// Only is the items of one section; Only(items, Waiting) is the flat
+// "waits on you" list.
+func Only(items []Item, section string) []Item {
+	var out []Item
+	for _, it := range items {
+		if it.Section == section {
+			out = append(out, it)
+		}
+	}
+	return out
 }
 
 // Answerable reports whether the overview's answer key applies to it: an
@@ -45,26 +85,31 @@ func (i Item) Answerable() bool {
 }
 
 // Input is what Build reads. Todos holds both admiral items and queue
-// items; Reports holds the unread reports of every admiral box.
+// items; Reports holds the unread reports of every admiral box; Ctx is each
+// agent's context, by name.
 type Input struct {
 	Agents  []*board.Agent
 	Todos   []todo.Item
 	Reports []mail.Msg
 	Extra   []Item
+	Ctx     map[string]string
 }
 
 // Build is the list, oldest first. A todo filed twice with the same text for
 // the same owner shows once (the older), and an unread report is left out
-// when the agent's own open question or block already shows it.
+// when the agent's own open question or block already shows it. An agent
+// that waits on nothing is a Running, Open or Quiet row.
 func Build(in Input, now time.Time) []Item {
 	var out []Item
 	asking := map[string]bool{}
 	for _, a := range in.Agents {
-		if it, ok := agentItem(a, now); ok {
-			out = append(out, it)
-			if it.Kind == Question || it.Kind == Blocked {
-				asking[a.Name] = true
-			}
+		it, ok := agentItem(a, now)
+		if !ok {
+			it = agentRow(a, now)
+		}
+		out = append(out, it)
+		if it.Kind == Question || it.Kind == Blocked {
+			asking[a.Name] = true
 		}
 	}
 	for _, m := range in.Reports {
@@ -77,6 +122,9 @@ func Build(in Input, now time.Time) []Item {
 		out = append(out, todoItem(t))
 	}
 	out = append(out, in.Extra...)
+	for i := range out {
+		fill(&out[i], in.Ctx)
+	}
 	out = dedupe(out)
 	slices.SortStableFunc(out, func(a, b Item) int {
 		return cmp.Or(a.Since.Compare(b.Since), cmp.Compare(a.Source, b.Source), cmp.Compare(a.Ask, b.Ask))
@@ -106,11 +154,42 @@ func agentItem(a *board.Agent, now time.Time) (Item, bool) {
 	return it, true
 }
 
+// agentRow is an agent that waits on nothing: at work, else Open (idle, or
+// in error with its status as the kind) until it has been still so long it
+// has gone quiet.
+func agentRow(a *board.Agent, now time.Time) Item {
+	it := Item{Kind: cmp.Or(a.Status, Idle), Section: Open, Source: a.Name, Agent: a.Name, Ask: todo.OneLine(a.Goal), Since: a.StatusSince}
+	switch {
+	case a.Status == Working:
+		it.Section = Running
+	case !a.StatusSince.IsZero() && now.Sub(a.StatusSince) >= QuietAfter:
+		it.Section = Quiet
+	}
+	if it.Ask == "" {
+		it.Ask = a.Status
+	}
+	return it
+}
+
 func todoItem(t todo.Item) Item {
 	if t.Queue != "" {
-		return Item{Kind: Queue, Source: t.Queue, Agent: t.Queue, Ask: t.Kind + ": " + todo.OneLine(t.Description), Since: t.Entry, Ref: t.ID()}
+		return Item{Kind: Queue, Source: t.Queue, Agent: t.Queue, Ask: t.Kind + ": " + todo.OneLine(t.Description), Since: t.Entry, Ref: t.ID(), Ctx: t.Ctx}
 	}
-	return Item{Kind: t.Kind, Source: t.Admiral, Ask: todo.OneLine(t.Description), Since: t.Entry, Ref: t.ID()}
+	return Item{Kind: t.Kind, Source: t.Admiral, Ask: todo.OneLine(t.Description), Since: t.Entry, Ref: t.ID(), Ctx: t.Ctx}
+}
+
+// fill gives an item its defaults: section Waiting, the agent (else the
+// source) as parent, and the agent's context.
+func fill(it *Item, ctx map[string]string) {
+	if it.Section == "" {
+		it.Section = Waiting
+	}
+	if it.Parent == "" {
+		it.Parent = cmp.Or(it.Agent, it.Source)
+	}
+	if it.Ctx == "" {
+		it.Ctx = ctx[it.Agent]
+	}
 }
 
 // dedupe keeps the oldest of items with the same kind, owner and text
