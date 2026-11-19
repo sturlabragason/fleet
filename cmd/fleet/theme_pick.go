@@ -36,19 +36,23 @@ func (b *backend) ThemeChrome() func() {
 
 // SaveTheme writes the theme to config.toml and does what `fleet up` does
 // after a theme change, without touching an agent (ADR-55): the full chrome,
-// fresh status tags and a watcher that loaded the new palette. This overview
+// fresh status tags and a watcher that loaded the new palette. The commands
+// are built here, on the UI goroutine that owns the palette. This overview
 // already shows it, so its pane is stamped instead of respawned.
-func (b *backend) SaveTheme(name string) error {
-	if err := prefs.SetTheme(name); err != nil {
-		return fmt.Errorf("save theme: %w", err)
+func (b *backend) SaveTheme(name string) func() error {
+	cmds := append(tmuxCommands(b.f), extTmux(b.f)...)
+	return func() error {
+		if err := prefs.SetTheme(name); err != nil {
+			return fmt.Errorf("save theme: %w", err)
+		}
+		b.themeMu.Lock()
+		defer b.themeMu.Unlock()
+		configureWith(b.f, cmds)
+		rethemeTo(b.f, name, true)
+		startWatcher(b.f)
+		if p := os.Getenv("TMUX_PANE"); p != "" {
+			b.f.T.SetPaneOption(p, "@fleet_theme", name)
+		}
+		return nil
 	}
-	b.themeMu.Lock()
-	defer b.themeMu.Unlock()
-	configure(b.f)
-	retheme(b.f)
-	startWatcher(b.f)
-	if p := os.Getenv("TMUX_PANE"); p != "" {
-		b.f.T.SetPaneOption(p, "@fleet_theme", name)
-	}
-	return nil
 }

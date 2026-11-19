@@ -19,9 +19,10 @@ type ThemeBackend interface {
 	// active palette. It is built on the UI goroutine, which owns the
 	// palette, and run off it; a later call's work supersedes an earlier one.
 	ThemeChrome() func()
-	// SaveTheme writes [defaults] theme to config.toml and applies the
-	// active palette to the rest of the running fleet.
-	SaveTheme(name string) error
+	// SaveTheme returns the work that writes [defaults] theme = name to
+	// config.toml and applies the active palette (name) to the rest of the
+	// running fleet; built on the UI goroutine like ThemeChrome.
+	SaveTheme(name string) func() error
 }
 
 // themePick is the open picker: every palette, the cursor, and the theme to
@@ -68,9 +69,10 @@ func (m *Model) themeKey(k string) tea.Cmd {
 		p.cur = c
 		return m.previewTheme(p.names[c])
 	case "enter":
-		name, tb := p.names[p.cur], m.be.(ThemeBackend)
+		name := p.names[p.cur]
+		save := m.be.(ThemeBackend).SaveTheme(name)
 		m.tp = nil
-		return func() tea.Msg { return themeSavedMsg{name, tb.SaveTheme(name)} }
+		return func() tea.Msg { return themeSavedMsg{name, save()} }
 	case "esc", "q", "t":
 		m.tp = nil
 		if theme.Active().Name == p.orig {
@@ -78,8 +80,12 @@ func (m *Model) themeKey(k string) tea.Cmd {
 		}
 		m.msg, m.msgAt = "theme unchanged: "+p.orig, m.now()
 		return m.previewTheme(p.orig)
-	case "ctrl+c":
-		return tea.Quit
+	case "ctrl+c": // quit, but leave the tmux chrome on the saved theme
+		m.tp = nil
+		if theme.Active().Name == p.orig {
+			return tea.Quit
+		}
+		return tea.Sequence(m.previewTheme(p.orig), tea.Quit)
 	}
 	return nil
 }

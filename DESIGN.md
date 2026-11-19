@@ -452,6 +452,7 @@ The bottom tmux status line and the overview header show a short hint in plain w
 | Overview | `R` | same as Alt-R: reset the admiral (asks y/n) |
 | Overview | `O` | hand the selected agent to another admiral (several admirals only) |
 | Overview | `P` | same as Alt-P: pick the admiral's profile |
+| Overview | `t` | pick the colour theme: ↑↓ previews it live on the overview and tmux, ⏎ saves it to config.toml, Esc puts the old one back |
 | Overview | `q` | quit the overview |
 
 `Alt-?` (tmux) · `?` (overview): show this list.
@@ -2627,4 +2628,4 @@ Trade-offs of the amendment: a session's place in the tree is fixed when it open
 
 **Rejected.** A tmux popup like the admiral profile picker: the popup covers the overview, and a separate process cannot re-colour the overview's tiles live. A `fleet theme` command with no argument: it would still need the running overview to re-style, which only its own process can do. Restarting the watcher on every cursor move to re-colour agent pane borders: a process restart per keypress for a border that changes again a moment later.
 
-**Trade-offs.** During the preview, agent pane borders keep the saved palette until Enter, and the admiral's and agents' own TUIs, ACP host panes and other overviews keep theirs until they restart, as after `fleet up` (ADR-55). The role variables are now written while the overview runs, so the poll goroutine can read them mid-switch; every role is a 7-character hex and every team list has six entries, so a read that tears across a switch is still a valid colour, at worst one frame mixes two palettes. A comment on the old `theme` line in config.toml is dropped when it is replaced.
+**Trade-offs.** During the preview, agent pane borders keep the saved palette until Enter, and the admiral's and agents' own TUIs, ACP host panes and other overviews keep theirs until they restart, as after `fleet up` (ADR-55). The role variables are now written while the overview runs, so the poll goroutine can read them mid-switch; every role is a 7-character hex and every team list has six entries, so a read that tears across a switch is still a valid colour, at worst one frame mixes two palettes. A comment on the old `theme` line in config.toml is dropped when it is replaced. When no watcher is running, the overview's own refresh tags agent borders from the previewed palette, and Esc leaves those until each agent's status changes. Ctrl+c in the picker restores the saved palette before it quits, because a preview does not change the chrome stamp the watcher checks (ADR-111).

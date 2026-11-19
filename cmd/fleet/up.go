@@ -326,7 +326,12 @@ func retheme(f *fleet.Fleet) { rethemeWith(f, true) }
 // rethemeWith is retheme; stopWatcher false is the watcher itself applying
 // the palette it just loaded, so there is no stale watcher to stop.
 func rethemeWith(f *fleet.Fleet, stopWatcher bool) {
-	name := theme.Active().Name
+	rethemeTo(f, theme.Active().Name, stopWatcher)
+}
+
+// rethemeTo is rethemeWith for palette name, for a caller off the goroutine
+// that owns the active palette (the theme picker, ADR-175).
+func rethemeTo(f *fleet.Fleet, name string, stopWatcher bool) {
 	cur, _ := f.T.Run("show-options", "-qv", "-t", fleet.Session, "@fleet_theme")
 	if strings.TrimSpace(cur) == name {
 		return
@@ -379,8 +384,10 @@ func ensureOverview(f *fleet.Fleet, target string) {
 
 // configure sets server options, key bindings, hooks and border polish, and
 // records which set it applied in chromeOption, for hotApply.
-func configure(f *fleet.Fleet) {
-	cmds := append(tmuxCommands(f), extTmux(f)...)
+func configure(f *fleet.Fleet) { configureWith(f, append(tmuxCommands(f), extTmux(f)...)) }
+
+// configureWith is configure with the commands already built.
+func configureWith(f *fleet.Fleet, cmds [][]string) {
 	for _, a := range cmds {
 		f.T.Run(a...)
 	}

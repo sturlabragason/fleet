@@ -25,9 +25,8 @@ func (b *themeBE) ThemeChrome() func() {
 	return func() { b.chromes = append(b.chromes, name) }
 }
 
-func (b *themeBE) SaveTheme(name string) error {
-	b.saved = append(b.saved, name)
-	return b.saveErr
+func (b *themeBE) SaveTheme(name string) func() error {
+	return func() error { b.saved = append(b.saved, name); return b.saveErr }
 }
 
 func pickerModel(t *testing.T, be Backend) *Model {
@@ -58,6 +57,7 @@ func TestThemePicker(t *testing.T) {
 		{"esc restores", []string{"t", "j", "j", "esc"}, names[0], []string{names[1], names[2], names[0]}, nil, false},
 		{"esc unmoved touches nothing", []string{"t", "esc"}, names[0], nil, nil, false},
 		{"enter saves the previewed", []string{"t", "j", "enter"}, names[1], []string{names[1]}, []string{names[1]}, false},
+		{"ctrl+c restores before quitting", []string{"t", "j", "ctrl+c"}, names[0], []string{names[1]}, nil, false},
 		{"other keys stay in the picker", []string{"t", "w", "r", "x"}, names[0], nil, nil, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
