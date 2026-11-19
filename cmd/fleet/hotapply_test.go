@@ -38,7 +38,7 @@ func TestHotApplyReappliesChrome(t *testing.T) {
 	if !hotApply(f) {
 		t.Fatal("stale stamp not re-applied")
 	}
-	if got, _ := tc.Run("show-options", "-gqv", "status-right-length"); got != strconv.Itoa(statusRightLen) {
+	if got, _ := tc.Run("show-options", "-gqv", "status-right-length"); got != strconv.Itoa(statusRightLen+badgeLen) {
 		t.Fatalf("status-right-length %q", got)
 	}
 	if got, _ := tc.Run("show-options", "-sqv", "terminal-features[91]"); got != "xterm*:hyperlinks" {
@@ -111,7 +111,7 @@ func TestBinaryBumpHotApplies(t *testing.T) {
 			<-done
 		}
 	})
-	want := strconv.Itoa(statusRightLen)
+	want := strconv.Itoa(statusRightLen + badgeLen)
 	waitFor := func(what string, ok func() bool) {
 		t.Helper()
 		for end := time.Now().Add(20 * time.Second); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {

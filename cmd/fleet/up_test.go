@@ -424,15 +424,17 @@ func TestTmuxOptionsFollowTheTheme(t *testing.T) {
 	}
 }
 
-// With one admiral (@fleet_multi unset) the border title and the status-left
-// badge render exactly as they did before several admirals existed.
+// With one admiral (@fleet_multi unset) the border title and the status-line
+// badge render exactly as they did before several admirals existed. The badge
+// leads status-right, so the window tabs after status-left never move when
+// it comes and goes (ADR-182).
 func TestSingleAdmiralChromeUnchanged(t *testing.T) {
 	c := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
 	t.Cleanup(func() { c.KillServer() })
 	if _, err := c.Run("new-session", "-d", "-s", "f", "-n", "main", "cat"); err != nil {
 		t.Skip("tmux unavailable")
 	}
-	var border, left string
+	var border, left, right string
 	for _, a := range tmuxCommands(&fleet.Fleet{T: c, Exe: "/bin/true"}) {
 		if len(a) == 4 && a[2] == "pane-border-format" {
 			border = a[3]
@@ -440,13 +442,17 @@ func TestSingleAdmiralChromeUnchanged(t *testing.T) {
 		if len(a) == 4 && a[2] == "status-left" {
 			left = a[3]
 		}
+		if len(a) == 4 && a[2] == "status-right" {
+			right = a[3]
+		}
 	}
 	// The badge is a steady dot: no blink attribute, no background block (ADR-75, ADR-81).
-	if strings.Contains(left, "blink") || strings.Contains(left, "bg="+theme.Waiting) {
-		t.Errorf("status-left badge blinks: %q", left)
+	if strings.Contains(right, "blink") || strings.Contains(right, "bg="+theme.Waiting) {
+		t.Errorf("status-right badge blinks: %q", right)
 	}
 	oldBorder := " #{?#{==:#{@role},sup},#[fg=" + theme.Supervisor + "]#[bold]admiral#[default]#{?@fleet_admiral_profile,#[fg=" + theme.Muted + "] · #{@fleet_admiral_profile}#[default],}#{?@fleet_ctx,#[fg=#{@fleet_ctx_color}] · ctx #{@fleet_ctx}#[default],},#{?#{==:#{@role},ov},#[fg=" + theme.Text + "]#[bold]overview#[default]," + targetMark + "#[fg=#{?@fleet_color,#{@fleet_color},default}]#{@fleet_glyph} #{@fleet_agent}" + pinMark + "#{?@fleet_team, #[fg=#{@fleet_team_color}]◆,} #[fg=" + theme.Muted + "]#{@fleet_status}#[default]" + nextOutMark + "}} "
-	oldLeft := "#[fg=" + theme.Crust + ",bg=" + theme.Supervisor + ",bold] " + logo.Plain(logo.Line, false)[0] + " #[default] #{?" + fleet.BadgeOption + ",#[fg=" + theme.Waiting + "] ● #{" + fleet.BadgeOption + "} #[default] ,}"
+	oldLeft := "#[fg=" + theme.Crust + ",bg=" + theme.Supervisor + ",bold] " + logo.Plain(logo.Line, false)[0] + " #[default] "
+	oldBadge := "#{?" + fleet.BadgeOption + ",#[fg=" + theme.Waiting + "] ● #{" + fleet.BadgeOption + "} #[default] ,}"
 	pane, _ := c.Run("display-message", "-p", "-t", "f:main", "#{pane_id}")
 	expand := func(f string) string {
 		out, err := c.Run("display-message", "-p", "-t", pane, f)
@@ -462,6 +468,9 @@ func TestSingleAdmiralChromeUnchanged(t *testing.T) {
 		}
 		if got, want := expand(left), expand(oldLeft); got != want {
 			t.Errorf("%s status-left: got %q, want %q", what, got, want)
+		}
+		if got, want := expand(right), expand(oldBadge); !strings.HasPrefix(got, want) {
+			t.Errorf("%s status-right: got %q, want it to start with %q", what, got, want)
 		}
 	}
 	for k, v := range map[string]string{"@fleet_agent": "a1", "@fleet_glyph": "●", "@fleet_status": "waiting", "@fleet_color": "#f9e2af"} {
@@ -487,8 +496,8 @@ func TestSingleAdmiralChromeUnchanged(t *testing.T) {
 	c.Run("set-option", "-g", fleet.MultiOption, "1")
 	c.SetPaneOption(pane, "@role", "")
 	c.SetPaneOption(pane, "@fleet_owner_color", "#89b4fa")
-	if got := expand(left); !strings.Contains(got, "stale") {
-		t.Errorf("multi status-left: %q", got)
+	if got := expand(right); !strings.Contains(got, "stale") {
+		t.Errorf("multi status-right: %q", got)
 	}
 	if got := expand(border); !strings.Contains(got, " print ") {
 		t.Errorf("multi border: %q", got)

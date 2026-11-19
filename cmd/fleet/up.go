@@ -550,14 +550,15 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		{"set-option", "-g", "display-panes-colour", theme.Overlay0},
 		{"set-option", "-g", "display-panes-active-colour", theme.Text},
 		{"set-option", "-g", "clock-mode-colour", theme.Supervisor},
-		// The unread-report badge (ADR-36), a steady ● in the waiting colour (ADR-81), is set by the resident poll: the watcher when live (ADR-75), else the overview.
-		{"set-option", "-g", "status-left", "#[fg=" + theme.Crust + ",bg=" + theme.Supervisor + ",bold] " + logo.Plain(logo.Line, false)[0] + " #[default] #{?" + fleet.BadgeOption + ",#[fg=" + theme.Waiting + "]#{?#{&&:#{" + fleet.MultiOption + "},#{" + fleet.BadgeByOption + "}},#{" + fleet.BadgeByOption + "}, ● #{" + fleet.BadgeOption + "} }#[default] ,}"},
+		{"set-option", "-g", "status-left", "#[fg=" + theme.Crust + ",bg=" + theme.Supervisor + ",bold] " + logo.Plain(logo.Line, false)[0] + " #[default] "},
 		{"set-option", "-g", "status-left-length", "100"},
 		{"set-option", "-g", "window-status-separator", ""},
 		{"set-option", "-g", "window-status-format", "#[fg=" + theme.Overlay1 + "] #I #W "},
 		{"set-option", "-g", "window-status-current-format", "#[fg=" + theme.Crust + ",bg=" + theme.Select + ",bold] #I #W #[default]"},
-		{"set-option", "-g", "status-right", "#[fg=" + theme.Overlay1 + "]" + clickableChanges(keys.Hint(keys.ScopeTmux, statusRightLen-1)) + " "},
-		{"set-option", "-g", "status-right-length", strconv.Itoa(statusRightLen)},
+		// The unread-report badge (ADR-36), a steady ● in the waiting colour (ADR-81), is set by the resident poll: the watcher when live (ADR-75), else the overview.
+		// It leads the right-aligned block, so coming and going moves no window tab (ADR-182).
+		{"set-option", "-g", "status-right", statusBadge() + "#[fg=" + theme.Overlay1 + "]" + clickableChanges(keys.Hint(keys.ScopeTmux, statusRightLen-1)) + " "},
+		{"set-option", "-g", "status-right-length", strconv.Itoa(statusRightLen + badgeLen)},
 		{"set-hook", "-g", "client-resized", wallCmd("apply")},
 		{"set-hook", "-g", "client-attached", wallCmd("apply")},
 		// Focusing a wall pane makes it the target slot (DESIGN.md §5e), inline
@@ -637,6 +638,16 @@ func mouseSelectBindings() [][]string {
 var mouseSelectKeys = []string{"MouseDrag1Pane", "DoubleClick1Pane", "TripleClick1Pane"}
 
 const statusRightLen = 120 // fits the full tmux hint (keys.Hint ScopeTmux) plus a space
+
+// badgeLen is the room status-right keeps for the badge before the hint:
+// fleet.Badge clips its name list to 32 cells, so its text stays under it.
+const badgeLen = 50
+
+// statusBadge is the unread-report badge at the start of status-right, in
+// the active palette.
+func statusBadge() string {
+	return "#{?" + fleet.BadgeOption + ",#[fg=" + theme.Waiting + "]#{?#{&&:#{" + fleet.MultiOption + "},#{" + fleet.BadgeByOption + "}},#{" + fleet.BadgeByOption + "}, ● #{" + fleet.BadgeOption + "} }#[default] ,}"
+}
 
 // targetHook runs on pane-focus-in: a focused wall pane becomes the target
 // slot (@fleet_target on its window).
