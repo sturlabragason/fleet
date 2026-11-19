@@ -2435,6 +2435,8 @@ The run stopped early by its own rule (no graphify call in the first 12 runs of 
 
 **Trade-offs.** On copilot a steer still cuts the running step; the preamble and the `interrupted` reply say so, and `queue=true` avoids it. Claude's injected path is checked against the adapter's code and its method answering, not a live turn. A tool that changes how a second prompt behaves needs `acp_steer` changed in its profile.
 
+**Amendment (2026-11-19).** Steering stays the default in code, but the admiral now forwards a user's tweak with `queue=true` and steers only when the message makes the current work wrong, wasted or unsafe, or stops it; the admiral judges that itself, and the user never types a keyword such as `urgent:`. Both halves are user rules today (a pinned note for the admiral, a standing rule for workers that appends each message to an in-order queue), not built-in text.
+
 **ADR-159: Claude Desktop drives fleet as its own pane-less admiral over local stdio MCP** (§6.12; extends ADR-64) — accepted 2026-11-17.
 
 **Context.** Users want to steer fleet from Claude Desktop. `fleet mcp` already speaks stdio MCP, so a `claude_desktop_config.json` entry works, but only as admiral `main`: two servers then share one identity, `fleet_handoff` and `fleet_admiral_profile` run `fleet admiral reset|profile` in tmux and kill or swap the tmux admiral, both servers drain the spawn queue and run the memory guard, and Desktop starts servers with a minimal `PATH` in which plain `tmux` is not found. Desktop's handling of 17 KB of server instructions is unverified, and its tool calls end after about 60 s (the MCP TypeScript client's default; progress does not extend it by default).
