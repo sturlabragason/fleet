@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/mail"
@@ -52,15 +53,16 @@ const QuietAfter = 48 * time.Hour
 // Item is one thing waiting on the user.
 type Item struct {
 	Kind   string    `json:"kind"`
-	Source string    `json:"source"`          // agent or admiral it comes from
-	Agent  string    `json:"agent,omitempty"` // the agent to show or answer; "" for an admiral's own item
+	Source string    `json:"source"`          // the agent it comes from or names, else a topic, context or "admiral"
+	Agent  string    `json:"agent,omitempty"` // the agent to show or answer; "" for an admiral item that names none
 	Ask    string    `json:"ask"`             // one line
 	Since  time.Time `json:"since"`
 	Ref    string    `json:"ref,omitempty"` // todo or thread id
 	// Section is one of Sections; Build sets Waiting where it is empty.
 	Section string `json:"section,omitempty"`
-	Ctx     string `json:"ctx,omitempty"`    // the user's context (ADR-164)
-	Parent  string `json:"parent,omitempty"` // the agent, thread or admiral it belongs to
+	Ctx     string `json:"ctx,omitempty"`     // the user's context (ADR-164)
+	Parent  string `json:"parent,omitempty"`  // the agent, thread or topic it belongs to
+	Admiral string `json:"admiral,omitempty"` // the admiral that owns an admiral todo item
 }
 
 // Todo reports whether d (mark done) applies: an item of the todo store.
@@ -118,8 +120,12 @@ func Build(in Input, now time.Time) []Item {
 		}
 		out = append(out, Item{Kind: Report, Source: m.From, Agent: m.From, Ask: todo.OneLine(m.Text), Since: m.T})
 	}
+	names := map[string]bool{}
+	for _, a := range in.Agents {
+		names[a.Name] = true
+	}
 	for _, t := range in.Todos {
-		out = append(out, todoItem(t))
+		out = append(out, todoItem(t, names))
 	}
 	out = append(out, in.Extra...)
 	for i := range out {
@@ -171,11 +177,41 @@ func agentRow(a *board.Agent, now time.Time) Item {
 	return it
 }
 
-func todoItem(t todo.Item) Item {
+func todoItem(t todo.Item, agents map[string]bool) Item {
 	if t.Queue != "" {
 		return Item{Kind: Queue, Source: t.Queue, Agent: t.Queue, Ask: t.Kind + ": " + todo.OneLine(t.Description), Since: t.Entry, Ref: t.ID(), Ctx: t.Ctx}
 	}
-	return Item{Kind: t.Kind, Source: t.Admiral, Ask: todo.OneLine(t.Description), Since: t.Entry, Ref: t.ID(), Ctx: t.Ctx}
+	desc := todo.OneLine(t.Description)
+	it := Item{Kind: t.Kind, Admiral: t.Admiral, Ask: desc, Since: t.Entry, Ref: t.ID(), Ctx: t.Ctx}
+	it.Agent = mentioned(desc, agents, t.Admiral)
+	it.Parent = cmp.Or(it.Agent, topic(desc), "admiral")
+	it.Source = cmp.Or(it.Agent, topic(desc), t.Ctx, "admiral")
+	return it
+}
+
+// mentioned is the first agent on the board that text names as a word,
+// leaving out the admiral that filed it: the agent an admiral item is about.
+func mentioned(text string, agents map[string]bool, admiral string) string {
+	for _, w := range strings.FieldsFunc(text, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' && r != '.'
+	}) {
+		w = strings.TrimRight(w, ".")
+		if agents[w] && w != admiral {
+			return w
+		}
+	}
+	return ""
+}
+
+// topic is a short "topic: rest" prefix of text, up to three words and 24
+// characters, else "".
+func topic(text string) string {
+	head, rest, ok := strings.Cut(text, ": ")
+	head = strings.TrimSpace(head)
+	if !ok || strings.TrimSpace(rest) == "" || head == "" || strings.Contains(head, "//") || len(head) > 24 || len(strings.Fields(head)) > 3 {
+		return ""
+	}
+	return head
 }
 
 // fill gives an item its defaults: section Waiting, the agent (else the
@@ -198,7 +234,7 @@ func dedupe(in []Item) []Item {
 	best := map[string]int{}
 	out := make([]Item, 0, len(in))
 	for _, it := range in {
-		k := it.Kind + "\x00" + it.Source + "\x00" + strings.ToLower(strings.Join(strings.Fields(it.Ask), " "))
+		k := it.Kind + "\x00" + it.Admiral + "\x00" + it.Source + "\x00" + strings.ToLower(strings.Join(strings.Fields(it.Ask), " "))
 		if i, ok := best[k]; ok {
 			if it.Since.Before(out[i].Since) {
 				out[i] = it

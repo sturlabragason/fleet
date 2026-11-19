@@ -49,6 +49,7 @@ type Model struct {
 	adms      []AdmiralInfo
 	badgeBy   string
 	wv        *waitsView  // w: the waits on you list replaces the tiles (ADR-167)
+	waitsSort int         // the w view's sort (s), kept while the overview runs
 	ans       *answerView // r: answering one agent's prompt, over everything else
 }
 

@@ -32,6 +32,7 @@ type WaitsActor interface {
 // (ADR-167) after T.
 type waitsView struct {
 	all    []waits.Item // everything Waits returned, oldest first
+	sort   int          // index into waitSorts; s cycles it
 	loaded bool
 	rows   []wrow
 	sel    int
@@ -73,7 +74,7 @@ func (m *Model) openWaits() tea.Cmd {
 		m.msg = "w needs fleet's backend"
 		return nil
 	}
-	m.wv = &waitsView{folded: map[string]bool{}, marked: map[string]bool{}}
+	m.wv = &waitsView{folded: map[string]bool{}, marked: map[string]bool{}, sort: m.waitsSort}
 	return m.loadWaits()
 }
 
@@ -141,6 +142,7 @@ var waitsKeys = map[string]func(m *Model) tea.Cmd{
 	"T":      func(m *Model) tea.Cmd { m.wv.flat = !m.wv.flat; m.wv.rebuild(); return nil },
 	"G":      func(m *Model) tea.Cmd { m.wv.byCtx = !m.wv.byCtx; m.wv.rebuild(); return nil },
 	"c":      func(m *Model) tea.Cmd { m.wv.nextCtx(); return nil },
+	"s":      (*Model).waitsNextSort,
 	"1":      func(m *Model) tea.Cmd { m.wv.jump(waits.Waiting); return nil },
 	"2":      func(m *Model) tea.Cmd { m.wv.jump(waits.Running); return nil },
 	"3":      func(m *Model) tea.Cmd { m.wv.jump(waits.Open); return nil },
@@ -158,6 +160,14 @@ func (m *Model) waitsKey(k string) tea.Cmd {
 }
 
 func (m *Model) closeWaits() tea.Cmd { m.wv = nil; return nil }
+
+// waitsNextSort is s: the next sort, kept for the next w.
+func (m *Model) waitsNextSort() tea.Cmd {
+	m.wv.sort = (m.wv.sort + 1) % len(waitSorts)
+	m.waitsSort = m.wv.sort
+	m.wv.rebuild()
+	return nil
+}
 
 // waitsEsc clears the filter first, then closes.
 func (m *Model) waitsEsc() tea.Cmd {

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -74,14 +75,16 @@ func (m *Model) waitsTitle() string {
 	case v.byCtx:
 		mode = "tree · by context"
 	}
-	head := " " + lipgloss.NewStyle().Bold(true).Foreground(colText).Render("Waits on you") + dim.Render("  "+mode)
 	n := map[string]int{}
 	items := v.shown()
 	for _, it := range items {
 		n[it.Section]++
 	}
+	mode += " · " + waitSorts[v.sort].name
+	head := " " + lipgloss.NewStyle().Bold(true).Foreground(colText).Render("Waits on you") + dim.Render("  "+mode)
 	if w := waits.Only(items, waits.Waiting); len(w) > 0 {
-		head += dim.Render(" · oldest " + board.Age(m.now().Sub(w[0].Since)))
+		oldest := slices.MinFunc(w, func(a, b waits.Item) int { return a.Since.Compare(b.Since) })
+		head += dim.Render(" · oldest " + board.Age(m.now().Sub(oldest.Since)))
 	}
 	var counts []string
 	for _, s := range waits.Sections {
@@ -134,7 +137,7 @@ func (m *Model) waitsFoot() string {
 		}
 		return " " + what + lipgloss.NewStyle().Foreground(colText).Render(in.text+"█") + dim.Render(keys)
 	}
-	foot := waitsFooter
+	foot := slices.Insert(slices.Clone(waitsFooter), 1, [2]string{"s", "s " + waitSorts[m.wv.sort].name})
 	for len(foot) > 1 && ansi.StringWidth(keyButtons(foot))+1 > m.w {
 		foot = foot[:len(foot)-1]
 	}
@@ -284,7 +287,7 @@ func (m *Model) waitsMouse(msg tea.MouseMsg) tea.Cmd {
 	if msg.Action != tea.MouseActionRelease || msg.Button != tea.MouseButtonLeft {
 		return nil
 	}
-	for _, k := range append(waitsFooter, [2]string{"/"}, [2]string{"T"}, [2]string{"G"}, [2]string{"esc"}) {
+	for _, k := range append(slices.Clone(waitsFooter), [2]string{"s"}, [2]string{"/"}, [2]string{"T"}, [2]string{"G"}, [2]string{"esc"}) {
 		if zone.Get("wkey:" + k[0]).InBounds(msg) {
 			return m.waitsKey(k[0])
 		}

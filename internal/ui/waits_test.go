@@ -96,10 +96,9 @@ func TestWaitsAnswerFlow(t *testing.T) {
 	run(m, "w")
 	run(m, "T")
 	v := ansi.Strip(m.View())
-	if !strings.Contains(v, "Waits on you  flat · oldest 2d") || strings.Index(v, "Teams thread") > strings.Index(v, "Approve?") || strings.Contains(v, "build it") {
-		t.Fatalf("flat waits view, waiting only, oldest first:\n%s", v)
+	if !strings.Contains(v, "Waits on you  flat · newest first · oldest 2d") || strings.Index(v, "Teams thread") < strings.Index(v, "Approve?") || strings.Contains(v, "build it") {
+		t.Fatalf("flat waits view, waiting only, newest first:\n%s", v)
 	}
-	run(m, "down")
 	run(m, "r")
 	if v := ansi.Strip(m.View()); !strings.Contains(v, "Answer bravo") || !strings.Contains(v, "Allow write to go.mod?") || !strings.Contains(v, "2. No") {
 		t.Fatalf("answer view must show the exact prompt and options:\n%s", v)
@@ -192,6 +191,73 @@ func TestWaitsTree(t *testing.T) {
 	run(m, "G")
 	if v := ansi.Strip(m.View()); !strings.Contains(v, "by context") || strings.Index(v, "work") > strings.Index(v, "WAITING ON YOU") {
 		t.Fatalf("G groups by context first:\n%s", v)
+	}
+}
+
+// TestWaitsSort: s cycles the order of the rows, within each group and in
+// the flat list, and the next w opens with the same order.
+func TestWaitsSort(t *testing.T) {
+	be := &waitsBE{gone: map[string]bool{}}
+	zone.NewGlobal()
+	m := New(be, "")
+	m.Update(tea.WindowSizeMsg{Width: 140, Height: 30})
+	run(m, "w")
+	run(m, "4")
+	order := func() string {
+		var asks []string
+		for _, r := range m.wv.rows {
+			if r.item != nil && r.item.Section != waits.Running {
+				asks = append(asks, r.item.Ask)
+			}
+		}
+		return strings.Join(asks, ",")
+	}
+	steps := []struct{ name, want string }{
+		{"newest first", "Approve? [y/n],reply to the Teams thread,review the draft,slides 6-9"},
+		{"oldest first", "reply to the Teams thread,Approve? [y/n],review the draft,slides 6-9"},
+		{"by context", "Approve? [y/n],reply to the Teams thread,review the draft,slides 6-9"},
+		{"by source", "Approve? [y/n],reply to the Teams thread,review the draft,slides 6-9"},
+	}
+	for i, s := range steps {
+		if i > 0 {
+			run(m, "s")
+		}
+		v := ansi.Strip(m.View())
+		if got := order(); got != s.want || !strings.Contains(v, "tree · by section · "+s.name) || !strings.Contains(v, "s "+s.name) {
+			t.Fatalf("%s: rows %s, want %s\n%s", s.name, got, s.want, v)
+		}
+	}
+	run(m, "s")
+	run(m, "s")
+	run(m, "esc")
+	run(m, "w")
+	if m.wv.sort != 1 {
+		t.Fatalf("w reopens with sort %d, want the last one (1)", m.wv.sort)
+	}
+	run(m, "T")
+	if v := ansi.Strip(m.View()); strings.Index(v, "Teams thread") > strings.Index(v, "Approve?") {
+		t.Fatalf("flat list follows the sort, oldest first:\n%s", v)
+	}
+}
+
+func TestWaitSorts(t *testing.T) {
+	t0 := time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)
+	items := []waits.Item{
+		{Ask: "a", Source: "zed", Ctx: "work", Since: t0.Add(-3 * time.Hour)},
+		{Ask: "b", Source: "amy", Ctx: "", Since: t0.Add(-time.Hour)},
+		{Ask: "c", Source: "zed", Ctx: "home", Since: t0.Add(-2 * time.Hour)},
+		{Ask: "d", Source: "amy", Ctx: "work", Since: t0},
+	}
+	want := map[string]string{"newest first": "dbca", "oldest first": "acbd", "by context": "cdab", "by source": "dbca"}
+	for i, s := range waitSorts {
+		v := &waitsView{all: items, sort: i}
+		got := ""
+		for _, it := range v.shown() {
+			got += it.Ask
+		}
+		if got != want[s.name] {
+			t.Errorf("%s = %s, want %s", s.name, got, want[s.name])
+		}
 	}
 }
 

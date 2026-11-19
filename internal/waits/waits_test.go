@@ -1,6 +1,7 @@
 package waits
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -30,6 +31,7 @@ func TestBuild(t *testing.T) {
 			{UUID: "aaaa1111x", Admiral: "main", Kind: todo.Ask, Description: "Reply to the  Teams thread", Entry: ago(24 * time.Hour)},
 			{UUID: "bbbb2222x", Admiral: "main", Kind: todo.Ask, Description: "reply to the Teams thread", Entry: ago(48 * time.Hour)},
 			{UUID: "cccc3333x", Admiral: "main", Kind: todo.Promise, Description: "reply to the Teams thread", Entry: ago(time.Hour)},
+			{UUID: "ffff6666x", Admiral: "ops", Kind: todo.Ask, Description: "reply to the Teams thread", Entry: ago(30 * time.Hour)},
 			{UUID: "dddd4444x", Queue: "api", Kind: todo.Queued, Description: "also bump the version", Entry: ago(20 * time.Minute), Ctx: "own"},
 		},
 		Extra: []Item{{Kind: Thread, Source: "release-notes", Ask: "review the draft", Since: ago(3 * time.Hour)}},
@@ -37,10 +39,11 @@ func TestBuild(t *testing.T) {
 	all := Build(in, now)
 	got := Only(all, Waiting)
 	want := []struct{ kind, source, ask, ref string }{
-		{todo.Ask, "main", "reply to the Teams thread", "bbbb2222"}, // the older duplicate wins
+		{todo.Ask, "admiral", "reply to the Teams thread", "bbbb2222"}, // the older duplicate wins
+		{todo.Ask, "admiral", "reply to the Teams thread", "ffff6666"}, // another admiral's is its own
 		{Thread, "release-notes", "review the draft", ""},
 		{Question, "ui", "Teal or blue?", ""}, // its unread report is the same ask
-		{todo.Promise, "main", "reply to the Teams thread", "cccc3333"},
+		{todo.Promise, "admiral", "reply to the Teams thread", "cccc3333"},
 		{Report, "docs", "done: README updated", ""},
 		{Queue, "api", "queued: also bump the version", "dddd4444"},
 		{Prompt, "api", "Allow write? 1. Yes 2. No", ""},
@@ -54,12 +57,13 @@ func TestBuild(t *testing.T) {
 			t.Errorf("item %d = %s/%s/%q/%s, want %s/%s/%q/%s", i, g.Kind, g.Source, g.Ask, g.Ref, w.kind, w.source, w.ask, w.ref)
 		}
 	}
+	got = slices.DeleteFunc(got, func(it Item) bool { return it.Admiral == "ops" })
 	if !got[2].Answerable() || !got[6].Answerable() || got[0].Answerable() || got[4].Answerable() {
 		t.Error("only agent prompts and open asks are answerable")
 	}
 	// The tree's fields: parent is the agent, else the source; context is
 	// the item's own, else its agent's.
-	if q, p := got[5], got[6]; q.Parent != "api" || q.Ctx != "own" || p.Parent != "api" || p.Ctx != "work" || got[0].Parent != "main" {
+	if q, p := got[5], got[6]; q.Parent != "api" || q.Ctx != "own" || p.Parent != "api" || p.Ctx != "work" || got[0].Parent != "admiral" || got[0].Admiral != "main" {
 		t.Errorf("parent/ctx: queue %q/%q, prompt %q/%q, ask %q", q.Parent, q.Ctx, p.Parent, p.Ctx, got[0].Parent)
 	}
 	run, quiet := Only(all, Running), Only(all, Quiet)
@@ -80,5 +84,35 @@ func TestBuildAnsweredQuestionDrops(t *testing.T) {
 		Report: &board.Report{State: "question", Summary: "Teal?", At: now.Add(-time.Minute)}}
 	if got := Only(Build(Input{Agents: []*board.Agent{a}}, now), Waiting); len(got) != 0 {
 		t.Fatalf("an answered question still waits: %+v", got)
+	}
+}
+
+// TestTodoSource: an admiral item's source is the agent it names, else its
+// "topic:" prefix, else its context, else "admiral"; never the admiral's
+// name, which the admiral field keeps.
+func TestTodoSource(t *testing.T) {
+	agents := []*board.Agent{{Name: "main", Status: "idle"}, {Name: "waits-sort", Status: "working"}}
+	tests := []struct {
+		desc, ctx             string
+		source, agent, parent string
+	}{
+		{"merge waits-sort once CI is green", "", "waits-sort", "waits-sort", "waits-sort"},
+		{"release: tell main about waits-sort.", "work", "waits-sort", "waits-sort", "waits-sort"},
+		{"release notes: push v1.54", "work", "release notes", "", "release notes"},
+		{"see http://x.io: then decide", "home", "home", "", "admiral"},
+		{"ask main about the deck", "", "admiral", "", "admiral"},
+		{"a much longer opening clause than a topic: rest", "", "admiral", "", "admiral"},
+	}
+	for _, tc := range tests {
+		in := Input{Agents: agents, Todos: []todo.Item{{UUID: "eeee5555x", Admiral: "main", Kind: todo.Ask, Ctx: tc.ctx, Description: tc.desc}}}
+		var it Item
+		for _, x := range Only(Build(in, time.Now()), Waiting) {
+			if x.Ref != "" {
+				it = x
+			}
+		}
+		if it.Source != tc.source || it.Agent != tc.agent || it.Parent != tc.parent || it.Admiral != "main" {
+			t.Errorf("%q: source/agent/parent/admiral = %q/%q/%q/%q, want %q/%q/%q/main", tc.desc, it.Source, it.Agent, it.Parent, it.Admiral, tc.source, tc.agent, tc.parent)
+		}
 	}
 }

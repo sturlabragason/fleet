@@ -69,7 +69,7 @@ func (f *Fleet) DoneWait(it waits.Item) (todo.Item, error) {
 	if !it.Todo() {
 		return todo.Item{}, fmt.Errorf("%s is not a todo item", it.Kind)
 	}
-	adm := it.Source
+	adm := it.Admiral
 	if it.Kind == waits.Queue {
 		adm = ""
 		if a, ok := f.Store.Load().Agents[it.Agent]; ok {

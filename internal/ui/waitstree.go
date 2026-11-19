@@ -43,8 +43,26 @@ var (
 	byContext = level{lvlCtx, func(it waits.Item) string { return it.Ctx }, func(a, b string) int {
 		return cmp.Or(cmp.Compare(noCtx(a), noCtx(b)), cmp.Compare(a, b))
 	}}
-	byParent = level{lvlParent, func(it waits.Item) string { return it.Parent }, nil} // oldest first
+	byParent = level{lvlParent, func(it waits.Item) string { return it.Parent }, nil} // in the sort's order
 )
+
+// newest orders the most recent first.
+func newest(a, b waits.Item) int { return b.Since.Compare(a.Since) }
+
+// waitSorts are the w view's row orders, which s cycles; newest first is
+// the default. Sections and contexts keep their own order; the items, and
+// so the parents, within them follow the sort.
+var waitSorts = []struct {
+	name string
+	cmp  func(a, b waits.Item) int
+}{
+	{"newest first", newest},
+	{"oldest first", func(a, b waits.Item) int { return a.Since.Compare(b.Since) }},
+	{"by context", func(a, b waits.Item) int {
+		return cmp.Or(cmp.Compare(noCtx(a.Ctx), noCtx(b.Ctx)), cmp.Compare(a.Ctx, b.Ctx), newest(a, b))
+	}},
+	{"by source", func(a, b waits.Item) int { return cmp.Or(cmp.Compare(a.Source, b.Source), newest(a, b)) }},
+}
 
 // noCtx sorts the group of items with no context last.
 func noCtx(c string) int {
@@ -107,6 +125,7 @@ func (v *waitsView) shown() []waits.Item {
 		}
 		out = append(out, it)
 	}
+	slices.SortStableFunc(out, waitSorts[v.sort].cmp)
 	return out
 }
 
