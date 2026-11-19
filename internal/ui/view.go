@@ -36,6 +36,12 @@ func (m *Model) View() (out string) {
 // body is everything below the header: the help overlay, the tiers, or the
 // card grid and its overflow line.
 func (m *Model) body() []string {
+	switch {
+	case m.ans != nil:
+		return m.answerLines()
+	case m.wv != nil:
+		return m.waitsLines()
+	}
 	if v := extView(m); v != nil {
 		return v.Lines(m)
 	}

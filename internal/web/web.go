@@ -148,6 +148,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.events(w, r)
 	case r.URL.Path == "/api/peek" && r.Method == http.MethodGet:
 		s.peek(w, r)
+	case r.URL.Path == "/api/waits" && r.Method == http.MethodGet:
+		writeJSON(w, http.StatusOK, s.F.Waits(time.Now()))
 	case r.URL.Path == "/api/send" && r.Method == http.MethodPost:
 		s.act(w, r, s.send)
 	case r.URL.Path == "/api/keys" && r.Method == http.MethodPost:

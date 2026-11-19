@@ -48,6 +48,8 @@ type Model struct {
 	offline   time.Time // network down since (ADR-110); zero = up
 	adms      []AdmiralInfo
 	badgeBy   string
+	wv        *waitsView  // w: the waits on you list replaces the tiles (ADR-167)
+	ans       *answerView // r: answering one agent's prompt, over everything else
 }
 
 type agentsMsg struct {
@@ -176,7 +178,19 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 		m.adms, m.badgeBy = msg.adms, msg.badgeBy
 		extApply(m, msg.ext)
 		m.setAgents(msg.agents) // tiers need the wall and teams
-		return m, tea.Batch(pollLater(), m.syncSupCtx(msg.supCtx))
+		var more tea.Cmd
+		if m.wv != nil {
+			more = m.loadWaits()
+		}
+		return m, tea.Batch(pollLater(), m.syncSupCtx(msg.supCtx), more)
+	case waitsMsg:
+		if m.wv != nil {
+			m.wv.set(msg)
+		}
+	case pendingMsg:
+		m.gotPending(msg)
+	case replyMsg:
+		return m, m.gotReply(msg)
 	case pollMsg:
 		return m, m.poll()
 	case animMsg:
@@ -201,7 +215,7 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 		return m, m.key(msg.String())
 	case tea.MouseMsg:
 		m.touch() // the pointer is over the overview: hold the order still
-		if extViewOpen(m) {
+		if extViewOpen(m) || m.wv != nil || m.ans != nil {
 			return m, nil
 		}
 		if m.help && msg.Action == tea.MouseActionPress {
@@ -303,6 +317,12 @@ func (m *Model) key(k string) tea.Cmd {
 		m.sel = m.agents[j].Name
 		m.saveCursor()
 	}
+	if m.ans != nil {
+		return m.answerKey(k)
+	}
+	if m.wv != nil {
+		return m.waitsKey(k)
+	}
 	if v := extView(m); v != nil {
 		return v.Key(m, k)
 	}
@@ -343,6 +363,10 @@ func (m *Model) key(k string) tea.Cmd {
 		return tea.Quit
 	case "?":
 		m.help = true
+	case "w":
+		return m.openWaits()
+	case "r":
+		return m.openAnswer(m.selName())
 	case "left", "h":
 		move(-1)
 	case "right", "l":

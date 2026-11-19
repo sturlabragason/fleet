@@ -438,6 +438,8 @@ The bottom tmux status line and the overview header show a short hint in plain w
 | Overview | `a / +` | add the selected agent as a new pane (more slots if full) |
 | Overview | `Space` | preview the selected agent in a popup (⏎ there puts it in ▶) |
 | Overview | `Tab / Shift-Tab` | put the next/previous waiting agent into the ▶ pane (or onto the wall) |
+| Overview | `w` | waits on you: open asks, questions, prompts, unread reports and queues, oldest first (⏎ show, r answer) |
+| Overview | `r` | answer the selected agent's prompt or question: pick 1-9, y/n or t to type; confirm, refused if the prompt changed |
 | Overview | `Esc` | clear the ▶ target |
 | Overview | `u` | undo the last replace (again: redo) |
 | Overview | `p` | pin/unpin: a pinned pane is never replaced or evicted |
@@ -710,6 +712,14 @@ Every key above is in the key registry (`internal/keys`), so it shows in `?`, `A
 
 Drag a card onto a pane (tmux sends the release to the pane the drag started in), Shift+click and Shift+Enter (the terminal keeps Shift+click for selection; Bubble Tea v1 cannot see Shift+Enter), an interactive preview, collapsing teams, a taller overview size.
 
+## 5g. Waits on you and answer from the overview (ADR-167, built)
+
+**`w`: waits on you.** One dense list, replacing the tiles until `esc`, of everything waiting on the user, oldest first. Each row: age, kind, source (agent or admiral; `●` when `r` can answer it) and a one-line ask. Sources: an agent on a prompt or picker (`prompt`), an unanswered `question` or `blocked` report (ADR-90), an agent idle after a turn with no report (`no report`, ADR-68), the admirals' unread reports (`report`, its own open ask already counts), the todo store's open items (`ask`, `promise`, `request`, `followup`) and agent queues (`queue`, ADR-164), and what an extension adds through `fleet.Extension.Waits` (open threads with their next step, docs/design/thread-board.md). The same todo text filed twice for the same owner shows once, the older. `↑↓` move, `⏎` puts the row's agent in ▶, `r` answers it. The list reloads on every overview poll while open. The model is `internal/waits` (pure, built from the board, mail and the store by `Fleet.Waits`), so the web mirror serves the same list at `GET /api/waits` (§5f).
+
+**`r`: answer.** On the selected tile (or a `w` row), fleet reads what the agent waits on (`Fleet.Pending`: the picker's question and options, the waiting line, or with nothing on screen the open question's report) and shows it exactly. `1`-`9` pick an option, `y`/`n` pick the Yes/No option (or send yes/no where there is no picker), `t` types a short reply (no picker only, at most 200 characters). Every answer asks to confirm (`⏎`/`y` send, `esc`/`n` back). `Fleet.Reply` sends it only if the prompt, question and options, is still exactly what was shown (`Gate`; a picker answer then goes through `Choose` with its own `expect` check) and `SendBlocker` finds the user is not typing in that pane (ADR-61); a typed reply goes through `Deliver`, so it lands on the agent's queue (ADR-164). A refusal keeps the view open on the prompt as it is now, with the reason.
+
+Out of scope: acting on todo items from the list (mark done, let go), a header count of waiting items, the web page's own waits panel (the endpoint is there).
+
 ## 5f. Web view: `fleet web` (ADR-66, alpha)
 
 A browser front end beside the TUI and MCP, for steering from another device (a phone through a login gateway). Package `internal/web`, stdlib only, page embedded in the binary.
@@ -717,6 +727,7 @@ A browser front end beside the TUI and MCP, for steering from another device (a 
 - **Run:** `fleet web [--listen ADDR] [--allow-host NAME,...]`, in the foreground. Default `127.0.0.1:7777` (`$FLEET_WEB_LISTEN`). Refused inside an agent pane: it acts as the user.
 - **Tiles:** every board agent with status colour, profile, last line and latest report, pushed over SSE when `board.json` changes. It only reads the board; the watcher stays the one refresher (ADR-49), and a stale heartbeat shows a banner.
 - **Peek drawer:** the agent's pane in colour (`Fleet.PeekColor`, the last 200 lines; the web package never calls tmux itself, so other backends can serve it later) turned into HTML, refreshed once a second while open. Never attaches a tmux client, so window sizes don't change.
+- **Waits:** `GET /api/waits` is the overview's `w` list as JSON (`internal/waits`, ADR-167).
 - **Input:** a numbered prompt shows as buttons that call `Choose` with the question as `expect` (a changed prompt is refused); a send box (`Send`, paste plus Enter); buttons for allowlisted keys. Send and keys are refused while `SendBlocker` says the user is typing there; there is no force.
 - **Auth:** a token from `$FLEET_WEB_TOKEN`, else `~/.fleet/web.json` (0600, made on first run, same across restarts; delete it to rotate). The printed URL `/?token=` trades it for an `HttpOnly`, `SameSite=Strict` cookie; a proxy can send `Authorization: Bearer <token>` instead. Every request's `Host` and every POST's `Origin` must be loopback, the listen host or a `--allow-host` name (`$FLEET_WEB_HOSTS`); POSTs must be JSON.
 - **Behind a gateway:** listen on the LAN (`--listen 0.0.0.0:7777` or the laptop's address), let the proxy inject the bearer header, and allow the gateway's host name. The token check stays on behind the gateway, because the page can type into agents that run with every permission.
@@ -2517,3 +2528,13 @@ Trade-offs of the amendment: a session's place in the tree is fixed when it open
 **Rejected.** Another prompt line or a stronger AGENTS.md rule: ADR-141 measured 0 of 10 runs following a reworded line. A log line in `fleet.log` as the measure: it rotates at 5 MB and keeps two files, about a day of history. Graph-by-default for `--json`: it would change the meaning of `files` for existing consumers. A staleness rule by age: a repo with `build = "manual"` can be old in commits but young in days, and the commit count is one cheap `git rev-list`.
 
 **Trade-offs.** `fleet touching <files>` reads the 10 MB `graph.json` on every call: measured 0.41-0.70 s against 0.31 s without it on this repo. The spawn brief only finds paths written out in the prompt; a task that names a function but no file gets nothing. Reads by fleet itself count as reads, so the measure shows whether the graph's answers reach agents, not whether agents asked for them; `auto` separates the two.
+
+**ADR-167: one "waits on you" list for the TUI and the web, and answering a prompt from the overview** (§5g; extends ADR-61, ADR-90, ADR-164) — accepted 2026-11-19.
+
+**Context.** What the user owes gets lost: a Teams reply that was published was never tracked, and "what's open, what waits on me" is asked again and again. The pieces exist (the todo store, question and blocked reports, no-report agents, unread reports, queues) but each lives in a different place. Answering a prompt meant moving to the agent's pane or asking the admiral; the web mirror already answered pickers through `Choose` with `expect`.
+
+**Decision.** (1) `internal/waits` builds one list, oldest first, from plain inputs; `Fleet.Waits` gathers them, and the overview (`w`) and the web mirror (`GET /api/waits`) both draw it, because the web becomes the main surface at about 100 agents. Extensions add rows (threads) through a `Waits` field on the existing `fleet.Extension` seam (ADR-126). (2) `r` on a tile or a row shows the exact prompt and answers it with a pick, y/n or a short typed reply, after a confirm. `Fleet.Reply` refuses unless the question and options are exactly what was shown (stricter than `Choose`'s substring check) and the user is not in the pane.
+
+**Rejected.** A second header count: computing the list each second would query the todo store every poll; the list loads only while open. Header hint items for `w`/`r`: the overview hint is already full at 180 columns; the keys are in `?`. Text replies to a picker: a paste into a menu does not answer it.
+
+**Trade-offs.** The list is as fresh as one overview poll. A thread shows only in a build whose extension fills `Waits`. Exact-match gating refuses an answer when a prompt's text changes in a harmless way (a timer in the line); the view then shows the new text and the user confirms again.

@@ -22,6 +22,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/tmux"
 	"github.com/sturlabragason/fleet/internal/tools"
 	"github.com/sturlabragason/fleet/internal/ui"
+	"github.com/sturlabragason/fleet/internal/waits"
 	"github.com/sturlabragason/fleet/internal/wall"
 	"github.com/sturlabragason/fleet/internal/watch"
 )
@@ -123,6 +124,13 @@ func (b *backend) WallEnabled() bool { return b.enabled }
 
 // Reports is how many reports the admiral has not read: the header badge (ADR-36).
 func (b *backend) Reports() int { return b.f.UnreadReports() }
+
+// Waits, Pending and Reply are the overview's w and r views (ADR-167).
+func (b *backend) Waits() []waits.Item                        { return b.f.Waits(time.Now()) }
+func (b *backend) Pending(name string) (fleet.Pending, error) { return b.f.Pending(name) }
+func (b *backend) Reply(name string, r fleet.Reply, expect string) (string, error) {
+	return b.f.Reply(name, r, expect)
+}
 func (b *backend) OfflineSince() time.Time {
 	if off, since := b.f.Offline(); off {
 		return since

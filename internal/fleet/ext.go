@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/sturlabragason/fleet/internal/todo"
+	"github.com/sturlabragason/fleet/internal/waits"
 )
 
 // Extension is what a feature compiled in with a build tag adds to this
@@ -20,6 +21,9 @@ type Extension struct {
 	// Todo opens the store for admiral open items and agent queues
 	// (ADR-164); the first extension that sets it is used.
 	Todo func() (todo.Store, error)
+	// Waits adds items to the "waits on you" list (ADR-167), e.g. open
+	// threads with their next step.
+	Waits func(f *Fleet) []waits.Item
 }
 
 var exts []Extension
