@@ -289,7 +289,9 @@ local preferences (never committed): ~/.config/fleet/config.toml ($FLEET_CONFIG 
   [defaults] max_working and the [memory] RAM guard (guard, min_free, check_every)
   are re-read live, so a change takes effect without restarting fleet;
   [defaults] theme picks the TUI palette: lane (default), catppuccin,
-  stealth, neon-drive, phosphor or graphite -- set it and run fleet up again;
+  stealth, neon-drive, phosphor, graphite, or one of 20 VS Code themes
+  (shades-of-purple, dracula, github-light, ...; see THEMES.md) -- set it
+  and run fleet up again;
   [defaults] animation = false keeps the start-up banner and the header
   logo still (both also off under NO_COLOR and FLEET_NO_ANIM; the banner also
   in CI, outside a terminal and inside tmux);

@@ -31,7 +31,7 @@ grep 'component=status' ~/.fleet/logs/fleet.log | tail
 | `~/.fleet/patterns.toml` | Your status patterns |
 | `~/.fleet/decisions.log` | Notes the admiral kept for you |
 | `~/.fleet/worker.md` | Extra playbook text prepended to every spawn prompt, at every effort level (`fleet playbook [--effort light\|standard\|pro]`) |
-| `~/.config/fleet/config.toml` | Local preferences, never committed: starting mode (`mode = "auto"` runs every agent without permission prompts, whatever its tool), extra tool args, prompt auto-submit, `theme` (`lane`, the default, `catppuccin`, `stealth`, `neon-drive`, `phosphor`, `graphite`: set it, run `fleet up` again, agents keep running). `$FLEET_CONFIG` overrides the path; see [`examples/config.toml.example`](../examples/config.toml.example). |
+| `~/.config/fleet/config.toml` | Local preferences, never committed: starting mode (`mode = "auto"` runs every agent without permission prompts, whatever its tool), extra tool args, prompt auto-submit, `theme` (`lane`, the default, `catppuccin`, `stealth`, `neon-drive`, `phosphor`, `graphite`, or a VS Code theme from [THEMES.md](../THEMES.md) such as `shades-of-purple`: set it, run `fleet up` again, agents keep running). `$FLEET_CONFIG` overrides the path; see [`examples/config.toml.example`](../examples/config.toml.example). |
 | `~/.fleet/logs/fleet.log` | Everything fleet does, one `component=` per line; rotated at 5 MB to `fleet.log.1` and `.2` |
 
 ## First checks

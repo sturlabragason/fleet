@@ -263,13 +263,22 @@ A palette is a set of *roles*, not of shades (ADR-55). `theme.Working`, `theme.W
 `Text`/`Subtext0`/`Overlay2-0` mean the same thing in every theme; only the hex changes. There is
 no `theme.Yellow` any more, because yellow means nothing on a grey theme.
 
-Six palettes ship. Set one in `~/.config/fleet/config.toml` and run `fleet up` again: the tmux
+Six hand-tuned palettes ship, plus 20 taken from the most-installed VS Code themes. Set one in `~/.config/fleet/config.toml` and run `fleet up` again: the tmux
 chrome re-colours and the overview pane restarts, agents keep running.
 
 ```toml
 [defaults]
 theme = "stealth"   # lane (default), catppuccin, stealth, neon-drive, phosphor, graphite
+                    # or a VS Code theme: shades-of-purple, dracula, github-light, ...
 ```
+
+The VS Code themes are `github-dark`, `github-light`, `one-dark-pro`, `dracula`, `atom-one-dark`,
+`ayu`, `winter-is-coming`, `night-owl`, `tokyo-night`, `one-monokai`, `palenight`, `synthwave-84`,
+`shades-of-purple`, `cobalt2`, `andromeda`, `atom-one-light`, `noctis`, `nord`, `gruvbox` and
+`material` (Catppuccin, also in the top 20, is `catppuccin` above). One function, `fromVSCode`, maps
+each theme's published colours onto the roles and lifts a colour that misses its floor only as far
+as the floor (ADR-174). Sources, licences and the themes left out are in
+[THEMES.md](../THEMES.md).
 
 | Theme | Ground | Working | Waiting | Error | `▶` Select | In one line |
 |---|---|---|---|---|---|---|

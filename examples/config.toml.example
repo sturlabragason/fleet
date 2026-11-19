@@ -9,7 +9,9 @@
 
 [defaults]
 # TUI colour palette (ADR-55, ADR-166): "lane" (the default, the house
-# brand), "catppuccin", "stealth", "neon-drive", "phosphor" or "graphite". An unknown name stops fleet rather
+# brand), "catppuccin", "stealth", "neon-drive", "phosphor" or "graphite", or
+# one of 20 VS Code themes such as "shades-of-purple", "dracula" or
+# "github-light" (ADR-174, THEMES.md). An unknown name stops fleet rather
 # than falling back silently. Resolved at start-up: change it and run
 # `fleet up` again — the tmux chrome is re-set and the overview pane restarts,
 # agents keep running.
