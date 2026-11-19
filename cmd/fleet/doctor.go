@@ -21,6 +21,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/conf"
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/graph"
+	"github.com/sturlabragason/fleet/internal/logo"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/park"
 	"github.com/sturlabragason/fleet/internal/prefs"
@@ -233,15 +234,8 @@ func checkTmux(version func() (string, error)) doctorCheck {
 // panes inherit the locale, and a tool may draw its screen in ASCII under it.
 func checkLocale(getenv func(string) string) doctorCheck {
 	c := doctorCheck{Name: "locale"}
-	name, val := "LANG", getenv("LANG")
-	for _, v := range []string{"LC_ALL", "LC_CTYPE"} {
-		if s := getenv(v); s != "" {
-			name, val = v, s
-			break
-		}
-	}
-	l := strings.ToLower(val)
-	if strings.Contains(l, "utf-8") || strings.Contains(l, "utf8") {
+	name, val := logo.Locale(getenv)
+	if logo.UTF8(val) {
 		c.Level, c.Detail = levelOK, name+"="+val
 		return c
 	}

@@ -101,11 +101,11 @@ func TestSelectIsItsOwnColour(t *testing.T) {
 }
 
 func TestLoad(t *testing.T) {
-	t.Cleanup(func() { apply(catppuccin) })
+	t.Cleanup(func() { apply(palettes[Default]) })
 	if err := Load("bogus"); err == nil {
 		t.Error("an unknown theme must be an error, not a silent fallback")
 	}
-	if Select != catppuccin.Select {
+	if Select != palettes[Default].Select {
 		t.Error("a failed Load must leave the palette alone")
 	}
 	for _, name := range Names() {
@@ -127,12 +127,12 @@ func TestLoad(t *testing.T) {
 // A cached colour (a lipgloss style, a tmux format string) must be rebuilt
 // when the theme changes.
 func TestOnChange(t *testing.T) {
-	t.Cleanup(func() { apply(catppuccin) })
+	t.Cleanup(func() { apply(palettes[Default]) })
 	var got string
 	n := len(hooks)
 	OnChange(func() { got = Select })
 	t.Cleanup(func() { hooks = hooks[:n] })
-	if got != catppuccin.Select {
+	if got != palettes[Default].Select {
 		t.Errorf("OnChange did not run once on registration: %q", got)
 	}
 	if err := Load("phosphor"); err != nil {
@@ -144,7 +144,8 @@ func TestOnChange(t *testing.T) {
 }
 
 func TestStatus(t *testing.T) {
-	cases := map[string]string{"working": catppuccin.Working, "waiting": catppuccin.Waiting, "error": catppuccin.Error, "stuck": catppuccin.Stuck, "bogus": catppuccin.Idle}
+	d := palettes[Default]
+	cases := map[string]string{"working": d.Working, "waiting": d.Waiting, "error": d.Error, "stuck": d.Stuck, "bogus": d.Idle}
 	for st, want := range cases {
 		if got := Status(st); got != want {
 			t.Errorf("Status(%q) = %s, want %s", st, got, want)

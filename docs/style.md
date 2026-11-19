@@ -129,7 +129,30 @@ are never combined into one lockup or placed side by side at the same size.
 Both marks are framed with square corners, black on white, with a reversed version for dark
 grounds (fleet's frame is a square, the maker's mark 1.88:1). Regenerate
 fleet's own with `python3 scripts/build_logo.py <IBMPlexMono-Bold.ttf> docs/img`; never retype or
-redraw either one, and never recolour, stretch, rotate, outline or shadow them.
+redraw either one, and never recolour, stretch, rotate, outline or shadow them. The one exception
+is the terminal mark below, which is generated from the same geometry, not redrawn by hand.
+
+### In the terminal
+
+A terminal can't show the SVG, so fleet draws the mark in text (ADR-166). It is generated, never
+typed: `python3 scripts/build_ascii_logo.py <IBMPlexMono-Bold.ttf> > internal/logo/art.go` routes
+the SVG's five strands on a character grid and rasterises the word, and `internal/logo`'s golden
+files pin the result. Three sizes, each used where it adds identity and never on a working screen:
+
+| Size | Looks like | Where |
+|---|---|---|
+| Line, 1 row | `╳━■ fleet` | tmux status line badge, web mirror header |
+| Mark, 3 rows | strands crossing into lanes, `fleet` beside it | Head of the help (`?` and `Alt-?`), only when it costs no key a row |
+| Splash, 16 rows by 73 columns | the framed mark, `fleet` in half blocks | The overview with no agents |
+
+- Colour comes from theme roles at render time: strands, frame and word in `theme.Text`, the
+  blue lane and its stop in `theme.Select`. The status badge is the logo's primary form, black
+  on white (`theme.Crust` on `theme.Supervisor`), with no accent.
+- The blue lane is heavy (`━┃┏`) and its stop `■` is larger than the others' `▪`, as in the SVG.
+- `TERM=dumb`, or a locale that is not UTF-8 outside tmux, gets the ASCII form (`X=# fleet`).
+  Inside tmux fleet forces UTF-8, so the Unicode form always draws there.
+- Never edit `art.go` by hand, never add a fourth size, and never put the terminal mark on a card,
+  a tile or anywhere an agent's state is shown.
 
 ### Light and dark on GitHub
 
@@ -178,52 +201,58 @@ where the ground travels with it, and its reversed counterpart is `#8AA4FF` (7.6
 ink and grey tokens are likewise for the printed and generated artefacts (the marks, a PDF, a
 slide), where the ground is known.
 
-**The TUI** uses [Catppuccin Mocha](https://catppuccin.com/palette) (`internal/theme`) by default,
-and the docs and screenshots keep using it. Lane blue is a print and web accent: `#0033CC` on the Mocha base `#1e1e2e` is
-1.8:1, which is unreadable in a terminal. The brand rule that carries over is
-not the hex value, it is the discipline: colour means status, never decoration, and at most one
-thing per screen is allowed to be the accent.
+**The TUI** uses the `lane` palette (`internal/theme`) by default (ADR-166), and the docs and
+screenshots use it too. It is the house palette reversed for a dark terminal: ground ink
+`#161616`, text `#f4f4f4`, the IBM Carbon grey ramp the brand greys come from, and the one accent
+as the reversed Lane `#8AA4FF`. Lane blue itself, `#0033CC`, is 1.8:1 on ink and unreadable in a
+terminal. The brand rule that carries over is the discipline: colour means status, never
+decoration, and at most one thing per screen is allowed to be the accent.
+
+The brand has one accent and no other hue, but a terminal of agents needs status colours. Those
+come from Carbon's dark-theme support colours, the same family as the greys, each lifted to clear
+7:1 on ink: green `#42be65`, yellow `#f1c21b`, and for errors the brand's Signal red lifted from
+`#C40000` (2.9:1 on ink) to `#ff7a7a` (7.2:1), same hue.
 
 The mapping from the house roles to the terminal palette:
 
 | House role | Document token | TUI constant | Terminal colour |
 |---|---|---|---|
-| Accent, the one thing that matters | Lane `#0033CC` | `theme.Select` | Lavender `#b4befe` |
-| Body text | Ink `#161616` | `theme.Text` | `#cdd6f4` |
-| Secondary text, resting state | Grey `#525252` | `theme.Idle` | Overlay1 `#7f849c` |
-| Inactive, finished with | Hair `#E0E0E0` | `theme.Gone` | Surface2 `#585b70` |
-| Signal, something is wrong | Signal `#C40000` | `theme.Error` | Red `#f38ba8` |
-| Ground | Paper `#FFFFFF` | `theme.Base` | `#1e1e2e` |
+| Accent, the one thing that matters | Lane `#0033CC` | `theme.Select` | Lane on ink `#8aa4ff` |
+| Body text | Ink `#161616` | `theme.Text` | Paper grey `#f4f4f4` |
+| Secondary text, resting state | Grey `#525252` | `theme.Idle` | Grey on ink `#8d8d8d` |
+| Inactive, finished with | Hair `#E0E0E0` | `theme.Gone` | Grey `#525252` |
+| Signal, something is wrong | Signal `#C40000` | `theme.Error` | Signal on ink `#ff7a7a` |
+| Ground | Paper `#FFFFFF` | `theme.Base` | Ink `#161616` |
 
 Status colours carry meaning, and that meaning is fixed:
 
 | Status | Constant | Colour | Means |
 |---|---|---|---|
-| `working` | `theme.Working` | Green `#a6e3a1` | Running, needs nothing from you |
-| `waiting` | `theme.Waiting` / `WaitingAlt` | Yellow `#f9e2af`, pulsing to Peach `#fab387` | Wants an answer from you |
-| `error` | `theme.Error` | Red `#f38ba8` | Failed |
-| `stuck` | `theme.Stuck` | Maroon `#eba0ac` | Grinding: the same error twice, or no output for a long time |
-| `idle` | `theme.Idle` | Overlay1 `#7f849c` | Alive, nothing to do |
-| `gone` | `theme.Gone` | Surface2 `#585b70` | Process ended |
-| `queued` | `theme.Gone` | Surface2 `#585b70` | Waiting for a slot, no pane yet |
-| `starting` | `theme.Working` | Green `#a6e3a1` | Launching |
+| `working` | `theme.Working` | Green `#42be65` | Running, needs nothing from you |
+| `waiting` | `theme.Waiting` / `WaitingAlt` | Yellow `#f1c21b`, pulsing to Orange `#ff832b` | Wants an answer from you |
+| `error` | `theme.Error` | Red `#ff7a7a` | Failed |
+| `stuck` | `theme.Stuck` | Pale red `#ffb0b0` | Grinding: the same error twice, or no output for a long time |
+| `idle` | `theme.Idle` | Grey `#8d8d8d` | Alive, nothing to do |
+| `gone` | `theme.Gone` | Grey `#525252` | Process ended |
+| `queued` | `theme.Gone` | Grey `#525252` | Waiting for a slot, no pane yet |
+| `starting` | `theme.Working` | Green `#42be65` | Launching |
 
 Selection, focus and the target slot are three different things, so they look different (ADR-37).
-Lavender is spent on exactly one of them:
+The accent is spent on exactly one of them (the logo's blue lane is the only other use, ADR-166):
 
 | State | Looks like | Constant |
 |---|---|---|
-| `▶` target slot (the next card lands here) | Bold `▶` before the pane title and after the card name | `theme.Select` Lavender `#b4befe` |
+| `▶` target slot (the next card lands here) | Bold `▶` before the pane title and after the card name | `theme.Select` `#8aa4ff` |
 | Overview cursor (what `⏎` would act on) | An underline, in the cell's own status colour, plus a thick card border | the status colour, or `theme.Text` when that colour recedes (`gone`, `queued`) |
-| Active tmux pane (where your keys go) | Heavy border, full-brightness text | `theme.Text` `#cdd6f4` |
-| Any other pane | One step dimmer, same ground | Overlay2 `#9399b2` |
-| Pinned `⚑`, `+N hidden`, `+N idle`, one-line row ages | Resting grey | `theme.Muted` / `theme.Idle` Overlay1 `#7f849c` |
-| `· next out` (the pane a card would evict) | Dimmest, it is on its way out | `theme.Gone` Surface2 `#585b70` |
+| Active tmux pane (where your keys go) | Heavy border, full-brightness text | `theme.Text` `#f4f4f4` |
+| Any other pane | One step dimmer, same ground | Overlay2 `#a8a8a8` |
+| Pinned `⚑`, `+N hidden`, `+N idle`, one-line row ages | Resting grey | `theme.Muted` / `theme.Idle` Overlay1 `#8d8d8d` |
+| `· next out` (the pane a card would evict) | Dimmest, it is on its way out | `theme.Gone` `#525252` |
 
 Dimming unfocused panes and the emphasis pane (ADR-16, off by default, `fleet wall emphasis`) must not
 stack into "big but unreadable": emphasis only changes a pane's size, dimming only its text, and
-Overlay2 stays at 5.8:1 on the base so an emphasised pane you are not typing in is still legible.
-Do not take the dim step down to Overlay1 (4.4:1), which is the resting colour of things you are
+Overlay2 stays at 7.6:1 on the base (lane) so an emphasised pane you are not typing in is still
+legible. Do not take the dim step down to Overlay1 (5.5:1), which is the resting colour of things you are
 meant to ignore. A card-to-pane highlight (`@fleet_hl` in docs/ux-interaction.md) is not built; when
 it is, it is Overlay1, not a second accent.
 
@@ -234,17 +263,18 @@ A palette is a set of *roles*, not of shades (ADR-55). `theme.Working`, `theme.W
 `Text`/`Subtext0`/`Overlay2-0` mean the same thing in every theme; only the hex changes. There is
 no `theme.Yellow` any more, because yellow means nothing on a grey theme.
 
-Five palettes ship. Set one in `~/.config/fleet/config.toml` and run `fleet up` again: the tmux
+Six palettes ship. Set one in `~/.config/fleet/config.toml` and run `fleet up` again: the tmux
 chrome re-colours and the overview pane restarts, agents keep running.
 
 ```toml
 [defaults]
-theme = "stealth"   # catppuccin (default), stealth, neon-drive, phosphor, graphite
+theme = "stealth"   # lane (default), catppuccin, stealth, neon-drive, phosphor, graphite
 ```
 
 | Theme | Ground | Working | Waiting | Error | `▶` Select | In one line |
 |---|---|---|---|---|---|---|
-| `catppuccin` | `#1e1e2e` | Green `#a6e3a1` | Yellow `#f9e2af` | Red `#f38ba8` | Lavender `#b4befe` | The default; nothing changes unless you ask |
+| `lane` | Ink `#161616` | Green `#42be65` | Yellow `#f1c21b` | Red `#ff7a7a` | Lane `#8aa4ff` | The default: the house brand, greys and one blue |
+| `catppuccin` | `#1e1e2e` | Green `#a6e3a1` | Yellow `#f9e2af` | Red `#f38ba8` | Lavender `#b4befe` | Mocha, the default until ADR-166 |
 | `stealth` | `#0a0b0d` | `#53d6a0` | `#ffcf4d` | `#ff4d5e` | Ember `#ff7a18` | Near-black and quiet until something needs you |
 | `neon-drive` | `#0b0f2a` | Cyan `#00e5ff` | `#ffd166` | `#ff3864` | Magenta `#ff2bd1` | A night-drive dashboard; the loudest |
 | `phosphor` | `#06110a` | `#33ff77` | Amber `#ffc044` | `#ff3b2f` | White `#ffffff` | Green CRT: attention is the only thing that is not green |
@@ -268,15 +298,17 @@ Rules for anyone changing `internal/theme`:
   `●`, `error` `✖`, `stuck` `⧗`, `idle` `○`, `gone` `·`, `queued` `‖`, `starting` `▸`), tiles are
   ordered by attention, and `waiting` pulses. Colour is the fastest signal, never the only one: a
   new status needs its own glyph before it needs its own colour.
-- Lightness carries the hierarchy, so it survives any colour vision. Against the Mocha base
-  `#1e1e2e`, the four statuses with a live process (`working`, `waiting`, `error`, `stuck`) sit
-  between 7.1:1 (`error`) and 12.9:1
-  (`waiting`), while `idle` drops to 4.4:1 and `gone` to 2.5:1 on purpose: they recede. Keep a new
+- Lightness carries the hierarchy, so it survives any colour vision. Against the lane base
+  `#161616`, the four statuses with a live process (`working`, `waiting`, `error`, `stuck`) sit
+  between 7.2:1 (`error`) and 10.7:1 (`waiting`), while `idle` drops to 5.5:1 and `gone` to 2.3:1
+  on purpose: they recede. Keep a new
   status above 7:1 if it should be noticed, and don't lift `idle` or `gone`.
-- The dim step of the running-subagent wave (`theme.WorkingDim`, `#628067`, 3.8:1) stays a darker
+- The dim step of the running-subagent wave (`theme.WorkingDim`, `#198038` in lane, 3.6:1) stays a darker
   green, never grey, so it cannot be read as a finished dot.
 - Team colours come from `theme.TeamPalette` and must stay out of the status range: no green,
-  yellow, peach, red or maroon, and not the selection lavender. A new palette fills every role,
+  yellow, peach, red or maroon, and not the selection colour. Lane's six teams are cool hues
+  (purple, teal, cyan, lilac, aqua, slate): a documented cost against the brand's single accent,
+  because a team needs a hue. A new palette fills every role,
   including its own six team colours; a role may never be left empty.
 
 ## 5. Screenshots and diagrams
@@ -299,7 +331,7 @@ Screenshots:
   panes. The gif renders on the same pinned grid, so every frame is the same size.
 - Every screenshot has a caption in `<sub>` saying what is in it and that it was made with fake
   agents. A reader must never mistake a demo for a measurement.
-- The terminal uses the Mocha palette and the same font at the same size in every shot.
+- The terminal uses the default `lane` palette and the same font at the same size in every shot.
 - The GitHub social preview, `docs/img/social.png` (1280×640), is the hero under the lockup and one
   tagline, built by `scripts/social-card.sh`. GitHub has no API for it: upload it under Settings,
   Social preview, after regenerating.

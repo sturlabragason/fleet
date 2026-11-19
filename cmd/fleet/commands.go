@@ -282,8 +282,8 @@ local preferences (never committed): ~/.config/fleet/config.toml ($FLEET_CONFIG 
   worktree (worktree = false turns it off);
   [defaults] max_working and the [memory] RAM guard (guard, min_free, check_every)
   are re-read live, so a change takes effect without restarting fleet;
-  [defaults] theme picks the TUI palette: catppuccin (default), stealth,
-  neon-drive, phosphor or graphite -- set it and run fleet up again;
+  [defaults] theme picks the TUI palette: lane (default), catppuccin,
+  stealth, neon-drive, phosphor or graphite -- set it and run fleet up again;
   see examples/config.toml.example`
 
 // openFleet is fleet.Open; tests point it at a throwaway socket.

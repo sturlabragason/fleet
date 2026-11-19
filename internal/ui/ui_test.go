@@ -157,6 +157,30 @@ func TestViewTilesThenRows(t *testing.T) {
 	}
 }
 
+// An empty overview shows the largest mark that fits; agents replace it.
+func TestViewEmptySplash(t *testing.T) {
+	zone.NewGlobal()
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("LC_ALL", "C.UTF-8")
+	for _, tc := range []struct {
+		w, h int
+		want string
+	}{{80, 24, "▀████▀"}, {40, 10, "━━╳━━━━■"}, {12, 3, "╳━■ fleet"}} {
+		m := New(&fakeBE{}, "")
+		m.Update(tea.WindowSizeMsg{Width: tc.w, Height: tc.h})
+		if v := ansi.Strip(m.View()); !strings.Contains(v, tc.want) {
+			t.Errorf("%dx%d: want %q:\n%s", tc.w, tc.h, tc.want, v)
+		}
+	}
+	m := New(&fakeBE{}, "")
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	as, _ := (&fakeBE{}).Refresh()
+	m.setAgents(as)
+	if v := ansi.Strip(m.View()); strings.Contains(v, "■") {
+		t.Errorf("splash with agents:\n%s", v)
+	}
+}
+
 func TestMouseClickSelectsAndShows(t *testing.T) {
 	zone.NewGlobal()
 	be := &fakeBE{}

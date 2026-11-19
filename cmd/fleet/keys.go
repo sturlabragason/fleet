@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/sturlabragason/fleet/internal/keys"
+	"github.com/sturlabragason/fleet/internal/logo"
 )
 
 // cmdKeys prints the hotkey list. --markdown prints the DESIGN.md table;
@@ -53,7 +54,7 @@ func (p popup) View() string {
 		return ""
 	}
 	margin := strings.Repeat(" ", keys.PopupMargin)
-	lines := strings.Split(keys.HelpStyled(0), "\n")
+	lines := logo.Head(strings.Split(keys.HelpStyled(0), "\n"), p.w-keys.PopupMargin, p.h)
 	if len(lines) > p.h {
 		lines = lines[:p.h]
 	}

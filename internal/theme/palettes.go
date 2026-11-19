@@ -1,10 +1,36 @@
 package theme
 
-// The named palettes. Catppuccin Mocha is the default and the only one that
-// was ever shipped; the other four come from the theme drafts, with their
-// contrast numbers checked in palettes_test.go (ADR-55).
+// The named palettes. Lane, the house brand on a terminal, is the default
+// (ADR-166); Catppuccin Mocha was the default before it and the other four
+// come from the theme drafts. palettes_test.go checks every one's contrast
+// (ADR-55).
 
-// Catppuccin Mocha (https://catppuccin.com/palette): the default.
+// Lane: the house brand (docs/style.md §4). The ground, the inks and the
+// accent are the brand's own tokens: ink #161616, the IBM Carbon grey ramp the
+// brand's greys come from, and Lane on ink #8aa4ff as the one accent, the ▶
+// target. The brand has no status hues, so they come from the same system's
+// dark-theme support colours (Carbon g100), and error is the brand's signal
+// red lifted to 7.2:1 on ink (#c40000 itself is 2.9:1). Teams stay in cool
+// hues, clear of every status and of the accent.
+var lane = Palette{
+	Name: "lane", Label: "Lane",
+	Base: "#161616", Mantle: "#0e0e0e", Crust: "#000000",
+	Surface0: "#262626", Surface1: "#393939", Surface2: "#525252",
+	Text: "#f4f4f4", Subtext0: "#c6c6c6", Overlay2: "#a8a8a8", Overlay1: "#8d8d8d", Overlay0: "#6f6f6f",
+	Working: "#42be65", WorkingDim: "#198038",
+	Waiting: "#f1c21b", WaitingAlt: "#ff832b",
+	Error: "#ff7a7a", Stuck: "#ffb0b0",
+	Idle: "#8d8d8d", Gone: "#525252",
+	// Paper white: the status-line badge is the mark in its primary form,
+	// ink on paper, and the admiral's title is the plainest bright thing.
+	Select: "#8aa4ff", Supervisor: "#ffffff",
+	Team: []Swatch{
+		{"purple", "#be95ff"}, {"teal", "#08bdba"}, {"cyan", "#82cfff"},
+		{"lilac", "#d4bbff"}, {"aqua", "#9ef0f0"}, {"slate", "#c1c7cd"},
+	},
+}
+
+// Catppuccin Mocha (https://catppuccin.com/palette), the default until ADR-166.
 var catppuccin = Palette{
 	Name: "catppuccin", Label: "Catppuccin Mocha",
 	Base: "#1e1e2e", Mantle: "#181825", Crust: "#11111b",
@@ -98,6 +124,7 @@ var graphite = Palette{
 }
 
 var palettes = map[string]Palette{
+	lane.Name:       lane,
 	catppuccin.Name: catppuccin,
 	stealth.Name:    stealth,
 	neonDrive.Name:  neonDrive,

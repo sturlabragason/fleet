@@ -8,12 +8,12 @@
 # whatever mode the tool itself defaults to.
 
 [defaults]
-# TUI colour palette (ADR-55): "catppuccin" (the default), "stealth",
-# "neon-drive", "phosphor" or "graphite". An unknown name stops fleet rather
+# TUI colour palette (ADR-55, ADR-166): "lane" (the default, the house
+# brand), "catppuccin", "stealth", "neon-drive", "phosphor" or "graphite". An unknown name stops fleet rather
 # than falling back silently. Resolved at start-up: change it and run
 # `fleet up` again — the tmux chrome is re-set and the overview pane restarts,
 # agents keep running.
-# theme = "catppuccin"
+# theme = "lane"
 # Tool profile for fleet_spawn and fleet_squad_spawn calls that name none
 # (see `fleet profiles`). Unset: claude-copilot, whatever tool the admiral runs.
 # Re-read on every spawn. The spawn reply always names the profile and model.

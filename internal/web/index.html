@@ -9,7 +9,8 @@
 *{box-sizing:border-box}
 body{margin:0;background:var(--crust);color:var(--fg);font:14px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace}
 header{display:flex;gap:12px;align-items:baseline;padding:10px 16px;background:var(--mantle)}
-header h1{font-size:16px;margin:0}
+header h1{font-size:16px;margin:0;white-space:pre}
+header h1 .lane{color:var(--select)}
 #count{color:var(--sub)}
 #stale{display:none;background:var(--stuck);color:var(--crust);padding:6px 16px}
 #tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;padding:16px}
@@ -37,7 +38,7 @@ form input{flex:1;min-width:0;background:var(--bg);color:var(--fg);border:1px so
 </style>
 </head>
 <body>
-<header><h1>fleet</h1><span id="count"></span></header>
+<header><h1 aria-label="fleet"><span aria-hidden="true">╳<span class="lane">━■</span> </span>fleet</h1><span id="count"></span></header>
 <div id="stale">Status is stale: no watcher is refreshing the board. Run <code>fleet up</code> or <code>fleet watch</code>.</div>
 <main id="tiles"></main>
 <aside id="drawer" aria-label="agent">

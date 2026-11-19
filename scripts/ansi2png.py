@@ -24,12 +24,12 @@ FONTS = [  # first font that has the glyph wins
 ]
 BOLD = "/usr/share/fonts/adwaita-mono-fonts/AdwaitaMono-Bold.ttf"
 # The ground and the default text are a pinned copy of the TUI's Base and Text
-# (Catppuccin Mocha today), so the padding around the capture is the same colour
+# (Lane today, ADR-166), so the padding around the capture is the same colour
 # as the terminal inside it. It is a copy, not a read: if internal/theme changes
 # its Base or Text, edit these two tuples by hand and re-run scripts/screenshot.sh.
 # No window chrome, no shadow, no rounded corners: a screenshot is a terminal,
 # not a device (docs/style.md §5).
-BG, FG = (30, 30, 46), (205, 214, 244)
+BG, FG = (22, 22, 22), (244, 244, 244)
 BASE16 = [(0, 0, 0), (205, 49, 49), (13, 188, 121), (229, 229, 16), (36, 114, 200), (188, 63, 188), (17, 168, 205), (229, 229, 229),
           (102, 102, 102), (241, 76, 76), (35, 209, 139), (245, 245, 67), (59, 142, 234), (214, 112, 214), (41, 184, 219), (255, 255, 255)]
 
@@ -43,6 +43,57 @@ def c256(n):
         return (lv[n // 36], lv[(n // 6) % 6], lv[n % 6])
     g = 8 + (n - 232) * 10
     return (g, g, g)
+
+
+# Box-drawing glyphs are drawn, not typeset, the way a terminal does it: each
+# arm runs from the cell centre to the cell edge, so lines join across cells.
+# Arms are (up, down, left, right), 1 light and 2 heavy; ╭╮╰╯ get an arc.
+BOX = {}
+for chars, arms in [
+    ("─━", [(0, 0, 1, 1), (0, 0, 2, 2)]), ("│┃", [(1, 1, 0, 0), (2, 2, 0, 0)]),
+    ("┌┐└┘", [(0, 1, 0, 1), (0, 1, 1, 0), (1, 0, 0, 1), (1, 0, 1, 0)]),
+    ("┏┓┗┛", [(0, 2, 0, 2), (0, 2, 2, 0), (2, 0, 0, 2), (2, 0, 2, 0)]),
+    ("╭╮╰╯", [(0, 1, 0, 1), (0, 1, 1, 0), (1, 0, 0, 1), (1, 0, 1, 0)]),
+    ("├┤┬┴┼", [(1, 1, 0, 1), (1, 1, 1, 0), (0, 1, 1, 1), (1, 0, 1, 1), (1, 1, 1, 1)]),
+    ("┣┫┳┻╋", [(2, 2, 0, 2), (2, 2, 2, 0), (0, 2, 2, 2), (2, 0, 2, 2), (2, 2, 2, 2)]),
+    ("┿╂", [(1, 1, 2, 2), (2, 2, 1, 1)]),
+]:
+    for c, a in zip(chars, arms):
+        BOX[c] = a
+ROUND = "╭╮╰╯"
+
+
+def draw_box(d, c, px, py, cw, ch, f):
+    up, down, left, right = BOX[c]
+    cx, cy = px + cw // 2, py + ch // 2
+    w = {1: max(1, cw // 9), 2: max(2, cw // 4)}
+    if c in ROUND:  # quarter arc of radius r, then straight to the edges
+        r = cw // 2
+        t = w[1]
+        ox = cx + r if right else cx - r
+        oy = cy + r if down else cy - r
+        start = {(0, 1, 0, 1): 180, (0, 1, 1, 0): 270, (1, 0, 0, 1): 90, (1, 0, 1, 0): 0}[(up, down, left, right)]
+        d.arc((ox - r, oy - r, ox + r - 1, oy + r - 1), start, start + 90, fill=f, width=t)
+        if down:
+            d.rectangle((cx - t // 2, oy, cx - t // 2 + t - 1, py + ch - 1), fill=f)
+        if up:
+            d.rectangle((cx - t // 2, py, cx - t // 2 + t - 1, oy), fill=f)
+        if right and ox < px + cw - 1:
+            d.rectangle((ox, cy - t // 2, px + cw - 1, cy - t // 2 + t - 1), fill=f)
+        if left and ox > px:
+            d.rectangle((px, cy - t // 2, ox, cy - t // 2 + t - 1), fill=f)
+        return
+    for on, box in ((up, lambda t: (cx - t // 2, py, cx - t // 2 + t - 1, cy + t // 2)),
+                    (down, lambda t: (cx - t // 2, cy - t // 2, cx - t // 2 + t - 1, py + ch - 1)),
+                    (left, lambda t: (px, cy - t // 2, cx + t // 2, cy - t // 2 + t - 1)),
+                    (right, lambda t: (cx - t // 2, cy - t // 2, px + cw - 1, cy - t // 2 + t - 1))):
+        if on:
+            d.rectangle(box(w[on]), fill=f)
+
+
+# Block elements as the share of the cell they fill (top, bottom), drawn
+# edge to edge like a terminal does, so half-block text has no seams.
+BLOCK = {"█": (0, 1), "▀": (0, 0.5), "▄": (0.5, 1)}
 
 
 def parse(text):
@@ -131,10 +182,12 @@ def main():
                 continue
             if di:
                 f = tuple((v + bb) // 2 for v, bb in zip(f, b or BG))
-            # box drawing: stretch vertical strokes over the full cell height
-            if c in "│┃║":
-                w = 2 if c == "┃" else 1
-                d.rectangle((px + cw // 2 - w // 2, py, px + cw // 2 - w // 2 + w - 1, py + ch - 1), fill=f)
+            if c in BOX:
+                draw_box(d, c, px, py, cw, ch, f)
+                continue
+            if c in BLOCK:
+                top, bot = BLOCK[c]
+                d.rectangle((px, py + round(ch * top), px + cw - 1, py + round(ch * bot) - 1), fill=f)
                 continue
             font = None
             for fnt, cmap in fonts:

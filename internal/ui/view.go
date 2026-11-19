@@ -13,6 +13,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/keys"
 	"github.com/sturlabragason/fleet/internal/layout"
+	"github.com/sturlabragason/fleet/internal/logo"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/theme"
 )
@@ -47,6 +48,9 @@ func (m *Model) body() []string {
 	}
 	if m.help {
 		return strings.Split(m.helpOverlay(), "\n")
+	}
+	if len(m.agents) == 0 {
+		return m.splash()
 	}
 	if tv, ok := m.tiers(); ok { // past one screen of cards (ADR-32)
 		return m.tierLines(tv)
@@ -89,14 +93,15 @@ func (m *Model) fitPane(blocks []string) string {
 }
 
 // helpLines is the hotkey list for the overlay and the rows it has (the
-// pane minus the header). Too tall for the pane: two columns.
+// pane minus the header). Too tall for the pane: two columns. With rows to
+// spare the 3-row mark heads it (ADR-166).
 func (m *Model) helpLines() (lines []string, avail int) {
 	avail = max(m.h-1, 1)
 	h := keys.HelpStyled(min(m.w, keys.PopupWidth()-2*keys.PopupMargin-2))
 	if strings.Count(h, "\n")+1 > avail {
 		h = keys.HelpColumns(m.w)
 	}
-	return strings.Split(h, "\n"), avail
+	return logo.Head(strings.Split(h, "\n"), m.w, avail), avail
 }
 
 // helpMaxOff is the last scroll offset: the window of avail-1 rows (one is

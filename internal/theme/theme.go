@@ -3,14 +3,13 @@
 //
 // A palette is a set of roles, not a set of shades: Working, Waiting, Select
 // and the structural ladder (Base → Crust, Text → Overlay0) mean the same
-// thing in every theme, only the hex changes. Catppuccin Mocha is the default;
-// `theme = "..."` under [defaults] in config.toml picks another (ADR-55).
+// thing in every theme, only the hex changes. Lane, the house brand, is the
+// default (ADR-166); `theme = "..."` under [defaults] in config.toml picks
+// another (ADR-55).
 //
-// The house brand's Lane blue is a print and web accent (1.8:1 on the Mocha
-// base, unreadable here) and is deliberately not used. What carries over from
-// the brand is the discipline: colour means status, never decoration, and at
-// most one thing on screen is the accent. Before adding a colour or a status,
-// read docs/style.md §4.
+// From the brand comes the discipline too: colour means status, never
+// decoration, and at most one thing on screen is the accent. Before adding a
+// colour or a status, read docs/style.md §4.
 package theme
 
 import (
@@ -20,7 +19,7 @@ import (
 )
 
 // Default is the palette used when config.toml names none.
-const Default = "catppuccin"
+const Default = "lane"
 
 // Swatch is a named colour.
 type Swatch struct{ Name, Hex string }
@@ -66,34 +65,34 @@ type Palette struct {
 // tmux format string) must either read them at render time or re-read them
 // from an OnChange hook.
 var (
-	Base       = catppuccin.Base
-	Mantle     = catppuccin.Mantle
-	Crust      = catppuccin.Crust
-	Surface0   = catppuccin.Surface0
-	Surface1   = catppuccin.Surface1
-	Surface2   = catppuccin.Surface2
-	Text       = catppuccin.Text
-	Subtext0   = catppuccin.Subtext0
-	Overlay2   = catppuccin.Overlay2
-	Overlay1   = catppuccin.Overlay1
-	Overlay0   = catppuccin.Overlay0
-	Working    = catppuccin.Working
-	WorkingDim = catppuccin.WorkingDim
-	Waiting    = catppuccin.Waiting
-	WaitingAlt = catppuccin.WaitingAlt
-	Error      = catppuccin.Error
-	Stuck      = catppuccin.Stuck
-	Idle       = catppuccin.Idle
-	Gone       = catppuccin.Gone
-	Select     = catppuccin.Select
-	Supervisor = catppuccin.Supervisor
-	Muted      = catppuccin.Overlay1
+	Base       = lane.Base
+	Mantle     = lane.Mantle
+	Crust      = lane.Crust
+	Surface0   = lane.Surface0
+	Surface1   = lane.Surface1
+	Surface2   = lane.Surface2
+	Text       = lane.Text
+	Subtext0   = lane.Subtext0
+	Overlay2   = lane.Overlay2
+	Overlay1   = lane.Overlay1
+	Overlay0   = lane.Overlay0
+	Working    = lane.Working
+	WorkingDim = lane.WorkingDim
+	Waiting    = lane.Waiting
+	WaitingAlt = lane.WaitingAlt
+	Error      = lane.Error
+	Stuck      = lane.Stuck
+	Idle       = lane.Idle
+	Gone       = lane.Gone
+	Select     = lane.Select
+	Supervisor = lane.Supervisor
+	Muted      = lane.Overlay1
 
 	// TeamPalette is the active palette's team colours.
-	TeamPalette = catppuccin.Team
+	TeamPalette = lane.Team
 )
 
-var active = catppuccin
+var active = lane
 
 var hooks []func()
 

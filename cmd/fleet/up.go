@@ -18,6 +18,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/keys"
+	"github.com/sturlabragason/fleet/internal/logo"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/sysx"
@@ -539,7 +540,7 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		{"set-option", "-g", "display-panes-active-colour", theme.Text},
 		{"set-option", "-g", "clock-mode-colour", theme.Supervisor},
 		// The unread-report badge (ADR-36), a steady ● in the waiting colour (ADR-81), is set by the resident poll: the watcher when live (ADR-75), else the overview.
-		{"set-option", "-g", "status-left", "#[fg=" + theme.Crust + ",bg=" + theme.Supervisor + ",bold] fleet #[default] #{?" + fleet.BadgeOption + ",#[fg=" + theme.Waiting + "]#{?#{&&:#{" + fleet.MultiOption + "},#{" + fleet.BadgeByOption + "}},#{" + fleet.BadgeByOption + "}, ● #{" + fleet.BadgeOption + "} }#[default] ,}" + usageSegment()},
+		{"set-option", "-g", "status-left", "#[fg=" + theme.Crust + ",bg=" + theme.Supervisor + ",bold] " + logo.Plain(logo.Line, false)[0] + " #[default] #{?" + fleet.BadgeOption + ",#[fg=" + theme.Waiting + "]#{?#{&&:#{" + fleet.MultiOption + "},#{" + fleet.BadgeByOption + "}},#{" + fleet.BadgeByOption + "}, ● #{" + fleet.BadgeOption + "} }#[default] ,}" + usageSegment()},
 		{"set-option", "-g", "status-left-length", "150"},
 		{"set-option", "-g", "window-status-separator", ""},
 		{"set-option", "-g", "window-status-format", "#[fg=" + theme.Overlay1 + "] #I #W "},
@@ -569,7 +570,7 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		{"bind-key", "-n", "M-R", wallCmdAct(f.Exe, "reset")},
 		{"bind-key", "-n", "M-P", wallCmdAct(f.Exe, "pick")},
 		{"bind-key", "-n", keys.HelpTmuxKey, "display-popup", "-E", "-b", "rounded",
-			"-w", strconv.Itoa(keys.PopupWidth()), "-h", strconv.Itoa(keys.PopupHeight()),
+			"-w", strconv.Itoa(keys.PopupWidth()), "-h", strconv.Itoa(keys.PopupHeight() + logo.HeadRows),
 			"-T", " fleet keys · any key closes ", exe + " keys --popup"},
 		append([]string{"bind-key", "-n", keys.ChangesTmuxKey}, changesPopupArgs(exe)...),
 		changesStatusClick(exe),

@@ -12,6 +12,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/keys"
+	"github.com/sturlabragason/fleet/internal/logo"
 	"github.com/sturlabragason/fleet/internal/theme"
 	"github.com/sturlabragason/fleet/internal/tmux"
 	"github.com/sturlabragason/fleet/internal/tools"
@@ -445,7 +446,7 @@ func TestSingleAdmiralChromeUnchanged(t *testing.T) {
 		t.Errorf("status-left badge blinks: %q", left)
 	}
 	oldBorder := " #{?#{==:#{@role},sup},#[fg=" + theme.Supervisor + "]#[bold]admiral#[default]#{?@fleet_admiral_profile,#[fg=" + theme.Muted + "] · #{@fleet_admiral_profile}#[default],}#{?@fleet_ctx,#[fg=#{@fleet_ctx_color}] · ctx #{@fleet_ctx}#[default],},#{?#{==:#{@role},ov},#[fg=" + theme.Text + "]#[bold]overview#[default]," + targetMark + "#[fg=#{?@fleet_color,#{@fleet_color},default}]#{@fleet_glyph} #{@fleet_agent}" + pinMark + "#{?@fleet_team, #[fg=#{@fleet_team_color}]◆,} #[fg=" + theme.Muted + "]#{@fleet_status}#[default]" + nextOutMark + "}} "
-	oldLeft := "#[fg=" + theme.Crust + ",bg=" + theme.Supervisor + ",bold] fleet #[default] #{?" + fleet.BadgeOption + ",#[fg=" + theme.Waiting + "] ● #{" + fleet.BadgeOption + "} #[default] ,}"
+	oldLeft := "#[fg=" + theme.Crust + ",bg=" + theme.Supervisor + ",bold] " + logo.Plain(logo.Line, false)[0] + " #[default] #{?" + fleet.BadgeOption + ",#[fg=" + theme.Waiting + "] ● #{" + fleet.BadgeOption + "} #[default] ,}"
 	pane, _ := c.Run("display-message", "-p", "-t", "f:main", "#{pane_id}")
 	expand := func(f string) string {
 		out, err := c.Run("display-message", "-p", "-t", pane, f)
