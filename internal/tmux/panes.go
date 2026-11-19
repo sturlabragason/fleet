@@ -8,8 +8,43 @@ import (
 // Spawn opens a detached window (creating session if needed) running cmd.
 // Returns the new pane id (%N).
 func (c *Client) Spawn(session, window, dir string, env []string, cmd string) (string, error) {
+	return c.Run(spawnArgs(c.HasSession(session), session, window, dir, env, cmd)...)
+}
+
+// SpawnKeep is Spawn with remain-on-exit on for the new pane, set in the same
+// tmux call: tmux runs one client's command list before it reaps a child, so
+// a command that exits at once still leaves its dead pane behind. Set in a
+// later call, the window could close first and the exit go unseen.
+func (c *Client) SpawnKeep(session, window, dir string, env []string, cmd string) (string, error) {
+	if Headless {
+		p, err := c.Spawn(session, window, dir, env, cmd)
+		if err == nil {
+			c.SetPaneOption(p, "remain-on-exit", "on")
+		}
+		return p, err
+	}
+	const keep = "set-option -p remain-on-exit on"
+	exists := c.HasSession(session)
+	args := spawnArgs(exists, session, window, dir, env, cmd)
+	if !exists {
+		// new-session makes the new pane the target of the commands after it.
+		return c.Run(append(args, ";", "set-option", "-p", "remain-on-exit", "on")...)
+	}
+	// new-window -d does not, but its after-new-window hook runs on it; the
+	// hook is set for this one call.
+	t := "=" + session + ":"
+	args = append([]string{"set-hook", "-t", t, "after-new-window", keep, ";"}, args...)
+	p, err := c.Run(append(args, ";", "set-hook", "-u", "-t", t, "after-new-window")...)
+	if err != nil {
+		// tmux skips the rest of the list after a failed command.
+		c.Run("set-hook", "-u", "-t", t, "after-new-window")
+	}
+	return p, err
+}
+
+func spawnArgs(exists bool, session, window, dir string, env []string, cmd string) []string {
 	var args []string
-	if c.HasSession(session) {
+	if exists {
 		args = []string{"new-window", "-d", "-t", session + ":", "-n", window}
 	} else {
 		args = []string{"new-session", "-d", "-s", session, "-n", window, "-x", "200", "-y", "50"}
@@ -21,8 +56,7 @@ func (c *Client) Spawn(session, window, dir string, env []string, cmd string) (s
 	for _, e := range env {
 		args = append(args, "-e", e)
 	}
-	args = append(args, cmd)
-	return c.Run(args...)
+	return append(args, cmd)
 }
 
 // SetPaneOption sets a pane-level option such as @fleet_agent.

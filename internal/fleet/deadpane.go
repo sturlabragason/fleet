@@ -19,10 +19,18 @@ const deadTail = 8
 // deadWakeLine caps the screen line quoted in a crash wake line.
 const deadWakeLine = 80
 
+// deadSettle is how long a dead pane without an exit status waits for one.
+// tmux marks a pane dead when its pty closes but fills pane_dead_status only
+// when it reaps the child, which can be a later event-loop pass; a poll in
+// between would claim a clean exit as "exit unknown", a crash that is not
+// closed. Past deadSettle it is reported as it is (headless never says).
+const deadSettle = 2 * time.Second
+
 type deadReaper struct {
-	run   sync.Mutex
-	mu    sync.Mutex
-	tried map[string]time.Time // last close attempt per agent
+	run       sync.Mutex
+	mu        sync.Mutex
+	tried     map[string]time.Time // last close attempt per agent
+	unsettled map[string]time.Time // first sighting of a status-less dead pane, by pane ID
 }
 
 type deadJob struct {
@@ -72,6 +80,7 @@ func (f *Fleet) deadJobs(as []*board.Agent, panes map[string]tmux.PaneInfo, now 
 			// A park or close in progress: an acp host exits on its stop
 			// request just before fleet kills its window.
 		case a.Exit == nil && f.holdDead(a, p, off, now):
+		case a.Exit == nil && f.dead.unsettledFor(p, now):
 		case a.Exit == nil:
 			jobs = append(jobs, deadJob{a: a, pane: p, fresh: true})
 		case off:
@@ -80,6 +89,28 @@ func (f *Fleet) deadJobs(as []*board.Agent, panes map[string]tmux.PaneInfo, now 
 		}
 	}
 	return jobs
+}
+
+// unsettledFor reports whether p is dead without an exit status yet and has
+// been for less than deadSettle. Callers hold d.mu.
+func (d *deadReaper) unsettledFor(p tmux.PaneInfo, now time.Time) bool {
+	if p.DeadStatus != "" || p.DeadSignal != "" {
+		delete(d.unsettled, p.ID)
+		return false
+	}
+	if d.unsettled == nil {
+		d.unsettled = map[string]time.Time{}
+	}
+	first, ok := d.unsettled[p.ID]
+	if !ok {
+		first = now
+		d.unsettled[p.ID] = now
+	}
+	if now.Sub(first) < deadSettle {
+		return true
+	}
+	delete(d.unsettled, p.ID)
+	return false
 }
 
 // reportDead claims the first sighting of a's death on the board and, if

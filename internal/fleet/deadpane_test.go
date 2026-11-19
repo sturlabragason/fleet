@@ -90,7 +90,7 @@ func reports(t *testing.T, f *Fleet) []mail.Msg {
 }
 
 func TestDeadPaneCleanExitCloses(t *testing.T) {
-	f, r := deadFleet(t, "echo bye; sleep 0.3; exit 0", "", "")
+	f, r := deadFleet(t, "echo bye; exit 0", "", "")
 	poll(t, f, func() bool { c, _ := r.get(); return len(c) > 0 })
 	for range 3 {
 		poll(t, f, func() bool { return true })
@@ -184,6 +184,31 @@ func TestDeadReportText(t *testing.T) {
 func deadReportLine(e *board.Exit, grace time.Duration) string {
 	_, _, l := deadReport("x", e, "z", "", grace)
 	return l
+}
+
+// A dead pane whose exit status tmux has not filled in yet is not claimed
+// until it has one, or until deadSettle has passed (then "exit unknown").
+func TestDeadJobsWaitForExitStatus(t *testing.T) {
+	f := &Fleet{}
+	a := &board.Agent{Name: "a", Profile: "fake"}
+	now := time.Now()
+	for _, c := range []struct {
+		status string
+		at     time.Duration
+		want   int
+	}{
+		{"", 0, 0},
+		{"", deadSettle / 2, 0},
+		{"0", deadSettle / 2, 1},
+		{"", deadSettle / 2, 0}, // a new sighting restarts the wait
+		{"", deadSettle * 5 / 4, 0},
+		{"", deadSettle * 3, 1},
+	} {
+		p := tmux.PaneInfo{ID: "%1", Agent: "a", Dead: true, DeadStatus: c.status}
+		if got := f.deadJobs([]*board.Agent{a}, map[string]tmux.PaneInfo{"a": p}, now.Add(c.at), false); len(got) != c.want {
+			t.Fatalf("status %q at %v: %d jobs, want %d", c.status, c.at, len(got), c.want)
+		}
+	}
 }
 
 // The parked skip is for acp hosts only, and so is the closing one: a tmux

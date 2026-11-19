@@ -578,14 +578,13 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 	} else {
 		env = append(env, "GRAPHIFY_OUT=") // unset parent's graph when this repo has none
 	}
-	pane, err := f.T.Spawn(Session, WindowPrefix+name, dir, env, tools.ShellCommand(argv))
+	pane, err := f.T.SpawnKeep(Session, WindowPrefix+name, dir, env, tools.ShellCommand(argv))
 	if err != nil {
 		log.Error("spawn failed", "agent", name, "err", err)
 		return nil, err
 	}
 	f.T.SetPaneOption(pane, "@fleet_agent", name)
 	f.T.SetPaneOption(pane, "@role", "agent")
-	f.T.SetPaneOption(pane, "remain-on-exit", "on")
 	f.T.Run("set-option", "-s", "-t", Session, "escape-time", "10")
 	f.T.Run("set-option", "-g", "mouse", "on")
 	if afterTag != nil {
