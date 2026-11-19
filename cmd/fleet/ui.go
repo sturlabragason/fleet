@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -43,6 +44,11 @@ type backend struct {
 	// supAt when; polls only touch them, one at a time.
 	supCtx [2]string
 	supAt  time.Time
+	// themeSeq numbers theme previews; themeRan, under themeMu, is the
+	// last one applied, so a slow earlier preview never wins (theme_pick.go).
+	themeSeq atomic.Int64
+	themeMu  sync.Mutex
+	themeRan int64
 }
 
 // supCtxEvery is how often a snapshot poll recomputes the admiral meter.

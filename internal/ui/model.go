@@ -53,6 +53,7 @@ type Model struct {
 	wv        *waitsView  // w: the waits on you list replaces the tiles (ADR-167)
 	waitsSort int         // the w view's sort (s), kept while the overview runs
 	ans       *answerView // r: answering one agent's prompt, over everything else
+	tp        *themePick  // t: the theme picker above the tiles (ADR-175)
 }
 
 type agentsMsg struct {
@@ -216,6 +217,8 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 		return m, anim()
 	case infoMsg:
 		m.msg, m.msgAt = string(msg), m.now()
+	case themeSavedMsg:
+		m.themeSaved(msg)
 	case wallMsg:
 		m.msg, m.msgAt = msg.info, m.now()
 		if msg.target != "" {
@@ -234,7 +237,7 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 		if m.wv != nil && m.ans == nil {
 			return m, m.waitsMouse(msg)
 		}
-		if extViewOpen(m) || m.wv != nil || m.ans != nil {
+		if extViewOpen(m) || m.wv != nil || m.ans != nil || m.tp != nil {
 			return m, nil
 		}
 		if m.help && msg.Action == tea.MouseActionPress {
@@ -339,6 +342,9 @@ func (m *Model) key(k string) tea.Cmd {
 	if m.ans != nil {
 		return m.answerKey(k)
 	}
+	if m.tp != nil {
+		return m.themeKey(k)
+	}
 	if m.wv != nil {
 		return m.waitsKey(k)
 	}
@@ -384,6 +390,8 @@ func (m *Model) key(k string) tea.Cmd {
 		m.help = true
 	case "w":
 		return m.openWaits()
+	case "t":
+		return m.openThemes()
 	case "r":
 		return m.openAnswer(m.selName())
 	case "left", "h":

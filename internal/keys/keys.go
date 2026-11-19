@@ -125,6 +125,8 @@ var Bindings = []Binding{
 		Desc: "hand the selected agent to another admiral (several admirals only)"},
 	{Group: Overview, Key: "P",
 		Desc: "same as Alt-P: pick the admiral's profile"},
+	{Group: Overview, Key: "t",
+		Desc: "pick the colour theme: ↑↓ previews it live on the overview and tmux, ⏎ saves it to config.toml, Esc puts the old one back"},
 	{Group: Overview, Key: "q",
 		Desc: "quit the overview"},
 }

@@ -291,7 +291,7 @@ local preferences (never committed): ~/.config/fleet/config.toml ($FLEET_CONFIG 
   [defaults] theme picks the TUI palette: lane (default), catppuccin,
   stealth, neon-drive, phosphor, graphite, or one of 20 VS Code themes
   (shades-of-purple, dracula, github-light, ...; see THEMES.md) -- set it
-  and run fleet up again;
+  and run fleet up again, or press t in the overview to preview and save one;
   [defaults] animation = false keeps the start-up banner and the header
   logo still (both also off under NO_COLOR and FLEET_NO_ANIM; the banner also
   in CI, outside a terminal and inside tmux);

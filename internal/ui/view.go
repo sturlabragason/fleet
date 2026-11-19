@@ -50,6 +50,14 @@ func (m *Model) body() []string {
 	if m.help {
 		return strings.Split(m.helpOverlay(), "\n")
 	}
+	if m.tp != nil { // the tiles stay below the picker: they are the preview
+		return append(m.themeLines(), m.tiles()...)
+	}
+	return m.tiles()
+}
+
+// tiles is the splash, the tiers, or the card grid and its overflow line.
+func (m *Model) tiles() []string {
 	if len(m.agents) == 0 {
 		return m.splash()
 	}

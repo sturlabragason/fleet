@@ -119,6 +119,13 @@ func Names() []string {
 	return out
 }
 
+// Get returns the named palette, for drawing one that is not active (the
+// overview's theme picker shows each theme's swatches).
+func Get(name string) (Palette, bool) {
+	p, ok := palettes[name]
+	return p, ok
+}
+
 // Load makes the named palette active. "" means the default. An unknown name
 // is an error: a typo must not silently leave the theme unchanged.
 func Load(name string) error {
