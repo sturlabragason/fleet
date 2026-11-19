@@ -43,9 +43,10 @@ func TestBackdropOverlay(t *testing.T) {
 	vp.add(Entry{Kind: KindAgent, Text: "plain text"})
 	vp.mu.Lock()
 	vp.paint(true)
+	esc := vp.bg.esc
 	vp.mu.Unlock()
-	if strings.ContainsAny(ansi.Strip(plain.String()), "░·") {
-		t.Errorf("backdrop drawn on colourless ACP pane: %q", ansi.Strip(plain.String()))
+	if esc != nil || strings.ContainsRune(ansi.Strip(plain.String()), '░') {
+		t.Errorf("backdrop drawn on colourless ACP pane (esc=%v): %q", esc != nil, ansi.Strip(plain.String()))
 	}
 	vp.close()
 }
