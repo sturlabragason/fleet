@@ -53,7 +53,7 @@ type Model struct {
 	wv        *waitsView  // w: the waits on you list replaces the tiles (ADR-167)
 	waitsSort int         // the w view's sort (s), kept while the overview runs
 	ans       *answerView // r: answering one agent's prompt, over everything else
-	tp        *themePick  // t: the theme picker above the tiles (ADR-175)
+	tp        *themePick  // T: the theme picker above the tiles (ADR-175)
 }
 
 type agentsMsg struct {
@@ -387,7 +387,7 @@ func (m *Model) key(k string) tea.Cmd {
 		m.help = true
 	case "w":
 		return m.openWaits()
-	case "t":
+	case "T":
 		return m.openThemes()
 	case "r":
 		return m.openAnswer(m.selName())

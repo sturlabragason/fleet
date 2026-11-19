@@ -12,8 +12,8 @@ import (
 	"github.com/sturlabragason/fleet/internal/theme"
 )
 
-// ThemeBackend is what a Backend adds for the theme picker (t, ADR-175).
-// Optional: without it t says so.
+// ThemeBackend is what a Backend adds for the theme picker (T, ADR-175).
+// Optional: without it T says so.
 type ThemeBackend interface {
 	// ThemeChrome returns the work that re-colours the tmux chrome with the
 	// active palette. It is built on the UI goroutine, which owns the
@@ -42,10 +42,10 @@ type themeSavedMsg struct {
 	err  error
 }
 
-// openThemes is t: open the picker on the active theme.
+// openThemes is T: open the picker on the active theme.
 func (m *Model) openThemes() tea.Cmd {
 	if _, ok := m.be.(ThemeBackend); !ok || !m.be.WallEnabled() {
-		m.msg = "t needs fleet up"
+		m.msg = "T needs fleet up"
 		return nil
 	}
 	orig := theme.Active().Name
@@ -73,7 +73,7 @@ func (m *Model) themeKey(k string) tea.Cmd {
 		save := m.be.(ThemeBackend).SaveTheme(name)
 		m.tp = nil
 		return func() tea.Msg { return themeSavedMsg{name, save()} }
-	case "esc", "q", "t":
+	case "esc", "q", "T":
 		m.tp = nil
 		if theme.Active().Name == p.orig {
 			return nil

@@ -51,14 +51,14 @@ func TestThemePicker(t *testing.T) {
 		saved  []string
 		open   bool
 	}{
-		{"opens on the active theme", []string{"t"}, names[0], nil, nil, true},
-		{"move previews", []string{"t", "j", "j"}, names[2], []string{names[1], names[2]}, nil, true},
-		{"top edge does nothing", []string{"t", "k"}, names[0], nil, nil, true},
-		{"esc restores", []string{"t", "j", "j", "esc"}, names[0], []string{names[1], names[2], names[0]}, nil, false},
-		{"esc unmoved touches nothing", []string{"t", "esc"}, names[0], nil, nil, false},
-		{"enter saves the previewed", []string{"t", "j", "enter"}, names[1], []string{names[1]}, []string{names[1]}, false},
-		{"ctrl+c restores before quitting", []string{"t", "j", "ctrl+c"}, names[0], []string{names[1]}, nil, false},
-		{"other keys stay in the picker", []string{"t", "w", "r", "x"}, names[0], nil, nil, true},
+		{"opens on the active theme", []string{"T"}, names[0], nil, nil, true},
+		{"move previews", []string{"T", "j", "j"}, names[2], []string{names[1], names[2]}, nil, true},
+		{"top edge does nothing", []string{"T", "k"}, names[0], nil, nil, true},
+		{"esc restores", []string{"T", "j", "j", "esc"}, names[0], []string{names[1], names[2], names[0]}, nil, false},
+		{"esc unmoved touches nothing", []string{"T", "esc"}, names[0], nil, nil, false},
+		{"enter saves the previewed", []string{"T", "j", "enter"}, names[1], []string{names[1]}, []string{names[1]}, false},
+		{"ctrl+c restores before quitting", []string{"T", "j", "ctrl+c"}, names[0], []string{names[1]}, nil, false},
+		{"other keys stay in the picker", []string{"T", "w", "r", "x"}, names[0], nil, nil, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			be := &themeBE{}
@@ -85,7 +85,7 @@ func TestThemePicker(t *testing.T) {
 func TestThemePickerSaveFails(t *testing.T) {
 	be := &themeBE{saveErr: errors.New("read-only")}
 	m := pickerModel(t, be)
-	for _, k := range []string{"t", "j", "enter"} {
+	for _, k := range []string{"T", "j", "enter"} {
 		run(m, k)
 	}
 	if !strings.Contains(m.msg, "not saved: read-only") {
@@ -95,7 +95,7 @@ func TestThemePickerSaveFails(t *testing.T) {
 
 func TestThemePickerNeedsBackend(t *testing.T) {
 	m := pickerModel(t, &fakeBE{})
-	run(m, "t")
+	run(m, "T")
 	if m.tp != nil || !strings.Contains(m.msg, "needs fleet up") {
 		t.Fatalf("open %v msg %q", m.tp != nil, m.msg)
 	}
@@ -106,7 +106,7 @@ func TestThemePickerDrawsAboveTiles(t *testing.T) {
 	m := pickerModel(t, be)
 	as, _ := be.Refresh()
 	m.setAgents(as)
-	run(m, "t")
+	run(m, "T")
 	v := ansi.Strip(m.View())
 	first, _ := theme.Get(theme.Names()[0])
 	if !strings.Contains(v, "theme 1/") || !strings.Contains(v, "› ") || !strings.Contains(v, first.Label) || !strings.Contains(v, "alpha") {

@@ -7,7 +7,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/prefs"
 )
 
-// The overview's theme picker (t, ADR-175): ui.ThemeBackend.
+// The overview's theme picker (T, ADR-175): ui.ThemeBackend.
 
 // ThemeChrome builds the set-option half of configure from the active
 // palette now, on the UI goroutine, and returns the work of applying it. Key

@@ -125,7 +125,7 @@ var Bindings = []Binding{
 		Desc: "hand the selected agent to another admiral (several admirals only)"},
 	{Group: Overview, Key: "P",
 		Desc: "same as Alt-P: pick the admiral's profile"},
-	{Group: Overview, Key: "t",
+	{Group: Overview, Key: "T",
 		Desc: "pick the colour theme: ↑↓ previews it live on the overview and tmux, ⏎ saves it to config.toml, Esc puts the old one back"},
 	{Group: Overview, Key: "q",
 		Desc: "quit the overview"},
@@ -362,15 +362,62 @@ type Extension struct {
 
 var extNames = map[string]bool{}
 
+// keyTokens splits a binding's Key into the keys it names: "a / +" is a and
+// +, "1/2/4/6/9/m" each of its digits and m, "Alt-1/2" Alt-1 and Alt-2, and
+// "Alt-w 1/2" the chords Alt-w 1 and Alt-w 2.
+// shortcut: a run such as "hjkl" stays one token, so a clash with h alone is not caught; split those if one ever matters.
+func keyTokens(k string) []string {
+	var out []string
+	for alt := range strings.SplitSeq(k, " / ") {
+		chord, body := "", strings.TrimSpace(alt)
+		if i := strings.LastIndex(body, " "); i >= 0 {
+			chord, body = body[:i+1], body[i+1:]
+		}
+		items := strings.Split(body, "/")
+		mod := ""
+		if i := strings.LastIndex(items[0], "-"); i > 0 && len(items) > 1 {
+			mod = items[0][:i+1]
+		}
+		for j, it := range items {
+			if j > 0 {
+				it = mod + it
+			}
+			out = append(out, chord+it)
+		}
+	}
+	return out
+}
+
+// Clash reports the Key of a binding in b's group that already names one of
+// b's keys.
+func Clash(b Binding) (string, bool) {
+	for _, x := range Bindings {
+		if x.Group != b.Group {
+			continue
+		}
+		for _, t := range keyTokens(b.Key) {
+			if slices.Contains(keyTokens(x.Key), t) {
+				return x.Key, true
+			}
+		}
+	}
+	return "", false
+}
+
 // Register adds an extension's bindings, marked Ext. Each goes before its
 // group's "q" (quit stays last), or at the end of its group when the group
-// has none. A name registered twice panics.
+// has none. A name registered twice panics, and so does a key its group
+// already binds: the overview looks extension keys up before its own, so a
+// clash would silently shadow a built-in key (ADR-175).
 func Register(e Extension) {
 	if e.Name == "" || extNames[e.Name] {
 		panic("keys.Register: extension name empty or registered twice: " + e.Name)
 	}
 	extNames[e.Name] = true
 	for _, b := range e.Bindings {
+		if k, ok := Clash(b); ok {
+			panic("keys.Register: " + e.Name + " binds " + b.Key + " in " + string(b.Group) + ", already bound as " + k)
+		}
 		b.Ext = true
 		at := len(Bindings)
 		for i, x := range Bindings {

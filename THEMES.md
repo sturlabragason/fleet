@@ -3,7 +3,7 @@
 fleet ships 20 palettes taken from the 20 most-installed colour themes on the VS Code Marketplace
 (ranking read 2026-11-19, icon packs and non-theme extensions left out). Set one with
 `theme = "<name>"` under `[defaults]` in `~/.config/fleet/config.toml` and run `fleet up` again, or
-press `t` in the overview to preview each theme live and save one with Enter (ADR-175).
+press `T` in the overview to preview each theme live and save one with Enter (ADR-175).
 
 fleet uses each theme's published colours: the editor background and foreground, the terminal
 ANSI colours, and a token colour where the terminal set has none (`internal/theme/vscode_palettes.go`).
