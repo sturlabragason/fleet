@@ -313,8 +313,8 @@ func swapAdmiral(f *fleet.Fleet, name string) (string, error) {
 // swapAdmiralOf is swapAdmiral for admiral adm.
 func swapAdmiralOf(f *fleet.Fleet, adm, name string) (string, error) {
 	log := logx.For("admiral")
-	draft, pending := holdForDraft(f, adm)
-	defer restoreDraft(f, adm, draft, pending)
+	d := holdForDraft(f, adm)
+	defer func() { restoreDraft(f, adm, d) }()
 	unlock, err := supervisor.LockOf(f.Home, adm)
 	if err != nil {
 		return "", err
@@ -359,6 +359,10 @@ func swapAdmiralOf(f *fleet.Fleet, adm, name string) (string, error) {
 			return "", err
 		}
 		saveChoiceOf(f, adm, name)
+		if m := sentMessage(d); m != "" {
+			pasteBoot(f, pane, supLaunch{Profile: name, Paste: m})
+			d.Carried = true
+		}
 		log.Info("restart", "profile", name, "session_id", old.SessionID, "pane", pane)
 		return fmt.Sprintf("admiral restarted on %s (resumed %s)", name, shortID(old.SessionID)), nil
 	}
@@ -371,7 +375,7 @@ func swapAdmiralOf(f *fleet.Fleet, adm, name string) (string, error) {
 	if err := supervisor.WriteHandoffOf(f.Home, adm, text); err != nil {
 		return "", err
 	}
-	sl, err := admiralLaunchOf(f, adm, name, "", supervisor.BootPrompt)
+	sl, err := admiralLaunchOf(f, adm, name, "", bootPrompt(d))
 	if err != nil {
 		return "", err
 	}
@@ -388,6 +392,7 @@ func swapAdmiralOf(f *fleet.Fleet, adm, name string) (string, error) {
 	}
 	saveChoiceOf(f, adm, name)
 	pasteBoot(f, pane, sl)
+	d.Carried = d.Sent
 	log.Info("swap", "from", oldName, "to", name, "generation", gen, "session_id", sl.ID, "previous", old.SessionID, "kept_handoff", kept != "")
 	return fmt.Sprintf("%s → %s · gen %d (handoff written)", admiralLabel(adm), name, gen), nil
 }

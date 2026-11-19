@@ -195,8 +195,8 @@ func resetSupervisorOf(f *fleet.Fleet, adm string, handoff bool) (int, error) {
 		return 0, err
 	}
 	log := logx.For("admiral")
-	draft, pending := holdForDraft(f, adm)
-	defer restoreDraft(f, adm, draft, pending)
+	d := holdForDraft(f, adm)
+	defer func() { restoreDraft(f, adm, d) }()
 	unlock, err := supervisor.LockOf(f.Home, adm)
 	if err != nil {
 		return 0, err
@@ -224,7 +224,7 @@ func resetSupervisorOf(f *fleet.Fleet, adm string, handoff bool) (int, error) {
 	if _, ok := f.Profiles[prof]; !ok {
 		prof = "" // unknown or unset: FLEET_ADMIRAL_PROFILE / default
 	}
-	sl, err := supervisorCmdOf(f, adm, prof, supervisor.BootPrompt)
+	sl, err := supervisorCmdOf(f, adm, prof, bootPrompt(d))
 	if err != nil {
 		return 0, err
 	}
@@ -241,6 +241,7 @@ func resetSupervisorOf(f *fleet.Fleet, adm string, handoff bool) (int, error) {
 		return 0, err
 	}
 	pasteBoot(f, pane, sl)
+	d.Carried = d.Sent
 	log.Info("reset", "pane", pane, "generation", gen, "session_id", sl.ID, "previous", old.SessionID, "stub_handoff", stale, "handoff", handoff)
 	return gen, nil
 }

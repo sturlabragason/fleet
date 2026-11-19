@@ -798,7 +798,7 @@ The admiral's chat fills up over a long day. Fleet does not compact it (ADR-4). 
 3. Build the same command as `fleet up` with a new session ID, plus for Copilot `-i "<boot prompt>"`. Boot prompt: "You are taking over as fleet admiral. Call fleet_brief, tell the user in 1–3 lines what needs them, then wait."
 4. `respawn-pane -k` the admiral pane with that command, then update `session.json` (generation + 1, `previous` = old ID). The old Copilot session isn't deleted; its ID is in the handoff, so `copilot --resume <id>` still opens it.
 
-Before step 1, and before any profile swap or `fleet admiral restart` (§6.10), the reset waits while the admiral's input box holds the user's unsubmitted text (ADR-140): up to 2 minutes, with a status-line notice. Text still there at the deadline is saved to `~/.fleet/drafts/<admiral>-<time>.txt` and typed, without Enter, into the new admiral's box; text the user submitted or cleared during the wait is only saved. An idle agent whose box holds unsubmitted text is not parked (§7).
+Before step 1, and before any profile swap or `fleet admiral restart` (§6.10), the reset waits while the admiral's input box holds the user's unsubmitted text (ADR-140): up to 2 minutes, with a status-line notice. Text still there at the deadline is saved to `~/.fleet/drafts/<admiral>-<time>.txt` and typed, without Enter, into the new admiral's box. Text the user submitted during the wait (the box empties and the admiral turns busy within 3 s) is saved and added to the new admiral's boot prompt, because the reset kills the turn that would have answered it (ADR-178); text the user cleared is only saved. An idle agent whose box holds unsubmitted text is not parked (§7).
 
 `M-R` and overview `R` go through tmux `confirm-before` ("reset admiral? (y/n)"), because a reset by mistake loses the chat. `--handoff` (called from `fleet_handoff`) doesn't ask.
 
@@ -2641,3 +2641,12 @@ Trade-offs of the amendment: a session's place in the tree is fixed when it open
 **Rejected.** A per-item in-progress flag in the todo store: the store is an extension backend fleet does not own (ADR-164), and the agent's queue already tracks in-flight work. Auto-deleting stale items: one key clears them, and a wrong guess stays recoverable. Fuzzy dedupe of near-identical text: two asks that differ in their tail may be two decisions.
 
 **Trade-offs.** The `→ sent` mark lives as long as the `w` view; reopening it shows the row in its new place instead. A woken ACP agent whose host is not up yet refuses the send and says so; `⏎` again sends it. The line sent is the row's one-line text, up to 200 characters, with the todo id to look the rest up.
+**ADR-178: a message sent while a restart is held goes to the new admiral** (§6.5; amends ADR-140 (c)) — accepted 2026-11-19.
+
+**Context.** ADR-140 held an admiral restart while the input box had text and treated an emptied box as safe. Pressing Enter also empties it: the restart then fired within a poll, killed the turn that had just received the message, and the new admiral never saw it. The draft file ADR-140 (c) relied on was written, but nobody was told to read it.
+
+**Decision.** When the held box empties, the restart looks for up to 3 s at whether the old admiral turns busy (Enter starts or queues a turn; clearing does not). If it does, the message is added to the new admiral's boot prompt with "answer it first", and the status line says it went there. A cleared box keeps ADR-140's behaviour: saved, not acted on. The box is polled every 250 ms instead of every second, so less of the end of a sent message is missed. A same-profile resume restart gets the message pasted as its first prompt: the transcript holds it, but the turn that would have answered it was killed. The status line says the message was passed on only once it was; otherwise it says it went unanswered and where the copy is.
+
+**Rejected.** Waiting for the old admiral to finish its answer: the answer would not reach the new one's handoff, and the handoff was due because the context is full. Carrying every emptied box: ADR-140 rejected acting on text the user had not sent.
+
+**Trade-offs.** The text comes from the screen, so the last characters typed after the final poll can be missing; the prompt says so. A box that clears while the admiral is busy for another reason (a wake) counts as sent.

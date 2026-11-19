@@ -152,6 +152,13 @@ func (f *Fleet) AdmiralDraft(name string) string {
 	return in
 }
 
+// AdmiralBusy reports whether admiral name's pane shows it working: found,
+// and not detected idle.
+func (f *Fleet) AdmiralBusy(name string) bool {
+	v := f.admiralView(name)
+	return v.Pane != "" && !v.Idle
+}
+
 // RestoreAdmiralDraft types text, without Enter, into admiral name's input
 // box once the box shows and is empty, polling every `every` for up to wait.
 // It reports whether the text was typed.
