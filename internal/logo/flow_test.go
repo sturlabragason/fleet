@@ -5,15 +5,15 @@ import (
 	"testing"
 )
 
-// flowRun draws a w×h flow at 4 fps for secs seconds, the strands leaning
+// flowRun draws a w×h flow at 12 fps for secs seconds, the strands leaning
 // toward a tile near the top for the second half, and calls each with the
 // frame's time, its cells and the strands' centre rows.
 func flowRun(t *testing.T, w, h int, secs float64, each func(tt float64, cells []FlowCell, f *Flow)) {
 	t.Helper()
 	f := NewFlow(w, h)
 	cells := make([]FlowCell, w*h)
-	for n := 0; float64(n) <= secs*4; n++ {
-		tt := float64(n) / 4
+	for n := 0; float64(n) <= secs*12; n++ {
+		tt := float64(n) / 12
 		lean := Lean{}
 		if tt > secs/2 {
 			lean = Lean{Row: float64(h) * 0.2, Pull: min(1, (tt-secs/2)/8)}
@@ -72,9 +72,9 @@ func TestFlowContinuous(t *testing.T) {
 	})
 }
 
-// TestFlowSmooth: between two frames at 4 fps no strand moves half a row
-// or more anywhere, so the anti-aliased edge carries the motion instead of
-// a visible step.
+// TestFlowSmooth: between two frames at 12 fps no strand moves a quarter
+// row or more anywhere, so the anti-aliased edge carries the motion as a
+// fade instead of a visible step.
 func TestFlowSmooth(t *testing.T) {
 	var prev [5][]float64
 	worst := 0.0
@@ -88,8 +88,8 @@ func TestFlowSmooth(t *testing.T) {
 			prev[i] = append(prev[i][:0], ys...)
 		}
 	})
-	if worst >= 0.5 {
-		t.Errorf("a strand moved %.2f rows in one frame, want under 0.5", worst)
+	if worst >= 0.25 {
+		t.Errorf("a strand moved %.2f rows in one frame, want under 0.25", worst)
 	}
 }
 
@@ -128,6 +128,46 @@ func TestFlowTiny(t *testing.T) {
 			if !(f.xs[c] > f.xs[c-1]) || math.IsInf(f.xs[c], 0) {
 				t.Fatalf("%dx%d: columns out of order: %v", sz[0], sz[1], f.xs)
 			}
+		}
+	}
+}
+
+// TestFlowVaried: the strands don't move in step, and the drift does not
+// come back to where it started within two minutes, so it never reads as a
+// loop.
+func TestFlowVaried(t *testing.T) {
+	f := NewFlow(160, 44)
+	at := func(tt float64) [5]float64 {
+		var e [5]float64
+		for i := range e {
+			e[i] = f.entry(i, tt, Lean{}) - flowStarts[i]
+		}
+		return e
+	}
+	start := at(0)
+	for tt := 5.0; tt <= 120; tt += 1.0 / 12 {
+		e, near := at(tt), true
+		for i := range e {
+			near = near && math.Abs(e[i]-start[i]) < 0.15
+		}
+		if near {
+			t.Fatalf("the drift is back at its start after %.1f s", tt)
+		}
+	}
+	a, b := at(3), at(4)
+	same := 0
+	for i := 1; i < 5; i++ {
+		if math.Signbit(b[i]-a[i]) == math.Signbit(b[0]-a[0]) {
+			same++
+		}
+	}
+	if same == 4 {
+		t.Error("all strands move the same way at once")
+	}
+	// Lanes also breathe on distinct periods rather than in lockstep.
+	for i := 1; i < len(drifts); i++ {
+		if math.Abs(drifts[i].bp-drifts[0].bp) < 0.05 {
+			t.Errorf("lane %d shares breath period %.2f with lane 0", i, drifts[i].bp)
 		}
 	}
 }

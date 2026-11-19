@@ -29,21 +29,53 @@ const (
 	flowY1 = 74.0
 )
 
-// Motion (ADR-176). Every speed is slow enough that a strand moves under
-// half a row between two frames at 4 fps on a 45-row pane, so the anti-
-// aliased edge carries it smoothly instead of stepping (TestFlowSmooth).
+// Motion (ADR-176, ADR-180). Each strand drifts on its own blend of three
+// incommensurate sways, carries two swelling ripples, and its lane breathes on
+// its own rhythm, with periods and phases spread by the golden ratio so no two
+// strands move alike and the whole never visibly repeats. Every speed stays
+// slow enough that a strand moves under a quarter row between two frames at
+// 12 fps on a 45-row pane, and the anti-aliased edge carries that in
+// brightness instead of a step (TestFlowSmooth).
 const (
-	swayAmp    = 4.5  // icon units an entry rises and falls
-	swayPeriod = 18.0 // seconds per rise and fall
-	waveAmp    = 1.6  // icon units of the ripple running along each strand
-	waveLen    = 30.0 // icon units per ripple
-	wavePeriod = 14.0 // seconds for a ripple to travel one waveLen
-	breathe    = 5.0  // seconds per breath of a lane and its square
-	leanPull   = 0.22 // how far the entries lean toward the selected tile
+	swayAmp  = 4.5  // icon units an entry rises and falls
+	waveAmp  = 1.6  // icon units of the ripple running along each strand, at its fullest
+	leanPull = 0.22 // how far the entries lean toward the selected tile
 )
 
-// FlowLevels is how many brightness steps each colour role has.
-const FlowLevels = 8
+// drift is one strand's own timing: amplitude scale, three sways (periods p1,
+// p2, p3 seconds, phases f1, f2, f3), two ripples (wavelengths wl1, wl2 icon
+// units, periods wp1, wp2 seconds) whose fullness swells over ap seconds, and
+// its lane's own breath (bp seconds, phase bf).
+type drift struct {
+	amp        float64
+	p1, p2, p3 float64
+	f1, f2, f3 float64
+	wl1, wp1   float64
+	wl2, wp2   float64
+	ap, fa     float64
+	bp, bf     float64
+}
+
+var drifts = func() (d [5]drift) {
+	const g = 0.6180339887498949 // golden ratio: spreads strands without a common beat
+	for i := range d {
+		u := func(k float64) float64 { return math.Mod(float64(i+1)*g*k, 1) }
+		d[i] = drift{
+			amp: 0.85 + 0.30*u(1.1),
+			p1:  15 + 11*u(1), p2: 7.5 + 5*u(2.3), p3: 31 + 23*u(3.1),
+			f1: 2 * math.Pi * u(3.7), f2: 2 * math.Pi * u(5.1), f3: 2 * math.Pi * u(7.3),
+			wl1: 22 + 14*u(1.7), wp1: 11 + 7*u(2.9),
+			wl2: 34 + 18*u(4.7), wp2: 19 + 13*u(5.9),
+			ap: 9 + 11*u(4.3), fa: 2 * math.Pi * u(6.7),
+			bp: 4.5 + 4*u(8.3), bf: 2 * math.Pi * u(9.7),
+		}
+	}
+	return d
+}()
+
+// FlowLevels is how many brightness steps each colour role has: enough that
+// a strand's edge moving a fraction of a row reads as a fade, not a jump.
+const FlowLevels = 16
 
 // FlowCell is one cell of a flow frame: the glyph and its colour index into
 // FlowColours, -1 for a blank cell.
@@ -67,6 +99,7 @@ type Flow struct {
 	hwInk, hwAcc float64 // ribbon half thickness, rows
 	sqInk, sqAcc float64 // square half height, rows (half width is twice it in columns)
 	xs           []float64
+	env          []float64    // ripple fade envelope per column (0 once on the flat lane)
 	lanes        [5]float64   // each lane's height, snapped to a row's centre so it draws crisp
 	ys           [5][]float64 // scratch: each strand's centre row per column
 	val          []float64    // scratch: brightness per cell
@@ -78,13 +111,18 @@ type Flow struct {
 func NewFlow(w, h int) *Flow {
 	w, h = max(w, 1), max(h, 1)
 	f := &Flow{w: w, h: h, ky: float64(h) / (flowY1 - flowY0),
-		val: make([]float64, w*h), role: make([]int8, w*h), lane: make([]int8, w*h), xs: make([]float64, w)}
+		val: make([]float64, w*h), role: make([]int8, w*h), lane: make([]int8, w*h),
+		xs: make([]float64, w), env: make([]float64, w)}
 	sp := 10 * f.ky // rows between two lanes
 	f.hwInk, f.hwAcc = max(0.8, 0.13*sp), max(1.1, 0.18*sp)
 	f.sqInk, f.sqAcc = max(0.8, 0.2*sp), max(1.0, 0.25*sp)
 	f.xc = max(float64(w)-2.5-2*f.sqAcc, 1) // the accent square ends two cells short of the edge
 	for c := range f.xs {
-		f.xs[c] = flowX0 + (flowEnd-flowX0)*(float64(c)+0.5)/f.xc
+		x := flowX0 + (flowEnd-flowX0)*(float64(c)+0.5)/f.xc
+		f.xs[c] = x
+		if x < 44 {
+			f.env[c] = 0.5 + 0.5*math.Cos(math.Pi*max(0, x-flowX0)/(44-flowX0))
+		}
 	}
 	for i := range f.ys {
 		f.ys[i] = make([]float64, w)
@@ -97,7 +135,11 @@ func (f *Flow) row(y float64) float64 { return (y - flowY0) * f.ky }
 
 // entry is strand i's entry height at time t, leaning toward lean.
 func (f *Flow) entry(i int, t float64, lean Lean) float64 {
-	y := flowStarts[i] + swayAmp*math.Sin(2*math.Pi*t/swayPeriod+float64(i)*1.26)
+	d := drifts[i]
+	s := 0.50*math.Sin(2*math.Pi*t/d.p1+d.f1) +
+		0.30*math.Sin(2*math.Pi*t/d.p2+d.f2) +
+		0.20*math.Sin(2*math.Pi*t/d.p3+d.f3)
+	y := flowStarts[i] + swayAmp*d.amp*s
 	target := flowY0 + lean.Row/f.ky
 	return y + leanPull*lean.Pull*(target-y)
 }
@@ -133,14 +175,17 @@ func (f *Flow) centre(i int, t float64, lean Lean) {
 	for ; c < f.w; c++ {
 		ys[c] = b
 	}
+	d := drifts[i]
+	amp := waveAmp * (0.40 + 0.60*(0.5+0.5*math.Sin(2*math.Pi*t/d.ap+d.fa)))
 	for c := range ys {
-		x := f.xs[c]
-		env := 0.0
-		if x < 44 {
-			env = 0.5 + 0.5*math.Cos(math.Pi*max(0, x-flowX0)/(44-flowX0))
+		if env := f.env[c]; env > 0 {
+			x := f.xs[c]
+			w1 := 0.65 * math.Sin(2*math.Pi*(x/d.wl1-t/d.wp1)+d.f1)
+			w2 := 0.35 * math.Sin(2*math.Pi*(x/d.wl2-t/d.wp2)+d.f2)
+			ys[c] = f.row(ys[c] + amp*env*(w1+w2))
+		} else {
+			ys[c] = f.row(ys[c])
 		}
-		ripple := waveAmp * env * math.Sin(2*math.Pi*(x/waveLen-t/wavePeriod)+float64(i)*2.1)
-		ys[c] = f.row(ys[c] + ripple)
 	}
 }
 
@@ -157,7 +202,8 @@ func (f *Flow) Frame(t float64, lean Lean, out []FlowCell) {
 	clear(f.val) // every cell lit below was written by put, lane included
 	var breath [5]float64
 	for i := range breath {
-		p := 0.5 + 0.5*math.Sin(2*math.Pi*t/breathe-float64(i)*0.7)
+		d := drifts[i]
+		p := 0.5 + 0.5*math.Sin(2*math.Pi*t/d.bp+d.bf)
 		breath[i] = 0.7 + 0.3*p*p
 	}
 	for _, i := range [5]int{0, 4, 1, 3, flowAccent} { // back to front; the accent on top
@@ -185,11 +231,11 @@ func (f *Flow) Frame(t float64, lean Lean, out []FlowCell) {
 // The same characters are ASCII, so no fallback is needed.
 func flowGlyph(v float64) rune {
 	switch {
-	case v >= 0.6:
+	case v >= 0.64:
 		return '@'
-	case v >= 0.3:
+	case v >= 0.32:
 		return '+'
-	case v >= 0.12:
+	case v >= 0.06:
 		return ':'
 	}
 	return ' '
@@ -264,7 +310,7 @@ func FlowColours(dim float64) []string {
 	// every theme, Lane's pale blue on near-white included.
 	for _, top := range []string{theme.Mix(theme.Base, theme.Text, 0.75), theme.Select} {
 		for l := range FlowLevels {
-			out = append(out, theme.Mix(theme.Base, top, dim*(0.18+0.82*float64(l+1)/FlowLevels)))
+			out = append(out, theme.Mix(theme.Base, top, dim*float64(l+1)/FlowLevels))
 		}
 	}
 	return out

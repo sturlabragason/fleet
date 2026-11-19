@@ -174,12 +174,14 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 			cmd = nil
 		}
 	}()
+	_, m.bg.tickOnly = msg.(bgMsg) // View redraws only the backdrop after a tick
 	if c, ok := extUpdate(m, msg); ok {
 		return m, c
 	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
+		m.bg.lastView = "" // Bubble Tea repaints on WindowSizeMsg; wait for its flush before patching
 		m.reveal()
 	case agentsMsg:
 		if msg.err != nil {
@@ -213,8 +215,6 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 		return m, m.poll()
 	case bgMsg:
 		return m, m.bgTick(msg)
-	case tea.FocusMsg:
-		return m, m.bgFocus()
 	case animMsg:
 		if !m.still {
 			m.tick++

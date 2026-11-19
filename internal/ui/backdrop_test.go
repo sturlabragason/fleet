@@ -1,29 +1,140 @@
 package ui
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/sturlabragason/fleet/internal/logo"
 )
 
-// TestBgRow: a row keeps what it shows up to its last drawn cell and the
-// backdrop fills the rest, one escape per colour change.
+// TestBgRow: the backdrop starts with a reset and writes one escape per
+// colour change, blanks without one.
 func TestBgRow(t *testing.T) {
 	m := New(&fakeBE{}, "")
 	m.bg.esc = []string{"<0>", "<1>"}
-	cells := []logo.FlowCell{{R: 'a'}, {R: 'b'}, {R: 'c'}, {R: 'd', Col: 1}, {R: ' ', Col: -1}, {R: 'e', Col: 1}}
-	for _, tc := range []struct{ line, want string }{
-		{"xy    ", "xy\x1b[0m<0>c<1>d e\x1b[0m"},
-		{"", "\x1b[0m<0>abc<1>d e\x1b[0m"},
-		{"xyzuvw", "xyzuvw"},
-	} {
-		if got := m.bgRow(tc.line, cells); got != tc.want {
-			t.Errorf("bgRow(%q) = %q, want %q", tc.line, got, tc.want)
-		}
+	var b strings.Builder
+	m.bgRow(&b, []logo.FlowCell{{R: 'c'}, {R: 'd', Col: 1}, {R: ' ', Col: -1}, {R: 'e', Col: 1}})
+	if want := "\x1b[0m<0>c<1>d e\x1b[0m"; b.String() != want {
+		t.Errorf("bgRow = %q, want %q", b.String(), want)
+	}
+}
+
+// TestFrameReuse: after a backdrop tick the overview's rows are reused, not
+// redrawn; any other message redraws them.
+func TestFrameReuse(t *testing.T) {
+	m, _ := overview(120, 30, 2)
+	draws := 0
+	draw := func() string { draws++; return "head\nrow" }
+	m.frame(draw)
+	m.Update(bgMsg{gen: -1}) // a stale tick is still only a tick
+	m.frame(draw)
+	if draws != 1 {
+		t.Errorf("a backdrop tick redrew the overview: %d draws, want 1", draws)
+	}
+	m.Update(infoMsg("x"))
+	if m.frame(draw); draws != 2 {
+		t.Errorf("a message did not redraw the overview: %d draws, want 2", draws)
+	}
+}
+
+// TestBgPatch: only changed cells right of each row's tiles are written, with
+// minimal cursor moves and colour escapes, and an unchanged frame writes nothing.
+func TestBgPatch(t *testing.T) {
+	var buf bytes.Buffer
+	m := New(&fakeBE{}, "")
+	m.w, m.h = 5, 3
+	m.bg.out = &SyncOut{w: &buf}
+	m.bg.esc = []string{"<0>", "<1>"}
+	m.bg.base = []bgLine{
+		{raw: "head", pre: "head", n: 4},
+		{raw: "xy", pre: "xy", n: 2},
+		{raw: "", pre: "", n: 0},
+	}
+	// w=5, h-1=2 -> 10 cells.
+	m.bg.drawn = []logo.FlowCell{
+		{R: ' ', Col: -1}, {R: ' ', Col: -1}, {R: ':', Col: 0}, {R: '+', Col: 0}, {R: ' ', Col: -1},
+		{R: ' ', Col: -1}, {R: ' ', Col: -1}, {R: ' ', Col: -1}, {R: ' ', Col: -1}, {R: ' ', Col: -1},
+	}
+	next := append([]logo.FlowCell(nil), m.bg.drawn...)
+	next[0] = logo.FlowCell{R: '@', Col: 1} // under tile "xy" on row 1: must be skipped
+	next[2] = logo.FlowCell{R: '+', Col: 0} // row 1 (1-based 2), col 2 (1-based 3)
+	next[3] = logo.FlowCell{R: '@', Col: 1} // row 1 (1-based 2), col 3 (1-based 4)
+	next[4] = logo.FlowCell{R: ':', Col: 0} // row 1 (1-based 2), col 4 (1-based 5): same colour <0>, 1-cell jump right
+	next[6] = logo.FlowCell{R: ':', Col: 1} // row 2 (1-based 3), col 1 (1-based 2): same colour <1>
+	m.bgPatch(next)
+	want := "\x1b[?2026h\x1b[0m<0>\x1b[2;3H+\x1b[C:<1>\x1b[2;4H@\x1b[3;2H:\x1b[0m\x1b[3;1H\x1b[?2026l"
+	if got := buf.String(); got != want {
+		t.Errorf("bgPatch = %q, want %q", got, want)
+	}
+	// Running again with the same cells writes nothing.
+	buf.Reset()
+	m.bgPatch(next)
+	if buf.Len() != 0 {
+		t.Errorf("unchanged bgPatch wrote %q, want empty", buf.String())
+	}
+}
+
+// TestFramePatchSync: frame waits for Bubble Tea to flush the full frame before
+// switching to cell-delta patches, returns lastView unchanged while patching,
+// and resets on WindowSizeMsg.
+func TestFramePatchSync(t *testing.T) {
+	var buf bytes.Buffer
+	m := New(&fakeBE{}, "")
+	m.w, m.h = 20, 6
+	m.bg.out = &SyncOut{w: &buf}
+	// Force colour escapes so the backdrop runs in a colourless test terminal.
+	esc := make([]string, 2*logo.FlowLevels)
+	for i := range esc {
+		esc[i] = "<c>"
+	}
+	draw := func() string { return "head\n\n\n\n\n" }
+	_ = m.frame(draw) // initializes m.bg.key and m.bg.flow
+	m.bg.esc = esc
+	m.bg.frameT = -1
+	v0 := m.frame(draw)
+	// Before Bubble Tea flushes v0, a tick must NOT patch directly.
+	m.bg.t = 1
+	m.Update(bgMsg{gen: -1})
+	v1 := m.frame(draw)
+	if buf.Len() != 0 {
+		t.Fatalf("patched before full frame flushed: %q", buf.String())
+	}
+	// Simulate Bubble Tea flushing v1 to SyncOut.
+	_, _ = m.bg.out.Write([]byte(v1))
+	buf.Reset()
+	// Now a backdrop tick patches directly and returns v1 unchanged.
+	m.bg.t = 2
+	m.Update(bgMsg{gen: -1})
+	if v2 := m.frame(draw); v2 != v1 {
+		t.Errorf("patching tick changed View() string (would trigger full Bubble Tea redraw)")
+	}
+	if buf.Len() == 0 {
+		t.Errorf("patching tick wrote no cell delta after flush")
+	}
+	if len(v0) == 0 {
+		t.Errorf("initial frame was empty")
+	}
+	// A non-tick message whose draw() output is unchanged keeps patching without a full repaint.
+	buf.Reset()
+	m.Update(animMsg{})
+	if v3 := m.frame(draw); v3 != v1 {
+		t.Errorf("unchanged non-tick message triggered a full redraw")
+	}
+	if buf.Len() != 0 {
+		t.Errorf("unchanged non-tick message wrote %q, want empty", buf.String())
+	}
+	// WindowSizeMsg clears lastView so the next frame waits for Bubble Tea again.
+	buf.Reset()
+	m.Update(tea.WindowSizeMsg{Width: 20, Height: 6})
+	m.bg.t = 3
+	_ = m.frame(draw)
+	if buf.Len() != 0 {
+		t.Errorf("patched directly right after WindowSizeMsg: %q", buf.String())
 	}
 }
 

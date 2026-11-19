@@ -31,8 +31,7 @@ func (m *Model) View() (out string) {
 	if m.w == 0 {
 		return "loading…"
 	}
-	out = zone.Scan(m.fitPane(append([]string{m.header()}, m.body()...)))
-	return strings.Join(m.backdropOver(strings.Split(out, "\n")), "\n")
+	return m.frame(func() string { return zone.Scan(m.fitPane(append([]string{m.header()}, m.body()...))) })
 }
 
 // body is everything below the header: the help overlay, the tiers, or the
