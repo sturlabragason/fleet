@@ -261,6 +261,22 @@ func TestWaitSorts(t *testing.T) {
 	}
 }
 
+// TestWaitsPage: PgDn and PgUp move a whole page of rows.
+func TestWaitsPage(t *testing.T) {
+	m := New(&waitsBE{gone: map[string]bool{}}, "")
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 10})
+	m.wv = &waitsView{rows: make([]wrow, 50)}
+	for _, s := range []struct {
+		key  tea.KeyType
+		want int
+	}{{tea.KeyPgDown, 6}, {tea.KeyPgDown, 12}, {tea.KeyPgUp, 6}, {tea.KeyEnd, 49}, {tea.KeyHome, 0}} {
+		m.Update(tea.KeyMsg{Type: s.key})
+		if m.wv.sel != s.want {
+			t.Fatalf("%v: sel %d, want %d", s.key, m.wv.sel, s.want)
+		}
+	}
+}
+
 // rowOf is the index of the item row whose ask is ask.
 func rowOf(t *testing.T, m *Model, ask string) int {
 	t.Helper()

@@ -51,7 +51,7 @@ func (m *Model) waitsLines() []string {
 	case len(v.rows) == 0:
 		return append(top, dim.Render(" Nothing here."), m.waitsFoot())
 	}
-	rows := max(m.h-1-len(top)-1, 1)
+	rows := m.waitsPage()
 	v.off = min(max(v.off, v.sel-rows+1), v.sel)
 	v.off = max(min(v.off, len(v.rows)-rows), 0)
 	lines := top
@@ -63,6 +63,10 @@ func (m *Model) waitsLines() []string {
 	}
 	return append(lines, m.waitsFoot())
 }
+
+// waitsPage is how many rows the w view shows: the screen less the title,
+// the chips and the footer. PgUp and PgDn move this far.
+func (m *Model) waitsPage() int { return max(m.h-4, 1) }
 
 // waitsTitle is "Waits on you  tree" and the count of every section.
 func (m *Model) waitsTitle() string {

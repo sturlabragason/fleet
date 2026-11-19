@@ -7,6 +7,7 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
 ## 2026-11-19
+- PgUp and PgDn in the `w` list move a whole page of rows; Home and End go to the top and bottom (ADR-172)
 - An agent that exits cleanly right after it starts is closed with an "exited, closed" report; before, it could vanish without a report or stay open as a crash with "exit unknown"
 - **Changed default:** the playbook fleet injects into agents and the admiral's instructions now say search and summary subagents (Copilot's `explore`) run Gemini 4 Hydrogen and every other subagent runs Opus; the old "Sonnet for scoped subtasks" exception is gone. Override it in `~/.fleet/worker.md` to keep the old rule (ADR-100)
 - The `w` list shows the newest first and `s` re-sorts it (oldest first, by context, by source) for the rest of the session; an admiral's open item now shows the agent it names, its topic or its context as the source instead of `main` (ADR-172)
