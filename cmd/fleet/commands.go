@@ -93,6 +93,10 @@ var usage = `usage:
                                             how often fleet's own policy acted on agents (stop blocks,
                                             wakes, refused sends, done-checks, hook/screen disagreements),
                                             counted from events.jsonl; --json: an object of counts
+  fleet stats --runs [--since D] [--by profile|model|effort|version|repo|week|playbook|agents_md|route] [--json]
+                                            score closed runs from runs.jsonl: done rate with a 95%
+                                            interval, done-check passes, rework, time to done, spend per
+                                            done, compactions and interventions per run (ADR-170)
   fleet send [--force] [--resume] [--now|--queue] <name> ["text"]
                                             refused while the user is typing in that pane (keys
                                             there in the last 30 s, unsubmitted text in its box);

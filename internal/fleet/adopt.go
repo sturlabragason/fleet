@@ -98,7 +98,7 @@ func (f *Fleet) adopt(o AdoptOpts, rec *board.Agent, claimed bool, prompt string
 		// A resume comes back as a wake does: its card, role, effort and
 		// write fence (ADR-60).
 		ex = startExtra{Base: rec.Baseline, Worktree: rec.Worktree, NoWorktree: rec.NoWorktree, Card: rec.Card, Effort: rec.Effort,
-			Role: Role{Leader: rec.Leader, LeadBy: rec.LeadBy, Interactive: rec.Interactive, Admiral: o.Admiral}, Resume: !claimed}
+			Role: Role{Leader: rec.Leader, LeadBy: rec.LeadBy, Interactive: rec.Interactive, Admiral: o.Admiral}, Resume: !claimed, Config: rec.Config}
 		if rec.Effort != "" {
 			ctx = contextKey(p, playbook.Level(rec.Effort), rec.Leader)
 		}

@@ -66,6 +66,7 @@ func NormalizeCard(c *board.Card) *board.Card {
 		Check:  strings.TrimSpace(c.Check),
 		Want:   c.Want,
 		Result: strings.TrimSpace(c.Result),
+		Route:  strings.TrimSpace(c.Route),
 	}
 	for _, m := range c.May {
 		if m = strings.TrimSpace(m); m != "" {

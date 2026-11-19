@@ -15,7 +15,7 @@ import (
 // card builds the spawn's task card from the tool arguments; nil when the
 // call asked for none.
 func (a args) card() *board.Card {
-	c := board.Card{Goal: a.Goal, Check: a.Check, Result: a.Result, May: a.May}
+	c := board.Card{Goal: a.Goal, Check: a.Check, Result: a.Result, May: a.May, Route: a.Route}
 	if a.CheckExit != nil {
 		c.Want = *a.CheckExit
 	}

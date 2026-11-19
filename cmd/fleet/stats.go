@@ -5,13 +5,17 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"os"
+	"slices"
 	"sort"
+	"strings"
 	"text/tabwriter"
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/runs"
 )
 
 // statsKey picks what fleet stats groups interventions by.
@@ -26,14 +30,11 @@ var statsKey = map[string]func(board.Event) string{
 func cmdStats(args []string) error {
 	fs := flag.NewFlagSet("stats", flag.ContinueOnError)
 	since := fs.String("since", "", "only events since a duration (24h, 7d) or a date (2006-01-02)")
-	by := fs.String("by", "kind", "group by kind, profile or model")
-	asJSON := fs.Bool("json", false, "machine-readable output: an object of counts")
+	by := fs.String("by", "", "group by kind, profile or model; with --runs also effort, version, repo, week, playbook, agents_md or route")
+	ledger := fs.Bool("runs", false, "score closed runs from runs.jsonl instead of counting interventions (ADR-170)")
+	asJSON := fs.Bool("json", false, "machine-readable output: an object of counts, or with --runs a list of rows")
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-	key, ok := statsKey[*by]
-	if !ok {
-		return fmt.Errorf("--by %q: want kind, profile or model", *by)
 	}
 	var from time.Time
 	if *since != "" {
@@ -42,6 +43,16 @@ func cmdStats(args []string) error {
 			return err
 		}
 		from = t
+	}
+	if *ledger {
+		return statsRuns(os.Stdout, from, *by, *asJSON)
+	}
+	if *by == "" {
+		*by = "kind"
+	}
+	key, ok := statsKey[*by]
+	if !ok {
+		return fmt.Errorf("--by %q: want kind, profile or model", *by)
 	}
 	evs, err := board.NewStore(logx.Home()).ReadEvents(from)
 	if err != nil {
@@ -65,6 +76,28 @@ func countInterventions(evs []board.Event, key func(board.Event) string) map[str
 		out[k]++
 	}
 	return out
+}
+
+// statsRuns is fleet stats --runs: the run ledger grouped by one field
+// (ADR-170), profile when by is "".
+func statsRuns(out io.Writer, from time.Time, by string, asJSON bool) error {
+	if by == "" {
+		by = "profile"
+	}
+	key, ok := runs.Keys[by]
+	if !ok {
+		names := slices.Sorted(maps.Keys(runs.Keys))
+		return fmt.Errorf("--by %q: want one of %s", by, strings.Join(names, ", "))
+	}
+	rs, err := runs.Read(logx.Home(), from)
+	if err != nil {
+		return err
+	}
+	rows := runs.Summarize(rs, key)
+	if asJSON {
+		return json.NewEncoder(out).Encode(rows)
+	}
+	return runs.Write(out, rows)
 }
 
 func writeStats(out io.Writer, counts map[string]int, asJSON bool) error {

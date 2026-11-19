@@ -135,6 +135,10 @@ type Agent struct {
 	// FleetVersion is the fleet build that last started the agent's window
 	// (spawn, wake or adopt; ADR-77). "" before v1.2.0.
 	FleetVersion string `json:"fleet_version,omitempty"`
+	// Config fingerprints what shaped the run: playbook layers, the repo's
+	// agent notes, the route (ADR-170). nil before v1.x or for an adopted
+	// session.
+	Config *RunConfig `json:"config,omitempty"`
 
 	// extra holds board keys this build does not know, so they survive a
 	// round trip (ADR-58).
@@ -198,6 +202,9 @@ type Card struct {
 	// May lists standing permissions the user gave for this task, such as
 	// merge-local, push-main or deploy (free text, fleet#32).
 	May []string `json:"may,omitempty"`
+	// Route is the saved route that filled this spawn's arguments, "" for
+	// none (ADR-170).
+	Route string `json:"route,omitempty"`
 	// Checked is the last done-check run; nil until one has finished.
 	Checked *Check `json:"checked,omitempty"`
 	// Started is when a done-check run was claimed. It is the claim marker

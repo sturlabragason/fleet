@@ -409,6 +409,7 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	// playbook. A leader also gets its squad orientation, at every effort
 	// level and whether or not the playbook is on (ADR-58).
 	full := prompt
+	pbText, pbSrc := "", []string(nil)
 	lead := ""
 	if role.Leader {
 		lead = playbook.Leader()
@@ -429,10 +430,13 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 			text = strings.TrimRight(text, "\n") + "\n\n" + lead
 		}
 		full = playbook.Compose(text, prompt)
+		pbText, pbSrc = text, src
 		logx.For("fleet").Info("playbook", "agent", name, "effort", lvl, "sources", src, "bytes", len(full)-len(prompt))
 	case lead != "" && prompt != "":
 		full = playbook.Compose(lead, prompt)
+		pbText = lead
 	}
+	ex.Config = f.fingerprint(lvl, dir, pbText, pbSrc, card)
 	if gb := f.graphBrief(dir, prompt); gb != "" {
 		full = strings.TrimRight(full, "\n") + "\n\n" + gb
 	}
@@ -592,7 +596,7 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 		PaneID: pane, Status: string(status.Unknown), Created: now, StatusSince: now, LastChange: now,
 		Baseline: ex.Base, Worktree: ex.Worktree, NoWorktree: ex.NoWorktree, Card: ex.Card, Effort: ex.Effort, Model: ex.Model,
 		Leader: ex.Role.Leader, LeadBy: ex.Role.LeadBy, Interactive: ex.Role.Interactive, Driver: ex.Driver,
-		FleetVersion: Version}
+		FleetVersion: Version, Config: ex.Config}
 	if a.ACP() {
 		a.ACPServer, a.Where = p.ACPLabel(), p.Where()
 	}
@@ -642,6 +646,7 @@ type startExtra struct {
 	Model      string // board.Agent.Model
 	Driver     string // board.Agent.Driver
 	Resume     bool   // a resume: the name must still be free (ADR-95)
+	Config     *board.RunConfig
 }
 
 // Version is the running fleet build ("v1.2.0", else a revision), set by
@@ -837,12 +842,15 @@ func (f *Fleet) Close(name string) error {
 		}
 	}
 	var wt *board.Worktree
+	var run board.Agent
 	leader, owner, outcome := "", "", ""
+	box := f.ReportBox(name) // before the close forgets the squad
 	err := f.Store.Update(func(b *board.Board) error {
 		a, ok := b.Agents[name]
 		if !ok {
 			return fmt.Errorf("no agent %q", name)
 		}
+		run = *a
 		wt, leader, owner, outcome = a.Worktree, a.LeadBy, a.Owner(), sessionOutcome(a)
 		// Kept so a send can resume it with its card (ADR-95); without a
 		// session there is nothing to resume.
@@ -855,6 +863,7 @@ func (f *Fleet) Close(name string) error {
 	if err == nil {
 		f.queueHand(name, leader, f.liveOwner(owner))
 		f.sessionEnd(name, outcome)
+		f.recordRun(run, box, time.Now())
 		status.ForgetSent(f.Home, name)
 		dropMergedRemote(name, wt)
 	}

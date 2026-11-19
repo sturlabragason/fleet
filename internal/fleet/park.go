@@ -296,7 +296,7 @@ func (f *Fleet) Wake(name string, force bool) (*board.Agent, error) {
 			tools.Launch{Resume: true, Mode: f.modeFor(name, old.Profile, p, wpr.Mode), Extra: modelExtra(p, model, wpr.ExtraArgs), Context: ctx})
 	}
 	a, err := f.start(name, old.Profile, p, old.Dir, old.Goal, "", old.SessionID, argv, true,
-		startExtra{Base: old.Baseline, Worktree: old.Worktree, NoWorktree: old.NoWorktree, Effort: old.Effort, Model: model, Role: role, Driver: old.Driver})
+		startExtra{Base: old.Baseline, Worktree: old.Worktree, NoWorktree: old.NoWorktree, Card: old.Card, Effort: old.Effort, Model: model, Role: role, Driver: old.Driver, Config: old.Config})
 	if err != nil {
 		f.unclaimWake(name, old)
 		return nil, err
@@ -306,7 +306,7 @@ func (f *Fleet) Wake(name string, force bool) (*board.Agent, error) {
 		if cur, ok := b.Agents[name]; ok {
 			cur.Created, cur.Report, cur.UserAt = old.Created, old.Report, old.UserAt
 			cur.PromptAt, cur.NoReportTold, cur.TurnAt = old.PromptAt, old.NoReportTold, old.TurnAt
-			cur.RecycleTold = old.RecycleTold
+			cur.RecycleTold, cur.DoneBounces = old.RecycleTold, old.DoneBounces
 			cur.SubLogOffset, cur.SubKnown = old.SubLogOffset, old.SubKnown
 			a = cur
 		}
