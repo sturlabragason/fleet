@@ -19,6 +19,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/spend"
 	"github.com/sturlabragason/fleet/internal/sysx"
+	"github.com/sturlabragason/fleet/internal/todo"
 	"golang.org/x/term"
 )
 
@@ -94,8 +95,16 @@ func cmdACPHost(args []string) error {
 		Mode: *mode, Model: *model, MCP: mcp, Meta: meta, Profile: *profile,
 		Out: os.Stdout, In: os.Stdin,
 	}
-	// The usage footer reads spend as fleet spend does (ADR-151).
+	// The usage footer reads spend as fleet spend does (ADR-151); the
+	// user's own prompts go on the agent's queue (ADR-164).
 	if f, err := fleet.Open(); err == nil {
+		cfg.OnUserPrompt = func(text string, held bool) {
+			kind := todo.Prompt
+			if held {
+				kind = todo.Queued
+			}
+			f.Tweak(name, kind, "user: "+text)
+		}
 		cfg.Spend = func(sid string) (spend.Spend, bool) {
 			return f.SpendOf(&board.Agent{Name: name, Profile: *profile, SessionID: sid, Driver: board.DriverACP})
 		}

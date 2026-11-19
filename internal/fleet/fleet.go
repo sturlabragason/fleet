@@ -295,13 +295,17 @@ func (f *Fleet) SpawnWith(o SpawnOpts, name, profile, dir, prompt string) (*boar
 	if o.Role.Leader {
 		f.MakeLeader(name)
 	}
-	if a, err := f.enqueue(name, profile, dir, prompt, wt, card, o.Role, o.Effort, driver, o.Model); a != nil || err != nil {
-		return a, err
+	a, err := f.enqueue(name, profile, dir, prompt, wt, card, o.Role, o.Effort, driver, o.Model)
+	if a == nil && err == nil {
+		// The busy count and the launch are not one critical section, so two
+		// concurrent spawns can both see the last free slot: the cap is
+		// best-effort and may be exceeded by one per racing spawn.
+		a, err = f.launch(name, profile, dir, prompt, false, wt, card, o.Role, o.Effort, driver, o.Model)
 	}
-	// The busy count and the launch are not one critical section, so two
-	// concurrent spawns can both see the last free slot: the cap is
-	// best-effort and may be exceeded by one per racing spawn.
-	return f.launch(name, profile, dir, prompt, false, wt, card, o.Role, o.Effort, driver, o.Model)
+	if err == nil {
+		f.sessionOpen(a)
+	}
+	return a, err
 }
 
 // agentWorktree gives the agent its own worktree and branch for a spawn into
@@ -448,6 +452,7 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 		tools.Launch{Mode: pr.Mode, Context: contextKey(p, lvl, role.Leader), Extra: pr.ExtraArgs,
 			Prompt: full, NoPromptArgs: !pr.AutoSubmit})
 	ex.Base = Baseline(dir) // before the agent can touch anything
+	f.markSent(name, full)
 	a, err := f.start(name, profile, p, dir, prompt, full, id, argv, claimed, ex)
 	if err != nil {
 		return nil, err
@@ -694,6 +699,7 @@ func (f *Fleet) Send(name, text string) error {
 		return err
 	}
 	logx.For("fleet").Info("send", "agent", name, "bytes", len(text))
+	f.markSent(name, text)
 	if err := f.T.Paste(p, text, false); err != nil {
 		return err
 	}
@@ -827,13 +833,13 @@ func (f *Fleet) Close(name string) error {
 		}
 	}
 	var wt *board.Worktree
-	leader, owner := "", ""
+	leader, owner, outcome := "", "", ""
 	err := f.Store.Update(func(b *board.Board) error {
 		a, ok := b.Agents[name]
 		if !ok {
 			return fmt.Errorf("no agent %q", name)
 		}
-		wt, leader, owner = a.Worktree, a.LeadBy, a.Owner()
+		wt, leader, owner, outcome = a.Worktree, a.LeadBy, a.Owner(), sessionOutcome(a)
 		// Kept so a send can resume it with its card (ADR-95); without a
 		// session there is nothing to resume.
 		if a.SessionID != "" {
@@ -844,6 +850,8 @@ func (f *Fleet) Close(name string) error {
 	})
 	if err == nil {
 		f.queueHand(name, leader, f.liveOwner(owner))
+		f.sessionEnd(name, outcome)
+		status.ForgetSent(f.Home, name)
 		dropMergedRemote(name, wt)
 	}
 	return err

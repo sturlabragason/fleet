@@ -72,3 +72,31 @@ func TestRecordSubs(t *testing.T) {
 		t.Error("subs after drop")
 	}
 }
+
+// ADR-164: a prompt fleet typed is not the user's: its text was marked, or
+// it came right after a mark; "[fleet]" lines are always fleet's.
+func TestFleetSent(t *testing.T) {
+	home := t.TempDir()
+	t0 := time.Now()
+	if err := MarkSent(home, "a", "# Fleet worker playbook\n\nYou are one worker", t0); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		prompt string
+		at     time.Duration
+		want   bool
+	}{
+		{"# Fleet worker playbook You are one worker agent", time.Minute, true},
+		{"anything", 2 * time.Second, true},
+		{"please also fix the docs", time.Minute, false},
+		{"[fleet] report from b", time.Hour, true},
+		{"# Fleet worker playbook You are one worker", time.Hour, false},
+	} {
+		if got := FleetSent(home, "a", c.prompt, t0.Add(c.at)); got != c.want {
+			t.Errorf("FleetSent(%q, +%v) = %v", c.prompt, c.at, got)
+		}
+	}
+	if FleetSent(home, "b", "my own prompt", t0) {
+		t.Error("an agent without marks: fleet's")
+	}
+}

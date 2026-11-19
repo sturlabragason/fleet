@@ -59,6 +59,12 @@ func HookEvents() []string {
 		"sessionend", "sessionstart", "stop", "subagentstart", "subagentstop", "ui_prompt_start", "userpromptsubmit", "userpromptsubmitted"}
 }
 
+// PromptEvent reports whether event is a submitted prompt.
+func PromptEvent(event string) bool {
+	e := normEvent(event)
+	return e == "userpromptsubmit" || e == "userpromptsubmitted"
+}
+
 // SubagentEvent reports whether event starts or stops a subagent.
 func SubagentEvent(event string) bool {
 	e := normEvent(event)

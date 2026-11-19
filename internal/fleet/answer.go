@@ -88,6 +88,7 @@ func (f *Fleet) SendKeys(name, text string, keys []string) error {
 		return err
 	}
 	if text != "" {
+		f.markSent(name, text)
 		if err := f.T.Paste(p, text, false); err != nil {
 			return err
 		}

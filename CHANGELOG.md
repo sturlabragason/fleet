@@ -8,6 +8,7 @@ The release notes are built from these lines (`scripts/release-notes.sh`), group
 
 ## 2026-11-19
 - **Changed default:** `fleet touching <files>` and `fleet_touching` with files also list worktrees changing code one call away, and the merge order, from the code graph when it is fresh; `fleet merge --dry-run` lists them too, `fleet recall <file|pkg.Func>` shows what uses that code, and a spawn prompt that names repo paths gets their callers. `fleet doctor` counts these graph reads. Pass `--graph=false` (`graph: false`) to keep the plain file check (ADR-165)
+- Each agent session is now a task in the todo store, from spawn to close with its goal and outcome, and every tweak to an agent goes on its queue: steering and queued `fleet_send`s and the prompts you type into its pane. A done report while queued tweaks are still waiting is sent back to the agent. `fleet note --open promise|ask|request` and `fleet note --done ID` work from the shell (ADR-164)
 - The admiral keeps your open questions, its asks and its promises as open tasks (`fleet_note open=…`, `fleet_handoff open_items`), and `fleet_brief` lists them after a reset. Each agent has a queue of follow-ups (`fleet_send queue=true`, `next:` lines) shown in `fleet_info` and `fleet_status` and handed on when it closes. Each task carries one user context. Needs a build with a todo store; without one nothing changes (ADR-164)
 
 ## 2026-11-18

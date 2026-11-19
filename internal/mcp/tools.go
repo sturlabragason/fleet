@@ -14,6 +14,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/spend"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/supervisor"
+	"github.com/sturlabragason/fleet/internal/todo"
 	"github.com/sturlabragason/fleet/internal/tools"
 	"github.com/sturlabragason/fleet/internal/wall"
 )
@@ -439,7 +440,7 @@ func (s *Server) noteCall(a args) (string, error) {
 	if err := need(strings.TrimSpace(a.Text), "text"); err != nil {
 		return "", err
 	}
-	if err := checkOpen(a.Open); err != nil {
+	if err := todo.CheckOpen(a.Open); err != nil {
 		return "", err
 	}
 	if err := checkRule(a.Rule, a.Text); err != nil {

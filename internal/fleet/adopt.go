@@ -137,6 +137,7 @@ func (f *Fleet) adopt(o AdoptOpts, rec *board.Agent, claimed bool, prompt string
 	// Adopt resumes a session that already has a dir, so it never makes a
 	// worktree; when that dir is one, the board records it so close and
 	// sweep can name the work left there (DESIGN §4, ADR-39).
+	f.markSent(name, prompt)
 	a, err := f.start(name, o.Profile, p, dir, goal, prompt, id, argv, claimed, ex)
 	if err != nil {
 		return nil, err
@@ -151,6 +152,7 @@ func (f *Fleet) adopt(o AdoptOpts, rec *board.Agent, claimed bool, prompt string
 		f.notePrompt(name)
 	}
 	logx.For("fleet").Info("adopted", "agent", name, "profile", o.Profile, "session_id", id, "force", o.Force, "driver", driver)
+	f.sessionOpen(a)
 	return a, nil
 }
 

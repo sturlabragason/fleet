@@ -260,8 +260,9 @@ const hookStdinMax = 64 << 10
 // SubagentStart/SubagentStop (ADR-99). It is wired in through the per-agent
 // plugin dir fleet writes at spawn (ADR-99), so the user's own settings are
 // never touched. --no-status keeps the subagents only: an ACP agent's host
-// owns its status file. A hook fired inside a subagent (its payload names
-// one) changes no status. A Stop/agentStop of an agent that holds a task and
+// owns its status file. A prompt fleet did not type goes on the agent's
+// queue as the user's (ADR-164). A hook fired inside a subagent (its
+// payload names one) changes no status. A Stop/agentStop of an agent that holds a task and
 // has not reported is blocked once per prompt (ADR-105). It never fails loudly: a broken hook must not
 // break the agent.
 func cmdHook(f *fleet.Fleet, args []string) error {
@@ -298,6 +299,10 @@ func cmdHook(f *fleet.Fleet, args []string) error {
 	}
 	if sub || *noStatus || p.AgentID != "" {
 		return nil
+	}
+	// An ACP agent's host records the user's prompts itself.
+	if status.PromptEvent(ev) {
+		f.UserPrompt(*agent, p.Prompt)
 	}
 	if s.WaitingFor == "" {
 		s.WaitingFor = p.WaitingFor(ev)

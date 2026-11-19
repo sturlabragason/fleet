@@ -11,6 +11,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/sessions"
 	"github.com/sturlabragason/fleet/internal/status"
+	"github.com/sturlabragason/fleet/internal/todo"
 )
 
 // summaryWait bounds fleet_peek summary=true, so an MCP call never hangs on
@@ -120,7 +121,8 @@ func (s *Server) send(a args) (string, error) {
 // confirmed=true: Enter on a picker approves it (ADR-9). Text or keys to a
 // pane the user is typing in need force=true (ADR-61). Text alone to a
 // queued agent is held for its start (fleet#33); to a working agent it
-// steers the running turn unless queue=true (ADR-158).
+// steers the running turn unless queue=true (ADR-158). Text goes on the
+// agent's queue (ADR-164).
 func (s *Server) sendOne(a args, name string) (string, error) {
 	if err := s.scope(name); err != nil {
 		return "", err
@@ -134,6 +136,7 @@ func (s *Server) sendOne(a args, name string) (string, error) {
 			return "", err
 		}
 		if held {
+			s.F.Tweak(name, todo.Queued, a.Text)
 			return fleet.DeliveryHeld, nil
 		}
 	}
@@ -153,15 +156,25 @@ func (s *Server) sendOne(a args, name string) (string, error) {
 			return "", fleet.WaitingError(w)
 		}
 	}
+	if len(a.Keys) > 0 {
+		return "", s.F.SendKeys(name, a.Text, a.Keys)
+	}
+	var d string
+	var err error
 	switch {
 	case a.Now:
-		return "", s.F.SendNow(name, a.Text)
-	case len(a.Keys) > 0:
-		return "", s.F.SendKeys(name, a.Text, a.Keys)
+		err = s.F.SendNow(name, a.Text)
 	case a.Queue:
-		return s.F.Queue(name, a.Text)
+		d, err = s.F.Queue(name, a.Text)
+	default:
+		d, err = s.F.Steer(name, a.Text)
 	}
-	return s.F.Steer(name, a.Text)
+	if err == nil {
+		// Every text the admiral or a leader sends is a tweak on the
+		// agent's queue, under its session (ADR-164).
+		s.F.Tweak(name, fleet.TweakKind(d), a.Text)
+	}
+	return d, err
 }
 
 // resume is fleet_send resume=true: a closed agent of the caller's comes

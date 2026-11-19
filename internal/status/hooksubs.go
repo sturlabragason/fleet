@@ -34,6 +34,9 @@ type Payload struct {
 	// StopHookActive is set on a Stop that follows a blocked one (Claude's
 	// stop_hook_active, Copilot's stopHookActive).
 	StopHookActive bool
+	// Prompt is the text of a UserPromptSubmit/userPromptSubmitted (both
+	// tools call it prompt).
+	Prompt string
 }
 
 // ParsePayload reads a hook's JSON; anything it can't read is empty.
@@ -51,6 +54,7 @@ func ParsePayload(b []byte) Payload {
 		AgentName string `json:"agentName"`
 		ActiveS   bool   `json:"stop_hook_active"`
 		ActiveC   bool   `json:"stopHookActive"`
+		Prompt    string `json:"prompt"`
 	}
 	if json.Unmarshal(b, &r) != nil {
 		return Payload{}
@@ -68,6 +72,7 @@ func ParsePayload(b []byte) Payload {
 		AgentID:          or(r.AgentIDS, r.AgentIDC),
 		AgentType:        or(r.AgentTyS, or(r.AgentTyC, r.AgentName)),
 		StopHookActive:   r.ActiveS || r.ActiveC,
+		Prompt:           strings.TrimSpace(r.Prompt),
 	}
 }
 

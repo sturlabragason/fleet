@@ -25,14 +25,18 @@ import (
 
 // Config is one host's agent: who it is, what to start and where.
 type Config struct {
-	Home          string // fleet state dir; "" means logx.Home()
-	Name          string
-	Dir           string // the agent's working dir; "" means the current dir
-	Argv          []string
-	Env           []string
-	SessionID     string // resume or load this session instead of starting one
-	Prompt        string // sent once the session is ready
-	OnPromptSent  func() // called once Prompt has been handed to the agent
+	Home         string // fleet state dir; "" means logx.Home()
+	Name         string
+	Dir          string // the agent's working dir; "" means the current dir
+	Argv         []string
+	Env          []string
+	SessionID    string // resume or load this session instead of starting one
+	Prompt       string // sent once the session is ready
+	OnPromptSent func() // called once Prompt has been handed to the agent
+	// OnUserPrompt, when set, is told of each prompt the user types in the
+	// pane; held is set when it waits for the running turn (ADR-164). It
+	// runs on its own goroutine.
+	OnUserPrompt  func(text string, held bool)
 	CopilotEvents bool
 	MCP           []acp.MCPServer
 	// Meta is the _meta sent with session/new, load and resume, for an

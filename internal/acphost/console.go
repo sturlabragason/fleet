@@ -366,7 +366,10 @@ func (h *host) submit(line string) {
 	if n, nerr := strconv.Atoi(line); open && nerr == nil {
 		err = h.answer(n, "", ByPane)
 	} else {
-		_, err = h.prompt(line, ByPane)
+		var d string
+		if d, err = h.prompt(line, ByPane); err == nil {
+			h.userPrompt(line, d == DeliveryQueued)
+		}
 	}
 	if err != nil {
 		h.say("! " + err.Error())
@@ -413,6 +416,15 @@ func (h *host) paneSendNow() {
 			h.con.restore(text)
 		}
 		h.say("! send now: " + err.Error())
+		return
+	}
+	h.userPrompt(text, false)
+}
+
+// userPrompt tells OnUserPrompt of a prompt the user typed.
+func (h *host) userPrompt(text string, held bool) {
+	if h.cfg.OnUserPrompt != nil && text != "" {
+		go h.cfg.OnUserPrompt(text, held)
 	}
 }
 

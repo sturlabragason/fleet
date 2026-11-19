@@ -6,14 +6,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/acphost"
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/todo"
 )
 
-// Each agent's queue lives in the todo store when a build has one (ADR-164):
-// a fleet_send queue=true adds an item, a done report completes the items
-// it had been given and adds its next: lines, and a close hands what is
+// Each agent session is a task in the todo store when a build has one
+// (ADR-164): opened at spawn, adopt or resume, ended at close with its
+// outcome. Every tweak to the agent goes under it as a queue item: a
+// fleet_send (steered or queued), and the user's own prompts where fleet
+// sees them (an ACP pane, a tool's prompt hook). A done report completes
+// the tweaks the agent has had, adds its next: lines, and is refused while
+// tweaks it has not had yet are open (donegate.go). A close hands what is
 // left to the leader or the owning admiral. Without a store these are
 // no-ops and the reports and notes are the only record.
 
@@ -34,32 +40,144 @@ func todoDo(what, agent string, fn func(ctx context.Context, s todo.Store) error
 	}
 }
 
-// queueAdd records text sent with queue=true as the agent's next item.
-func (f *Fleet) queueAdd(name, text string) {
-	a, ok := f.Store.Load().Agents[name]
-	if !ok {
+// markSent records a text fleet types into the agent's pane, so its prompt
+// hook does not take it for the user's (status.FleetSent).
+func (f *Fleet) markSent(name, text string) {
+	if strings.TrimSpace(text) == "" {
 		return
 	}
-	todoDo("queue add", name, func(ctx context.Context, s todo.Store) error {
-		_, err := s.Add(ctx, todo.Item{Queue: name, Kind: todo.Queued, Ctx: s.Context(WorkDir(a)), Description: text})
+	if err := status.MarkSent(f.Home, name, text, time.Now()); err != nil {
+		logx.For("todo").Warn("mark sent", "agent", name, "err", err)
+	}
+}
+
+// UserPrompt records a prompt the agent's tool hook saw, unless fleet typed
+// it: the user's own tweak, typed into the pane.
+func (f *Fleet) UserPrompt(name, text string) {
+	if text == "" || status.FleetSent(f.Home, name, text, time.Now()) {
+		return
+	}
+	f.Tweak(name, todo.Prompt, "user: "+text)
+}
+
+// sessionGoal is the card goal, else the first line of the task.
+func sessionGoal(a *board.Agent) string {
+	if a.Card != nil && a.Card.Goal != "" {
+		return a.Card.Goal
+	}
+	if g := todo.OneLine(a.Goal); g != "" {
+		return g
+	}
+	return "session of " + a.Name
+}
+
+// sessionOpen starts the agent's session task (a no-op when one is open).
+func (f *Fleet) sessionOpen(a *board.Agent) {
+	if a == nil {
+		return
+	}
+	dir := WorkDir(a)
+	todoDo("session open", a.Name, func(ctx context.Context, s todo.Store) error {
+		_, err := s.Open(ctx, todo.Session{Agent: a.Name, Admiral: a.Owner(), Leader: a.LeadBy,
+			Goal: sessionGoal(a), Ctx: s.Context(dir), Dir: dir, Profile: a.Profile})
 		return err
 	})
 }
 
-// queueDone runs on a done report: it completes the queued items the agent
-// had been given by then (added before its previous report or the start of
-// this turn) and adds each "next:" line of the report.
-func (f *Fleet) queueDone(name string, a board.Agent, prevReport time.Time, summary string) {
-	since := prevReport
+// sessionOutcome is how a closed agent's session ended: its last report.
+func sessionOutcome(a *board.Agent) string {
+	if a == nil || a.Report == nil {
+		return "closed without a report"
+	}
+	return a.Report.State + ": " + todo.OneLine(a.Report.Summary)
+}
+
+// sessionEnd closes the agent's session task with its outcome.
+func (f *Fleet) sessionEnd(name, outcome string) {
+	todoDo("session end", name, func(ctx context.Context, s todo.Store) error {
+		return s.End(ctx, name, outcome)
+	})
+}
+
+// Tweak records text sent to the agent as a queue item of kind (todo.Steer,
+// todo.Queued or todo.Prompt) under its session, opening the session first
+// for an agent spawned before the store had one.
+func (f *Fleet) Tweak(name, kind, text string) {
+	a, ok := f.Store.Load().Agents[name]
+	if !ok || strings.TrimSpace(text) == "" {
+		return
+	}
+	f.sessionOpen(a)
+	todoDo("queue add", name, func(ctx context.Context, s todo.Store) error {
+		_, err := s.Add(ctx, todo.Item{Queue: name, Kind: kind, Ctx: s.Context(WorkDir(a)), Description: text})
+		return err
+	})
+}
+
+// TweakKind is the queue kind of a send that returned delivery d: a text
+// held for later (by the agent's host, or the spawn queue) is queued; one
+// that reached the agent, queue=true to an idle agent included, is a steer.
+func TweakKind(d string) string {
+	if d == acphost.DeliveryQueued || d == DeliveryHeld {
+		return todo.Queued
+	}
+	return todo.Steer
+}
+
+// queueClose runs on a done report, before the done gate: it completes the
+// tweaks the agent has had by now and returns those it has not had yet.
+// A steer or a prompt reached it when sent; a queued tweak reaches it when
+// its turn ends, so it has had those added before its previous report or
+// the start of this turn, whichever is later. A refused done is no report
+// here: the agent is still in the turn the gate sent it back to.
+func (f *Fleet) queueClose(name string) (left []todo.Item) {
+	a, ok := f.Store.Load().Agents[name]
+	if !ok {
+		return nil
+	}
+	var since time.Time
+	if a.Report != nil && a.DoneBounces == 0 {
+		since = a.Report.At
+	}
 	if a.Status == "working" && a.StatusSince.After(since) {
 		since = a.StatusSince
 	}
-	nexts := nextLines(summary)
+	now := time.Now()
 	todoDo("queue done", name, func(ctx context.Context, s todo.Store) error {
-		if _, err := s.Finish(ctx, name, since); err != nil {
+		is, err := s.Queue(ctx, name)
+		if err != nil {
 			return err
 		}
-		c := s.Context(WorkDir(&a))
+		for _, i := range is {
+			if !todo.Tweak(i.Kind) {
+				continue
+			}
+			cut := now
+			if i.Kind == todo.Queued {
+				cut = since
+			}
+			if !i.Entry.Before(cut) {
+				left = append(left, i)
+				continue
+			}
+			if _, err := s.Done(ctx, i.UUID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return left
+}
+
+// queueNext adds each "next:" line of an accepted done report to the queue.
+func (f *Fleet) queueNext(name, summary string) {
+	a, ok := f.Store.Load().Agents[name]
+	nexts := nextLines(summary)
+	if !ok || len(nexts) == 0 {
+		return
+	}
+	todoDo("queue next", name, func(ctx context.Context, s todo.Store) error {
+		c := s.Context(WorkDir(a))
 		for _, n := range nexts {
 			if _, err := s.Add(ctx, todo.Item{Queue: name, Kind: todo.Next, Ctx: c, Description: n}); err != nil {
 				return err
@@ -104,26 +222,35 @@ func QueueCounts() map[string]int {
 	return n
 }
 
-// queueInfo is fleet_info's queue lines: "" without a store.
-func queueInfo(name string) string {
+// queueInfo is fleet_info's session and queue lines: "" without a store.
+func queueInfo(name string) (session, queue string) {
 	var is []todo.Item
+	var sess todo.Item
+	var open bool
 	ok, err := TodoDo(func(ctx context.Context, s todo.Store) error {
 		var err error
+		if sess, open, err = s.SessionOf(ctx, name); err != nil {
+			return err
+		}
 		is, err = s.Queue(ctx, name)
 		return err
 	})
 	switch {
 	case err != nil:
-		return "unreadable (" + err.Error() + ")"
+		return "", "unreadable (" + err.Error() + ")"
 	case !ok:
-		return ""
-	case len(is) == 0:
-		return "empty"
+		return "", ""
+	}
+	if open {
+		session = sess.Line()
+	}
+	if len(is) == 0 {
+		return session, "empty"
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%d pending (fleet_note done=<id> closes one)", len(is))
 	for _, i := range is {
 		b.WriteString("\n  " + i.Line())
 	}
-	return b.String()
+	return session, b.String()
 }

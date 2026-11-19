@@ -9,6 +9,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/playbook"
+	"github.com/sturlabragason/fleet/internal/todo"
 	"github.com/sturlabragason/fleet/internal/tools"
 )
 
@@ -31,31 +32,41 @@ type gateVerdict struct {
 	state, summary, reply string
 }
 
-// doneGate checks a done report against the agent's own work (ADR-160): a
-// done that leaves uncommitted changes or an unmerged branch behind goes
-// back to the agent, at most MaxDoneBounces times, then to the admiral as
-// blocked. An agent that may not merge and has only an unmerged branch left
-// goes to the admiral as blocked at once. It lets through what fleet can't
-// attribute: no spawn baseline, a checkout shared with another agent, git
-// state it can't read, a remote agent and an agent the user is talking to.
-func (f *Fleet) doneGate(me, summary string) gateVerdict {
+// doneGate checks a done report against the agent's own work (ADR-160)
+// and its queue (ADR-164): a done that leaves uncommitted changes, an
+// unmerged branch or tweaks the agent has not had yet (left) goes back to
+// the agent, at most MaxDoneBounces times, then to the admiral as blocked.
+// An agent that may not merge and has only an unmerged branch left goes to
+// the admiral as blocked at once. The work check lets through what fleet
+// can't attribute: no spawn baseline, a checkout shared with another agent,
+// git state it can't read, a remote agent and an agent the user is talking
+// to. The queue check lets through a remote agent (fleet's reply may not
+// reach it) and a done with a "queue:" line, the agent's stated exception
+// (stop, safety, lost permission, urgent).
+func (f *Fleet) doneGate(me, summary string, left []todo.Item) gateVerdict {
 	b := f.Store.Load()
 	a := b.Agents[me]
-	if a == nil || a.Where != "" || a.Baseline == nil || superseded(summary) || sharedDir(b, a) || f.userBlocker(a) != "" {
-		return gateVerdict{}
-	}
-	reason := AgentBlocker(a)
-	if reason == "" && a.DoneBounces > 0 {
-		f.resetBounces(me)
-	}
-	if reason == "" || reason == "git state unreadable" || reason == "no main or master branch" {
+	if a == nil {
 		return gateVerdict{}
 	}
 	merge := mayMerge(a)
-	if !merge && !strings.Contains(reason, "uncommitted changes") {
+	reason, reply := f.workLeft(b, a, summary), ""
+	switch {
+	case reason != "" && !merge && !strings.Contains(reason, "uncommitted changes"):
 		return gateVerdict{state: "blocked", summary: fmt.Sprintf(
 			"done, but %s and this agent may not merge (effort %s, no merge-local): merge its branch or grant merge-local. %s",
 			reason, effortOf(a), summary)}
+	case reason != "":
+		reply = bounceText(reason, merge)
+	case len(left) > 0 && a.Where == "" && !queueException(summary):
+		reason = fmt.Sprintf("%d queued tweak(s) not handled yet", len(left))
+		reply = queueText(left)
+	}
+	if reason == "" {
+		if a.DoneBounces > 0 {
+			f.resetBounces(me)
+		}
+		return gateVerdict{}
 	}
 	n, over := 0, false
 	if err := f.Store.Update(func(b *board.Board) error {
@@ -78,8 +89,44 @@ func (f *Fleet) doneGate(me, summary string) gateVerdict {
 	return gateVerdict{
 		state:   "progress",
 		summary: fmt.Sprintf("done refused by fleet (%d/%d): %s. %s", n, MaxDoneBounces, reason, summary),
-		reply:   bounceText(reason, merge),
+		reply:   reply,
 	}
+}
+
+// workLeft is the agent's own work a done leaves behind ("" = none, or
+// fleet can't attribute it).
+func (f *Fleet) workLeft(b *board.Board, a *board.Agent, summary string) string {
+	if a.Where != "" || a.Baseline == nil || superseded(summary) || sharedDir(b, a) || f.userBlocker(a) != "" {
+		return ""
+	}
+	r := AgentBlocker(a)
+	if r == "git state unreadable" || r == "no main or master branch" {
+		return ""
+	}
+	return r
+}
+
+// queueException is a done whose summary has a "queue:" line: the agent
+// reports done with tweaks open under one of the queue rule's exceptions.
+func queueException(summary string) bool {
+	for l := range strings.SplitSeq(summary, "\n") {
+		if strings.HasPrefix(strings.TrimPrefix(strings.TrimSpace(l), "- "), "queue:") {
+			return true
+		}
+	}
+	return false
+}
+
+// queueText is fleet's reply to a done refused for open tweaks.
+func queueText(left []todo.Item) string {
+	var b strings.Builder
+	b.WriteString(DoneRefused + "your queue still has tweaks you have not had yet; they reach you when this turn ends:")
+	for _, i := range left {
+		b.WriteString("\n- " + i.Line())
+	}
+	b.WriteString("\nWork them in order, then report done again. Only a stop, a safety issue, lost permission or an" +
+		" urgent: message lets you report done with them open: then add a line \"queue: <which>\".")
+	return b.String()
 }
 
 // resetBounces clears the refusal count once a done passes clean, so the

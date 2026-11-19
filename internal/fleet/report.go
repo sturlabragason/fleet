@@ -8,6 +8,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/mail"
+	"github.com/sturlabragason/fleet/internal/todo"
 	"github.com/sturlabragason/fleet/internal/tools"
 )
 
@@ -23,8 +24,10 @@ func (f *Fleet) Report(me, state, summary string) (note string, err error) {
 		return "", err
 	}
 	reply := ""
+	var left []todo.Item
 	if state == "done" {
-		if g := f.doneGate(me, summary); g.state != "" {
+		left = f.queueClose(me)
+		if g := f.doneGate(me, summary, left); g.state != "" {
 			state, summary, reply = g.state, g.summary, g.reply
 		}
 	}
@@ -36,14 +39,8 @@ func (f *Fleet) Report(me, state, summary string) (note string, err error) {
 		return "", err
 	}
 	sum := mail.FoldSummary(strings.TrimPrefix(m.Text, state+": "))
-	var was board.Agent
-	var prev time.Time
 	err = f.Store.Update(func(b *board.Board) error {
 		if a, ok := b.Agents[me]; ok {
-			was = *a
-			if a.Report != nil {
-				prev = a.Report.At
-			}
 			a.Report = &board.Report{State: state, Summary: sum, At: time.Now()}
 		}
 		return nil
@@ -52,7 +49,7 @@ func (f *Fleet) Report(me, state, summary string) (note string, err error) {
 		return "", err
 	}
 	if state == "done" {
-		f.queueDone(me, was, prev, summary)
+		f.queueNext(me, summary)
 	}
 	if reply != "" {
 		f.tell(me, reply)
@@ -86,6 +83,9 @@ func (f *Fleet) Report(me, state, summary string) (note string, err error) {
 	}
 	if state == "done" || state == "blocked" || state == "question" {
 		line := ReportLineTo(up, me, state, sum)
+		if state == "done" && len(left) > 0 {
+			line += fmt.Sprintf(" (queue: %d open)", len(left))
+		}
 		if note != "" {
 			line += " (" + note + ")"
 		}

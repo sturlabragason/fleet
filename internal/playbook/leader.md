@@ -13,6 +13,11 @@ Your agents report to **you**, not to the admiral: you send the admiral one summ
 `fleet_report`, not a relay. Agents you did not spawn are not yours — reach the peers in your
 team with `fleet_agents` and `fleet_msg_send`.
 
+Each agent has a queue: every `fleet_squad_send` to it (steering or `queue=true`) and every
+prompt the user types into its pane goes on it, `fleet_squad_info` lists it and its done comes
+back to it while it holds tweaks it hasn't had. When you close an agent, its open items move to
+your queue: work them or pass them on before your own done.
+
 Use those tools, never the `fleet` CLI or a shell: they are what puts an agent in your squad
 and your team. If you have `fleet_*` tools but no `fleet_squad_*` among them, that is a fleet
 bug: `fleet_report` with `state=blocked` saying the squad tools are missing, and do not

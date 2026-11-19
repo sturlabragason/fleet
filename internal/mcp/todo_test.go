@@ -1,25 +1,17 @@
 package mcp
 
 import (
-	"context"
-	"fmt"
 	"regexp"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/todo"
+	"github.com/sturlabragason/fleet/internal/todo/todotest"
 )
 
-// memTodo is an in-memory todo store; nil memStore means none.
-type memTodo struct {
-	mu    sync.Mutex
-	items []todo.Item
-}
-
-var memStore *memTodo
+// memStore is the in-memory todo store; nil means none.
+var memStore *todotest.Mem
 
 func init() {
 	fleet.Register(fleet.Extension{Name: "memtodo", Todo: func() (todo.Store, error) {
@@ -32,62 +24,9 @@ func init() {
 
 func useMemTodo(t *testing.T) {
 	t.Helper()
-	memStore = &memTodo{}
+	memStore = todotest.New()
 	t.Cleanup(func() { memStore = nil })
 }
-
-func (m *memTodo) Add(_ context.Context, it todo.Item) (todo.Item, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	it.UUID = fmt.Sprintf("%08x-0000", len(m.items)+0xabc0000)
-	it.Entry = time.Now()
-	m.items = append(m.items, it)
-	return it, nil
-}
-
-func (m *memTodo) list(keep func(todo.Item) bool) []todo.Item {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	var out []todo.Item
-	for _, i := range m.items {
-		if keep(i) {
-			out = append(out, i)
-		}
-	}
-	return out
-}
-
-func (m *memTodo) Admiral(_ context.Context, n string) ([]todo.Item, error) {
-	return m.list(func(i todo.Item) bool { return i.Admiral == n }), nil
-}
-
-func (m *memTodo) Queue(_ context.Context, n string) ([]todo.Item, error) {
-	return m.list(func(i todo.Item) bool { return i.Queue == n }), nil
-}
-
-func (m *memTodo) Queues(context.Context) (map[string]int, error) {
-	n := map[string]int{}
-	for _, i := range m.list(func(i todo.Item) bool { return i.Queue != "" }) {
-		n[i.Queue]++
-	}
-	return n, nil
-}
-
-func (m *memTodo) Done(_ context.Context, ref string) (todo.Item, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for k, i := range m.items {
-		if strings.HasPrefix(i.UUID, ref) {
-			m.items = append(m.items[:k], m.items[k+1:]...)
-			return i, nil
-		}
-	}
-	return todo.Item{}, fmt.Errorf("no item %q", ref)
-}
-
-func (m *memTodo) Finish(context.Context, string, time.Time) (int, error)    { return 0, nil }
-func (m *memTodo) Hand(context.Context, string, string, string) (int, error) { return 0, nil }
-func (m *memTodo) Context(string) string                                     { return "work" }
 
 // Without a store an open item is still a note, and the brief has no
 // open-items section (ADR-164).

@@ -56,17 +56,9 @@ func (f *Fleet) steerOldHost(name, text, status string) (string, error) {
 
 // Queue sends text the ordinary way and says how: an ACP agent's host
 // holds it while a turn runs (DeliveryQueued) and sends it when the turn
-// ends (ADR-118). The text is also the agent's next queue item in
-// the todo store, when the build has one (ADR-164).
+// ends (ADR-118). fleet_send records it on the agent's queue (Tweak);
+// fleet's own replies through here are not tweaks.
 func (f *Fleet) Queue(name, text string) (string, error) {
-	d, err := f.queueSend(name, text)
-	if err == nil {
-		f.queueAdd(name, text)
-	}
-	return d, err
-}
-
-func (f *Fleet) queueSend(name, text string) (string, error) {
 	if !f.isACP(name) {
 		return acphost.DeliverySent, f.Send(name, text)
 	}

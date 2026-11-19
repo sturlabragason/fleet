@@ -13,6 +13,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/supervisor"
+	"github.com/sturlabragason/fleet/internal/todo"
 	"github.com/sturlabragason/fleet/internal/tools"
 )
 
@@ -249,15 +250,48 @@ func cmdNote(f *fleet.Fleet, args []string) error {
 	agent := fs.String("agent", "", "agent the note is about")
 	adm := fs.String("admiral", supervisor.Main, "admiral the note is from")
 	pin := fs.Bool("pin", false, "a standing rule: fleet_brief always shows it (unpin by deleting its line from ~/.fleet/pinned.log)")
+	open := fs.String("open", "", "also an open item in the todo store: "+strings.Join(todo.AdmiralKinds, ", "))
+	itemCtx := fs.String("ctx", "", "the open item's context (default: the agent's dir, else the configured one)")
+	done := fs.String("done", "", "close the open item with this id; the text, if any, is the outcome")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	text := strings.Join(fs.Args(), " ")
+	if *done != "" {
+		it, err := f.DoneItem(*adm, *agent, *done, text)
+		if err != nil {
+			return fmt.Errorf("close %s: %w", *done, err)
+		}
+		fmt.Println("closed task [" + it.ID() + "] " + it.Description)
+		return nil
+	}
 	if strings.TrimSpace(text) == "" {
-		return errors.New(`usage: fleet note [--agent NAME] [--pin] "text"`)
+		return errors.New(`usage: fleet note [--agent NAME] [--pin] [--open KIND [--ctx CTX]] "text" | fleet note --done ID ["outcome"]`)
 	}
+	if err := todo.CheckOpen(*open); err != nil {
+		return err
+	}
+	add := supervisor.AppendNoteBy
 	if *pin {
-		return supervisor.AppendPinnedBy(f.Home, *adm, *agent, text)
+		add = supervisor.AppendPinnedBy
 	}
-	return supervisor.AppendNoteBy(f.Home, *adm, *agent, text)
+	if err := add(f.Home, *adm, *agent, text); err != nil {
+		return err
+	}
+	if *open == "" {
+		return nil
+	}
+	if k, rest := todo.Kind(text); k != "" {
+		text = rest
+	}
+	it, ok, err := f.AddItem(*adm, *open, text, *agent, *itemCtx)
+	switch {
+	case err != nil:
+		return fmt.Errorf("noted, but not added to the todo store: %w", err)
+	case !ok:
+		fmt.Println("noted; no todo store in this build, so it is in the notes only")
+	default:
+		fmt.Printf("noted; open task [%s] (fleet note --done %s closes it)\n", it.ID(), it.ID())
+	}
+	return nil
 }

@@ -168,7 +168,8 @@ var usage = `usage:
   fleet admiral profile [--name N] [NAME | --pick]   show the admiral's profile, or swap it (hands off; Alt-P picks)
   fleet admiral restart [--name N]          restart the admiral, resuming the same session
                                             ("fleet supervisor ..." still works: deprecated alias)
-  fleet note [--agent NAME] [--admiral N] [--pin] "text"  append a note to ~/.fleet/decisions.log; --pin keeps it in every brief
+  fleet note [--agent NAME] [--admiral N] [--pin] [--open KIND [--ctx C]] "text"  append a note to ~/.fleet/decisions.log; --pin keeps it in every brief; --open promise|ask|request also files it as an open item (ADR-164)
+  fleet note --done ID ["outcome"]  close an open item and log it
   fleet playbook [--effort LEVEL] [dir]     print the worker playbook prepended to a spawn prompt in dir
                                             (built-in + ~/.fleet/worker.md + the repo's .fleet/worker.md;
                                             --effort light|standard|pro, default pro)

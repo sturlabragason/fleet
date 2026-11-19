@@ -19,6 +19,10 @@ squad → you → admiral → user. The admiral sees your summary, not your agen
 - `fleet_squad_close` an agent whose work is merged or no longer needed, and close your squad
   before you report `done`. The first call is refused and names work the close would lose: read
   it, then call again with `confirmed=true`.
+- Queues: each of your agents keeps a todo queue. Every `fleet_squad_send` (steering or
+  `queue=true`) and every prompt the user types into its pane is an item; `fleet_squad_info`
+  lists them, and its done comes back to it while it holds tweaks it hasn't had. A closed agent's
+  open items move to your queue, so you work or hand them on before your own done.
 - Report **once** upward: `fleet_report` with one summary of the whole squad's work, not a relay
   of each agent's report.
 

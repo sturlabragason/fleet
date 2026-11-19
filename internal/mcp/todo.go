@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/sturlabragason/fleet/internal/fleet"
-	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/todo"
 )
 
@@ -17,13 +16,6 @@ import (
 
 // briefTodoMax bounds the brief's open-items section.
 const briefTodoMax = 2 << 10
-
-func checkOpen(kind string) error {
-	if kind != "" && !slices.Contains(todo.AdmiralKinds, kind) {
-		return fmt.Errorf("open must be one of %s", strings.Join(todo.AdmiralKinds, ", "))
-	}
-	return nil
-}
 
 // noteTask adds the admiral task a fleet_note asks for (open=, or text
 // starting "promise:", "ask:" or "request:") and says so; "" for a plain note.
@@ -38,7 +30,7 @@ func (s *Server) noteTask(a args) string {
 	if kind == "" {
 		return ""
 	}
-	it, ok, err := s.addTask(kind, text, a.Agent, a.Ctx)
+	it, ok, err := s.F.AddItem(s.Me(), kind, text, a.Agent, a.Ctx)
 	switch {
 	case err != nil:
 		return "; not added to the todo store: " + err.Error()
@@ -50,46 +42,10 @@ func (s *Server) noteTask(a args) string {
 	return fmt.Sprintf("; open task [%s] (fleet_note done=%s closes it)", it.ID(), it.ID())
 }
 
-// addTask records one admiral item. Its context is ctx, else the one the
-// agent's dir maps to, else the configured default.
-func (s *Server) addTask(kind, text, agent, ctx string) (it todo.Item, ok bool, err error) {
-	dir := ""
-	if ctx == "" {
-		if ag, found := s.F.Store.Load().Agents[agent]; found {
-			dir = fleet.WorkDir(ag)
-		}
-	}
-	ok, err = fleet.TodoDo(func(c context.Context, st todo.Store) error {
-		var err error
-		if ctx == "" {
-			ctx = st.Context(dir)
-		}
-		it, err = st.Add(c, todo.Item{Admiral: s.Me(), Kind: kind, Ctx: ctx, Description: text})
-		return err
-	})
-	return it, ok, err
-}
-
-// noteDone is fleet_note done=<id>: the item is completed and the decisions
-// log gets a line saying so (with text, if any, as the outcome).
+// noteDone is fleet_note done=<id>.
 func (s *Server) noteDone(a args) (string, error) {
-	var it todo.Item
-	ok, err := fleet.TodoDo(func(c context.Context, st todo.Store) error {
-		var err error
-		it, err = st.Done(c, a.Done)
-		return err
-	})
+	it, err := s.F.DoneItem(s.Me(), a.Agent, a.Done, a.Text)
 	if err != nil {
-		return "", err
-	}
-	if !ok {
-		return "", fmt.Errorf("done= needs a todo store, which this build does not have")
-	}
-	line := "done " + it.Line()
-	if t := strings.TrimSpace(a.Text); t != "" {
-		line += " -- " + t
-	}
-	if err := supervisor.AppendNoteBy(s.F.Home, s.Me(), a.Agent, line); err != nil {
 		return "", err
 	}
 	return "closed task [" + it.ID() + "] " + it.Description, nil
@@ -108,7 +64,7 @@ func (s *Server) handoffTasks(items []string) string {
 		if kind == "" {
 			kind = todo.Request
 		}
-		it, ok, err := s.addTask(kind, text, "", "")
+		it, ok, err := s.F.AddItem(s.Me(), kind, text, "", "")
 		switch {
 		case err != nil:
 			// The handoff must still be written: the item goes in it as text.

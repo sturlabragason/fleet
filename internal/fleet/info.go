@@ -243,7 +243,11 @@ func (f *Fleet) Info(name string) (string, error) {
 		}
 	}
 	kv("mode", mode)
-	if q := queueInfo(name); q != "" {
+	sess, q := queueInfo(name)
+	if sess != "" {
+		kv("session task", sess)
+	}
+	if q != "" {
 		kv("queue", q)
 	}
 	return strings.TrimRight(b.String(), "\n"), nil
