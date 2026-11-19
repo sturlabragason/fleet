@@ -1996,6 +1996,7 @@ Rejected: (a) PF4's model per effort (Haiku for light, Sonnet for standard): the
 (e) The admiral runs Opus too: every admiral launch (`fleet up`, restart, profile swap) refuses an admiral profile whose `args` name a model that is not Opus, and pins `default_model` when they name none. The admiral takes no `extra_args`, so only `args` count.
 Amended 2026-11-11 (ADR-112): the Opus-only check of (a), (c) and (e) is gone; Opus stays the default, and a spawn may name any model its tool offers.
 Resolved 2026-11-11: the built-in `claude` profile no longer sets `CLAUDE_CODE_SUBAGENT_MODEL=sonnet` (ADR-63 amended), so Claude subagents inherit Opus and pick Sonnet per subagent under (d).
+Amended 2026-11-19 (Sturla): (d) is now "search and summary subagents (Copilot's `explore`) run Gemini 4 Hydrogen; all else Opus, never Haiku". The Sonnet exception is gone; design, review, debugging, judgment, code, research synthesis and side-effecting `task` runs stay on Opus. `worker.md`, `instructions.md` and the playbook test carry the new wording.
 
 **ADR-101: the admiral follows its session after /clear, and an exited admiral pane is reported** (§6.5, §6.12, §7c) — accepted 2026-11-10. *Fixes #15; builds on ADR-93.*
 Context: `session.json` was written only at start, reset and restart. `/clear` makes the tool start a new session, so `fleet admiral restart` resumed the old conversation. An admiral pane that exited (`/exit`) was reported to nobody.

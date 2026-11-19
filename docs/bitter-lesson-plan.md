@@ -168,7 +168,7 @@ The worker playbook and the admiral instructions name specific models and client
 - `tool_search_tool` (`internal/playbook/worker.md:10`): a Copilot deferral detail.
 - `task_complete` (`worker.md:40`, `internal/mcp/agent_instructions.md:18`, `instructions.md:198`): a
   Copilot autopilot tool.
-- "Opus by default, never Haiku. Sonnet only for..." (`worker.md:21`, and the admiral's spawning
+- "Opus by default, never Haiku. Sonnet only for..." (since 2026-11-19: "search and summary subagents run Gemini 4 Hydrogen; all else Opus") (`worker.md:21`, and the admiral's spawning
   section): model names as rules. This is Sturla's standing decision (ADR-100), so its meaning stays;
   only where it lives is in question.
 

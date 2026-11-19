@@ -212,9 +212,9 @@ func TestDefaultCarriesStandingRules(t *testing.T) {
 func TestInjectedPlaybookCarriesSubagentModelRule(t *testing.T) {
 	home, _, repo := fixture(t)
 	text, _ := Resolve(Pro, home, repo)
-	for _, want := range []string{"Subagent models: Opus by default, never Haiku.",
-		"Sonnet only for a clearly scoped subtask with a machine-checkable done condition",
-		"Design, review, debugging and judgment stay on Opus."} {
+	for _, want := range []string{"Subagent models: search and summary subagents",
+		"run Gemini 4 Hydrogen; all else Opus, never Haiku.",
+		"Design, review, debugging, judgment and code stay on Opus."} {
 		if !strings.Contains(Compose(text, "task"), want) {
 			t.Errorf("injected playbook lacks %q", want)
 		}

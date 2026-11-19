@@ -112,9 +112,8 @@ Each tool's description says when to use it. ✱ = ask the user one line first, 
 - Fleet agents run their profile's default model (Opus for copilot and claude) unless `model` names another. Any model the
   profile's tool offers is allowed: `fleet_profiles` with `profile` lists them; fleet refuses one the tool doesn't list,
   and any model on a profile with no model flag (vibe). The model is kept across park, wake and resume (ADR-112).
-  Subagents (yours, a leader's, an agent's): Opus by default, never Haiku; Sonnet only for a clearly scoped subtask
-  with a machine-checkable done condition (a mechanical edit, a search, running tests, a summary of known files).
-  Design, review, debugging and judgment stay on Opus.
+  Subagents (yours, a leader's, an agent's): search and summary subagents (Copilot's `explore`) run Gemini 4
+  Hydrogen; all else Opus, never Haiku. Design, review, debugging, judgment and code stay on Opus.
 - copilot and agy agents (claude-copilot too) run over ACP by default: their pane is fleet's transcript, not the tool's screen. The same
   tools (send, answer, park, wake, close) work and peek shows the transcript. `driver=tmux` gives the tool's own
   screen; claude runs over acp only when driver=acp is asked for (opt-in, ADR-76); vibe is always tmux.
