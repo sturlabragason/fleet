@@ -71,6 +71,11 @@ type Config struct {
 	// Spend reads the session's spend for the usage footer (ADR-151); nil
 	// shows only what the agent reports over ACP.
 	Spend func(sessionID string) (spend.Spend, bool)
+	// Backdrop draws the blurred frosted-glass fleet mark behind the
+	// conversation body (ADR-183); Still keeps it as one still frame.
+	Backdrop bool
+	Still    bool
+	BgSeed   uint64
 }
 
 // agentConn is the part of *acp.Client the host uses.
@@ -217,6 +222,9 @@ func run(ctx context.Context, cfg Config, start starter, tr stateTracker) error 
 			// fleet's tmux reports focus changes but not the focus a pane
 			// starts with: hints wait for the first focus in.
 			h.con.bordered, h.con.focus = true, -1
+		}
+		if cfg.Backdrop {
+			h.con.enableBackdrop(cfg.Still, cfg.BgSeed)
 		}
 		defer h.con.close()
 		h.out = h.con

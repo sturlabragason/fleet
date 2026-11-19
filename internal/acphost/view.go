@@ -84,6 +84,9 @@ type view struct {
 	drawnAt  time.Time // when the last frame was written
 	drawWait bool      // a frame is due once frameGap has passed
 	closed   bool      // the host is done: nothing more is written
+
+	bodyStart, bodyEnd int         // 0-based row range of the conversation body in frame()
+	bg                 acpBackdrop // blurred frosted-glass backdrop (ADR-183)
 }
 
 func newView(out io.Writer, size func() (int, int), p colorprofile.Profile, name, profile string) *view {
@@ -307,6 +310,7 @@ func (v *view) close() {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	v.closed = true
+	v.bg.stop()
 }
 
 // redraw draws every row again at once, after a resize.
@@ -338,6 +342,7 @@ func (v *view) setFocus(in bool) {
 	}
 	if v.focus != f {
 		v.focus = f
+		v.syncBgTimer()
 		v.draw()
 	}
 }
@@ -372,6 +377,7 @@ func (v *view) paint(full bool) {
 	}
 	w, h := v.dims()
 	rows, cx, cy := v.frame(w, h)
+	v.bg.overlay(rows, w, v.bodyStart, v.bodyEnd, v.pt.p)
 	if full || w != v.shownW || len(rows) != len(v.shown) {
 		v.shown = nil
 	}
@@ -432,14 +438,19 @@ func (v *view) frame(w, h int) (rows []string, cx, cy int) {
 	if ruled {
 		bottom[0] = v.rule(w, more)
 	}
+	v.bodyStart = len(top)
 	rows = append(rows, top...)
 	rows = append(rows, body...)
 	for len(rows) < h-len(bottom) {
 		rows = append(rows, "")
 	}
+	v.bodyEnd = len(rows)
 	rows = append(rows, bottom...)
 	if len(rows) > h {
-		rows = rows[len(rows)-h:]
+		cut := len(rows) - h
+		rows = rows[cut:]
+		v.bodyStart = max(v.bodyStart-cut, 0)
+		v.bodyEnd = max(v.bodyEnd-cut, v.bodyStart)
 	}
 	v.inY = len(rows) - len(input) + 1
 	if hint != "" {

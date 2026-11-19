@@ -42,32 +42,36 @@ func TestFrameReuse(t *testing.T) {
 	}
 }
 
-// TestBgPatch: only changed cells right of each row's tiles are written, with
-// minimal cursor moves and colour escapes, and an unchanged frame writes nothing.
+// TestBgPatch: only changed cells inside backdrop spans (both crisp open space
+// and blurred glass inside tiles) are written, with minimal cursor moves and
+// colour escapes, and an unchanged frame writes nothing.
 func TestBgPatch(t *testing.T) {
 	var buf bytes.Buffer
 	m := New(&fakeBE{}, "")
 	m.w, m.h = 5, 3
 	m.bg.out = &SyncOut{w: &buf}
-	m.bg.esc = []string{"<0>", "<1>"}
-	m.bg.base = []bgLine{
-		{raw: "head", pre: "head", n: 4},
-		{raw: "xy", pre: "xy", n: 2},
-		{raw: "", pre: "", n: 0},
+	m.bg.esc = make([]string, logo.BackdropCols)
+	m.bg.esc[0] = "<0>"
+	m.bg.esc[1] = "<1>"
+	m.bg.esc[logo.CrispCols] = "<g0>"
+	m.bg.base = []logo.BackdropLine{
+		{Raw: "head"},
+		{Raw: "xy", Spans: []logo.BackdropSpan{{C0: 2, C1: 5, Glass: false}}},
+		{Raw: "", Spans: []logo.BackdropSpan{{C0: 0, C1: 5, Glass: true}}},
 	}
-	// w=5, h-1=2 -> 10 cells.
+	// w=5, h-1=2 -> 10 cells (drawn holds rendered cells, crisp or glass).
 	m.bg.drawn = []logo.FlowCell{
 		{R: ' ', Col: -1}, {R: ' ', Col: -1}, {R: ':', Col: 0}, {R: '+', Col: 0}, {R: ' ', Col: -1},
 		{R: ' ', Col: -1}, {R: ' ', Col: -1}, {R: ' ', Col: -1}, {R: ' ', Col: -1}, {R: ' ', Col: -1},
 	}
 	next := append([]logo.FlowCell(nil), m.bg.drawn...)
 	next[0] = logo.FlowCell{R: '@', Col: 1} // under tile "xy" on row 1: must be skipped
-	next[2] = logo.FlowCell{R: '+', Col: 0} // row 1 (1-based 2), col 2 (1-based 3)
-	next[3] = logo.FlowCell{R: '@', Col: 1} // row 1 (1-based 2), col 3 (1-based 4)
-	next[4] = logo.FlowCell{R: ':', Col: 0} // row 1 (1-based 2), col 4 (1-based 5): same colour <0>, 1-cell jump right
-	next[6] = logo.FlowCell{R: ':', Col: 1} // row 2 (1-based 3), col 1 (1-based 2): same colour <1>
+	next[2] = logo.FlowCell{R: '+', Col: 0} // row 1 (1-based 2), col 2 (1-based 3), crisp
+	next[3] = logo.FlowCell{R: '@', Col: 1} // row 1 (1-based 2), col 3 (1-based 4), crisp
+	next[4] = logo.FlowCell{R: ':', Col: 0} // row 1 (1-based 2), col 4 (1-based 5), crisp <0>, 1-cell jump right
+	next[6] = logo.FlowCell{R: '@', Col: 1} // row 2 (1-based 3), col 1 (1-based 2), glass -> '░' <g0>
 	m.bgPatch(next)
-	want := "\x1b[?2026h\x1b[0m<0>\x1b[2;3H+\x1b[C:<1>\x1b[2;4H@\x1b[3;2H:\x1b[0m\x1b[3;1H\x1b[?2026l"
+	want := "\x1b[?2026h\x1b[0m<0>\x1b[2;3H+\x1b[C:<1>\x1b[2;4H@<g0>\x1b[3;2H░\x1b[0m\x1b[3;1H\x1b[?2026l"
 	if got := buf.String(); got != want {
 		t.Errorf("bgPatch = %q, want %q", got, want)
 	}
@@ -88,7 +92,7 @@ func TestFramePatchSync(t *testing.T) {
 	m.w, m.h = 20, 6
 	m.bg.out = &SyncOut{w: &buf}
 	// Force colour escapes so the backdrop runs in a colourless test terminal.
-	esc := make([]string, 2*logo.FlowLevels)
+	esc := make([]string, logo.BackdropCols)
 	for i := range esc {
 		esc[i] = "<c>"
 	}
@@ -198,21 +202,26 @@ func TestBackdropLean(t *testing.T) {
 	}
 }
 
-// TestBackdropShown: a terminal without colour gets no backdrop, and the
-// help is never drawn over it.
+// TestBackdropShown: a terminal without colour gets no backdrop, reading panels
+// (help, waits, answer) show it in full blurred-glass mode, and SetBackdrop(false)
+// turns it off everywhere.
 func TestBackdropShown(t *testing.T) {
 	m, _ := overview(120, 30, 2)
 	m.bg.key, m.bg.esc = "", nil
 	lines := strings.Split(m.View(), "\n")
 	if m.bg.esc == nil { // a test terminal has no colour: nothing is drawn
 		for _, l := range lines {
-			if strings.ContainsAny(ansi.Strip(l), "@%#") {
+			if strings.ContainsAny(ansi.Strip(l), "@%#░") {
 				t.Fatalf("backdrop drawn without colour: %q", ansi.Strip(l))
 			}
 		}
 	}
 	m.help = true
-	if _, ok := m.bgShown(); ok {
-		t.Error("backdrop shown behind the help")
+	if _, fullGlass, ok := m.bgShown(); !ok || !fullGlass {
+		t.Errorf("help panel bgShown = (fullGlass=%v, ok=%v), want (true, true)", fullGlass, ok)
+	}
+	m.SetBackdrop(false)
+	if _, _, ok := m.bgShown(); ok {
+		t.Error("backdrop shown after SetBackdrop(false)")
 	}
 }

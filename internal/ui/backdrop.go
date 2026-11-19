@@ -10,22 +10,22 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/sturlabragason/fleet/internal/logo"
 	"github.com/sturlabragason/fleet/internal/theme"
 )
 
 // The overview's backdrop is the fleet mark stretched over the whole pane
-// below the header, behind the tiles (ADR-176, ADR-180): its strands drift
-// organically, its lanes hold still and breathe on their own rhythms, and it
-// leans toward the selected tile.
+// below the header, behind every tile and panel (ADR-176, ADR-180, ADR-181,
+// ADR-183): its strands roam freely like Bezier ribbons, its lanes hold still
+// and breathe on their own rhythms, and it leans toward the selected tile.
+// Open space right of tiles is crisp; blank cells inside tiles and panels show
+// a blurred, very-low-opacity frosted-glass layer of the same frame.
 const (
 	bgFPS    = 12  // frames a second while it runs; cell-delta patching keeps tmux CPU low (ADR-180)
-	bgDim    = 0.4 // behind tiles: the tiles stay the brightest thing
+	bgDim    = 0.4 // open area behind tiles: the tiles stay the brightest thing
 	leanEase = 8.0 // seconds to cover about 63% of a lean change: slow enough to stay under TestFlowSmooth's quarter row a frame
 )
 
@@ -91,34 +91,24 @@ type backdrop struct {
 	flow   *logo.Flow
 	flowW  int
 	flowH  int
-	cells  []logo.FlowCell // newly rendered cells
-	drawn  []logo.FlowCell // cells currently on screen
-	key    string          // size, theme and dim the cells and escapes were drawn for
-	esc    []string        // colour escapes; nil: the terminal has no colour
+	cells  []logo.FlowCell // newly rendered raw flow cells
+	drawn  []logo.FlowCell // rendered cells (crisp or glass) currently on screen
+	key    string          // size, theme, dim and glass mode the cells and escapes were drawn for
+	esc    []string        // colour escapes (crisp + glass); nil: the terminal has no colour
 	frameT float64         // t the cells were drawn at
 	// base is the overview without the backdrop, one entry per pane row.
 	// A frame whose only news is a bgMsg reuses it, so backdrop ticks never
 	// redraw the tiles (tickOnly).
-	base     []bgLine
+	base     []logo.BackdropLine
 	baseRaw  string
+	baseW    int  // width base was parsed for
+	baseFull bool // fullGlass mode base was parsed for
 	tickOnly bool
 	out      *SyncOut // nil in tests: falls back to full View() strings
 	lastView string   // last full frame handed to bubbletea
 	fullSeq  uint64   // out.seq when lastView was handed to bubbletea
-	patchBuf []byte   // scratch buffer for cell-delta escape output
-	buckets  [2*logo.FlowLevels + 1][]bgCell
-}
-
-type bgCell struct {
-	r, c int16
-	ch   rune
-}
-
-// bgLine is one row of the overview: as drawn, and cut after its last
-// drawn cell (n cells), where the backdrop starts.
-type bgLine struct {
-	raw, pre string
-	n        int
+	patcher  logo.BackdropPatcher
+	patchBuf []byte
 }
 
 // SetBackdrop turns the backdrop off for NO_COLOR and TERM=dumb, where its
@@ -203,20 +193,29 @@ func (m *Model) selRow() (float64, bool) {
 }
 
 // frame is the pane: the overview's rows (redrawn unless only the backdrop
-// ticked) with the backdrop in every cell right of what each row shows,
-// below the header. When the last full frame has already been flushed to
-// m.bg.out and only the backdrop changed, it patches only the changed cells
-// directly and returns lastView unchanged so Bubble Tea skips a full repaint.
+// ticked) with the backdrop in open space and blurred low-opacity glass in
+// blank spans of tiles and panels, below the header. When the last full frame
+// has already been flushed to m.bg.out and only the backdrop changed, it
+// patches only the changed cells directly and returns lastView unchanged so
+// Bubble Tea skips a full repaint.
 func (m *Model) frame(draw func() string) string {
+	_, fullGlass, _ := m.bgShown()
 	baseChanged := false
-	if !m.bg.tickOnly || len(m.bg.base) == 0 {
+	if !m.bg.tickOnly || len(m.bg.base) == 0 || m.bg.baseFull != fullGlass || m.bg.baseW != m.w {
 		raw := draw()
-		if raw != m.bg.baseRaw || len(m.bg.base) == 0 {
+		if raw != m.bg.baseRaw || len(m.bg.base) == 0 || m.bg.baseFull != fullGlass || m.bg.baseW != m.w {
 			m.bg.baseRaw = raw
+			m.bg.baseW = m.w
+			m.bg.baseFull = fullGlass
 			m.bg.base = m.bg.base[:0]
+			r := 0
 			for l := range strings.SplitSeq(raw, "\n") {
-				n := ansi.StringWidth(strings.TrimRight(ansi.Strip(l), " "))
-				m.bg.base = append(m.bg.base, bgLine{raw: l, pre: ansi.Truncate(l, n, ""), n: n})
+				if r == 0 {
+					m.bg.base = append(m.bg.base, logo.BackdropLine{Raw: l})
+				} else {
+					m.bg.base = append(m.bg.base, logo.ParseBackdropLine(l, m.w, fullGlass))
+				}
+				r++
 			}
 			baseChanged = true
 		}
@@ -233,17 +232,18 @@ func (m *Model) frame(draw func() string) string {
 		if r > 0 {
 			b.WriteByte('\n')
 		}
-		if r == 0 || cells == nil || l.n >= m.w || r > m.h-1 {
-			b.WriteString(l.raw)
+		if r == 0 || cells == nil || len(l.Spans) == 0 || r > m.h-1 {
+			b.WriteString(l.Raw)
 			continue
 		}
-		b.WriteString(l.pre)
-		m.bgRow(&b, cells[(r-1)*m.w+l.n:r*m.w])
+		rowOff := (r - 1) * m.w
+		for si, sp := range l.Spans {
+			b.WriteString(l.Segs[si])
+			logo.WriteBackdropSpan(&b, cells[rowOff+sp.C0:rowOff+sp.C1], m.bg.drawn[rowOff+sp.C0:rowOff+sp.C1], m.bg.esc, sp.Glass, sp.Restore)
+		}
+		b.WriteString(l.Segs[len(l.Spans)])
 	}
 	s := b.String()
-	if cells != nil {
-		copy(m.bg.drawn, cells)
-	}
 	if m.bg.out != nil && s != m.bg.lastView {
 		m.bg.fullSeq = m.bg.out.seq.Load()
 	}
@@ -251,81 +251,26 @@ func (m *Model) frame(draw func() string) string {
 	return s
 }
 
-// bgPatch writes only backdrop cells that changed since m.bg.drawn straight to
-// the terminal, grouped by colour index so each SGR escape is emitted at most
-// once per frame, skipping tile columns and the header row (ADR-180).
+// bgPatch writes only changed backdrop cells (open and blurred glass) straight
+// to the terminal inside a synchronized update (ADR-180, ADR-183).
 func (m *Model) bgPatch(cells []logo.FlowCell) {
-	for i := range m.bg.buckets {
-		m.bg.buckets[i] = m.bg.buckets[i][:0]
-	}
-	rows := min(len(m.bg.base), m.h)
-	changed := false
-	for r := 1; r < rows; r++ {
-		start := m.bg.base[r].n
-		if start >= m.w {
-			continue
-		}
-		rowOff := (r - 1) * m.w
-		for c := start; c < m.w; c++ {
-			idx := rowOff + c
-			cell := cells[idx]
-			if cell == m.bg.drawn[idx] {
-				continue
-			}
-			m.bg.drawn[idx] = cell
-			b := int(cell.Col) + 1
-			m.bg.buckets[b] = append(m.bg.buckets[b], bgCell{int16(r), int16(c), cell.R})
-			changed = true
-		}
-	}
-	if !changed {
+	inner := m.bg.patcher.Patch(m.bg.base, 1, min(len(m.bg.base), m.h), m.w, 1, cells, m.bg.drawn, m.bg.esc)
+	if len(inner) == 0 {
 		return
 	}
-	buf := append(m.bg.patchBuf[:0], "\x1b[?2026h\x1b[0m"...)
-	curR, curC := -1, -1
-	for b, list := range m.bg.buckets {
-		if len(list) == 0 {
-			continue
-		}
-		if b > 0 {
-			buf = append(buf, m.bg.esc[b-1]...)
-		}
-		for _, p := range list {
-			r, c := int(p.r), int(p.c)
-			if r != curR || c != curC {
-				buf = appendMove(buf, curR, curC, r, c)
-			}
-			buf = utf8.AppendRune(buf, p.ch)
-			curR, curC = r, c+1
-		}
-	}
-	buf = append(buf, "\x1b[0m\x1b["...)
+	buf := append(m.bg.patchBuf[:0], "\x1b[?2026h"...)
+	buf = append(buf, inner...)
+	buf = append(buf, "\x1b["...)
 	buf = strconv.AppendInt(buf, int64(m.h), 10)
 	buf = append(buf, ";1H\x1b[?2026l"...)
 	m.bg.patchBuf = buf
 	m.bg.out.patch(buf)
 }
 
-func appendMove(buf []byte, curR, curC, r, c int) []byte {
-	if r == curR && c > curC {
-		d := c - curC
-		buf = append(buf, "\x1b["...)
-		if d > 1 {
-			buf = strconv.AppendInt(buf, int64(d), 10)
-		}
-		return append(buf, 'C')
-	}
-	buf = append(buf, "\x1b["...)
-	buf = strconv.AppendInt(buf, int64(r+1), 10)
-	buf = append(buf, ';')
-	buf = strconv.AppendInt(buf, int64(c+1), 10)
-	return append(buf, 'H')
-}
-
 // bgCells is this frame's backdrop, w×(h-1) cells, nil when none is shown,
-// and whether the backdrop's geometry, theme, brightness or visibility changed.
+// and whether the backdrop's geometry, theme, brightness or mode changed.
 func (m *Model) bgCells() ([]logo.FlowCell, bool) {
-	dim, ok := m.bgShown()
+	dim, fullGlass, ok := m.bgShown()
 	if !ok || m.h < 2 || m.w < 1 {
 		changed := m.bg.key != ""
 		m.bg.key = ""
@@ -333,8 +278,8 @@ func (m *Model) bgCells() ([]logo.FlowCell, bool) {
 	}
 	w, h := m.w, m.h-1
 	keyChanged := false
-	if key := fmt.Sprint(theme.Base, theme.Text, theme.Select, dim, w, h); key != m.bg.key {
-		m.bg.key, m.bg.esc = key, logo.FlowEscapes(dim)
+	if key := fmt.Sprint(theme.Base, theme.Text, theme.Select, dim, fullGlass, w, h); key != m.bg.key {
+		m.bg.key, m.bg.esc = key, logo.BackdropEscapes(dim)
 		if m.bg.flow == nil || m.bg.flowW != w || m.bg.flowH != h {
 			if m.bg.seed != 0 {
 				m.bg.flow = logo.NewFlowSeeded(w, h, m.bg.seed)
@@ -358,32 +303,25 @@ func (m *Model) bgCells() ([]logo.FlowCell, bool) {
 	return m.bg.cells, keyChanged
 }
 
-// bgRow writes cells after a reset, one escape per colour change.
+// bgRow writes crisp cells after a reset, one escape per colour change.
 func (m *Model) bgRow(b *strings.Builder, cells []logo.FlowCell) {
-	b.WriteString("\x1b[0m")
-	cur := int8(-1)
-	for _, c := range cells {
-		if c.Col >= 0 && c.Col != cur {
-			b.WriteString(m.bg.esc[c.Col])
-			cur = c.Col
-		}
-		b.WriteRune(c.R)
-	}
-	b.WriteString("\x1b[0m")
+	logo.WriteBackdropSpan(b, cells, nil, m.bg.esc, false, "")
 }
 
-// bgShown reports whether the backdrop belongs on screen now, and how
-// bright: on the tile overview (the theme picker above it included), at
-// bgDim behind tiles and full on an empty overview; never behind the help,
-// the w list, an answer or an extension's view, which are text to read.
-func (m *Model) bgShown() (dim float64, ok bool) {
-	if m.bg.off || m.ans != nil || m.wv != nil || m.help || extView(m) != nil {
-		return 0, false
+// bgShown reports whether the backdrop belongs on screen now, how bright open
+// areas are, and whether the whole pane below the header is a reading panel
+// that uses blurred glass across the full width (ADR-183).
+func (m *Model) bgShown() (dim float64, fullGlass, ok bool) {
+	if m.bg.off {
+		return 0, false, false
+	}
+	if m.ans != nil || m.wv != nil || m.help || extView(m) != nil {
+		return bgDim, true, true
 	}
 	if len(m.agents) == 0 {
-		return 1, true
+		return 1, false, true
 	}
-	return bgDim, true
+	return bgDim, false, true
 }
 
 // bgOnEmpty reports whether an empty overview shows the backdrop instead of

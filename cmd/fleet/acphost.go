@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -16,6 +17,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/acphost"
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/logo"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/spend"
 	"github.com/sturlabragason/fleet/internal/sysx"
@@ -97,7 +99,9 @@ func cmdACPHost(args []string) error {
 	}
 	// The usage footer reads spend as fleet spend does (ADR-151); the
 	// user's own prompts go on the agent's queue (ADR-164).
+	animOn := true
 	if f, err := fleet.Open(); err == nil {
+		animOn = f.Prefs.Animation()
 		cfg.OnUserPrompt = func(text string, held bool) {
 			kind := todo.Prompt
 			if held {
@@ -120,6 +124,11 @@ func cmdACPHost(args []string) error {
 			// fleet's tmux titles every pane with the agent and its status.
 			cfg.Bordered = os.Getenv("TMUX") != ""
 			cfg.Color = acphost.ColorProfile(os.Environ())
+			cfg.Backdrop = os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb"
+			cfg.Still = !animOn || logo.Still(os.Getenv)
+			if !cfg.Still {
+				cfg.BgSeed = rand.Uint64() | 1
+			}
 			cfg.Size = func() (int, int) {
 				w, h, err := term.GetSize(int(os.Stdout.Fd()))
 				if err != nil {
