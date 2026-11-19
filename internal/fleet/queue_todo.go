@@ -114,10 +114,31 @@ func (f *Fleet) Tweak(name, kind, text string) {
 	})
 }
 
-// TweakKind is the queue kind of a send that returned delivery d: a text
-// held for later (by the agent's host, or the spawn queue) is queued; one
-// that reached the agent, queue=true to an idle agent included, is a steer.
-func TweakKind(d string) string {
+// Deliver types text to agent name at once (now), for when its turn ends
+// (queue) or into its running turn, and puts it on the agent's queue as a
+// tweak (ADR-164): every text the user, the admiral or a leader sends is
+// one. It returns the delivery (DeliveryNote).
+func (f *Fleet) Deliver(name, text string, now, queue bool) (string, error) {
+	var d string
+	var err error
+	switch {
+	case now:
+		err = f.SendNow(name, text)
+	case queue:
+		d, err = f.Queue(name, text)
+	default:
+		d, err = f.Steer(name, text)
+	}
+	if err == nil {
+		f.Tweak(name, tweakKind(d), text)
+	}
+	return d, err
+}
+
+// tweakKind is the queue kind of a send that returned delivery d: a text
+// held for later (by the agent's host) is queued; one that reached the
+// agent, queue=true to an idle agent included, is a steer.
+func tweakKind(d string) string {
 	if d == acphost.DeliveryQueued || d == DeliveryHeld {
 		return todo.Queued
 	}

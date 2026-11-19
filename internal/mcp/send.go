@@ -159,22 +159,7 @@ func (s *Server) sendOne(a args, name string) (string, error) {
 	if len(a.Keys) > 0 {
 		return "", s.F.SendKeys(name, a.Text, a.Keys)
 	}
-	var d string
-	var err error
-	switch {
-	case a.Now:
-		err = s.F.SendNow(name, a.Text)
-	case a.Queue:
-		d, err = s.F.Queue(name, a.Text)
-	default:
-		d, err = s.F.Steer(name, a.Text)
-	}
-	if err == nil {
-		// Every text the admiral or a leader sends is a tweak on the
-		// agent's queue, under its session (ADR-164).
-		s.F.Tweak(name, fleet.TweakKind(d), a.Text)
-	}
-	return d, err
+	return s.F.Deliver(name, a.Text, a.Now, a.Queue)
 }
 
 // resume is fleet_send resume=true: a closed agent of the caller's comes

@@ -447,15 +447,8 @@ func cmdSend(f *fleet.Fleet, rest []string) error {
 		f.Intervene(rest[0], board.KindSendRefused, code)
 		return fmt.Errorf("not sent: %s; fleet send --force types it anyway", r)
 	}
-	if now {
-		return f.SendNow(rest[0], text)
-	}
-	send := f.Steer
-	if queue {
-		send = f.Queue
-	}
-	d, err := send(rest[0], text)
-	if err != nil {
+	d, err := f.Deliver(rest[0], text, now, queue)
+	if err != nil || now {
 		return err
 	}
 	fmt.Println(fleet.DeliveryNote(rest[0], d))
