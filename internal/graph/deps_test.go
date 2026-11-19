@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/sturlabragason/fleet/internal/worktree"
 )
@@ -112,12 +113,12 @@ func TestFiles(t *testing.T) {
 		{"internal/work", nil},
 		{"Nope", nil},
 	}
+	g, err := load(out)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, c := range cases {
-		got, err := Files(out, c.name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !reflect.DeepEqual(got, c.want) {
+		if got := g.files(c.name); !reflect.DeepEqual(got, c.want) {
 			t.Errorf("Files(%q) = %v, want %v", c.name, got, c.want)
 		}
 	}
@@ -127,29 +128,49 @@ func TestResolve(t *testing.T) {
 	repo, wt := gitRepo(t)
 	home := t.TempDir()
 	write(t, filepath.Join(repo, "docs", "a.md"), "x")
-	if root, files := Resolve(home, wt, []string{"docs/a.md", "Touching", "merge"}); root != repo || !reflect.DeepEqual(files, []string{"docs/a.md"}) {
-		t.Errorf("no graph: root %q files %v, want only the path that exists", root, files)
+	if l := Resolve(home, wt, []string{"docs/a.md", "Touching", "merge"}); l.Root != repo || !reflect.DeepEqual(l.Files, []string{"docs/a.md"}) || l.UsedBy != nil {
+		t.Errorf("no graph: %+v, want only the path that exists", l)
 	}
 	out := Dir(home, repo)
 	write(t, filepath.Join(out, stampFile), goodStamp(repo))
 	write(t, filepath.Join(out, "graph.json"), `{"nodes":[
  {"id":"1","label":"Touching()","source_file":"t.go","file_type":"code"},
- {"id":"2","label":"merge()","source_file":"m.go","file_type":"code"}],"links":[]}`)
+ {"id":"2","label":"merge()","source_file":"m.go","file_type":"code"}],
+ "links":[{"source":"2","target":"1","relation":"calls"}]}`)
 	cases := []struct {
-		words []string
-		want  []string
+		words      []string
+		want, used []string
 	}{
-		{[]string{"who", "touched", "Touching"}, []string{"t.go"}},
-		{[]string{"merge"}, nil}, // a plain word is not taken as code
-		{[]string{"Touching", "t.go"}, []string{"t.go"}},
-		{[]string{"docs/a.md"}, []string{"docs/a.md"}}, // a path the graph lacks
+		{[]string{"who", "touched", "Touching"}, []string{"t.go"}, []string{"m.go"}},
+		{[]string{"merge"}, nil, nil}, // a plain word is not taken as code
+		{[]string{"Touching", "t.go"}, []string{"t.go"}, []string{"m.go"}},
+		{[]string{"docs/a.md"}, []string{"docs/a.md"}, nil}, // a path the graph lacks
 	}
 	for _, c := range cases {
-		if _, got := Resolve(home, wt, c.words); !reflect.DeepEqual(got, c.want) {
-			t.Errorf("Resolve(%v) = %v, want %v", c.words, got, c.want)
+		if l := Resolve(home, wt, c.words); !reflect.DeepEqual(l.Files, c.want) || !reflect.DeepEqual(l.UsedBy, c.used) {
+			t.Errorf("Resolve(%v) = %v used by %v, want %v used by %v", c.words, l.Files, l.UsedBy, c.want, c.used)
 		}
 	}
-	if root, files := Resolve(home, t.TempDir(), []string{"x.go"}); root != "" || files != nil {
-		t.Errorf("outside a repo: %q %v", root, files)
+	if n := Reads(home, time.Time{})["recall"]; n != 3 {
+		t.Errorf("recall reads = %d, want 3 (one per lookup with a code word)", n)
+	}
+	if l := Resolve(home, t.TempDir(), []string{"x.go"}); l.Root != "" || l.Files != nil {
+		t.Errorf("outside a repo: %+v", l)
+	}
+}
+
+func TestUsedBy(t *testing.T) {
+	d := Deps{"a.go": {"b.go": true}, "b.go": {"c.go": true}, "d_test.go": {"a.go": true}}
+	cases := []struct {
+		files, want []string
+	}{
+		{[]string{"b.go"}, []string{"a.go"}},
+		{[]string{"a.go", "b.go"}, []string{"d_test.go"}}, // a user inside the set is left out
+		{[]string{"d_test.go"}, nil},
+	}
+	for _, c := range cases {
+		if got := d.UsedBy(c.files); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("UsedBy(%v) = %v, want %v", c.files, got, c.want)
+		}
 	}
 }

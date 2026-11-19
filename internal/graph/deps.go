@@ -60,22 +60,7 @@ func LoadDeps(out string) (Deps, error) {
 	if err != nil {
 		return nil, err
 	}
-	file := make(map[string]string, len(g.Nodes))
-	for _, n := range g.Nodes {
-		file[n.ID] = n.File
-	}
-	d := Deps{}
-	for _, l := range g.Links {
-		from, to := file[l.Source], file[l.Target]
-		if !depRelations[l.Relation] || from == "" || to == "" || from == to || strings.HasSuffix(to, "_test.go") {
-			continue
-		}
-		if d[from] == nil {
-			d[from] = map[string]bool{}
-		}
-		d[from][to] = true
-	}
-	return d, nil
+	return g.deps(), nil
 }
 
 // Link is one file using another.
@@ -162,17 +147,13 @@ func CouplingText(cs []Coupling) string {
 	return b.String()
 }
 
-// Files is where name lives in the graph in out, sorted: a repo path (a
+// files is where name lives in the graph, sorted: a repo path (a
 // file, or a directory and everything under it), a file's base name, a
 // symbol (Func, Type, Method) or pkg.Symbol, whose package is the file's
 // directory name; when no package matches, the part before the dot is taken
 // as a type (Type.Method, whose label carries no receiver) and every file
 // with that method counts. Only code nodes count as symbols.
-func Files(out, name string) ([]string, error) {
-	g, err := load(out)
-	if err != nil {
-		return nil, err
-	}
+func (g *graphJSON) files(name string) []string {
 	pkg, sym, qualified := strings.Cut(name, ".")
 	if !qualified || strings.Contains(sym, ".") {
 		pkg, sym = "", name
@@ -201,33 +182,88 @@ func Files(out, name string) ([]string, error) {
 	}
 	sort.Strings(files)
 	if len(files) == 0 {
-		return nil, nil
+		return nil
 	}
-	return files, nil
+	return files
+}
+
+// deps is the graph's file dependencies (see LoadDeps).
+func (g *graphJSON) deps() Deps {
+	file := make(map[string]string, len(g.Nodes))
+	for _, n := range g.Nodes {
+		file[n.ID] = n.File
+	}
+	d := Deps{}
+	for _, l := range g.Links {
+		from, to := file[l.Source], file[l.Target]
+		if !depRelations[l.Relation] || from == "" || to == "" || from == to || strings.HasSuffix(to, "_test.go") {
+			continue
+		}
+		if d[from] == nil {
+			d[from] = map[string]bool{}
+		}
+		d[from][to] = true
+	}
+	return d
+}
+
+// UsedBy lists, sorted, the files outside files that use one of them.
+func (d Deps) UsedBy(files []string) []string {
+	in := make(map[string]bool, len(files))
+	for _, f := range files {
+		in[f] = true
+	}
+	var users []string
+	for from, tos := range d {
+		if in[from] {
+			continue
+		}
+		for _, f := range files {
+			if tos[f] {
+				users = append(users, from)
+				break
+			}
+		}
+	}
+	sort.Strings(users)
+	return users
+}
+
+// Lookup is what Resolve found for a recall topic.
+type Lookup struct {
+	Root   string   // the main checkout, "" outside a repo
+	Files  []string // the repo files the topic names
+	UsedBy []string // files that use them, from the graph
 }
 
 // Resolve turns the words of a recall topic that name code (a path, a
 // file, pkg.Symbol or an exported name) into repo files, sorted: through
 // the graph in home when the repo holding dir has one, and words that are
-// paths in the repo. root is the main checkout, "" outside a repo.
-func Resolve(home, dir string, words []string) (root string, files []string) {
+// paths in the repo. With a graph it also lists the files that use them
+// (ADR-165), and records the read.
+func Resolve(home, dir string, words []string) Lookup {
 	root, err := Root(dir)
 	if err != nil {
-		return "", nil
+		return Lookup{}
 	}
-	_, out, haveGraph := Find(home, dir)
+	var g *graphJSON
+	asked := false
+	for _, w := range words {
+		asked = asked || codeWord(w)
+	}
+	if _, out, ok := Find(home, dir); ok && asked {
+		if g, err = load(out); err != nil {
+			logx.For("graphify").Warn("graph unreadable", "out", out, "err", err)
+		}
+	}
 	set := map[string]bool{}
 	for _, w := range words {
 		if !codeWord(w) {
 			continue
 		}
 		var fs []string
-		if haveGraph {
-			fs, err = Files(out, w)
-			if err != nil {
-				logx.For("graphify").Warn("graph unreadable", "out", out, "err", err)
-				haveGraph = false
-			}
+		if g != nil {
+			fs = g.files(w)
 			for _, f := range fs {
 				set[f] = true
 			}
@@ -237,11 +273,16 @@ func Resolve(home, dir string, words []string) (root string, files []string) {
 			set[path.Clean(w)] = true
 		}
 	}
+	l := Lookup{Root: root}
 	for f := range set {
-		files = append(files, f)
+		l.Files = append(l.Files, f)
 	}
-	sort.Strings(files)
-	return root, files
+	sort.Strings(l.Files)
+	if g != nil {
+		l.UsedBy = g.deps().UsedBy(l.Files)
+		Record(home, "recall", true, len(l.Files))
+	}
+	return l
 }
 
 func codeWord(w string) bool {

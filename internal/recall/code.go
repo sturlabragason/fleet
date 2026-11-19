@@ -101,6 +101,9 @@ func (r Result) formatCode(b *strings.Builder) {
 	}
 	files := strings.Join(r.CodeFiles, ", ")
 	fmt.Fprintf(b, "## code: %d commits to %s\n", len(r.Code), clip(files, 160))
+	if len(r.CodeUsedBy) > 0 {
+		fmt.Fprintf(b, "used by (code graph): %s\n", clip(strings.Join(r.CodeUsedBy, ", "), 400))
+	}
 	if r.CodeErr != "" {
 		b.WriteString("git log failed: " + r.CodeErr + "\n")
 	}

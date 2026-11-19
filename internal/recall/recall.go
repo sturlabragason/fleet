@@ -41,9 +41,11 @@ type Opts struct {
 	Agents map[string]string
 	Now    time.Time
 	// Repo and Files ask "what touched these files" too (ADR-136): the
-	// repo's commits to them, see Touched.
-	Repo  string
-	Files []string
+	// repo's commits to them, see Touched. UsedBy are the files that use
+	// them, from the code graph (ADR-165).
+	Repo   string
+	Files  []string
+	UsedBy []string
 }
 
 // Result is a search's answer. CassErr is ErrNoCass when cass is missing.
@@ -53,12 +55,14 @@ type Result struct {
 	Sessions []Hit  `json:"sessions"`
 	CassErr  string `json:"cass_error,omitempty"`
 	// CodeFiles are the files the topic resolved to, Code the commits
-	// that changed them (ADR-136).
-	CodeFiles []string      `json:"code_files,omitempty"`
-	Code      []Hit         `json:"code,omitempty"`
-	CodeErr   string        `json:"code_error,omitempty"`
-	IndexAge  time.Duration `json:"index_age_ns,omitempty"`
-	noCass    bool
+	// that changed them (ADR-136), CodeUsedBy the files that use them
+	// (ADR-165).
+	CodeFiles  []string      `json:"code_files,omitempty"`
+	CodeUsedBy []string      `json:"code_used_by,omitempty"`
+	Code       []Hit         `json:"code,omitempty"`
+	CodeErr    string        `json:"code_error,omitempty"`
+	IndexAge   time.Duration `json:"index_age_ns,omitempty"`
+	noCass     bool
 }
 
 // Search looks topic up in fleet's records and, through cass, in the
@@ -70,7 +74,7 @@ func Search(ctx context.Context, topic string, o Opts) Result {
 	if o.Now.IsZero() {
 		o.Now = time.Now()
 	}
-	r := Result{Topic: topic, Fleet: searchFleet(topic, o), CodeFiles: o.Files}
+	r := Result{Topic: topic, Fleet: searchFleet(topic, o), CodeFiles: o.Files, CodeUsedBy: o.UsedBy}
 	if len(o.Files) > 0 {
 		code, err := Touched(ctx, o.Repo, o.Files, Owners{Reports: Reports(o.Home), ADR: adrOwners(o.Home)}, o.Limit)
 		if err != nil {

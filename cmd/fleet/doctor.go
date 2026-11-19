@@ -135,7 +135,8 @@ func doctor(env doctorEnv) []doctorCheck {
 	if c, ok := checkDesktop(env.userHome, env.getenv); ok && env.userHome != "" {
 		cs = append(cs, c)
 	}
-	if c, ok := checkGraphs(graph.List(env.home), env.userHome, time.Now()); ok {
+	now := time.Now()
+	if c, ok := checkGraphs(graph.List(env.home), graph.Reads(env.home, now.Add(-graphReadsWindow)), env.userHome, now); ok {
 		cs = append(cs, c)
 	}
 	return cs
@@ -168,9 +169,13 @@ func checkCompanions(sts []companion.Status) []doctorCheck {
 	return cs
 }
 
+// graphReadsWindow is how far back doctor counts graph reads (ADR-165).
+const graphReadsWindow = 7 * 24 * time.Hour
+
 // checkGraphs lists the code graphs fleet keeps (DESIGN §6.15) with their
-// age; ok is false when there are none.
-func checkGraphs(sts []graph.Stamp, userHome string, now time.Time) (doctorCheck, bool) {
+// age, and the graph reads of the last week by use (ADR-165); ok is false
+// when there are none.
+func checkGraphs(sts []graph.Stamp, reads map[string]int, userHome string, now time.Time) (doctorCheck, bool) {
 	if len(sts) == 0 {
 		return doctorCheck{}, false
 	}
@@ -185,7 +190,18 @@ func checkGraphs(sts []graph.Stamp, userHome string, now time.Time) (doctorCheck
 		parts = append(parts, fmt.Sprintf("%s %s old", root, now.Sub(st.BuiltAt).Round(time.Minute)))
 	}
 	sort.Strings(parts)
-	return doctorCheck{Name: "code graphs", Level: levelInfo, Detail: strings.Join(parts, ", ")}, true
+	detail := strings.Join(parts, ", ")
+	uses, total := make([]string, 0, len(reads)), 0
+	for u, n := range reads {
+		uses = append(uses, fmt.Sprintf("%s %d", u, n))
+		total += n
+	}
+	sort.Strings(uses)
+	detail += fmt.Sprintf("; %d reads in 7 days", total)
+	if total > 0 {
+		detail += " (" + strings.Join(uses, ", ") + ")"
+	}
+	return doctorCheck{Name: "code graphs", Level: levelInfo, Detail: detail}, true
 }
 
 var tmuxVersionRe = regexp.MustCompile(`^tmux (?:next-)?(\d+)\.(\d+)`)

@@ -74,7 +74,7 @@ func touching(args []string) (int, error) {
 	dir := fs.String("C", ".", "directory inside the repo")
 	asJSON := fs.Bool("json", false, "JSON output")
 	all := fs.Bool("all", false, "also list worktrees whose work is already in main")
-	withGraph := fs.Bool("graph", false, "also code dependencies between the files, from the code graph")
+	withGraph := fs.Bool("graph", false, "also code dependencies between the files, from the code graph (default with files and text output: on when the graph is fresh)")
 	if err := fs.Parse(args); err != nil {
 		return 0, err
 	}
@@ -83,10 +83,19 @@ func touching(args []string) (int, error) {
 		return 0, err
 	}
 	files := fs.Args()
-	if *withGraph {
-		return touchingGraph(context.Background(), *dir, cwd, files, *asJSON)
+	ctx := context.Background()
+	var asked *bool
+	if flagSet(fs, "graph") || *asJSON {
+		asked = withGraph // JSON keeps its shape unless --graph is given
 	}
-	ws, overlap, left, err := worktree.Touching(context.Background(), *dir, cwd, files, resultFiles(), *all)
+	use, note := graph.Auto(ctx, logx.Home(), *dir, files, asked)
+	if note != "" {
+		fmt.Fprintln(os.Stderr, "fleet touching:", note)
+	}
+	if use {
+		return touchingGraph(ctx, *dir, cwd, files, *asJSON, asked == nil)
+	}
+	ws, overlap, left, err := worktree.Touching(ctx, *dir, cwd, files, resultFiles(), *all)
 	if err != nil {
 		return 0, err
 	}
@@ -108,9 +117,10 @@ func touching(args []string) (int, error) {
 // touchingGraph is `fleet touching --graph` (ADR-136): the other worktrees
 // whose changes overlap the files, or are one code dependency away from
 // them, with the merge order that follows. Without files it checks this
-// worktree's own changes. The exit code stays the file-overlap answer.
-func touchingGraph(ctx context.Context, dir, cwd string, files []string, asJSON bool) (int, error) {
-	cs, err := graph.Touching(ctx, logx.Home(), dir, cwd, files, resultFiles())
+// worktree's own changes. The exit code stays the file-overlap answer. auto:
+// fleet chose the graph itself (ADR-165).
+func touchingGraph(ctx context.Context, dir, cwd string, files []string, asJSON, auto bool) (int, error) {
+	cs, err := graph.Touching(ctx, logx.Home(), dir, cwd, files, resultFiles(), "touching", auto)
 	if err != nil {
 		return 0, err
 	}

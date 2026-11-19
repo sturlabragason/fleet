@@ -60,7 +60,7 @@ func cmdMerge(args []string) error {
 			fmt.Println(string(b))
 			return nil
 		}
-		steps := p.Steps()
+		steps := append(p.Steps(), graphSteps(context.Background(), p.Dir)...)
 		if len(taken) > 0 {
 			steps = append([]string{adrFix(taken)}, steps...)
 		}
@@ -98,6 +98,21 @@ func cmdMerge(args []string) error {
 	fmt.Println("worktree and branch left in place; nothing pushed")
 	rebuildGraph(p.BaseDir)
 	return nil
+}
+
+// graphSteps are the dry run's code-graph lines (ADR-165): the other
+// worktrees this branch's changes overlap or are one dependency away from.
+// None without a fresh graph.
+func graphSteps(ctx context.Context, dir string) []string {
+	if _, err := graph.Fresh(ctx, logx.Home(), dir); err != nil {
+		return nil
+	}
+	cs, err := graph.Touching(ctx, logx.Home(), dir, dir, nil, resultFiles(), "merge", true)
+	if err != nil {
+		logx.For("graphify").Warn("merge dry-run graph check failed", "err", err)
+		return nil
+	}
+	return graph.MergeSteps(cs)
 }
 
 // repoConfig reads the repo's merge conventions, with a one-line note when it

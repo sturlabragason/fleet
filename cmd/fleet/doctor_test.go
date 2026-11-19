@@ -195,13 +195,21 @@ func TestCheckCompanions(t *testing.T) {
 
 func TestCheckGraphs(t *testing.T) {
 	now := time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC)
-	if _, ok := checkGraphs(nil, "/home/u", now); ok {
+	if _, ok := checkGraphs(nil, nil, "/home/u", now); ok {
 		t.Error("no graphs should add no check")
 	}
-	c, ok := checkGraphs([]graph.Stamp{{Root: "/home/u/git/x", BuiltAt: now.Add(-3 * time.Hour)}}, "/home/u", now)
-	want := doctorCheck{Name: "code graphs", Level: levelInfo, Detail: "~/git/x 3h0m0s old"}
-	if !ok || c != want {
-		t.Errorf("got %+v, want %+v", c, want)
+	st := []graph.Stamp{{Root: "/home/u/git/x", BuiltAt: now.Add(-3 * time.Hour)}}
+	for _, c := range []struct {
+		reads map[string]int
+		want  string
+	}{
+		{nil, "~/git/x 3h0m0s old; 0 reads in 7 days"},
+		{map[string]int{"touching": 3, "recall": 1}, "~/git/x 3h0m0s old; 4 reads in 7 days (recall 1, touching 3)"},
+	} {
+		got, ok := checkGraphs(st, c.reads, "/home/u", now)
+		if want := (doctorCheck{Name: "code graphs", Level: levelInfo, Detail: c.want}); !ok || got != want {
+			t.Errorf("got %+v, want %+v", got, want)
+		}
 	}
 	env := doctorTestEnv(t, "copilot")
 	write(t, filepath.Join(env.home, "graphs", "k", "fleet-graph.json"), `{"root":"/r","built_at":"2026-01-02T03:04:05Z","schema_version":1}`)

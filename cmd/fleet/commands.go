@@ -179,10 +179,11 @@ var usage = `usage:
                                             files other worktrees of this repo change; with files, only
                                             the overlaps (exit 0 none, 1 overlap, 2 error). Agents'
                                             uncommitted result files don't count; worktrees whose work
-                                            is already in main are left out unless --all. --graph also
-                                            lists worktrees changing code one call or reference away
-                                            (from fleet graph; no files: this worktree's changes) and
-                                            which branch merges first; the exit code stays the overlap
+                                            is already in main are left out unless --all. With files
+                                            and a fresh code graph (or --graph) it also lists worktrees
+                                            changing code one call or reference away and which branch
+                                            merges first; --graph=false turns that off. --graph with no
+                                            files checks this worktree's changes. Exit stays the overlap
   fleet graph [-C dir] [--force] [--path] [--json]
                                             build or refresh the repo's code graph (graphify, optional)
                                             under ~/.fleet/graphs; --path prints its directory for

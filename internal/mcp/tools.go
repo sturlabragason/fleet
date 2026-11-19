@@ -183,8 +183,9 @@ type args struct {
 	// (ADR-159).
 	Client string
 	Files  []string
-	Graph  bool
-	Prune  bool
+	// Graph is fleet_touching's graph; nil lets fleet pick (ADR-165).
+	Graph *bool
+	Prune bool
 	// Days is fleet_recall's window (ADR-119).
 	Days int
 	// Route is fleet_spawn's request route; Fields are fleet_route set's

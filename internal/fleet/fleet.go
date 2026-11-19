@@ -429,6 +429,9 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	case lead != "" && prompt != "":
 		full = playbook.Compose(lead, prompt)
 	}
+	if gb := f.graphBrief(dir, prompt); gb != "" {
+		full = strings.TrimRight(full, "\n") + "\n\n" + gb
+	}
 	// The task card goes last, so it is the final thing the agent reads
 	// (ADR-43). A card with no prompt is still worth telling the agent.
 	if cp := CardPrompt(card); cp != "" {

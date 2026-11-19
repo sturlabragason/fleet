@@ -27,7 +27,8 @@ func (s *Server) recall(a args) (string, error) {
 		if err := absDir(a.Dir); err != nil {
 			return "", err
 		}
-		o.Repo, o.Files = graph.Resolve(s.F.Home, a.Dir, strings.Fields(a.Query))
+		l := graph.Resolve(s.F.Home, a.Dir, strings.Fields(a.Query))
+		o.Repo, o.Files, o.UsedBy = l.Root, l.Files, l.UsedBy
 	}
 	r := recall.Search(ctx, a.Query, o)
 	return r.Format(), nil

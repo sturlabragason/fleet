@@ -60,8 +60,8 @@ func cmdRecall(f *fleet.Fleet, args []string) error {
 		}
 	}
 	bd := recall.FromBoard(f.Store.Load())
-	repo, files := graph.Resolve(f.Home, *dir, words)
-	r := recall.Search(ctx, strings.Join(words, " "), recall.Opts{Home: f.Home, Days: *days, Limit: *limit, Agents: bd.Sessions, Repo: repo, Files: files})
+	l := graph.Resolve(f.Home, *dir, words)
+	r := recall.Search(ctx, strings.Join(words, " "), recall.Opts{Home: f.Home, Days: *days, Limit: *limit, Agents: bd.Sessions, Repo: l.Root, Files: l.Files, UsedBy: l.UsedBy})
 	if *asJSON {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
