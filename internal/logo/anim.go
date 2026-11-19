@@ -58,17 +58,22 @@ type Gate struct {
 	Explicit bool // the user asked for it (fleet logo): tmux is no reason to skip
 }
 
-// quietEnv turns the animation off when any of them is set: NO_COLOR and a
-// reduced-motion opt-out by the user, CI, and an agent's pane, where the
-// output is read by a tool rather than a person.
-var quietEnv = []string{"NO_COLOR", "FLEET_NO_ANIM", "CI", "FLEET_AGENT"}
+// quietEnv turns the start-up banner off when set: CI, and an agent's pane,
+// where the output is read by a tool rather than a person.
+var quietEnv = []string{"CI", "FLEET_AGENT"}
+
+// Still reports whether the user asked for no motion anywhere: NO_COLOR,
+// FLEET_NO_ANIM or TERM=dumb. The overview's glint and the banner both obey.
+func Still(getenv func(string) string) bool {
+	return getenv("NO_COLOR") != "" || getenv("FLEET_NO_ANIM") != "" || getenv("TERM") == "dumb"
+}
 
 // Animate reports whether the banner may animate. Off whenever no person is
 // watching or one asked for stillness: not a terminal, opted out, NO_COLOR,
 // CI, TERM=dumb, an agent's pane, or (unless asked for) inside tmux, where
 // fleet up is re-run on every attach and the animation would get in the way.
 func Animate(g Gate) bool {
-	if g.Off || !g.TTY || g.Getenv("TERM") == "dumb" {
+	if g.Off || !g.TTY || Still(g.Getenv) {
 		return false
 	}
 	for _, k := range quietEnv {
@@ -77,4 +82,38 @@ func Animate(g Gate) bool {
 		}
 	}
 	return g.Explicit || g.Getenv("TMUX") == ""
+}
+
+// GlintRest is how many ticks the line mark rests between two glints.
+const GlintRest = 21
+
+// GlintPeriod is one glint across the line mark and its rest, in ticks.
+var GlintPeriod = Line.Width() + GlintRest
+
+// Glint is the 1-row line mark at tick k of the overview's idle loop: a light
+// moves one cell a tick along "╳━■ fleet" in the bold accent, then the mark
+// rests GlintRest ticks as Render draws it, so an idle header changes on
+// about a third of the ticks (ADR-173).
+func Glint(k int, asc bool) string {
+	i := glintAt(k)
+	if i < 0 {
+		return Render(Line, asc)
+	}
+	cells := []rune(Plain(Line, asc)[0])
+	roles := []rune(Line.art().roles[0])
+	return paint(cells[:i], roles[:i]) +
+		style('a').Bold(true).Render(string(cells[i])) +
+		paint(cells[i+1:], roles[i+1:])
+}
+
+// glintAt is the line mark's lit cell at tick k, -1 while it rests or k < 0.
+func glintAt(k int) int {
+	if k < 0 {
+		return -1
+	}
+	k %= GlintPeriod
+	if k >= Line.Width() || []rune(Plain(Line, false)[0])[k] == ' ' {
+		return -1
+	}
+	return k
 }

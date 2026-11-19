@@ -726,10 +726,12 @@ func TestTileACPMarker(t *testing.T) {
 // Nothing on the overview blinks or animates (ADR-81): working, waiting and
 // subagent tiles keep exactly the same frame across ticks, so bubbletea writes
 // nothing and tmux never moves the cursor out of the admiral pane. No cell
-// carries the SGR blink attribute either.
+// carries the SGR blink attribute either. Only the header mark may move
+// (ADR-173), so it is held still here.
 func TestOverviewNeverBlinks(t *testing.T) {
 	now := time.Now()
 	m := New(&fakeBE{}, "")
+	m.SetStill(true)
 	m.now = func() time.Time { return now }
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 20})
 	t0 := now.Add(-time.Minute)

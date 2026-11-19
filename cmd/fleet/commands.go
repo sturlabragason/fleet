@@ -290,8 +290,9 @@ local preferences (never committed): ~/.config/fleet/config.toml ($FLEET_CONFIG 
   are re-read live, so a change takes effect without restarting fleet;
   [defaults] theme picks the TUI palette: lane (default), catppuccin,
   stealth, neon-drive, phosphor or graphite -- set it and run fleet up again;
-  [defaults] animation = false keeps the start-up banner still (also
-  FLEET_NO_ANIM=1, NO_COLOR, CI, not a terminal, or inside tmux);
+  [defaults] animation = false keeps the start-up banner and the header
+  logo still (both also off under NO_COLOR and FLEET_NO_ANIM; the banner also
+  in CI, outside a terminal and inside tmux);
   see examples/config.toml.example`
 
 // openFleet is fleet.Open; tests point it at a throwaway socket.

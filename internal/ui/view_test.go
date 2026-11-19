@@ -45,7 +45,7 @@ func TestOverviewFitsEveryPane(t *testing.T) {
 			if len(lines) > h {
 				t.Errorf("%dx%d n=%d: %d lines", w, h, n, len(lines))
 			}
-			if !strings.HasPrefix(lines[0], " fleet · ") {
+			if head := ansi.Strip(lines[0]); !strings.HasPrefix(head, " fleet · ") && !strings.HasPrefix(head, " ╳━■ fleet · ") {
 				t.Errorf("%dx%d n=%d: header missing: %q", w, h, n, lines[0])
 			}
 			for _, l := range lines {
@@ -420,5 +420,35 @@ func TestWaitBadge(t *testing.T) {
 	}
 	if got := waitBadge(nil, now); got != "" {
 		t.Errorf("no asks: %q", got)
+	}
+}
+
+// TestHeaderMark: a wide header draws the line mark and its glint moves on
+// the housekeeping tick; a still model and a narrow pane don't change it.
+func TestHeaderMark(t *testing.T) {
+	zone.NewGlobal()
+	for _, tc := range []struct {
+		name   string
+		w      int
+		still  bool
+		prefix string
+		moves  bool
+	}{
+		{"wide", 150, false, " ╳━■ fleet · ", true},
+		{"still", 150, true, " ╳━■ fleet · ", false},
+		{"narrow", 50, false, " fleet · ", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m, _ := overview(tc.w, 20, 1)
+			m.SetStill(tc.still)
+			m.Update(animMsg{})
+			after, _, _ := strings.Cut(m.View(), "\n")
+			if !strings.HasPrefix(ansi.Strip(after), tc.prefix) {
+				t.Errorf("header %q, want prefix %q", ansi.Strip(after), tc.prefix)
+			}
+			if moved := m.tick != 0; moved != tc.moves && tc.w >= markMinWidth {
+				t.Errorf("glint stepped = %v, want %v", moved, tc.moves)
+			}
+		})
 	}
 }

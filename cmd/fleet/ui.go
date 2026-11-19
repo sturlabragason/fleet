@@ -14,6 +14,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/logo"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/netwatch"
 	"github.com/sturlabragason/fleet/internal/supervisor"
@@ -436,7 +437,9 @@ func cmdUI(f *fleet.Fleet) error {
 	w.KeepFocus = true // keys typed after a click/Enter/Tab/a must still reach the overview
 	be := &backend{f: f, w: w, enabled: insideFleet(f)}
 	logx.For("ui").Info("start", "wall", be.enabled)
-	p := tea.NewProgram(ui.New(be, f.Home), tea.WithAltScreen(), tea.WithMouseCellMotion())
+	m := ui.New(be, f.Home)
+	m.SetStill(!f.Prefs.Animation() || logo.Still(os.Getenv))
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	// A rebuilt bin/fleet takes over this pane (ADR-62).
 	re := newUIReexec(f.Exe, "", probeBinary, p.Quit)
 	ctx, stop := context.WithCancel(context.Background())

@@ -22,6 +22,8 @@ import (
 // Model is the overview state.
 type Model struct {
 	be        Backend
+	still     bool           // the header logo holds still (ADR-173)
+	tick      int            // housekeeping ticks seen, the header logo's frame
 	agents    []*board.Agent // display order: by tier, stable within a tier (tiers.go)
 	tierOf    map[string]int // agent -> tier at the last arrange
 	touched   time.Time      // last key, mouse event, wheel or fold toggle; the order holds still for freezeFor
@@ -93,6 +95,10 @@ func New(be Backend, stateDir string) *Model {
 	return m
 }
 
+// SetStill holds the header logo still: [defaults] animation = false,
+// NO_COLOR or FLEET_NO_ANIM (ADR-173).
+func (m *Model) SetStill(v bool) { m.still = v }
+
 func (m *Model) saveCursor() {
 	if m.stateDir == "" {
 		return
@@ -130,10 +136,11 @@ func (m *Model) poll() tea.Cmd {
 // Init starts polling.
 func (m *Model) Init() tea.Cmd { return tea.Batch(m.poll(), anim()) }
 
-// animEvery is the housekeeping tick (it expires header messages). Nothing on
-// the overview animates or blinks (ADR-81): a tick that changes nothing leaves
-// the view identical, bubbletea writes nothing, and tmux never has to move the
-// cursor out of the admiral pane to repaint the overview.
+// animEvery is the housekeeping tick: it expires header messages and steps
+// the header logo's glint. Nothing else on the overview animates (ADR-81,
+// ADR-173): a tick that changes nothing leaves the view identical, bubbletea
+// writes nothing, and the glint rests most ticks, so the overview costs no
+// wake-up of its own.
 const animEvery = time.Second
 
 func anim() tea.Cmd {
@@ -200,6 +207,9 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 	case pollMsg:
 		return m, m.poll()
 	case animMsg:
+		if !m.still {
+			m.tick++
+		}
 		if m.msg != "" && m.now().Sub(m.msgAt) >= msgTTL {
 			m.msg = ""
 		}

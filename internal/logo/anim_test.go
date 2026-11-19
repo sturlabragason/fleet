@@ -125,3 +125,24 @@ func TestBannerStatic(t *testing.T) {
 		t.Errorf("narrow banner = %q, want the mark %q", got, want)
 	}
 }
+
+// TestGlint: one lit cell walks the drawn cells of the line mark, then it
+// rests as the static mark; every frame shows the same text.
+func TestGlint(t *testing.T) {
+	var lit []int
+	for k := range GlintPeriod {
+		if ansi.Strip(Glint(k, false)) != Plain(Line, false)[0] {
+			t.Fatalf("tick %d: text %q", k, ansi.Strip(Glint(k, false)))
+		}
+		if i := glintAt(k); i >= 0 {
+			lit = append(lit, i)
+		}
+	}
+	drawn := len([]rune(strings.ReplaceAll(Plain(Line, false)[0], " ", "")))
+	if len(lit) != drawn || len(lit) > GlintPeriod/2 {
+		t.Errorf("lit ticks %v, want each of the %d drawn cells once and under half of %d ticks", lit, drawn, GlintPeriod)
+	}
+	if glintAt(-1) != -1 || glintAt(GlintPeriod) != 0 || Glint(-1, false) != Render(Line, false) {
+		t.Error("still is not the static mark, or the loop does not wrap")
+	}
+}

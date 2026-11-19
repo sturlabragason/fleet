@@ -2598,3 +2598,13 @@ Trade-offs of the amendment: a session's place in the tree is fixed when it open
 **Rejected.** Storing the asking agent on the todo item: the store is an extension backend (ADR-164) that fleet does not own, so the label is derived when the list is built. Saving the sort in config: one key press restores it, and a session default is what the user asked for.
 
 **Trade-offs.** An item that names two agents goes under the first; a word that happens to equal an agent's name claims the item for it.
+
+**ADR-173: the overview header carries the live fleet mark, a slow glint on the housekeeping tick** (§5, amends ADR-81, ADR-166, extends ADR-171) — accepted 2026-11-19.
+
+**Context.** The user asked for the fleet logo to stay live and animated in the TUI the whole time, not only at `fleet up`, and to stay cheap on a laptop short of CPU. ADR-81 had made the overview motionless and ADR-166 had kept the mark out of the header because it costs a row.
+
+**Decision.** (1) The header's leading word `fleet` becomes the 1-row mark `╳━■ fleet` on panes 60 columns or wider, so the mark costs four cells of one existing row and no row. Below 60 columns the header keeps the plain bold word. (2) `logo.Glint` lights one drawn cell of the mark in the bold accent per tick, then the mark rests 21 ticks as the static drawing: one 30-tick loop in which the header changes on 9 ticks. (3) It steps on the overview's existing 1 s housekeeping tick (`animMsg`), so there is no new timer or wake-up; on a resting tick the frame is byte-identical and bubbletea writes nothing, and on a lit tick it rewrites one line. (4) `[defaults] animation = false`, `NO_COLOR`, `FLEET_NO_ANIM` and `TERM=dumb` hold it still (`logo.Still`, shared with the start-up banner's gate). This is the one moving thing ADR-81 now allows; statuses, badges and tiles stay still.
+
+**Rejected.** A faster loop or the full splash sweep in the header: more writes and more tmux repaints for no information. A separate animation timer: another wake-up every frame. The mark on its own row or on the wall: it costs a working row (ADR-166).
+
+**Trade-offs.** The overview pane repaints one line about nine times every 30 s even when nothing else changed, where it was silent before; tmux redraws that line in the client. Users who want ADR-81's fully still screen set `animation = false`.

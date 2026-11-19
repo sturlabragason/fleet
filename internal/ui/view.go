@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -153,7 +154,8 @@ func (m *Model) header() string {
 	for _, a := range m.agents {
 		counts[a.Shown()]++
 	}
-	h := fmt.Sprintf(" fleet · %d agents · %d working · %d waiting · %d error", len(m.agents), counts["working"], counts["waiting"], counts["error"]+counts["stuck"])
+	name := " " + m.mark()
+	h := fmt.Sprintf(" · %d agents · %d working · %d waiting · %d error", len(m.agents), counts["working"], counts["waiting"], counts["error"]+counts["stuck"])
 	idle := lipgloss.NewStyle().Foreground(colIdle)
 	badge := reportBadge(m.reports)
 	if by := strings.TrimSpace(m.badgeBy); by != "" && m.reports > 0 {
@@ -164,7 +166,7 @@ func (m *Model) header() string {
 	if !m.offline.IsZero() { // steady text, no age ticking (ADR-110)
 		badge = "  " + offlineMark + " offline since " + m.offline.Format("15:04") + badge
 	}
-	room := m.w - ansi.StringWidth(h) - ansi.StringWidth(badge) - 2
+	room := m.w - ansi.StringWidth(name) - ansi.StringWidth(h) - ansi.StringWidth(badge) - 2
 	var hint string
 	switch {
 	case m.msg != "":
@@ -179,7 +181,24 @@ func (m *Model) header() string {
 	default:
 		hint = idle.Render("  " + keys.Hint(keys.ScopeOverview, room))
 	}
-	return ansi.Truncate(lipgloss.NewStyle().Bold(true).Render(h)+badgeStyle.Render(badge)+hint, m.w, "…")
+	return ansi.Truncate(name+lipgloss.NewStyle().Bold(true).Render(h)+badgeStyle.Render(badge)+hint, m.w, "…")
+}
+
+// markMinWidth is the narrowest pane whose header draws the logo; below it
+// the header says "fleet" and keeps its cells for the counts.
+const markMinWidth = 60
+
+// mark is the header's name: the line mark with its idle glint (ADR-173), or
+// the plain word on a narrow pane.
+func (m *Model) mark() string {
+	if m.w < markMinWidth {
+		return lipgloss.NewStyle().Bold(true).Render("fleet")
+	}
+	k := -1
+	if !m.still {
+		k = m.tick
+	}
+	return logo.Glint(k, logo.ASCII(os.Getenv))
 }
 
 // reportBadge is the unread-report count for the header (ADR-36), "" when
