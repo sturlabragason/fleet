@@ -489,10 +489,7 @@ func (s *Server) handoffCall(a args) (string, error) {
 	if err := need(strings.TrimSpace(a.Summary.Text), "summary"); err != nil {
 		return "", err
 	}
-	tasks, err := s.handoffTasks(a.OpenItems)
-	if err != nil {
-		return "", err
-	}
+	tasks := s.handoffTasks(a.OpenItems)
 	if err := supervisor.WriteHandoffOf(s.F.Home, s.Me(), a.Summary.Text+tasks); err != nil {
 		return "", err
 	}

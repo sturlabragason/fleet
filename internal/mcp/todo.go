@@ -42,6 +42,8 @@ func (s *Server) noteTask(a args) string {
 	switch {
 	case err != nil:
 		return "; not added to the todo store: " + err.Error()
+	case !ok && a.Open == "":
+		return "" // a plain note that happens to start "ask:"; nothing changes without a store
 	case !ok:
 		return "; no todo store in this build, so it is in the notes only"
 	}
@@ -96,7 +98,7 @@ func (s *Server) noteDone(a args) (string, error) {
 // handoffTasks records fleet_handoff's open_items ("ask: …", "promise: …",
 // "request: …"; no prefix is a request) and returns the lines the handoff
 // gets, so the list is in the handoff too.
-func (s *Server) handoffTasks(items []string) (string, error) {
+func (s *Server) handoffTasks(items []string) string {
 	var b strings.Builder
 	for _, raw := range items {
 		if strings.TrimSpace(raw) == "" {
@@ -109,7 +111,8 @@ func (s *Server) handoffTasks(items []string) (string, error) {
 		it, ok, err := s.addTask(kind, text, "", "")
 		switch {
 		case err != nil:
-			return "", fmt.Errorf("open item %q: %w", text, err)
+			// The handoff must still be written: the item goes in it as text.
+			fmt.Fprintf(&b, "\n- %s: %s (not stored: %v)", kind, text, err)
 		case ok:
 			b.WriteString("\n- " + it.Line())
 		default:
@@ -117,9 +120,9 @@ func (s *Server) handoffTasks(items []string) (string, error) {
 		}
 	}
 	if b.Len() == 0 {
-		return "", nil
+		return ""
 	}
-	return "\n\nOpen items:" + b.String(), nil
+	return "\n\nOpen items:" + b.String()
 }
 
 // todoBrief is fleet_brief's "Open asks / in flight": the admiral's pending
