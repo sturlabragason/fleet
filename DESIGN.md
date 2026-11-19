@@ -2548,3 +2548,11 @@ Trade-offs of the amendment: a session's place in the tree is fixed when it open
 **Rejected.** A second header count: computing the list each second would query the todo store every poll; the list loads only while open. Header hint items for `w`/`r`: the overview hint is already full at 180 columns; the keys are in `?`. Text replies to a picker: a paste into a menu does not answer it.
 
 **Trade-offs.** The list is as fresh as one overview poll. A thread shows only in a build whose extension fills `Waits`. Exact-match gating refuses an answer when a prompt's text changes in a harmless way (a timer in the line); the view then shows the new text and the user confirms again.
+
+**ADR-169: estimates are agent wall-clock time, measured, never human dev-days** (§4, extends ADR-35) — accepted 2026-11-19.
+
+**Context.** ADR-35 left estimates out of the playbook ("no action for an agent to take"). Asked "how long?", the admiral and agents still answered from human-team habit: "one agent, about 2–3 days" for a feature that fleet agents finish in under an hour. The user plans on these numbers, so a wrong unit is a wrong plan.
+
+**Decision.** One rule, in the admiral instructions and in every worker playbook level: an estimate is agent wall-clock time as a range in minutes or hours, never human dev-days or weeks; human time (review, decisions, waiting on the user) is named separately. The reference numbers are measured, from 43 fleet-repo tasks on 2026-11-11..19 (spawn in `events.jsonl` to the first `done` report in `fleet.log`, merge, CI and release included): median 21 min, middle half 13–35 min, 90% under about 60 min; the long tail (4–12 h) was waiting on outside systems or the user, not agent work. The worker and standard lines are appended to the existing plan line, so the playbook line budgets (§4) don't grow.
+
+**Rejected.** A per-task estimate field on the card or the report (no action for an agent to take, as ADR-35 says); asking for estimates by default (the rule shapes the unit, it does not ask for a number); hard-coding per-model speeds (they change with every model; the range is refreshed from the same logs when it drifts).

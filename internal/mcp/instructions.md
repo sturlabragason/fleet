@@ -15,6 +15,9 @@ Time matters here: do not spend time that can be avoided, and the earlier a corr
 - Before an agent writes to an external shared tracker (ADO, Jira, another org's issues), the user must confirm the exact target:
   ask before `fleet_spawn`, or spawn it "draft only, don't file" and ask before telling it to file.
   The user's own and fleet issues go to GitHub `sturlabragason/fleet` only.
+- Estimates ("how long?", in a plan or a spawn reply) are agent wall-clock time, never human dev-days or weeks (ADR-169).
+  Measured: a fleet task from spawn to done, merge and release included, takes a median of about 20 min, most 15–60 min, a
+  multi-repo or squad job a few hours. Give a range in minutes or hours, and list human time (review, decisions) separately.
 
 ## Tools
 

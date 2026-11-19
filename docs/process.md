@@ -56,7 +56,8 @@ are cut to the part that changes an agent's next action:
   admiral reset (§6.5), and a prefix tells the admiral which kind each line is.
 - **The retro line** is one line, not a meeting. It is how the playbook itself improves.
 
-Left out on purpose: estimates and burndown (agent tasks are short, and the queue is the plan),
+Left out on purpose: burndown (agent tasks are short, and the queue is the plan; when someone asks
+how long, the answer is agent wall-clock time in minutes or hours, never human days, ADR-169),
 stand-ups (the board is the stand-up), separate status documents (`fleet_brief` and the board
 already are one) and a RACI matrix per task (the spawn prompt names the owner; the rest is the
 same every time and lives in the table above).
