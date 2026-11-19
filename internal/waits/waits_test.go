@@ -2,6 +2,7 @@ package waits
 
 import (
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,7 +33,7 @@ func TestBuild(t *testing.T) {
 			{UUID: "bbbb2222x", Admiral: "main", Kind: todo.Ask, Description: "reply to the Teams thread", Entry: ago(48 * time.Hour)},
 			{UUID: "cccc3333x", Admiral: "main", Kind: todo.Promise, Description: "reply to the Teams thread", Entry: ago(time.Hour)},
 			{UUID: "ffff6666x", Admiral: "ops", Kind: todo.Ask, Description: "reply to the Teams thread", Entry: ago(30 * time.Hour)},
-			{UUID: "dddd4444x", Queue: "api", Kind: todo.Queued, Description: "also bump the version", Entry: ago(20 * time.Minute), Ctx: "own"},
+			{UUID: "dddd4444x", Queue: "api", Kind: todo.Next, Description: "also bump the version", Entry: ago(20 * time.Minute), Ctx: "own"},
 		},
 		Extra: []Item{{Kind: Thread, Source: "release-notes", Ask: "review the draft", Since: ago(3 * time.Hour)}},
 	}
@@ -43,9 +44,8 @@ func TestBuild(t *testing.T) {
 		{todo.Ask, "admiral", "reply to the Teams thread", "ffff6666"}, // another admiral's is its own
 		{Thread, "release-notes", "review the draft", ""},
 		{Question, "ui", "Teal or blue?", ""}, // its unread report is the same ask
-		{todo.Promise, "admiral", "reply to the Teams thread", "cccc3333"},
 		{Report, "docs", "done: README updated", ""},
-		{Queue, "api", "queued: also bump the version", "dddd4444"},
+		{Queue, "api", "next: also bump the version", "dddd4444"},
 		{Prompt, "api", "Allow write? 1. Yes 2. No", ""},
 	}
 	if len(got) != len(want) {
@@ -58,12 +58,12 @@ func TestBuild(t *testing.T) {
 		}
 	}
 	got = slices.DeleteFunc(got, func(it Item) bool { return it.Admiral == "ops" })
-	if !got[2].Answerable() || !got[6].Answerable() || got[0].Answerable() || got[4].Answerable() {
+	if !got[2].Answerable() || !got[5].Answerable() || got[0].Answerable() || got[3].Answerable() {
 		t.Error("only agent prompts and open asks are answerable")
 	}
 	// The tree's fields: parent is the agent, else the source; context is
 	// the item's own, else its agent's.
-	if q, p := got[5], got[6]; q.Parent != "api" || q.Ctx != "own" || p.Parent != "api" || p.Ctx != "work" || got[0].Parent != "admiral" || got[0].Admiral != "main" {
+	if q, p := got[4], got[5]; q.Parent != "api" || q.Ctx != "own" || p.Parent != "api" || p.Ctx != "work" || got[0].Parent != "admiral" || got[0].Admiral != "main" {
 		t.Errorf("parent/ctx: queue %q/%q, prompt %q/%q, ask %q", q.Parent, q.Ctx, p.Parent, p.Ctx, got[0].Parent)
 	}
 	run, quiet := Only(all, Running), Only(all, Quiet)
@@ -114,5 +114,75 @@ func TestTodoSource(t *testing.T) {
 		if it.Source != tc.source || it.Agent != tc.agent || it.Parent != tc.parent || it.Admiral != "main" {
 			t.Errorf("%q: source/agent/parent/admiral = %q/%q/%q/%q, want %q/%q/%q/main", tc.desc, it.Source, it.Agent, it.Parent, it.Admiral, tc.source, tc.agent, tc.parent)
 		}
+	}
+}
+
+// TestAging: tweaks wait on their agent (Running), not the user; followups
+// and next: lines age into Stale, "user:" chat lines at once; the same text
+// for the same owner is one item whatever its kind (ADR-177).
+func TestAging(t *testing.T) {
+	now := time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)
+	ago := func(d time.Duration) time.Time { return now.Add(-d) }
+	in := Input{Todos: []todo.Item{
+		{UUID: "t1", Queue: "api", Kind: todo.Steer, Description: "use the v2 client", Entry: ago(time.Minute)},
+		{UUID: "t2", Queue: "api", Kind: todo.Queued, Description: "then bump", Entry: ago(time.Minute)},
+		{UUID: "t3", Queue: "api", Kind: todo.Next, Description: "old next", Entry: ago(StaleAfter + time.Minute)},
+		{UUID: "t4", Queue: "api", Kind: todo.Next, Description: "new next", Entry: ago(time.Minute)},
+		{UUID: "f1", Admiral: "main", Kind: todo.Followup, Description: "old followup", Entry: ago(StaleAfter)},
+		{UUID: "f2", Admiral: "main", Kind: todo.Followup, Description: "fresh followup", Entry: ago(time.Hour)},
+		{UUID: "f3", Admiral: "main", Kind: todo.Followup, Description: "user: now push", Entry: ago(time.Minute)},
+		{UUID: "a1", Admiral: "main", Kind: todo.Ask, Description: "old ask", Entry: ago(100 * time.Hour)},
+		{UUID: "p1", Admiral: "main", Kind: todo.Promise, Description: "Old  ask", Entry: ago(time.Hour)},
+	}}
+	sec := map[string]string{}
+	for _, it := range Build(in, now) {
+		if _, dup := sec[it.Ref]; dup {
+			t.Fatalf("ref %s listed twice", it.Ref)
+		}
+		sec[it.Ref] = it.Section
+	}
+	want := map[string]string{"t1": Running, "t2": Running, "t3": Stale, "t4": Waiting,
+		"f1": Stale, "f2": Waiting, "f3": Stale, "a1": Waiting}
+	for ref, w := range want {
+		if sec[ref] != w {
+			t.Errorf("%s in %q, want %q", ref, sec[ref], w)
+		}
+	}
+	if _, ok := sec["p1"]; ok {
+		t.Error("a promise with the text of an older ask by the same owner is a duplicate")
+	}
+}
+
+// TestAction: what Enter does with each kind of row, and where it goes.
+func TestAction(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		it     Item
+		act    string
+		target string
+	}{
+		{"agent question", Item{Kind: Question, Agent: "ui", Section: Waiting}, ActAnswer, ""},
+		{"agent prompt", Item{Kind: Prompt, Agent: "ui", Section: Waiting}, ActAnswer, ""},
+		{"report", Item{Kind: Report, Agent: "docs", Section: Waiting}, ActPeek, ""},
+		{"thread", Item{Kind: Thread, Ref: "th-1", Section: Waiting}, ActResume, ""},
+		{"admiral ask", Item{Kind: todo.Ask, Admiral: "main", Ref: "a1", Section: Waiting}, ActAdmiral, "main"},
+		{"other admiral's promise", Item{Kind: todo.Promise, Admiral: "ops", Ref: "p1", Section: Waiting}, ActAdmiral, "ops"},
+		{"followup about an agent", Item{Kind: todo.Followup, Admiral: "main", Agent: "api", Ref: "f1", Section: Waiting}, ActAgent, "api"},
+		{"stale followup", Item{Kind: todo.Followup, Ref: "f2", Section: Stale}, ActAdmiral, "main"},
+		{"next on a queue", Item{Kind: Queue, Agent: "api", Ref: "n1", Section: Waiting}, ActAgent, "api"},
+		{"idle, no report", Item{Kind: NoReport, Agent: "api", Section: Waiting}, ActAgent, "api"},
+		{"running agent", Item{Kind: Working, Agent: "api", Section: Running}, ActShow, ""},
+		{"tweak in flight", Item{Kind: Queue, Agent: "api", Ref: "t1", Section: Running}, ActShow, ""},
+	} {
+		if a, tg := c.it.Action(), c.it.Target(); a != c.act || tg != c.target {
+			t.Errorf("%s: %s → %q, want %s → %q", c.name, a, tg, c.act, c.target)
+		}
+	}
+	ask := Item{Kind: todo.Ask, Admiral: "main", Ref: "a1b2c3d4", Ask: "send the reply", Section: Waiting}
+	if got := ask.Task(); !strings.Contains(got, "[a1b2c3d4] ask: send the reply") || !strings.Contains(got, "fleet_note done=a1b2c3d4") {
+		t.Errorf("admiral task = %q", got)
+	}
+	if got := (Item{Kind: NoReport, Agent: "api", Section: Waiting}).Task(); !strings.Contains(got, "fleet_report") {
+		t.Errorf("no-report task = %q", got)
 	}
 }

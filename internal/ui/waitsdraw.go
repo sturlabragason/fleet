@@ -26,11 +26,13 @@ var sectionLook = map[string]struct {
 	waits.Open:    {"○", "OPEN, NOBODY ON IT", colText},
 	waits.Quiet:   {"·", "QUIET", colIdle},
 	waits.Paused:  {"‖", "PAUSED", colIdle},
+	waits.Stale:   {"·", "STALE, D CLEARS", colIdle},
 }
 
 // waitsFooter is the footer's key labels, each a button (ADR-168).
 var waitsFooter = [][2]string{
-	{"enter", "⏎ put in ▶"}, {"space", "space peek"}, {"r", "r answer/resume"}, {"d", "d done"},
+	{"enter", "⏎ act (send to owner)"}, {"o", "o put in ▶"}, {">", "> send to ▶"}, {"space", "space peek"},
+	{"r", "r answer/resume"}, {"d", "d done"}, {"D", "D clear stale"},
 	{"p", "p pause"}, {"l", "l let go"}, {"x", "x mark"}, {"L", "L let go marked"}, {"1", "1-4 section"},
 }
 
@@ -92,7 +94,7 @@ func (m *Model) waitsTitle() string {
 	}
 	var counts []string
 	for _, s := range waits.Sections {
-		if n[s] == 0 && s == waits.Paused {
+		if n[s] == 0 && (s == waits.Paused || s == waits.Stale) {
 			continue
 		}
 		l := sectionLook[s]
@@ -240,14 +242,9 @@ func (m *Model) waitsItem(it waits.Item, cur bool, w int) string {
 		txt = txt.Bold(true)
 	}
 	s += txt.Render(it.Ask)
-	act := ""
-	switch {
-	case it.Answerable():
-		act = "● r answer"
-	case it.Kind == waits.Thread:
-		act = "r resume"
-	case it.Todo():
-		act = "d done"
+	act := m.wv.sent[wkey(it)]
+	if act == "" {
+		act = enterHint(it)
 	}
 	return fitRight(s, dim.Render(fmt.Sprintf("%s  %4s", act, board.Age(m.now().Sub(it.Since)))), w)
 }
@@ -321,4 +318,21 @@ func (m *Model) waitsMouse(msg tea.MouseMsg) tea.Cmd {
 		return nil
 	}
 	return nil
+}
+
+// enterHint is the row's right-hand hint: where ⏎ takes it (ADR-177).
+func enterHint(it waits.Item) string {
+	switch a := it.Action(); a {
+	case waits.ActShow:
+		return ""
+	case waits.ActAdmiral:
+		if t := it.Target(); t != board.Main {
+			return "⏎ admiral " + t
+		}
+		return "⏎ admiral"
+	case waits.ActAgent:
+		return "⏎ " + it.Target()
+	default:
+		return "⏎ " + a
+	}
 }

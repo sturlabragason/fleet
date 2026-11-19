@@ -7,8 +7,11 @@ import (
 	"slices"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/acphost"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/mail"
+	"github.com/sturlabragason/fleet/internal/prefs"
+	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/todo"
 	"github.com/sturlabragason/fleet/internal/waits"
 )
@@ -77,4 +80,124 @@ func (f *Fleet) DoneWait(it waits.Item) (todo.Item, error) {
 		}
 	}
 	return f.DoneItem(adm, it.Agent, it.Ref, "from the overview")
+}
+
+// ActWait is Enter on a w row (ADR-177): the item goes to its owner. Work
+// for an agent is sent to it as a task, after a wake when it is parked or a
+// resume when it has closed, and its todo is completed: the send is now a
+// tweak on that agent's queue, which its done report has to close. The
+// admiral's and the user's own items are typed into the admiral's pane as
+// a prompt and stay open until the admiral closes them. A to that is not ""
+// sends the item to that agent instead (> in the w view, the agent in ▶).
+// It returns the outcome for the row, e.g. "→ sent to api".
+func (f *Fleet) ActWait(it waits.Item, to string) (string, error) {
+	if to != "" {
+		return f.waitToAgent(it, to)
+	}
+	switch it.Action() {
+	case waits.ActAgent:
+		return f.waitToAgent(it, it.Agent)
+	case waits.ActAdmiral:
+		to := it.Target()
+		if err := f.PromptAdmiral(to, it.Task()); err != nil {
+			return "", err
+		}
+		return "→ " + to, nil
+	}
+	return "", fmt.Errorf("%s rows are not sent anywhere", it.Kind)
+}
+
+// waitToAgent sends the item to agent name, waking or resuming it first.
+func (f *Fleet) waitToAgent(it waits.Item, name string) (string, error) {
+	text := it.Task()
+	a, on := f.Store.Load().Agents[name]
+	var out string
+	switch {
+	case !on:
+		if _, held, err := f.Resume(name, text); err != nil {
+			return "", err
+		} else if held {
+			out = "→ " + name + " (resume queued)"
+		} else {
+			out = "→ resumed " + name
+		}
+		f.Tweak(name, todo.Queued, text)
+	case a.Status == string(status.Parked):
+		w, err := f.Wake(name, false)
+		if err != nil {
+			return "", err
+		}
+		if w.ACP() {
+			if _, err := f.Deliver(name, text, false, true); err != nil {
+				return "", fmt.Errorf("woke %s, but the send failed (send again once it is up): %w", name, err)
+			}
+		} else {
+			f.markSent(name, text) // fleet typed it, not the user (status.FleetSent)
+			f.PastePrompt(w.PaneID, f.Profiles[w.Profile], text, prefs.DefaultReadyTimeout)
+			f.Tweak(name, todo.Queued, text)
+		}
+		out = "→ woke " + name
+	case a.Status == string(status.Queued):
+		if _, err := f.HoldForQueued(name, text); err != nil {
+			return "", err
+		}
+		f.Tweak(name, todo.Queued, text)
+		out = "→ " + name + " (delivered when it starts)"
+	default:
+		if why, _ := f.SendBlock(name, true); why != "" {
+			return "", UserError(why)
+		}
+		if w, err := f.Prompting(name); err != nil {
+			return "", err
+		} else if w != "" {
+			return "", fmt.Errorf("%s is on a prompt (%s); answer it first", name, w)
+		}
+		if _, err := f.Deliver(name, text, false, false); err != nil {
+			return "", err
+		}
+		out = "→ sent to " + name
+	}
+	if it.Todo() {
+		if _, err := f.DoneWait(it); err != nil {
+			return out, fmt.Errorf("sent to %s, but its todo stays open: %w", name, err)
+		}
+	}
+	return out, nil
+}
+
+// PromptAdmiral types one line into the admiral's input box and submits it,
+// under the same guards as a report wake (ADR-36): only into an empty box,
+// under the wake lock, and Enter only when the box holds exactly the line.
+// An ACP admiral gets it as a prompt.
+func (f *Fleet) PromptAdmiral(name, line string) error {
+	box := mail.BoxOf(name)
+	if f.isACP(box) {
+		_, err := f.acpCall(box, acphost.Request{Op: acphost.OpPrompt, Text: line})
+		return err
+	}
+	v := f.boxView(box)
+	switch {
+	case v.Pane == "":
+		return fmt.Errorf("admiral %s has no pane", name)
+	case !v.Box:
+		return fmt.Errorf("can't see admiral %s's input box; try again when it is on screen", name)
+	case v.Input != "":
+		return fmt.Errorf("admiral %s's input box has text; not typing over it", name)
+	}
+	release, ok := f.lockWake(box)
+	if !ok {
+		return fmt.Errorf("fleet is typing into admiral %s's pane; try again", name)
+	}
+	defer release()
+	// Read again under the lock: a report wake may have just typed.
+	if v = f.boxView(box); v.Pane == "" || !v.Box || v.Input != "" {
+		return fmt.Errorf("admiral %s's input box changed; nothing sent, try again", name)
+	}
+	if err := f.typeText(v.Pane, line); err != nil {
+		return fmt.Errorf("type into admiral %s: %w", name, err)
+	}
+	if !f.guardEnter(box, v.Pane, line) {
+		return fmt.Errorf("admiral %s's input box did not take the line; nothing sent", name)
+	}
+	return nil
 }

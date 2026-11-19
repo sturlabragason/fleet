@@ -197,10 +197,7 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 			m.wv.set(msg)
 		}
 	case waitsActedMsg:
-		m.msg, m.msgAt = msg.info, m.now()
-		if m.wv != nil {
-			m.wv.set(msg.items)
-		}
+		m.waitsActed(msg)
 	case pendingMsg:
 		m.gotPending(msg)
 	case replyMsg:

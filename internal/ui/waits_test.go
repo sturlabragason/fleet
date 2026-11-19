@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"cmp"
 	"strconv"
 	"strings"
 	"testing"
@@ -23,6 +24,7 @@ type waitsBE struct {
 	replies []string // "name|option|yn|text|expect"
 	acts    []string // "done ref" or "action id reason"
 	gone    map[string]bool
+	extra   []waits.Item // more rows, after the five every test has
 }
 
 func (b *waitsBE) Waits() []waits.Item {
@@ -34,7 +36,7 @@ func (b *waitsBE) Waits() []waits.Item {
 		{Kind: waits.Prompt, Source: "bravo", Agent: "bravo", Ask: "Approve? [y/n]", Since: time.Now().Add(-time.Minute), Section: waits.Waiting, Parent: "bravo", Ctx: "work"},
 	}
 	var out []waits.Item
-	for _, it := range all {
+	for _, it := range append(all, b.extra...) {
 		if !b.gone[it.Ref] {
 			out = append(out, it)
 		}
@@ -50,6 +52,11 @@ func (b *waitsBE) ThreadAction(id, action, reason string) error {
 	b.acts = append(b.acts, strings.TrimSpace(action+" "+id+" "+reason))
 	b.gone[id] = true
 	return nil
+}
+func (b *waitsBE) ActWait(it waits.Item, to string) (string, error) {
+	t := cmp.Or(to, it.Target())
+	b.acts = append(b.acts, "send "+t+" "+it.Ask)
+	return "→ sent to " + t, nil
 }
 func (b *waitsBE) Pending(string) (fleet.Pending, error) { return b.prompt, nil }
 func (b *waitsBE) Reply(name string, r fleet.Reply, expect string) (string, error) {
@@ -141,7 +148,7 @@ func TestWaitsTree(t *testing.T) {
 	m.setAgents(as)
 	run(m, "w")
 	v := ansi.Strip(m.View())
-	for _, want := range []string{"▾ WAITING ON YOU  2", "▾ work  2", "◆ bravo", "Approve?", "● r answer", "d done", "▸ RUNNING  1   ⠋ alpha", "▸ QUIET  2", "■ 2 waiting on you", "[all 5]"} {
+	for _, want := range []string{"▾ WAITING ON YOU  2", "▾ work  2", "◆ bravo", "Approve?", "⏎ answer", "⏎ admiral", "▸ RUNNING  1   ⠋ alpha", "▸ QUIET  2", "■ 2 waiting on you", "[all 5]"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("tree misses %q:\n%s", want, v)
 		}
@@ -358,5 +365,46 @@ func TestWaitsClicks(t *testing.T) {
 	click("wkey:T")
 	if !m.wv.flat {
 		t.Fatal("the T label is a button")
+	}
+}
+
+// TestWaitsEnter: ⏎ acts through the row's owner with no ▶ picked (ADR-177):
+// an admiral ask is sent to the admiral and the row says so, an agent's
+// prompt opens the answer input, and D clears the stale rows.
+func TestWaitsEnter(t *testing.T) {
+	be := &waitsBE{gone: map[string]bool{}, prompt: fleet.Pending{Question: "Approve?", Options: []string{"1. Yes", "2. No"}},
+		extra: []waits.Item{{Kind: "followup", Source: "main", Ask: "user: now push", Since: time.Now().Add(-time.Minute), Ref: "ffff0000", Section: waits.Stale, Parent: "main"}}}
+	zone.NewGlobal()
+	m := New(be, "")
+	m.Update(tea.WindowSizeMsg{Width: 140, Height: 30})
+	as, _ := be.Refresh()
+	m.setAgents(as)
+	run(m, "w")
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "⏎ act (send to owner)") || !strings.Contains(v, "thread   ") || strings.Contains(v, "d done    2d") {
+		t.Fatalf("the footer says what ⏎ does and rows carry no d done hint:\n%s", v)
+	}
+
+	m.wv.sel = rowOf(t, m, "reply to the Teams thread")
+	run(m, "enter")
+	if len(be.acts) != 1 || be.acts[0] != "send main reply to the Teams thread" {
+		t.Fatalf("⏎ on an admiral ask: acts %q", be.acts)
+	}
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "→ sent to main") {
+		t.Fatalf("the row shows where it went:\n%s", v)
+	}
+
+	run(m, "D")
+	if len(be.acts) != 2 || be.acts[1] != "done ffff0000" || !strings.Contains(m.msg, "cleared 1 stale") {
+		t.Fatalf("D clears stale: acts %q msg %q", be.acts, m.msg)
+	}
+	run(m, "D")
+	if !strings.Contains(m.msg, "nothing stale") {
+		t.Fatalf("D with nothing stale: %q", m.msg)
+	}
+
+	m.wv.sel = rowOf(t, m, "Approve? [y/n]")
+	run(m, "enter")
+	if m.ans == nil || len(be.acts) != 2 {
+		t.Fatalf("⏎ on an agent's prompt opens the answer input: ans=%v acts %q", m.ans, be.acts)
 	}
 }

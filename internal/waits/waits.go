@@ -42,13 +42,19 @@ const (
 	Open    = "open"
 	Quiet   = "quiet"
 	Paused  = "paused"
+	Stale   = "stale" // aged followups and next: lines, one key clears them (ADR-177)
 )
 
 // Sections is every section in rank order.
-var Sections = []string{Waiting, Running, Open, Quiet, Paused}
+var Sections = []string{Waiting, Running, Open, Quiet, Paused, Stale}
 
 // QuietAfter is how long an idle agent sits before it counts as Quiet.
 const QuietAfter = 48 * time.Hour
+
+// StaleAfter is how long a followup or a next: line waits before it moves
+// to Stale (ADR-177): one nobody acted on in a working day is a record, not
+// a wait. Asks, promises and requests never age; someone owes an answer.
+const StaleAfter = 6 * time.Hour
 
 // Item is one thing waiting on the user.
 type Item struct {
@@ -129,7 +135,7 @@ func Build(in Input, now time.Time) []Item {
 	}
 	out = append(out, in.Extra...)
 	for i := range out {
-		fill(&out[i], in.Ctx)
+		fill(&out[i], in.Ctx, now)
 	}
 	out = dedupe(out)
 	slices.SortStableFunc(out, func(a, b Item) int {
@@ -177,9 +183,16 @@ func agentRow(a *board.Agent, now time.Time) Item {
 	return it
 }
 
+// todoItem is one todo as a row. A tweak on an agent's queue (queued,
+// steer, prompt) waits on the agent, not the user: it is that agent's
+// Running work until its done report closes it (ADR-177).
 func todoItem(t todo.Item, agents map[string]bool) Item {
 	if t.Queue != "" {
-		return Item{Kind: Queue, Source: t.Queue, Agent: t.Queue, Ask: t.Kind + ": " + todo.OneLine(t.Description), Since: t.Entry, Ref: t.ID(), Ctx: t.Ctx}
+		it := Item{Kind: Queue, Source: t.Queue, Agent: t.Queue, Ask: t.Kind + ": " + todo.OneLine(t.Description), Since: t.Entry, Ref: t.ID(), Ctx: t.Ctx}
+		if todo.Tweak(t.Kind) {
+			it.Section = Running
+		}
+		return it
 	}
 	desc := todo.OneLine(t.Description)
 	it := Item{Kind: t.Kind, Admiral: t.Admiral, Ask: desc, Since: t.Entry, Ref: t.ID(), Ctx: t.Ctx}
@@ -214,11 +227,14 @@ func topic(text string) string {
 	return head
 }
 
-// fill gives an item its defaults: section Waiting, the agent (else the
-// source) as parent, and the agent's context.
-func fill(it *Item, ctx map[string]string) {
+// fill gives an item its defaults: section Waiting (Stale when it has
+// aged), the agent (else the source) as parent, and the agent's context.
+func fill(it *Item, ctx map[string]string, now time.Time) {
 	if it.Section == "" {
 		it.Section = Waiting
+		if stale(*it, now) {
+			it.Section = Stale
+		}
 	}
 	if it.Parent == "" {
 		it.Parent = cmp.Or(it.Agent, it.Source)
@@ -228,13 +244,31 @@ func fill(it *Item, ctx map[string]string) {
 	}
 }
 
-// dedupe keeps the oldest of items with the same kind, owner and text
-// (case and spacing ignored).
+// stale reports whether a waiting item has aged into Stale: a followup or a
+// next: line older than StaleAfter, or a followup that is a line the user
+// typed into a closed agent's pane ("user: ..."), handed over with its
+// queue: chat the user already saw, not a task (ADR-177).
+func stale(it Item, now time.Time) bool {
+	next := it.Kind == Queue && strings.HasPrefix(it.Ask, todo.Next+": ")
+	if it.Kind != todo.Followup && !next {
+		return false
+	}
+	return now.Sub(it.Since) >= StaleAfter || strings.HasPrefix(it.Ask, "user: ")
+}
+
+// dedupe keeps the oldest of items with the same owner and text (case and
+// spacing ignored). Admiral todo items match whatever their kind: an ask and
+// a promise that say the same thing are one wait (ADR-177). Other rows keep
+// their kind in the key, so an agent's question never folds into a todo.
 func dedupe(in []Item) []Item {
 	best := map[string]int{}
 	out := make([]Item, 0, len(in))
 	for _, it := range in {
-		k := it.Kind + "\x00" + it.Admiral + "\x00" + it.Source + "\x00" + strings.ToLower(strings.Join(strings.Fields(it.Ask), " "))
+		kind := it.Kind
+		if it.Todo() && it.Kind != Queue {
+			kind = "todo"
+		}
+		k := kind + "\x00" + it.Section + "\x00" + it.Admiral + "\x00" + it.Source + "\x00" + strings.ToLower(strings.Join(strings.Fields(it.Ask), " "))
 		if i, ok := best[k]; ok {
 			if it.Since.Before(out[i].Since) {
 				out[i] = it
@@ -245,4 +279,59 @@ func dedupe(in []Item) []Item {
 		out = append(out, it)
 	}
 	return out
+}
+
+// What Enter does with an item (ADR-177), from Action.
+const (
+	ActAnswer  = "answer"  // an agent on a prompt or an open ask: the answer input
+	ActPeek    = "peek"    // an unread report: show the agent that sent it
+	ActResume  = "resume"  // a thread: resume it
+	ActAgent   = "agent"   // work for an agent: send it there, waking or resuming it
+	ActAdmiral = "admiral" // the admiral's or the user's own item: prompt the admiral
+	ActShow    = "show"    // a row that waits on nothing: put its agent in ▶
+)
+
+// Action is what Enter does with the item: it goes to its owner.
+func (i Item) Action() string {
+	switch {
+	case i.Answerable():
+		return ActAnswer
+	case i.Kind == Report:
+		return ActPeek
+	case i.Kind == Thread:
+		return ActResume
+	case i.Section != Waiting && i.Section != Stale:
+		return ActShow
+	case i.Agent != "":
+		return ActAgent
+	}
+	return ActAdmiral
+}
+
+// Target is who Action sends the item to: the agent, else the admiral that
+// owns it ("" when it is no send).
+func (i Item) Target() string {
+	switch i.Action() {
+	case ActAgent:
+		return i.Agent
+	case ActAdmiral:
+		return cmp.Or(i.Admiral, board.Main)
+	}
+	return ""
+}
+
+// Task is the text Enter sends to Target: one line, with the todo id the
+// receiver closes it by.
+func (i Item) Task() string {
+	ref := ""
+	if i.Todo() {
+		ref = " [" + i.Ref + "]"
+	}
+	switch {
+	case i.Kind == NoReport:
+		return "The user asks from the overview: you are idle with no report. Report where you are with fleet_report (done, blocked, question or progress)."
+	case i.Action() == ActAdmiral && ref != "":
+		return "The user picked this waiting item from the overview, act on it now:" + ref + " " + i.Kind + ": " + i.Ask + " (close it with fleet_note done=" + i.Ref + " once handled)"
+	}
+	return "The user picked this waiting item from the overview, act on it now:" + ref + " " + i.Kind + ": " + i.Ask
 }

@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"cmp"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -21,10 +23,12 @@ type WaitsBackend interface {
 }
 
 // WaitsActor is what the w view's actions need (ADR-168): d marks a todo
-// done, r/p/l resume, pause or let go a thread. Optional.
+// done, r/p/l resume, pause or let go a thread, ⏎ sends an item to its
+// owner, or to agent to when it is not "" (ADR-177). Optional.
 type WaitsActor interface {
 	DoneWait(it waits.Item) (string, error)
 	ThreadAction(id, action, reason string) error
+	ActWait(it waits.Item, to string) (string, error)
 }
 
 // waitsView is the w view that replaces the tiles while open: a tree of
@@ -37,14 +41,15 @@ type waitsView struct {
 	rows   []wrow
 	sel    int
 	off    int
-	flat   bool            // T: the flat list of section Waiting
-	byCtx  bool            // G: context, then section
-	ctx    string          // the context chip shown; "" is all
-	filter string          // /: rows whose text holds it
-	folded map[string]bool // a group row's fold, where the user changed it
-	marked map[string]bool // x: thread ids to let go with L
-	input  *wInput         // typing a filter or a let-go reason
-	click  wclick          // the last row clicked, for a double click
+	flat   bool              // T: the flat list of section Waiting
+	byCtx  bool              // G: context, then section
+	ctx    string            // the context chip shown; "" is all
+	filter string            // /: rows whose text holds it
+	folded map[string]bool   // a group row's fold, where the user changed it
+	marked map[string]bool   // x: thread ids to let go with L
+	input  *wInput           // typing a filter or a let-go reason
+	click  wclick            // the last row clicked, for a double click
+	sent   map[string]string // ⏎'s outcome ("→ sent to api") by item key (ADR-177)
 }
 
 // wInput is a line being typed: the filter, or the reason for letting the
@@ -62,11 +67,28 @@ type wclick struct {
 
 type waitsMsg []waits.Item
 
-// waitsActedMsg is an action's outcome and the list read after it.
+// waitsActedMsg is an action's outcome and the list read after it; key
+// and sent are the row a ⏎ send acted on and its outcome, "" on failure.
 type waitsActedMsg struct {
-	info  string
-	items []waits.Item
+	info      string
+	items     []waits.Item
+	key, sent string
 }
+
+// waitsActed shows an action's outcome and the list read after it.
+func (m *Model) waitsActed(msg waitsActedMsg) {
+	m.msg, m.msgAt = msg.info, m.now()
+	if m.wv == nil {
+		return
+	}
+	if msg.sent != "" {
+		m.wv.sent[msg.key] = msg.sent
+	}
+	m.wv.set(msg.items)
+}
+
+// wkey names an item across reloads, for its ⏎ outcome.
+func wkey(it waits.Item) string { return it.Kind + "\x00" + it.Source + "\x00" + it.Ask }
 
 // openWaits is w: open the view and load it.
 func (m *Model) openWaits() tea.Cmd {
@@ -74,7 +96,7 @@ func (m *Model) openWaits() tea.Cmd {
 		m.msg = "w needs fleet's backend"
 		return nil
 	}
-	m.wv = &waitsView{folded: map[string]bool{}, marked: map[string]bool{}, sort: m.waitsSort}
+	m.wv = &waitsView{folded: map[string]bool{}, marked: map[string]bool{}, sent: map[string]string{}, sort: m.waitsSort}
 	return m.loadWaits()
 }
 
@@ -130,6 +152,9 @@ var waitsKeys = map[string]func(m *Model) tea.Cmd{
 	"left":   func(m *Model) tea.Cmd { m.wv.fold(true); return nil },
 	"right":  func(m *Model) tea.Cmd { m.wv.fold(false); return nil },
 	"enter":  (*Model).waitsEnter,
+	"o":      (*Model).waitsShow,
+	">":      (*Model).waitsToTarget,
+	"D":      (*Model).waitsClearStale,
 	" ":      (*Model).waitsPeek,
 	"space":  (*Model).waitsPeek,
 	"r":      (*Model).waitsAnswer,
@@ -239,7 +264,10 @@ func (m *Model) boardAgent(it waits.Item) bool {
 	return true
 }
 
-// waitsEnter folds a group row, or puts the row's agent in ▶.
+// waitsEnter folds a group row, or acts on the item through its owner
+// (ADR-177, waits.Item.Action): answer an agent's ask, peek a report,
+// resume a thread, send work to its agent or the admiral, or put an agent
+// that waits on nothing in ▶.
 func (m *Model) waitsEnter() tea.Cmd {
 	r, ok := m.wv.cur()
 	if !ok {
@@ -249,12 +277,74 @@ func (m *Model) waitsEnter() tea.Cmd {
 		m.wv.toggle(r)
 		return nil
 	}
-	if !m.boardAgent(*r.item) {
+	switch r.item.Action() {
+	case waits.ActAnswer:
+		return m.waitsAnswer()
+	case waits.ActPeek:
+		return m.waitsPeek()
+	case waits.ActResume:
+		return m.threadAct(fleet.ThreadResume, "")
+	case waits.ActShow:
+		return m.waitsShow()
+	}
+	return m.waitsSend(*r.item, "")
+}
+
+// waitsSend sends it to its owner, or to agent to.
+func (m *Model) waitsSend(it waits.Item, to string) tea.Cmd {
+	m.msg, m.msgAt = "sending to "+cmp.Or(to, it.Target())+"…", m.now()
+	return m.waitsActOn(wkey(it), func(a WaitsActor) (string, error) {
+		return a.ActWait(it, to)
+	})
+}
+
+// waitsShow is o: put the row's agent in ▶ (⏎ before ADR-177).
+func (m *Model) waitsShow() tea.Cmd {
+	it, ok := m.item()
+	if !ok || !m.boardAgent(it) {
 		return nil
 	}
 	m.wv = nil
 	m.reveal()
 	return m.show()
+}
+
+// waitsToTarget is >: send the row to the agent in ▶ instead of its owner.
+func (m *Model) waitsToTarget() tea.Cmd {
+	it, ok := m.item()
+	switch {
+	case !ok:
+		return nil
+	case it.Action() != waits.ActAgent && it.Action() != waits.ActAdmiral:
+		m.msg, m.msgAt = "> sends work rows; this row is not one (⏎ acts on it)", m.now()
+		return nil
+	case m.target == "":
+		m.msg, m.msgAt = "> sends to the agent in ▶; no ▶ pane, click a wall pane to pick one", m.now()
+		return nil
+	}
+	return m.waitsSend(it, m.target)
+}
+
+// waitsClearStale is D: mark every stale todo done (ADR-177).
+func (m *Model) waitsClearStale() tea.Cmd {
+	var st []waits.Item
+	for _, it := range m.wv.all {
+		if it.Section == waits.Stale && it.Todo() {
+			st = append(st, it)
+		}
+	}
+	if len(st) == 0 {
+		m.msg, m.msgAt = "nothing stale to clear", m.now()
+		return nil
+	}
+	return m.waitsAct(func(a WaitsActor) (string, error) {
+		for i, it := range st {
+			if _, err := a.DoneWait(it); err != nil {
+				return "", fmt.Errorf("cleared %d of %d stale: %w", i, len(st), err)
+			}
+		}
+		return fmt.Sprintf("cleared %d stale", len(st)), nil
+	})
 }
 
 func (m *Model) waitsPeek() tea.Cmd {
@@ -364,6 +454,11 @@ func (m *Model) letGo(refs []string, reason string) tea.Cmd {
 
 // waitsAct runs an action off the UI loop and reloads the list after it.
 func (m *Model) waitsAct(do func(a WaitsActor) (string, error)) tea.Cmd {
+	return m.waitsActOn("", do)
+}
+
+// waitsActOn is waitsAct for a ⏎ send: its outcome is kept on the row key.
+func (m *Model) waitsActOn(key string, do func(a WaitsActor) (string, error)) tea.Cmd {
 	a, ok := m.be.(WaitsActor)
 	wb, _ := m.be.(WaitsBackend)
 	if !ok || wb == nil {
@@ -372,10 +467,13 @@ func (m *Model) waitsAct(do func(a WaitsActor) (string, error)) tea.Cmd {
 	}
 	return func() tea.Msg {
 		info, err := do(a)
+		sent := ""
 		if err != nil {
 			info = err.Error()
+		} else if key != "" {
+			sent = info
 		}
-		return waitsActedMsg{info: info, items: wb.Waits()}
+		return waitsActedMsg{info: info, items: wb.Waits(), key: key, sent: sent}
 	}
 }
 

@@ -147,6 +147,9 @@ func (b *backend) DoneWait(it waits.Item) (string, error) {
 func (b *backend) ThreadAction(id, action, reason string) error {
 	return b.f.ThreadAction(id, action, reason)
 }
+
+// ActWait is ⏎ in the w view: the row goes to its owner (ADR-177).
+func (b *backend) ActWait(it waits.Item, to string) (string, error) { return b.f.ActWait(it, to) }
 func (b *backend) OfflineSince() time.Time {
 	if off, since := b.f.Offline(); off {
 		return since
