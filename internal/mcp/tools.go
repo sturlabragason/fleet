@@ -99,8 +99,11 @@ var baseToolDefs = []tool{
 		"action": map[string]any{"type": "string", "enum": []string{"list", "create", "delete", "add", "remove", "color", "send", "show", "hide", "close"}},
 		"team":   str("team name"), "agents": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "agent names for add/remove"},
 		"color": str("palette name (blue, pink, teal, mauve, sky, sapphire) or #rrggbb"), "text": str("text for send"), "confirmed": confirmedProp})},
-	{"fleet_note", "Save one line to the decisions log: a user decision, preference or promise, or a RAID entry starting risk:, assumption:, issue: or decision:. Survives an admiral reset. pin=true for a standing user rule: fleet_brief always shows pinned notes, not just the last 30. rule=true also adds it to every new spawn's playbook.", obj([]string{"text"}, map[string]any{
-		"text": str("the note, one line"), "agent": str("optional agent the note is about"),
+	{"fleet_note", "Save one line to the decisions log: a user decision, preference or promise, or a RAID entry starting risk:, assumption:, issue: or decision:. Survives an admiral reset. pin=true for a standing user rule: fleet_brief always shows pinned notes, not just the last 30. rule=true also adds it to every new spawn's playbook. open=promise|ask|request (or text starting \"promise:\", \"ask:\", \"request:\") also makes it an open task (if the build has a todo store), listed in fleet_brief until done=<id> closes it.", obj(nil, map[string]any{
+		"text": str("the note, one line; with done, the outcome (optional)"), "agent": str("optional agent the note is about"),
+		"open": map[string]any{"type": "string", "enum": []string{"promise", "ask", "request"}, "description": "also an open task: your promise, your ask waiting on the user, or the user's request or question in flight"},
+		"done": str("id of an open task or queue item to close (the 8 characters in [ ])"),
+		"ctx":  str("the user's context for the task; default: from the agent's dir, else the configured default"),
 		"pin":  map[string]any{"type": "boolean", "description": "a standing rule, always shown in fleet_brief"},
 		"rule": map[string]any{"type": "boolean", "description": "a rule every agent follows: added to the user's worker playbook layer (fleet rule)"}})},
 	{"fleet_brief", "Start-of-session brief, kept under 12 KB: the last handoff, the pinned notes, unread report headlines, the agents, the request routes and the recent notes that fit. Each cut section names the tool with the rest. Call first in a fresh session, then fleet_status. file= reads instead of briefing: a tool reply your client saved to a file (\"saved to /…copilot-tool-output…\"; you have no other tool to read it) or file=pinned for every pinned note, in 8 KB pages from offset (each page names the next offset), or only the lines matching query.", obj(nil, map[string]any{
@@ -112,8 +115,9 @@ var baseToolDefs = []tool{
 	{"fleet_access_decide", "Grant, deny or revoke access between two agents. Ask the user first; set confirmed=true only after an explicit yes.", obj([]string{"a", "b", "action", "confirmed"}, map[string]any{
 		"a": str("agent name"), "b": str("agent name"), "action": map[string]any{"type": "string", "enum": []string{"grant", "deny", "revoke"}}, "confirmed": confirmedProp})},
 	reportsToolDef,
-	{"fleet_handoff", "Write a handoff and get replaced by a fresh admiral in a few seconds. Include open questions, promises and plans in flight, not agent statuses.", obj([]string{"summary"}, map[string]any{
-		"summary": str("what the next admiral must know")})},
+	{"fleet_handoff", "Write a handoff and get replaced by a fresh admiral in a few seconds. Include open questions, promises and plans in flight, not agent statuses; put each open question, ask and promise in open_items too, so it becomes a task the next brief lists.", obj([]string{"summary"}, map[string]any{
+		"summary":    str("what the next admiral must know"),
+		"open_items": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "one per item: \"request: <the user's question or request in flight>\", \"ask: <waiting on the user>\" or \"promise: <what you promised>\""}})},
 	{"fleet_admiral_profile", "Switch the admiral (you) to another tool profile, e.g. claude-personal; same profile = restart and resume this chat. Only when the user asks. You are replaced in a few seconds; pass a summary of open questions, promises and plans in flight.", obj([]string{"profile"}, map[string]any{
 		"profile": str("tool profile, see fleet_profiles"), "summary": str("optional handoff for the next admiral")})},
 	adrToolDef,
@@ -194,6 +198,10 @@ type args struct {
 	NeedsAction *bool `json:"needs_action"`
 	// Fields of extra tools (ext.go).
 	Peer, Thread, Kind string
+	// Open, Done and Ctx make a fleet_note an admiral task in the todo store;
+	// OpenItems are fleet_handoff's (ADR-164).
+	Open, Done, Ctx string
+	OpenItems       []string `json:"open_items"`
 }
 
 // identityBound are the admiral tools that change something or read the
@@ -424,7 +432,13 @@ func (s *Server) wallCall(a args) (string, error) {
 }
 
 func (s *Server) noteCall(a args) (string, error) {
+	if a.Done != "" {
+		return s.noteDone(a)
+	}
 	if err := need(strings.TrimSpace(a.Text), "text"); err != nil {
+		return "", err
+	}
+	if err := checkOpen(a.Open); err != nil {
 		return "", err
 	}
 	if err := checkRule(a.Rule, a.Text); err != nil {
@@ -434,8 +448,12 @@ func (s *Server) noteCall(a args) (string, error) {
 	if a.Pin {
 		out, add = "pinned", supervisor.AppendPinnedBy
 	}
-	if err := add(s.F.Home, s.Me(), a.Agent, a.Text); err != nil || !a.Rule {
+	if err := add(s.F.Home, s.Me(), a.Agent, a.Text); err != nil {
 		return out, err
+	}
+	out += s.noteTask(a)
+	if !a.Rule {
+		return out, nil
 	}
 	return ruleNote(out, s.F.Home, a.Text)
 }
@@ -471,7 +489,11 @@ func (s *Server) handoffCall(a args) (string, error) {
 	if err := need(strings.TrimSpace(a.Summary.Text), "summary"); err != nil {
 		return "", err
 	}
-	if err := supervisor.WriteHandoffOf(s.F.Home, s.Me(), a.Summary.Text); err != nil {
+	tasks, err := s.handoffTasks(a.OpenItems)
+	if err != nil {
+		return "", err
+	}
+	if err := supervisor.WriteHandoffOf(s.F.Home, s.Me(), a.Summary.Text+tasks); err != nil {
 		return "", err
 	}
 	if err := s.Reset(); err != nil {
@@ -564,6 +586,7 @@ func (s *Server) status() (string, error) {
 	}
 	b.WriteString("\n")
 	var total spend.Spend
+	queues := fleet.QueueCounts()
 	for _, a := range as {
 		wf := ""
 		if a.Status == "waiting" || a.Status == "error" || a.Status == "stuck" {
@@ -590,6 +613,9 @@ func (s *Server) status() (string, error) {
 			if q := s.F.Mail().UnreadFYI(a.Name); q > 0 {
 				st += fmt.Sprintf(" (%d FYI queued)", q)
 			}
+		}
+		if q := queues[a.Name]; q > 0 {
+			st += fmt.Sprintf(" (queue %d)", q)
 		}
 		switch a.NoReportTag(time.Now()) {
 		case "1":

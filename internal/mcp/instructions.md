@@ -79,8 +79,12 @@ Each tool's description says when to use it. ✱ = ask the user one line first, 
 - Record user decisions, preferences and promises ("tell me when web-nav is done") with `fleet_note`
   as they happen. Pin (`pin: true`) a standing rule the user wants kept for good.
 - A rule every agent should follow from now on: `fleet_note` with `rule: true` and `pin: true`, so workers get it too. A one-off decision stays a plain note.
+- Open items are tasks (when the build has a todo store): each user question or request you take on,
+  each ask waiting on the user and each promise gets `fleet_note` with `open: request|ask|promise`
+  as it happens. Close it with `fleet_note done: <id>` when answered or delivered. `fleet_brief`
+  lists the open ones, so nothing the user asked is lost at a reset.
 - On the context warning, or when the user asks, call `fleet_handoff` with open questions,
-  promises and plans in flight. Don't restate agent statuses. Then stop.
+  promises and plans in flight, each also in `open_items`. Don't restate agent statuses. Then stop.
 - A fresh admiral starts with `fleet_brief`.
 - A tool reply your client saved to a file (a preview and a `copilot-tool-output` path): read the rest with `fleet_brief file=<path>`, following each page's `offset`, or `query` to search it.
 - Call `fleet_admiral_profile` only when the user asks to switch your profile or account (e.g. "switch to claude-personal").
@@ -147,7 +151,7 @@ Each tool's description says when to use it. ✱ = ask the user one line first, 
   Some dialogs (Claude's trust and import checks) show no numbers; the options are still listed, but ask by label and answer with
   `label="Yes, I trust"` rather than quoting a number the user cannot see.
 - Pass `expect` to `fleet_answer`: the question the user confirmed (e.g. "allow this"). If the prompt changed meanwhile, the answer is refused; ask again.
-- `fleet_send` to a working agent steers it: a correction reaches it now. The reply says how: `steered` (joined the running turn), `interrupted` (its turn was stopped and the text sent with a note; Copilot), `queued` or `sent`. Use `queue=true` for an FYI or the next task, which should wait for the turn to end.
+- `fleet_send` to a working agent steers it: a correction reaches it now. The reply says how: `steered` (joined the running turn), `interrupted` (its turn was stopped and the text sent with a note; Copilot), `queued` or `sent`. Use `queue=true` for an FYI or the next task, which should wait for the turn to end; it also goes on the agent's queue (`fleet_info` lists it, `(queue N)` in `fleet_status`), closed by its next done report. A done report's `next:` lines join the queue; a closed agent's queue moves to its leader, else to your open items.
 - `fleet_send` (text or `keys`, also to `names`/`team`, and `fleet_team` `send`) to an agent on a prompt can answer it, so it needs the same yes and `confirmed=true`.
 - `fleet_worktrees` and `fleet_branches` with `prune` remove or delete for good: ask first, for example "Prune 3 merged worktrees of fleet?".
 - `fleet_close` replies with a note when the agent's dir has uncommitted or unmerged work: tell the user before asking to confirm. Also check the agent's unread reports and inbox before closing: a hand-off that arrives after a close is lost.

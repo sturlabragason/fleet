@@ -243,6 +243,9 @@ func (f *Fleet) Info(name string) (string, error) {
 		}
 	}
 	kv("mode", mode)
+	if q := queueInfo(name); q != "" {
+		kv("queue", q)
+	}
 	return strings.TrimRight(b.String(), "\n"), nil
 }
 

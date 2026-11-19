@@ -1,6 +1,11 @@
 package fleet
 
-import "strings"
+import (
+	"context"
+	"strings"
+
+	"github.com/sturlabragason/fleet/internal/todo"
+)
 
 // Extension is what a feature compiled in with a build tag adds to this
 // package (DESIGN §15 "Extensions", ADR-126). It calls Register from its own
@@ -12,6 +17,9 @@ type Extension struct {
 	// AdmiralBadge is extra border text per admiral name (pane option
 	// @fleet_admiral_ext); a missing name shows nothing.
 	AdmiralBadge func(f *Fleet) map[string]string
+	// Todo opens the store for admiral open items and agent queues
+	// (ADR-164); the first extension that sets it is used.
+	Todo func() (todo.Store, error)
 }
 
 var exts []Extension
@@ -56,4 +64,15 @@ func extAdmiralBadge(f *Fleet) map[string]string {
 		}
 	}
 	return out
+}
+
+// TodoDo runs fn on the registered todo store (ADR-164); without one it is
+// ok false with no error.
+func TodoDo(fn func(ctx context.Context, s todo.Store) error) (ok bool, err error) {
+	for _, e := range exts {
+		if e.Todo != nil {
+			return todo.Do(e.Todo, fn)
+		}
+	}
+	return false, nil
 }

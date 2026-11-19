@@ -32,7 +32,7 @@ const pinnedWarn = briefBudget / 2
 // maxBriefNotes is the most recent notes the brief shows when they fit.
 const maxBriefNotes = 30
 
-// brief is the handoff, the pinned notes that fit, then the unread report
+// brief is the handoff, the open asks, the pinned notes that fit, then the unread report
 // headlines, extensions, routes, recent notes and agents within briefBudget.
 func (s *Server) brief() (string, error) {
 	var head strings.Builder
@@ -41,6 +41,7 @@ func (s *Server) brief() (string, error) {
 	} else {
 		head.WriteString("## Handoff\nnone\n\n")
 	}
+	head.WriteString(s.todoBrief())
 	pinned := supervisor.Pinned(s.F.Home)
 	head.WriteString(pinnedBrief(pinned, briefBudget-briefNotices-briefReserve-head.Len()))
 	left := briefBudget - briefNotices - head.Len()

@@ -6,6 +6,9 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
+## 2026-11-19
+- The admiral keeps your open questions, its asks and its promises as open tasks (`fleet_note open=…`, `fleet_handoff open_items`), and `fleet_brief` lists them after a reset. Each agent has a queue of follow-ups (`fleet_send queue=true`, `next:` lines) shown in `fleet_info` and `fleet_status` and handed on when it closes. Each task carries one user context. Needs a build with a todo store; without one nothing changes (ADR-164)
+
 ## 2026-11-18
 - An answer you send from a decision page (`decide-…` or `viz-…`, Send button) is no longer lost when the agent that published it has finished or closed: after a minute untaken it reaches the admiral as a question with your picks (ADR-163)
 - **Changed default:** fleet's state dir is now private to you: `~/.fleet` (or `$FLEET_HOME`) is created 0700, and an existing one that other users could read is made 0700 on the next run. Another account that read it loses access; there is no setting to keep the old mode (ADR-162)

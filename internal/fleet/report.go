@@ -36,14 +36,23 @@ func (f *Fleet) Report(me, state, summary string) (note string, err error) {
 		return "", err
 	}
 	sum := mail.FoldSummary(strings.TrimPrefix(m.Text, state+": "))
+	var was board.Agent
+	var prev time.Time
 	err = f.Store.Update(func(b *board.Board) error {
 		if a, ok := b.Agents[me]; ok {
+			was = *a
+			if a.Report != nil {
+				prev = a.Report.At
+			}
 			a.Report = &board.Report{State: state, Summary: sum, At: time.Now()}
 		}
 		return nil
 	})
 	if err != nil {
 		return "", err
+	}
+	if state == "done" {
+		f.queueDone(me, was, prev, summary)
 	}
 	if reply != "" {
 		f.tell(me, reply)

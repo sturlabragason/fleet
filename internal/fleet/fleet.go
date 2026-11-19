@@ -824,12 +824,13 @@ func (f *Fleet) Close(name string) error {
 		}
 	}
 	var wt *board.Worktree
+	leader, owner := "", ""
 	err := f.Store.Update(func(b *board.Board) error {
 		a, ok := b.Agents[name]
 		if !ok {
 			return fmt.Errorf("no agent %q", name)
 		}
-		wt = a.Worktree
+		wt, leader, owner = a.Worktree, a.LeadBy, a.Owner()
 		// Kept so a send can resume it with its card (ADR-95); without a
 		// session there is nothing to resume.
 		if a.SessionID != "" {
@@ -839,6 +840,7 @@ func (f *Fleet) Close(name string) error {
 		return nil
 	})
 	if err == nil {
+		f.queueHand(name, leader, f.liveOwner(owner))
 		dropMergedRemote(name, wt)
 	}
 	return err
