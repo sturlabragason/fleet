@@ -17,11 +17,11 @@ import (
 // below the header, behind the tiles (ADR-176): its strands flow, its lanes
 // hold still and breathe, and it leans toward the selected tile.
 const (
-	bgFPS      = 4                // frames a second while it runs
-	bgFocusFPS = 8                // for bgBoost after the pane gains focus
-	bgBoost    = 10 * time.Second //
-	bgDim      = 0.4              // behind tiles: the tiles stay the brightest thing
-	leanEase   = 8.0              // seconds to cover about 63% of a lean change: slow enough to stay under TestFlowSmooth's half row a frame
+	bgFPS      = 4 // frames a second while it runs
+	bgFocusFPS = 8 // for bgBoost after the pane gains focus
+	bgBoost    = 10 * time.Second
+	bgDim      = 0.4 // behind tiles: the tiles stay the brightest thing
+	leanEase   = 8.0 // seconds to cover about 63% of a lean change: slow enough to stay under TestFlowSmooth's half row a frame
 )
 
 type bgMsg struct{ gen int }
@@ -108,12 +108,12 @@ func (m *Model) togglePause() tea.Cmd {
 // selRow is the middle row of the selected tile in the backdrop's grid
 // (the pane below the header), false when the grid doesn't show it.
 func (m *Model) selRow() (float64, bool) {
-	if _, tiered := m.tiers(); tiered || m.help {
+	g := m.grid()
+	if _, tiered := m.tiers(); tiered || m.help || g.Cols == 0 {
 		return 0, false
 	}
-	g := m.grid()
 	for j, a := range m.agents[:min(g.Cards, len(m.agents))] {
-		if a.Name == m.sel && g.Cols > 0 {
+		if a.Name == m.sel {
 			return float64(j/g.Cols*m.cfg.TileH) + float64(m.cfg.TileH)/2, true
 		}
 	}

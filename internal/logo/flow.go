@@ -72,7 +72,6 @@ type Flow struct {
 	val          []float64    // scratch: brightness per cell
 	role         []int8       // scratch: 0 ink, 1 accent
 	lane         []int8       // scratch: the lane whose breath a cell takes, -1 none
-	breathOf     [5]float64
 }
 
 // NewFlow fits the mark to w×h cells.
@@ -155,13 +154,11 @@ func bez(p [4][2]float64, t float64) (float64, float64) {
 // of a cell comes from the shape alone, so the lanes and squares keep every
 // glyph from frame to frame; their breath changes only the colour index.
 func (f *Flow) Frame(t float64, lean Lean, out []FlowCell) {
-	clear(f.val)
-	for i := range f.lane {
-		f.lane[i] = -1
-	}
-	for i := range flowLanes {
+	clear(f.val) // every cell lit below was written by put, lane included
+	var breath [5]float64
+	for i := range breath {
 		p := 0.5 + 0.5*math.Sin(2*math.Pi*t/breathe-float64(i)*0.7)
-		f.breathOf[i] = 0.7 + 0.3*p*p
+		breath[i] = 0.7 + 0.3*p*p
 	}
 	for _, i := range [5]int{0, 4, 1, 3, flowAccent} { // back to front; the accent on top
 		f.centre(i, t, lean)
@@ -176,7 +173,7 @@ func (f *Flow) Frame(t float64, lean Lean, out []FlowCell) {
 		}
 		lv := min(v, 0.999)
 		if l := f.lane[k]; l >= 0 {
-			lv *= f.breathOf[l]
+			lv *= breath[l]
 		}
 		out[k] = FlowCell{g, f.role[k]*FlowLevels + int8(lv*FlowLevels)}
 	}
