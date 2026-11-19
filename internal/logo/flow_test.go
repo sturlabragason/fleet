@@ -132,42 +132,59 @@ func TestFlowTiny(t *testing.T) {
 	}
 }
 
-// TestFlowVaried: the strands don't move in step, and the drift does not
-// come back to where it started within two minutes, so it never reads as a
-// loop.
+// TestFlowVaried: strands roam widely across the canvas, do not repeat their
+// starting state within two minutes, move independently, and different seeds
+// trace distinct paths.
 func TestFlowVaried(t *testing.T) {
-	f := NewFlow(160, 44)
-	at := func(tt float64) [5]float64 {
-		var e [5]float64
-		for i := range e {
-			e[i] = f.entry(i, tt, Lean{}) - flowStarts[i]
-		}
-		return e
+	f := NewFlowSeeded(160, 44, 42)
+	var start, lo, hi [5]float64
+	for i := range start {
+		start[i] = f.strands[i].y0.pos
+		lo[i], hi[i] = start[i], start[i]
 	}
-	start := at(0)
-	for tt := 5.0; tt <= 120; tt += 1.0 / 12 {
-		e, near := at(tt), true
-		for i := range e {
-			near = near && math.Abs(e[i]-start[i]) < 0.15
+	var at3, at4 [5]float64
+	for n := 1; n <= 120*12; n++ {
+		tt := float64(n) / 12
+		f.advance(tt)
+		near := tt >= 5
+		for i := range start {
+			y := f.strands[i].y0.pos
+			lo[i], hi[i] = min(lo[i], y), max(hi[i], y)
+			near = near && math.Abs(y-start[i]) < 0.25 && math.Abs(f.strands[i].y1.pos-start[i]) < 0.25
 		}
 		if near {
-			t.Fatalf("the drift is back at its start after %.1f s", tt)
+			t.Fatalf("the wandering strands returned to their start after %.1f s", tt)
+		}
+		if n == 3*12 {
+			for i := range at3 {
+				at3[i] = f.strands[i].y0.pos
+			}
+		}
+		if n == 4*12 {
+			for i := range at4 {
+				at4[i] = f.strands[i].y0.pos
+			}
 		}
 	}
-	a, b := at(3), at(4)
+	for i := range lo {
+		if hi[i]-lo[i] < 12 {
+			t.Errorf("strand %d only roamed %.1f icon units, want >= 12", i, hi[i]-lo[i])
+		}
+	}
 	same := 0
 	for i := 1; i < 5; i++ {
-		if math.Signbit(b[i]-a[i]) == math.Signbit(b[0]-a[0]) {
+		if math.Signbit(at4[i]-at3[i]) == math.Signbit(at4[0]-at3[0]) {
 			same++
 		}
 	}
 	if same == 4 {
 		t.Error("all strands move the same way at once")
 	}
-	// Lanes also breathe on distinct periods rather than in lockstep.
-	for i := 1; i < len(drifts); i++ {
-		if math.Abs(drifts[i].bp-drifts[0].bp) < 0.05 {
-			t.Errorf("lane %d shares breath period %.2f with lane 0", i, drifts[i].bp)
-		}
+	f2 := NewFlowSeeded(160, 44, 99)
+	f2.advance(10)
+	f1 := NewFlowSeeded(160, 44, 42)
+	f1.advance(10)
+	if math.Abs(f1.strands[0].y0.pos-f2.strands[0].y0.pos) < 0.01 {
+		t.Error("different seeds traced the same path")
 	}
 }

@@ -451,7 +451,8 @@ func cmdUI(f *fleet.Fleet) error {
 	still := !f.Prefs.Animation() || logo.Still(os.Getenv)
 	m.SetStill(still)
 	if !still {
-		m.SetBackdropStart(rand.Float64() * 600)
+		m.SetBackdropSeed(rand.Uint64() | 1)
+		m.SetBackdropStart(12)
 	}
 	m.SetBackdrop(os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb") // ADR-176
 	out := ui.NewSyncOut(os.Stdout)

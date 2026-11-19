@@ -84,10 +84,13 @@ type backdrop struct {
 	off    bool // NO_COLOR or TERM=dumb: no backdrop at all
 	paused bool // z, kept in ui.json
 	gen    int  // the running tick chain; a stale bgMsg is dropped
+	seed   uint64
 	t      float64
 	last   time.Time
 	lean   logo.Lean
 	flow   *logo.Flow
+	flowW  int
+	flowH  int
 	cells  []logo.FlowCell // newly rendered cells
 	drawn  []logo.FlowCell // cells currently on screen
 	key    string          // size, theme and dim the cells and escapes were drawn for
@@ -125,6 +128,10 @@ func (m *Model) SetBackdrop(on bool) { m.bg.off = !on }
 // SetBackdropOut lets backdrop ticks patch only changed cells directly to the
 // terminal instead of handing Bubble Tea a full-pane string every frame.
 func (m *Model) SetBackdropOut(out *SyncOut) { m.bg.out = out }
+
+// SetBackdropSeed seeds the backdrop's wandering control points so each live
+// overview launch traces a unique non-repeating path; seed 0 uses the default.
+func (m *Model) SetBackdropSeed(seed uint64) { m.bg.seed = seed }
 
 // SetBackdropStart sets the starting clock of the drift, so an animated launch
 // begins at a fresh point in the motion while a still frame stays at t=0.
@@ -328,9 +335,16 @@ func (m *Model) bgCells() ([]logo.FlowCell, bool) {
 	keyChanged := false
 	if key := fmt.Sprint(theme.Base, theme.Text, theme.Select, dim, w, h); key != m.bg.key {
 		m.bg.key, m.bg.esc = key, logo.FlowEscapes(dim)
-		m.bg.flow = logo.NewFlow(w, h)
-		m.bg.cells = make([]logo.FlowCell, w*h)
-		m.bg.drawn = make([]logo.FlowCell, w*h)
+		if m.bg.flow == nil || m.bg.flowW != w || m.bg.flowH != h {
+			if m.bg.seed != 0 {
+				m.bg.flow = logo.NewFlowSeeded(w, h, m.bg.seed)
+			} else {
+				m.bg.flow = logo.NewFlow(w, h)
+			}
+			m.bg.flowW, m.bg.flowH = w, h
+			m.bg.cells = make([]logo.FlowCell, w*h)
+			m.bg.drawn = make([]logo.FlowCell, w*h)
+		}
 		m.bg.frameT = -1
 		keyChanged = true
 	}

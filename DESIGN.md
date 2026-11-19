@@ -2682,6 +2682,16 @@ Trade-offs of the amendment: a session's place in the tree is fixed when it open
 
 **Trade-offs.** Cell-delta patching cuts PTY traffic on an empty 289×67 pane from about 576 KB/s to about 101 KB/s (about 1.1% tmux CPU plus 0.8% overview CPU, lower behind tiles). Whenever a tile or the header glint changes, Bubble Tea does one full-line pass to bring its line cache back in step with the patched screen. Terminals that ignore DEC mode 2026 still receive valid cursor-positioned updates.
 
+**ADR-181: the backdrop strands wander freely like classic Bezier ribbons instead of oscillating in place** (§5; amends ADR-180) — accepted 2026-11-19.
+
+**Context.** ADR-180 made the 12 fps backdrop smooth, but the strands still swayed ±4.5 icon units around fixed home heights on fixed x coordinates, which read as going back and forth in a loop.
+
+**Decision.** Each strand's left-side curve is driven by five independent `wander` coordinates (`y0` across `[24, 72]`, `x1` across `[14, 24]`, `y1` across `[18, 78]`, `x2` across `[27, 38]`, `y2` across `[22, 74]`) plus a sixth wandering `breath` for its right-hand lane and square (`[0.65, 1.0]`). Every coordinate picks random target velocities at random intervals (2.5–9 s), rebounds smoothly near its soft bounds with a fresh random speed, and eases its velocity toward the target so motion stays C¹ smooth and non-repeating (`TestFlowSmooth` stays under 0.25 rows per frame at 12 fps; `TestFlowVaried` checks wide roaming and non-repetition over 2 min). Two C¹-joined cubics (`M = (P2 + (x3, b))/2` with mirrored control point `(x3, b)`) stay strictly increasing in x and land horizontally tangent onto each fixed lane (`TestFlowRightFixed`, `TestFlowContinuous`). `NewFlow` keeps a deterministic seed and starts at the canonical brand mark at `t=0` (so `animation = false` still draws the canonical still frame); an animated overview seeds `NewFlowSeeded` randomly per launch and warms up 12 s so each session traces a unique path from the first frame. Theme and brightness changes reuse the live `Flow` so strands never jump when previewing themes.
+
+**Rejected.** Keeping fixed-amplitude sine sums: even with incommensurate periods, strands pinned within ±4.5 icon units of their starting height still read as bobbing back and forth. Hard instant bounces: sudden velocity reversals read as jerky at 12 fps.
+
+**Trade-offs.** Removing per-column `math.Sin` ripple calls lowers CPU slightly below ADR-180. Resizing the pane rebuilds `Flow` from its seed at the new dimensions.
+
 **ADR-182: the report badge leads status-right, so the window tabs hold still** (§6.7; amends ADR-36, ADR-179) — accepted 2026-11-19.
 
 **Context.** The user saw the tmux status line flicker as agents worked. Measured on 2026-11-19 with a temporary `after-set-option` hook: in steady state fleet set fewer than ten options a minute, all real changes. What moved was the badge in `status-left`: each report set `● main 1` and the admiral read it seconds later, so the badge came and went about every 10 s and every window tab after it jumped sideways by the badge's width.
