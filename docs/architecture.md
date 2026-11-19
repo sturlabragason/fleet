@@ -70,7 +70,7 @@ flowchart TB
 | `internal/recall` | `fleet recall` and `fleet day`; the cass adapter (ADR-119) |
 | `internal/summary` | Short summaries of an agent's screen through a model CLI (ADR-40) |
 | `internal/spend` | What an agent has cost, from its tool's session files (ADR-46) |
-| `internal/usage` | The status-line usage bar |
+| `internal/usage` | The day spend ledger behind `fleet spend --today` |
 | `internal/trust` | Pre-marks a directory trusted in an agent tool's own config (ADR-47) |
 | `internal/routes` | The user's request routes (ADR-120) |
 | `internal/rexec` | `fleet exec`: rsync a worktree to a build host and run a command there over ssh (ADR-107) |

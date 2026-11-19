@@ -11,16 +11,11 @@ import (
 	"github.com/sturlabragason/fleet/internal/usage"
 )
 
-// The usage bar (DESIGN §7b, ADR-97): the badge writer (the watcher while
+// The day ledger (DESIGN §7b, ADR-97): the badge writer (the watcher while
 // it is live, else the overview, ADR-75) reads every agent's spend at most
-// once per RecycleEvery, adds the growth to the day ledger and sets two
-// global tmux options that `fleet up`'s status-left shows. Reads go through
-// the shared spend cache, so an unchanged session file costs one stat.
-const (
-	UsageOption      = "@fleet_usage"
-	UsageLevelOption = "@fleet_usage_level"
-)
-
+// once per RecycleEvery and adds the growth to the ledger that `fleet spend
+// --today` shows. Reads go through the shared spend cache, so an unchanged
+// session file costs one stat.
 var usageTick struct {
 	sync.Mutex
 	last time.Time
@@ -60,20 +55,8 @@ func (f *Fleet) syncUsage(now time.Time) {
 			usageTick.busy = false
 			usageTick.Unlock()
 		}()
-		f.SyncUsage(now)
+		f.ObserveUsage(now, f.UsageConfig())
 	}()
-}
-
-// SyncUsage updates the ledger and sets the bar options, touching tmux
-// only when the text or its level changed.
-func (f *Fleet) SyncUsage(now time.Time) {
-	c := f.UsageConfig()
-	l := f.ObserveUsage(now, c)
-	text, level := usage.Render(c, l, now)
-	changed := f.setOpt(UsageOption, text)
-	if f.setOpt(UsageLevelOption, level) || changed {
-		f.T.Run("refresh-client", "-S")
-	}
 }
 
 // ObserveUsage reads the spend of every agent on the board and of those

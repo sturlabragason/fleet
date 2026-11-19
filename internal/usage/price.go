@@ -1,9 +1,7 @@
-// Package usage turns what agents have spent into the status-line usage bar
-// (DESIGN §7b, ADR-97): a day ledger that survives agent close and resets at
-// local midnight, and one metric per profile that means something across
-// tools. Copilot profiles show the share of the monthly AI-credit allowance
-// used (and the overage in $ past 100%); every profile shows its estimated
-// cost today in $ at list price. Nothing here calls a model or the network.
+// Package usage is the day ledger behind `fleet spend --today` (DESIGN §7b,
+// ADR-97): what each profile spent since local midnight, surviving agent
+// close, as an estimated $ at list price, and the share of the monthly
+// Copilot AI-credit allowance used. Nothing here calls a model or the network.
 package usage
 
 import (
@@ -42,23 +40,19 @@ type Config struct {
 	// CopilotMonthAIC is the monthly AI-credit allowance the Copilot
 	// percentage is of; 0 turns the percentage off.
 	CopilotMonthAIC float64
-	// DayUSD is an optional daily budget per profile, for a percentage on
-	// a profile that has no allowance fleet knows.
-	DayUSD map[string]float64
-	Prices map[string]Price
+	Prices          map[string]Price
 }
 
 // DefaultConfig is the config without a [usage] section.
 func DefaultConfig() Config {
 	ps := map[string]Price{}
 	maps.Copy(ps, DefaultPrices)
-	return Config{CopilotMonthAIC: DefaultCopilotMonthAIC, DayUSD: map[string]float64{}, Prices: ps}
+	return Config{CopilotMonthAIC: DefaultCopilotMonthAIC, Prices: ps}
 }
 
 // Parse reads a [usage] section over the defaults:
 //
 //	copilot_month_aic = 3900
-//	day_usd = { claude-work = 40 }
 //	price_opus = { input = 5, output = 25, cache_read = 0.5, cache_write = 6.25 }
 func Parse(sec map[string]conf.Value) (Config, error) {
 	c := DefaultConfig()
@@ -68,13 +62,6 @@ func Parse(sec map[string]conf.Value) (Config, error) {
 			return c, fmt.Errorf("[usage] copilot_month_aic %q: %w", v, err)
 		}
 		c.CopilotMonthAIC = n
-	}
-	for prof, v := range conf.Map(sec, "day_usd") {
-		n, err := num(v)
-		if err != nil {
-			return c, fmt.Errorf("[usage] day_usd %s %q: %w", prof, v, err)
-		}
-		c.DayUSD[prof] = n
 	}
 	for k := range sec {
 		fam, ok := strings.CutPrefix(k, "price_")
@@ -104,6 +91,27 @@ func Parse(sec map[string]conf.Value) (Config, error) {
 		c.Prices[fam] = p
 	}
 	return c, nil
+}
+
+// USD formats dollars: cents below $10, whole dollars above.
+func USD(v float64) string {
+	if v < 10 {
+		return fmt.Sprintf("$%.2f", v)
+	}
+	return fmt.Sprintf("$%.0f", v)
+}
+
+// CopilotPct is the share of the monthly allowance used, and the overage
+// in $ past it. ok is false when no allowance is set or nothing was spent.
+func (c Config) CopilotPct(monthAIC float64) (pct int, overUSD float64, ok bool) {
+	if c.CopilotMonthAIC <= 0 || monthAIC <= 0 {
+		return 0, 0, false
+	}
+	pct = int(monthAIC * 100 / c.CopilotMonthAIC)
+	if over := monthAIC - c.CopilotMonthAIC; over > 0 {
+		overUSD = over * USDPerAIC
+	}
+	return pct, overUSD, true
 }
 
 func num(v string) (float64, error) {

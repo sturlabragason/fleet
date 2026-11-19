@@ -88,8 +88,8 @@ var usage = `usage:
                                             the fleet version that started it, status, git, session, spend
   fleet spend [--today] [--json]            what each agent has cost so far and the fleet total, read from
                                             the agents' own session files (AI credits for copilot, tokens
-                                            for claude); no model is called. --today: the usage bar's
-                                            figures per profile since midnight, with raw units
+                                            for claude); no model is called. --today: spend per
+                                            profile since midnight and the Copilot month, raw units
   fleet stats [--since D] [--by kind|profile|model] [--json]
                                             how often fleet's own policy acted on agents (stop blocks,
                                             wakes, refused sends, done-checks, hook/screen disagreements),

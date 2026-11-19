@@ -21,7 +21,7 @@ import (
 func cmdSpend(f *fleet.Fleet, args []string) error {
 	fs := flag.NewFlagSet("spend", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "machine-readable output")
-	today := fs.Bool("today", false, "per-profile usage today and the Copilot month (the usage bar's figures, with raw units)")
+	today := fs.Bool("today", false, "per-profile usage today and the Copilot month (raw units)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -65,7 +65,7 @@ func writeSpend(out io.Writer, rows []fleet.AgentSpend, total spend.Spend, asJSO
 	return err
 }
 
-// writeUsage is the details view behind the usage bar (ADR-97): the day
+// writeUsage is the `--today` view (ADR-97, ADR-179): the day
 // ledger's tallies per profile with raw credits and tokens.
 func writeUsage(out io.Writer, c ubar.Config, l *ubar.Ledger, now time.Time, asJSON bool) error {
 	today := l.Today(now)

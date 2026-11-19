@@ -642,7 +642,7 @@ func Badge(ms []mail.Msg) string {
 }
 
 // syncBadge sets the tmux badge option to the admiral's unread reports,
-// and starts the usage bar's pass (same single writer, ADR-97). snap, when
+// and starts the usage ledger's pass (same single writer, ADR-97). snap, when
 // not nil, is this pass's tmux snapshot: the current values are read from it.
 func (f *Fleet) syncBadge(snap *tmux.Snapshot) {
 	f.syncUsage(time.Now())

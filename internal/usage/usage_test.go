@@ -3,7 +3,6 @@ package usage
 import (
 	"math"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -33,7 +32,7 @@ func TestUSD(t *testing.T) {
 }
 
 func TestParse(t *testing.T) {
-	d, err := conf.Parse("[usage]\ncopilot_month_aic = 1900\nday_usd = { claude-work = 40 }\nprice_opus = { input = 15 }\n")
+	d, err := conf.Parse("[usage]\ncopilot_month_aic = 1900\nprice_opus = { input = 15 }\n")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +40,7 @@ func TestParse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.CopilotMonthAIC != 1900 || c.DayUSD["claude-work"] != 40 || c.Prices["opus"].Input != 15 || c.Prices["opus"].Output != 25 {
+	if c.CopilotMonthAIC != 1900 || c.Prices["opus"].Input != 15 || c.Prices["opus"].Output != 25 {
 		t.Errorf("parsed %+v", c)
 	}
 	d, _ = conf.Parse("[usage]\ncopilot_month_aic = lots\n")
@@ -119,36 +118,5 @@ func TestLedgerSurvivesReloadAndPrunes(t *testing.T) {
 	}
 	if got := l.Today(now)["claude-work"]; !near(got.USD, 15) {
 		t.Errorf("claude-work = %+v, want $15", got)
-	}
-}
-
-func TestRender(t *testing.T) {
-	c := DefaultConfig()
-	c.DayUSD["claude-work"] = 40
-	now := time.Date(2026, 11, 10, 12, 0, 0, 0, time.Local)
-	l := Load(filepath.Join(t.TempDir(), "none.json"))
-	if txt, _ := Render(c, l, now); txt != "" {
-		t.Errorf("empty ledger renders %q", txt)
-	}
-	l.Days[Day(now.AddDate(0, 0, -1))] = map[string]Tally{"copilot": {Kind: spend.Copilot, AIC: 3000, USD: 30}}
-	l.Days[Day(now)] = map[string]Tally{
-		"copilot":     {Kind: spend.Copilot, AIC: 310, USD: 3.1},
-		"claude-work": {Kind: spend.Claude, Tokens: 1e6, USD: 34},
-		"agy":         {Kind: spend.ACP, Tokens: 41000, Unpriced: true},
-	}
-	txt, lvl := Render(c, l, now)
-	want := "today agy 41k tok · claude-work $34 (85%) · copilot $3.10 │ Copilot 84% of month"
-	if txt != want || lvl != LevelWarn {
-		t.Errorf("Render = %q %q\nwant      %q warn", txt, lvl, want)
-	}
-
-	l.Days[Day(now)]["copilot"] = Tally{Kind: spend.Copilot, AIC: 1400, USD: 14}
-	for i := range 6 {
-		l.Days[Day(now)][strings.Repeat("p", 12)+string(rune('a'+i))] = Tally{Kind: spend.Claude, USD: 1}
-	}
-	txt, lvl = Render(c, l, now)
-	want = "today $54 + 41k tok │ Copilot 112% of month +$5.00 over"
-	if txt != want || lvl != LevelOver {
-		t.Errorf("narrow Render = %q %q\nwant             %q over", txt, lvl, want)
 	}
 }

@@ -472,6 +472,10 @@ func TestSingleAdmiralChromeUnchanged(t *testing.T) {
 	c.Run("set-option", "-g", fleet.BadgeOption, "3")
 	c.Run("set-option", "-g", fleet.BadgeByOption, "stale")
 	check("badge")
+	// The status line carries no spend: a usage option left by an older
+	// fleet must not show (ADR-97 bar removed).
+	c.Run("set-option", "-g", "@fleet_usage", "today $250 │ Copilot 3179% of month")
+	check("stale usage")
 	c.SetPaneOption(pane, "@role", "sup")
 	c.SetPaneOption(pane, "@fleet_admiral_profile", "claude")
 	c.SetPaneOption(pane, "@fleet_ctx", "42%")

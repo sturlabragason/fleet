@@ -11,9 +11,9 @@ import (
 // TestMain keeps spawns hermetic: the playbook's repo-layer walk stops at the
 // temp root, so no test reads the user's ~/.fleet/worker.md (ADR-62).
 // Wakes are typed at once unless a test sets the settle window (ADR-93).
-// The usage bar's background pass is off: its goroutine is untracked and
+// The usage ledger's background pass is off: its goroutine is untracked and
 // would write usage.json into whichever test's home first reaches syncBadge,
-// racing that test's TempDir cleanup. Tests call SyncUsage directly.
+// racing that test's TempDir cleanup. Tests call ObserveUsage directly.
 func TestMain(m *testing.M) {
 	playbook.Ceiling = os.TempDir()
 	WakeSettle = 0
