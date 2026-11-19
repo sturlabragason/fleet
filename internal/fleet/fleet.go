@@ -665,6 +665,10 @@ func (f *Fleet) paneOf(name string) string {
 
 // Pane returns the pane id of an agent or an error.
 func (f *Fleet) Pane(name string) (string, error) {
+	if name == "" {
+		// paneOf("") would match the first pane with no agent: an admiral.
+		return "", errors.New("agent name required")
+	}
 	if p := f.paneOf(name); p != "" {
 		return p, nil
 	}

@@ -101,13 +101,16 @@ func (w *Wall) setOpt(name, val string) {
 	w.T.Run("set-option", "-w", "-t", w.Target, name, val)
 }
 
-// Read loads the current state.
-func (w *Wall) Read() (*State, error) {
+// Read loads the current state. A main window that lost its name is found
+// again and renamed back (heal) before Read gives up.
+func (w *Wall) Read() (*State, error) { return w.read(false) }
+
+func (w *Wall) read(healed bool) (*State, error) {
 	var dims string
 	if w.Snap != nil {
 		win, ok := w.snapWindow()
 		if !ok {
-			return nil, fmt.Errorf("no window %s in the snapshot", w.Target)
+			return w.live().read(healed)
 		}
 		dims = win["window_width"] + " " + win["window_height"]
 	} else {
@@ -127,7 +130,15 @@ func (w *Wall) Read() (*State, error) {
 	s.Cfg.ChipsOnly = w.opt("@fleet_chips") == "1"
 	panes, err := w.listPanes(w.Target)
 	if err != nil {
-		return nil, err
+		// display-message falls back to another window when the target is
+		// gone, so a missing main window shows up here first.
+		if healed || w.Snap != nil {
+			return nil, err
+		}
+		if herr := w.heal(); herr != nil {
+			return nil, herr
+		}
+		return w.read(true)
 	}
 	for _, p := range panes {
 		s.Panes = append(s.Panes, p.ID)
@@ -359,6 +370,11 @@ func (w *Wall) show(pane string, useTarget, selectPane bool) (bool, error) {
 	now := strconv.FormatInt(time.Now().UnixNano(), 10)
 	if onWall(s, pane) {
 		return w.focus(pane, now, selectPane)
+	}
+	if index(s.Panes, pane) >= 0 {
+		// An admiral or the overview: swapping it into a slot would leave the
+		// slot's pane here and rename this window after it.
+		return false, fmt.Errorf("pane %s is an admiral or the overview, not an agent pane", pane)
 	}
 	if t, ok := targetPane(s, w.opt("@fleet_target")); useTarget && ok && !t.Pin {
 		w.setOpt("@fleet_undo", undoRecord(pane, t.ID, t.Agent))
