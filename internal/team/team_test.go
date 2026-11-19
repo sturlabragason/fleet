@@ -13,18 +13,18 @@ import (
 
 func TestAutoColoursDistinctAndSkipUsed(t *testing.T) {
 	s := NewStore(t.TempDir())
-	if err := s.Create("a", "blue"); err != nil {
+	if err := s.Create("a", "purple"); err != nil {
 		t.Fatal(err)
 	}
 	s.Create("b", "")
 	s.Create("c", "")
 	f := s.Load()
-	if f.Teams["b"].Color != theme.TeamHex("pink") || f.Teams["c"].Color != theme.TeamHex("teal") {
+	if f.Teams["b"].Color != theme.TeamHex("teal") || f.Teams["c"].Color != theme.TeamHex("cyan") {
 		t.Errorf("auto colours: b=%s c=%s", f.Teams["b"].Color, f.Teams["c"].Color)
 	}
 	s.Delete("b")
 	s.Create("d", "")
-	if got := s.Load().Teams["d"].Color; got != theme.TeamHex("pink") {
+	if got := s.Load().Teams["d"].Color; got != theme.TeamHex("teal") {
 		t.Errorf("freed colour not reused: %s", got)
 	}
 	if err := s.Create("a", ""); err == nil || !strings.Contains(err.Error(), "exists") {
@@ -41,7 +41,7 @@ func TestAddMovesAndCreates(t *testing.T) {
 	if err != nil || len(moved) != 0 {
 		t.Fatal(moved, err)
 	}
-	if c := s.Load().Teams["alpha"].Color; c != theme.TeamHex("blue") {
+	if c := s.Load().Teams["alpha"].Color; c != theme.TeamHex("purple") {
 		t.Errorf("created team colour %s", c)
 	}
 	moved, err = s.Add("beta", "a2")
@@ -77,18 +77,18 @@ func TestAddMovesAndCreates(t *testing.T) {
 func TestSetColorAndParse(t *testing.T) {
 	s := NewStore(t.TempDir())
 	s.Create("x", "")
-	if err := s.SetColor("x", "Sapphire"); err != nil || s.Load().Teams["x"].Color != theme.TeamHex("sapphire") {
+	if err := s.SetColor("x", "Slate"); err != nil || s.Load().Teams["x"].Color != theme.TeamHex("slate") {
 		t.Fatalf("by name: %v", err)
 	}
 	if err := s.SetColor("x", "#ABCDEF"); err != nil || s.Load().Teams["x"].Color != "#abcdef" {
 		t.Fatalf("by hex: %v %s", err, s.Load().Teams["x"].Color)
 	}
 	for _, bad := range []string{"green", "#abc", "#abcdeg", ""} {
-		if _, err := ParseColor(bad); err == nil || !strings.Contains(err.Error(), "sapphire") {
+		if _, err := ParseColor(bad); err == nil || !strings.Contains(err.Error(), "slate") {
 			t.Errorf("ParseColor(%q): %v", bad, err)
 		}
 	}
-	if err := s.SetColor("nope", "blue"); err == nil {
+	if err := s.SetColor("nope", "purple"); err == nil {
 		t.Error("unknown team accepted")
 	}
 }
@@ -116,7 +116,7 @@ func TestSurvivesRestartSameTeamDrop(t *testing.T) {
 		t.Fatal(err)
 	}
 	by := NewStore(dir).ByAgent()
-	if _, ok := by["a2"]; ok || by["a1"].Team != "alpha" || by["b1"].Color != theme.TeamHex("pink") {
+	if _, ok := by["a2"]; ok || by["a1"].Team != "alpha" || by["b1"].Color != theme.TeamHex("teal") {
 		t.Errorf("ByAgent %v", by)
 	}
 }

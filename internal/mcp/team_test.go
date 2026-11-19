@@ -40,7 +40,7 @@ func TestFleetTeam(t *testing.T) {
 	}
 	callText(t, s, "fleet_team", map[string]any{"action": "add", "team": "alpha", "agents": []string{"ghost"}})
 	out, isErr := callText(t, s, "fleet_team", map[string]any{"action": "list"})
-	if isErr || !strings.Contains(out, "alpha | blue | a1, ghost (not running)") || !strings.Contains(out, "beta | pink | \n") {
+	if isErr || !strings.Contains(out, "alpha | purple | a1, ghost (not running)") || !strings.Contains(out, "beta | teal | \n") {
 		t.Errorf("list: %q", out)
 	}
 	out, isErr = callText(t, s, "fleet_team", map[string]any{"action": "send", "team": "alpha", "text": "team hello", "confirmed": true}) // a1 sits on a [y/n] prompt

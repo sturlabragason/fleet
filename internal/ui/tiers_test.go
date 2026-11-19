@@ -270,7 +270,7 @@ func TestRowCellWidthAndMarks(t *testing.T) {
 	a := m.agents[0]
 	m.pinned = map[string]bool{a.Name: true}
 	m.target = a.Name
-	m.teams = map[string]team.Info{a.Name: {Team: "t", Color: theme.TeamHex("blue")}}
+	m.teams = map[string]team.Info{a.Name: {Team: "t", Color: theme.TeamHex("purple")}}
 	tv := tierView{}
 	for _, w := range []int{20, 34, 48} {
 		for _, sel := range []bool{false, true} {

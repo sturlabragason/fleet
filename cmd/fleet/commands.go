@@ -124,7 +124,7 @@ var usage = `usage:
                                             (park, wake on tmux, same wall slot; Ctrl-T in its pane does
                                             it); --acp hands a tmux agent back to fleet's acp host
   fleet team ls [--json]                    teams with colour and members (running members marked)
-  fleet team create <team> [colour]         new empty team; colour: blue, pink, teal, mauve, sky, sapphire or #rrggbb
+  fleet team create <team> [colour]         new empty team; colour: a team colour of the theme (lane: purple, teal, cyan, lilac, aqua, slate) or #rrggbb
   fleet team delete <team>                  remove the team; its agents keep running
   fleet team add <team> <agent>...          add agents (moves them from another team; creates the team)
   fleet team rm <team> <agent>...           take agents out of the team
