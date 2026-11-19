@@ -60,7 +60,7 @@ func cmdMerge(args []string) error {
 			fmt.Println(string(b))
 			return nil
 		}
-		steps := append(p.Steps(), graphSteps(context.Background(), p.Dir)...)
+		steps := append(graphSteps(context.Background(), p.Dir), p.Steps()...)
 		if len(taken) > 0 {
 			steps = append([]string{adrFix(taken)}, steps...)
 		}
