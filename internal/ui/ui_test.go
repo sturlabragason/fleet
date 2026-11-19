@@ -176,8 +176,8 @@ func TestViewEmptySplash(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	as, _ := (&fakeBE{}).Refresh()
 	m.setAgents(as)
-	if v := ansi.Strip(m.View()); strings.Contains(v, "■") {
-		t.Errorf("splash with agents:\n%s", v)
+	if _, body, _ := strings.Cut(ansi.Strip(m.View()), "\n"); strings.Contains(body, "■") {
+		t.Errorf("splash with agents:\n%s", body)
 	}
 }
 

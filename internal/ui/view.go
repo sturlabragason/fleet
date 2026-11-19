@@ -154,7 +154,7 @@ func (m *Model) header() string {
 	for _, a := range m.agents {
 		counts[a.Shown()]++
 	}
-	name := " " + m.mark()
+	name := " " + lipgloss.NewStyle().Bold(true).Render("fleet")
 	h := fmt.Sprintf(" · %d agents · %d working · %d waiting · %d error", len(m.agents), counts["working"], counts["waiting"], counts["error"]+counts["stuck"])
 	idle := lipgloss.NewStyle().Foreground(colIdle)
 	badge := reportBadge(m.reports)
@@ -181,19 +181,17 @@ func (m *Model) header() string {
 	default:
 		hint = idle.Render("  " + keys.Hint(keys.ScopeOverview, room))
 	}
-	return ansi.Truncate(name+lipgloss.NewStyle().Bold(true).Render(h)+badgeStyle.Render(badge)+hint, m.w, "…")
+	rest := lipgloss.NewStyle().Bold(true).Render(h) + badgeStyle.Render(badge) + hint
+	if mk := m.mark(); ansi.StringWidth(" "+mk+rest) <= m.w {
+		name = " " + mk
+	}
+	return ansi.Truncate(name+rest, m.w, "…")
 }
 
-// markMinWidth is the narrowest pane whose header draws the logo; below it
-// the header says "fleet" and keeps its cells for the counts.
-const markMinWidth = 60
-
-// mark is the header's name: the line mark with its idle glint (ADR-173), or
-// the plain word on a narrow pane.
+// mark is the header's logo, the line mark with its idle glint (ADR-173).
+// header draws it only where the counts, badges and hint still fit beside
+// it, and says "fleet" otherwise.
 func (m *Model) mark() string {
-	if m.w < markMinWidth {
-		return lipgloss.NewStyle().Bold(true).Render("fleet")
-	}
 	k := -1
 	if !m.still {
 		k = m.tick

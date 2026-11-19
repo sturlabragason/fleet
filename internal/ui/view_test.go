@@ -436,7 +436,7 @@ func TestHeaderMark(t *testing.T) {
 	}{
 		{"wide", 150, false, " ╳━■ fleet · ", true},
 		{"still", 150, true, " ╳━■ fleet · ", false},
-		{"narrow", 50, false, " fleet · ", false},
+		{"narrow", 50, false, " fleet · ", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m, _ := overview(tc.w, 20, 1)
@@ -446,7 +446,7 @@ func TestHeaderMark(t *testing.T) {
 			if !strings.HasPrefix(ansi.Strip(after), tc.prefix) {
 				t.Errorf("header %q, want prefix %q", ansi.Strip(after), tc.prefix)
 			}
-			if moved := m.tick != 0; moved != tc.moves && tc.w >= markMinWidth {
+			if moved := m.tick != 0; moved != tc.moves {
 				t.Errorf("glint stepped = %v, want %v", moved, tc.moves)
 			}
 		})
