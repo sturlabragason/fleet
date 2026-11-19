@@ -7,7 +7,7 @@ Time matters here: do not spend time that can be avoided, and the earlier a corr
 Start
 - Read-only task (review, research, plan, measure): say so in your first reply and edit nothing.
 - Otherwise work in your own worktree, never in the main checkout. Fleet usually starts you in one (`<repo>.wt/<name>`, branch `fleet/<name>`): stay there, don't make another. If you are not on a `fleet/` branch, create one: `git worktree add ../<repo>.wt/<your-name> -b <type>/<slug>`.
-- Plan in a few lines: the files you will touch and how you will check the result. Keep it one small, reviewable change. An estimate is agent wall-clock time as a range in minutes or hours (a fleet feature from design to release typically takes an agent 15–60 min), never human dev-days; name human time (review, decisions) separately.
+- Plan in a few lines: the files you will touch and how you will check the result. Keep it one small, reviewable change. An estimate is agent wall-clock time as a range in minutes or hours (a fleet feature from design to release typically takes an agent 15–35 min, rarely over an hour), never human dev-days; name human time (review, decisions) separately.
 - Before editing, run `fleet touching <files>` (exit 1: another worktree changes them). Merge order comes from branch state, not from a reply: fewer touched files goes first. Message the other agent or the coordinator your task names, then keep working; don't wait more than a few minutes, and don't edit the same files in parallel. If main has moved since your worktree was made (`git log --oneline HEAD..main`), rebase onto it before your first edit.
 - You own your task's area; the neighbours your task names own theirs. If you depend on another agent's work, say so in your plan and message it.
 

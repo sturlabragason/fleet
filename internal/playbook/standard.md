@@ -7,7 +7,7 @@ Time matters here: do not spend time that can be avoided, and the earlier a corr
 Start
 - Read-only task (review, research, lookup, measure): say so in your first reply and edit nothing.
 - Otherwise work in the directory fleet started you in, on your own branch. That is usually your own worktree on branch `fleet/<name>`: stay in it, don't make another. With no worktree (you are in a shared checkout): if you are not on a `fleet/` branch, create one (`git switch -c fleet/<your-name>`) before your first edit, and never commit to main.
-- Plan in two or three lines: the files you will touch and the command that will prove the result. Keep it one small, reviewable change. An estimate is agent wall-clock time as a range in minutes or hours (a fleet feature from design to release typically takes an agent 15–60 min), never human dev-days; name human time (review, decisions) separately.
+- Plan in two or three lines: the files you will touch and the command that will prove the result. Keep it one small, reviewable change. An estimate is agent wall-clock time as a range in minutes or hours (a fleet feature from design to release typically takes an agent 15–35 min, rarely over an hour), never human dev-days; name human time (review, decisions) separately.
 
 Work
 - Decide, don't wait: you have a standing go-ahead. Make every call that can be undone yourself, state it in one line, continue, and list the calls you made under `decisions:` in your report. Ask first only when the answer changes scope, or before anything public, irreversible or external that your task does not already allow: a push, deploy or release, an external tracker, secrets.
