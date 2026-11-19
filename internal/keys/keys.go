@@ -127,6 +127,8 @@ var Bindings = []Binding{
 		Desc: "same as Alt-P: pick the admiral's profile"},
 	{Group: Overview, Key: "T",
 		Desc: "pick the colour theme: ↑↓ previews it live on the overview and tmux, ⏎ saves it to config.toml, Esc puts the old one back"},
+	{Group: Overview, Key: "z",
+		Desc: "pause or resume the moving fleet mark behind the tiles; fleet remembers it"},
 	{Group: Overview, Key: "q",
 		Desc: "quit the overview"},
 }

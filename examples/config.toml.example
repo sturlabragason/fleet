@@ -16,9 +16,10 @@
 # `fleet up` again — the tmux chrome is re-set and the overview pane restarts,
 # agents keep running.
 # theme = "lane"
-# Motion (ADR-171, ADR-173): `fleet up` draws the fleet mark in with a short
-# animation (any key skips it), and the overview header's mark glints softly
-# every 30 s. false keeps both still (reduced motion); so do NO_COLOR and
+# Motion (ADR-171, ADR-173, ADR-176): `fleet up` draws the fleet mark in with
+# a short animation (any key skips it), a light walks the header's "fleet"
+# every 30 s, and the fleet mark flows behind the overview's tiles (z pauses
+# it). false keeps both still (reduced motion); so do NO_COLOR and
 # FLEET_NO_ANIM. The banner is also off in CI, inside tmux and when the
 # output is not a terminal.
 # animation = true

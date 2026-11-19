@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"os"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -32,7 +31,8 @@ func (m *Model) View() (out string) {
 	if m.w == 0 {
 		return "loading…"
 	}
-	return zone.Scan(m.fitPane(append([]string{m.header()}, m.body()...)))
+	out = zone.Scan(m.fitPane(append([]string{m.header()}, m.body()...)))
+	return strings.Join(m.backdropOver(strings.Split(out, "\n")), "\n")
 }
 
 // body is everything below the header: the help overlay, the tiers, or the
@@ -59,6 +59,9 @@ func (m *Model) body() []string {
 // tiles is the splash, the tiers, or the card grid and its overflow line.
 func (m *Model) tiles() []string {
 	if len(m.agents) == 0 {
+		if m.bgOnEmpty() { // the moving mark fills the pane instead (ADR-176)
+			return nil
+		}
 		return m.splash()
 	}
 	if tv, ok := m.tiers(); ok { // past one screen of cards (ADR-32)
@@ -162,7 +165,11 @@ func (m *Model) header() string {
 	for _, a := range m.agents {
 		counts[a.Shown()]++
 	}
-	name := " " + lipgloss.NewStyle().Bold(true).Render("fleet")
+	k := -1
+	if !m.still {
+		k = m.tick
+	}
+	name := " " + logo.Glint(k)
 	h := fmt.Sprintf(" · %d agents · %d working · %d waiting · %d error", len(m.agents), counts["working"], counts["waiting"], counts["error"]+counts["stuck"])
 	idle := lipgloss.NewStyle().Foreground(colIdle)
 	badge := reportBadge(m.reports)
@@ -190,21 +197,7 @@ func (m *Model) header() string {
 		hint = idle.Render("  " + keys.Hint(keys.ScopeOverview, room))
 	}
 	rest := lipgloss.NewStyle().Bold(true).Render(h) + badgeStyle.Render(badge) + hint
-	if mk := m.mark(); ansi.StringWidth(" "+mk+rest) <= m.w {
-		name = " " + mk
-	}
 	return ansi.Truncate(name+rest, m.w, "…")
-}
-
-// mark is the header's logo, the line mark with its idle glint (ADR-173).
-// header draws it only where the counts, badges and hint still fit beside
-// it, and says "fleet" otherwise.
-func (m *Model) mark() string {
-	k := -1
-	if !m.still {
-		k = m.tick
-	}
-	return logo.Glint(k, logo.ASCII(os.Getenv))
 }
 
 // reportBadge is the unread-report count for the header (ADR-36), "" when

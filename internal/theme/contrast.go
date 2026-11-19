@@ -33,3 +33,7 @@ func luminance(hex string) float64 {
 	}
 	return 0.2126*ch(1) + 0.7152*ch(3) + 0.0722*ch(5)
 }
+
+// Mix is the colour t of the way from a to b in sRGB, for a shade between
+// two palette roles (the overview's flowing mark, ADR-176).
+func Mix(a, b string, t float64) string { return mix(a, b, t) }

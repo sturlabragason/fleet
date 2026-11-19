@@ -453,6 +453,7 @@ The bottom tmux status line and the overview header show a short hint in plain w
 | Overview | `O` | hand the selected agent to another admiral (several admirals only) |
 | Overview | `P` | same as Alt-P: pick the admiral's profile |
 | Overview | `T` | pick the colour theme: ↑↓ previews it live on the overview and tmux, ⏎ saves it to config.toml, Esc puts the old one back |
+| Overview | `z` | pause or resume the moving fleet mark behind the tiles; fleet remembers it |
 | Overview | `q` | quit the overview |
 
 `Alt-?` (tmux) · `?` (overview): show this list.
@@ -2600,7 +2601,7 @@ Trade-offs of the amendment: a session's place in the tree is fixed when it open
 
 **Trade-offs.** An item that names two agents goes under the first; a word that happens to equal an agent's name claims the item for it.
 
-**ADR-173: the overview header carries the live fleet mark, a slow glint on the housekeeping tick** (§5, amends ADR-81, ADR-166, extends ADR-171) — accepted 2026-11-19.
+**ADR-173: the overview header carries the live fleet mark, a slow glint on the housekeeping tick** (§5, amends ADR-81, ADR-166, extends ADR-171) — accepted 2026-11-19; the mark leaves the header and the glint walks the word, ADR-176.
 
 **Context.** The user asked for the fleet logo to stay live and animated in the TUI the whole time, not only at `fleet up`, and to stay cheap on a laptop short of CPU. ADR-81 had made the overview motionless and ADR-166 had kept the mark out of the header because it costs a row.
 
@@ -2629,6 +2630,16 @@ Trade-offs of the amendment: a session's place in the tree is fixed when it open
 **Rejected.** A tmux popup like the admiral profile picker: the popup covers the overview, and a separate process cannot re-colour the overview's tiles live. A `fleet theme` command with no argument: it would still need the running overview to re-style, which only its own process can do. Restarting the watcher on every cursor move to re-colour agent pane borders: a process restart per keypress for a border that changes again a moment later.
 
 **Trade-offs.** During the preview, agent pane borders keep the saved palette until Enter, and the admiral's and agents' own TUIs, ACP host panes and other overviews keep theirs until they restart, as after `fleet up` (ADR-55). The role variables are now written while the overview runs, so the poll goroutine can read them mid-switch; every role is a 7-character hex and every team list has six entries, so a read that tears across a switch is still a valid colour, at worst one frame mixes two palettes. A comment on the old `theme` line in config.toml is dropped when it is replaced. When no watcher is running, the overview's own refresh tags agent borders from the previewed palette, and Esc leaves those until each agent's status changes. Ctrl+c in the picker restores the saved palette before it quits, because a preview does not change the chrome stamp the watcher checks (ADR-111).
+
+**ADR-176: the fleet mark flows behind the overview's tiles, edge to edge; the header keeps a glint on the word** (§5, amends ADR-81, ADR-173, ADR-166) — accepted 2026-11-19.
+
+**Context.** The user asked for the overview's empty area to carry the fleet mark as an elegant, fluid ASCII animation in the theme's colours, filling the pane edge to edge: the strands on the left flowing like ribbons, the lanes and squares on the right fixed and gently pulsing, never noise. The header's glint across `╳━■ fleet` read as noise; the user wanted the mark out of the header and the light on the word kept. A prototype (a glow field splatted from sampled points, 12 fps) looked speckled.
+
+**Decision.** (1) `logo.Flow` stretches the mark over the pane below the header, x and y separately: strands enter at the left edge, the squares end at the right edge, the lanes and the widest sway span the height, at any pane size. (2) Each strand is the brand's two cubics (scripts/build_logo.py) from a swaying entry to its lane, plus a ripple that travels along it and fades out before the lanes. It is drawn per column from its centre line, anti-aliased across its width, so a ribbon has one even brightness. A cell's glyph takes one of three steps (`@ + :`) by how deep inside a ribbon it is, and its colour carries the smooth part, so about 8% of lit cells change glyph between two frames where the prototype changed 25% at the same rate. Strands are drawn back to front with the accent on top, so each crossing reads as one strand over another. Lanes sit on row centres so they draw crisp. (3) Motion is slow enough that no strand moves half a row between two frames at 4 fps (sway 18 s, ripple 14 s), so the anti-aliased edge glides; `TestFlowSmooth` holds it. The lanes and squares keep every glyph; their 5 s breath changes colour only (`TestFlowRightFixed`), staggered down the lanes. (4) The strands lean toward the selected tile's row, eased over about 8 s. (5) `internal/ui` draws it after `zone.Scan` into every cell right of what a row shows, below the header: tiles stay opaque, the mark at 40% toward the ground behind them, its grey strands at 75% of `Text` so the accent stands out, full brightness on an empty overview in place of the static splash; never behind the help, the `w` list, an answer or an extension's view. Colours are the theme's `Text` and `Select` mixed toward `Base` (`theme.Mix`). (6) It ticks on its own chain at 4 fps, 8 fps for 10 s after the pane gains focus (`WithReportFocus`), and runs no timer while `z` pauses it (kept in `ui.json`), under `animation = false` or `FLEET_NO_ANIM` (one still frame), or `NO_COLOR`/`TERM=dumb` (no backdrop). (7) The header shows the word `fleet` with ADR-173's light walking its letters (5 of every 30 ticks); `╳━■` stays on the tmux status line and the web mirror.
+
+**Rejected.** The prototype's splatted field: uneven brightness along a strand read as speckle. A faster frame rate for smoothness: CPU and tmux repaints on a shared laptop. Hiding when the window is not visible: the overview reads tmux through the shared snapshot (ADR-98), which does not record it; `z` covers it. Glinting tmux window titles too: a tmux call per tick.
+
+**Trade-offs.** The overview now repaints most rows 4 times a second while it runs, about 1–2% of a core on a 160×45 pane (prototype measurement) plus tmux's redraw; `z` or `animation = false` brings it to zero. A pane whose tiles fill it shows little of the mark.
 
 **ADR-177: `⏎` in the `w` list acts on the row through its owner, and the list ages and dedupes** (§5g; amends ADR-167, ADR-168, ADR-172) — accepted 2026-11-19.
 

@@ -448,7 +448,8 @@ func cmdUI(f *fleet.Fleet) error {
 	logx.For("ui").Info("start", "wall", be.enabled)
 	m := ui.New(be, f.Home)
 	m.SetStill(!f.Prefs.Animation() || logo.Still(os.Getenv))
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	m.SetBackdrop(os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb") // ADR-176
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithReportFocus())
 	// A rebuilt bin/fleet takes over this pane (ADR-62).
 	re := newUIReexec(f.Exe, "", probeBinary, p.Quit)
 	ctx, stop := context.WithCancel(context.Background())

@@ -1,6 +1,12 @@
 package logo
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/sturlabragason/fleet/internal/theme"
+)
 
 // FrameCount is how many frames the start-up animation draws: at the player's
 // FrameRate it runs for about 1.2 s, then the full splash holds briefly.
@@ -63,7 +69,7 @@ type Gate struct {
 var quietEnv = []string{"CI", "FLEET_AGENT"}
 
 // Still reports whether the user asked for no motion anywhere: NO_COLOR,
-// FLEET_NO_ANIM or TERM=dumb. The overview's glint and the banner both obey.
+// FLEET_NO_ANIM or TERM=dumb. The overview's glint and backdrop and the banner all obey.
 func Still(getenv func(string) string) bool {
 	return getenv("NO_COLOR") != "" || getenv("FLEET_NO_ANIM") != "" || getenv("TERM") == "dumb"
 }
@@ -84,36 +90,32 @@ func Animate(g Gate) bool {
 	return g.Explicit || g.Getenv("TMUX") == ""
 }
 
-// GlintRest is how many ticks the line mark rests between two glints.
-const GlintRest = 21
+// GlintRest is how many ticks the word rests between two glints.
+const GlintRest = 25
 
-// GlintPeriod is one glint across the line mark and its rest, in ticks.
-var GlintPeriod = Line.Width() + GlintRest
+// glintWord is the word the header's glint walks.
+const glintWord = "fleet"
 
-// Glint is the 1-row line mark at tick k of the overview's idle loop: a light
-// moves one cell a tick along "╳━■ fleet" in the bold accent, then the mark
-// rests GlintRest ticks as Render draws it, so an idle header changes on
-// about a third of the ticks (ADR-173).
-func Glint(k int, asc bool) string {
+// GlintPeriod is one glint across the word and its rest, in ticks.
+const GlintPeriod = len(glintWord) + GlintRest
+
+// Glint is the header's bold "fleet" at tick k of the overview's idle loop:
+// a light walks its letters one a tick in the bold accent, then the word
+// rests GlintRest ticks, so the header changes on 6 of every 30 ticks
+// (ADR-173, ADR-176). k < 0 is the still word.
+func Glint(k int) string {
+	bold := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Text)).Bold(true)
 	i := glintAt(k)
 	if i < 0 {
-		return Render(Line, asc)
+		return bold.Render(glintWord)
 	}
-	cells := []rune(Plain(Line, asc)[0])
-	roles := []rune(Line.art().roles[0])
-	return paint(cells[:i], roles[:i]) +
-		style('a').Bold(true).Render(string(cells[i])) +
-		paint(cells[i+1:], roles[i+1:])
+	return bold.Render(glintWord[:i]) + style('a').Bold(true).Render(glintWord[i:i+1]) + bold.Render(glintWord[i+1:])
 }
 
-// glintAt is the line mark's lit cell at tick k, -1 while it rests or k < 0.
+// glintAt is the word's lit letter at tick k, -1 while it rests or k < 0.
 func glintAt(k int) int {
-	if k < 0 {
+	if k < 0 || k%GlintPeriod >= len(glintWord) {
 		return -1
 	}
-	k %= GlintPeriod
-	if k >= Line.Width() || []rune(Plain(Line, false)[0])[k] == ' ' {
-		return -1
-	}
-	return k
+	return k % GlintPeriod
 }

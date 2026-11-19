@@ -54,6 +54,7 @@ type Model struct {
 	waitsSort int         // the w view's sort (s), kept while the overview runs
 	ans       *answerView // r: answering one agent's prompt, over everything else
 	tp        *themePick  // T: the theme picker above the tiles (ADR-175)
+	bg        backdrop    // the flowing mark behind the tiles (ADR-176)
 }
 
 type agentsMsg struct {
@@ -88,23 +89,30 @@ type infoMsg string
 func New(be Backend, stateDir string) *Model {
 	m := &Model{be: be, onWall: map[string]bool{}, stateDir: stateDir, cfg: layout.Default, now: time.Now}
 	if b, err := os.ReadFile(filepath.Join(stateDir, "ui.json")); err == nil {
-		var s struct{ Selected string }
+		var s struct {
+			Selected string
+			BgPaused bool
+		}
 		if json.Unmarshal(b, &s) == nil {
-			m.sel = s.Selected
+			m.sel, m.bg.paused = s.Selected, s.BgPaused
 		}
 	}
 	return m
 }
 
-// SetStill holds the header logo still: [defaults] animation = false,
-// NO_COLOR or FLEET_NO_ANIM (ADR-173).
+// SetStill holds the header glint and the backdrop still: [defaults]
+// animation = false, NO_COLOR or FLEET_NO_ANIM (ADR-173, ADR-176). A still
+// backdrop is drawn once and never ticks.
 func (m *Model) SetStill(v bool) { m.still = v }
 
 func (m *Model) saveCursor() {
 	if m.stateDir == "" {
 		return
 	}
-	b, _ := json.Marshal(struct{ Selected string }{m.sel})
+	b, _ := json.Marshal(struct {
+		Selected string
+		BgPaused bool `json:",omitempty"`
+	}{m.sel, m.bg.paused})
 	if err := os.WriteFile(filepath.Join(m.stateDir, "ui.json"), b, 0o644); err != nil {
 		logx.For("ui").Warn("selection not saved", "err", err)
 	}
@@ -135,13 +143,12 @@ func (m *Model) poll() tea.Cmd {
 }
 
 // Init starts polling.
-func (m *Model) Init() tea.Cmd { return tea.Batch(m.poll(), anim()) }
+func (m *Model) Init() tea.Cmd { return tea.Batch(m.poll(), anim(), m.bgStart()) }
 
 // animEvery is the housekeeping tick: it expires header messages and steps
-// the header logo's glint. Nothing else on the overview animates (ADR-81,
-// ADR-173): a tick that changes nothing leaves the view identical, bubbletea
-// writes nothing, and the glint rests most ticks, so the overview costs no
-// wake-up of its own.
+// the header word's glint (ADR-173). A tick that changes nothing leaves the
+// view identical and bubbletea writes nothing. The backdrop has its own
+// tick, bgFPS, that stops while it is paused or still (ADR-176).
 const animEvery = time.Second
 
 func anim() tea.Cmd {
@@ -204,6 +211,10 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 		return m, m.gotReply(msg)
 	case pollMsg:
 		return m, m.poll()
+	case bgMsg:
+		return m, m.bgTick(msg)
+	case tea.FocusMsg:
+		return m, m.bgFocus()
 	case animMsg:
 		if !m.still {
 			m.tick++
@@ -389,6 +400,8 @@ func (m *Model) key(k string) tea.Cmd {
 		return m.openWaits()
 	case "T":
 		return m.openThemes()
+	case "z":
+		return m.togglePause()
 	case "r":
 		return m.openAnswer(m.selName())
 	case "left", "h":

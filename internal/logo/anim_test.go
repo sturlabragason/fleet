@@ -126,23 +126,22 @@ func TestBannerStatic(t *testing.T) {
 	}
 }
 
-// TestGlint: one lit cell walks the drawn cells of the line mark, then it
-// rests as the static mark; every frame shows the same text.
+// TestGlint: one lit letter walks the word, then it rests as the plain
+// bold word; every frame shows the same text.
 func TestGlint(t *testing.T) {
 	var lit []int
 	for k := range GlintPeriod {
-		if ansi.Strip(Glint(k, false)) != Plain(Line, false)[0] {
-			t.Fatalf("tick %d: text %q", k, ansi.Strip(Glint(k, false)))
+		if got := ansi.Strip(Glint(k)); got != "fleet" {
+			t.Fatalf("tick %d: text %q", k, got)
 		}
 		if i := glintAt(k); i >= 0 {
 			lit = append(lit, i)
 		}
 	}
-	drawn := len([]rune(strings.ReplaceAll(Plain(Line, false)[0], " ", "")))
-	if len(lit) != drawn || len(lit) > GlintPeriod/2 {
-		t.Errorf("lit ticks %v, want each of the %d drawn cells once and under half of %d ticks", lit, drawn, GlintPeriod)
+	if len(lit) != 5 || lit[0] != 0 || lit[4] != 4 {
+		t.Errorf("lit ticks %v, want each letter of fleet once, in order", lit)
 	}
-	if glintAt(-1) != -1 || glintAt(GlintPeriod) != 0 || Glint(-1, false) != Render(Line, false) {
-		t.Error("still is not the static mark, or the loop does not wrap")
+	if glintAt(-1) != -1 || glintAt(GlintPeriod) != 0 || Glint(-1) != Glint(GlintPeriod-1) {
+		t.Error("still is not the resting word, or the loop does not wrap")
 	}
 }

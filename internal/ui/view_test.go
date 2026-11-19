@@ -423,8 +423,8 @@ func TestWaitBadge(t *testing.T) {
 	}
 }
 
-// TestHeaderMark: a wide header draws the line mark and its glint moves on
-// the housekeeping tick; a still model and a narrow pane don't change it.
+// TestHeaderMark: the header leads with the word fleet, its glint stepping
+// on the housekeeping tick unless the model is still (ADR-176).
 func TestHeaderMark(t *testing.T) {
 	zone.NewGlobal()
 	for _, tc := range []struct {
@@ -434,8 +434,8 @@ func TestHeaderMark(t *testing.T) {
 		prefix string
 		moves  bool
 	}{
-		{"wide", 150, false, " ╳━■ fleet · ", true},
-		{"still", 150, true, " ╳━■ fleet · ", false},
+		{"wide", 150, false, " fleet · ", true},
+		{"still", 150, true, " fleet · ", false},
 		{"narrow", 50, false, " fleet · ", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
