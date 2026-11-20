@@ -30,7 +30,19 @@ const (
 	flowY1 = 74.0
 
 	leanPull = 0.22 // how far the entries lean toward the selected tile
+
+	// Depth (ADR-186): a strand drawn in front shades the strand behind it
+	// within haloRows of its edge, by up to haloShade once their depths are
+	// haloSpread apart, so a crossing reads as over and under and a swap
+	// of order fades in instead of popping.
+	haloRows   = 1.2
+	haloShade  = 0.75
+	haloSpread = 0.2
 )
+
+// zStart is each strand's depth at t=0, back to front 0, 4, 1, 3 and the
+// accent on top, as the brand mark draws them.
+var zStart = [5]float64{0.1, 0.5, 0.9, 0.7, 0.3}
 
 // FlowLevels is how many brightness steps each colour role has: enough that
 // a strand's edge moving a fraction of a row reads as a fade, not a jump.
@@ -83,9 +95,11 @@ func (w *wander) step(dt float64, rng *rand.Rand) {
 
 // strandState holds the freely wandering Bezier control points and lane breath
 // of one strand: entry height y0, two intermediate bend points (x1, y1) and
-// (x2, y2), and the right-hand lane's brightness breath.
+// (x2, y2), the right-hand lane's brightness breath and its depth z (0 back,
+// 1 front), which wanders too so strands pass behind and in front of each
+// other (ADR-186).
 type strandState struct {
-	y0, x1, y1, x2, y2, breath wander
+	y0, x1, y1, x2, y2, breath, z wander
 }
 
 // Flow is the fleet mark stretched edge to edge over a w×h cell grid, drawn
@@ -107,6 +121,7 @@ type Flow struct {
 	val          []float64    // scratch: brightness per cell
 	role         []int8       // scratch: 0 ink, 1 accent
 	lane         []int8       // scratch: the lane whose breath a cell takes, -1 none
+	own          []int8       // scratch: the strand that lit a cell
 }
 
 // NewFlow fits the mark to w×h cells with a deterministic default seed.
@@ -117,7 +132,7 @@ func NewFlow(w, h int) *Flow { return NewFlowSeeded(w, h, 1) }
 func NewFlowSeeded(w, h int, seed uint64) *Flow {
 	w, h = max(w, 1), max(h, 1)
 	f := &Flow{w: w, h: h, seed: seed, ky: float64(h) / (flowY1 - flowY0),
-		val: make([]float64, w*h), role: make([]int8, w*h), lane: make([]int8, w*h), xs: make([]float64, w)}
+		val: make([]float64, w*h), role: make([]int8, w*h), lane: make([]int8, w*h), own: make([]int8, w*h), xs: make([]float64, w)}
 	sp := 10 * f.ky // rows between two lanes
 	f.hwInk, f.hwAcc = max(0.8, 0.13*sp), max(1.1, 0.18*sp)
 	f.sqInk, f.sqAcc = max(0.8, 0.2*sp), max(1.0, 0.25*sp)
@@ -154,6 +169,7 @@ func (f *Flow) reset() {
 			x2:     init(30, 27, 38, 0.65),
 			y2:     init(s, 22, 74, 2.0),
 			breath: init(0.85, 0.65, 1.0, 0.14),
+			z:      init(zStart[i], 0, 1, 0.16),
 		}
 	}
 }
@@ -179,6 +195,7 @@ func (f *Flow) advance(t float64) {
 			s.x2.step(h, f.rng)
 			s.y2.step(h, f.rng)
 			s.breath.step(h, f.rng)
+			s.z.step(h, f.rng)
 		}
 		dt -= h
 	}
@@ -243,9 +260,13 @@ func bez(p [4][2]float64, t float64) (float64, float64) {
 func (f *Flow) Frame(t float64, lean Lean, out []FlowCell) {
 	f.advance(t)
 	clear(f.val) // every cell lit below was written by put, lane included
-	for _, i := range [5]int{0, 4, 1, 3, flowAccent} { // back to front; the accent on top
+	for _, i := range f.depthOrder() {
 		f.centre(i, lean)
-		f.ribbon(i)
+		f.ribbon(i, false)
+	}
+	// Lanes on a short pane touch, so they keep one order and their glyphs.
+	for _, i := range [5]int{0, 4, 1, 3, flowAccent} {
+		f.ribbon(i, true)
 		f.square(i)
 	}
 	for k, v := range f.val {
@@ -260,6 +281,32 @@ func (f *Flow) Frame(t float64, lean Lean, out []FlowCell) {
 		}
 		out[k] = FlowCell{g, f.role[k]*FlowLevels + int8(lv*FlowLevels)}
 	}
+}
+
+// depthOrder is the strands back to front by their current depth.
+func (f *Flow) depthOrder() [5]int {
+	o := [5]int{0, 1, 2, 3, 4}
+	for a := 1; a < len(o); a++ {
+		for b := a; b > 0 && f.strands[o[b]].z.pos < f.strands[o[b-1]].z.pos; b-- {
+			o[b], o[b-1] = o[b-1], o[b]
+		}
+	}
+	return o
+}
+
+// shade dims cell k where strand i passes in front of the strand that lit
+// it: by more the closer to i's edge (d rows from i's centre, its body ending
+// at edge) and the further apart their depths are. Lanes and squares are
+// never shaded, and a lit cell never goes blank.
+func (f *Flow) shade(k, i int, d, edge float64) {
+	j := f.own[k]
+	if f.val[k] <= 0 || int(j) == i || f.lane[k] >= 0 {
+		return
+	}
+	near := min(max((edge+haloRows-d)/haloRows, 0), 1)
+	dz := min(max((f.strands[i].z.pos-f.strands[j].z.pos)/haloSpread, 0), 1)
+	v := f.val[k]
+	f.val[k] = max(v*(1-haloShade*near*dz), min(v, 0.1))
 }
 
 // flowGlyph is a cell's glyph from how deep inside a ribbon it is: three
@@ -287,6 +334,7 @@ func (f *Flow) put(k int, v float64, i int, onLane bool) {
 		return
 	}
 	f.val[k] = v
+	f.own[k] = int8(i)
 	f.role[k] = 0
 	if acc {
 		f.role[k] = 1
@@ -297,10 +345,11 @@ func (f *Flow) put(k int, v float64, i int, onLane bool) {
 	}
 }
 
-// ribbon lights strand i along its centre line: full inside the ribbon and
+// ribbon lights strand i along its centre line, on its lane or left of it: full inside the ribbon and
 // an anti-aliased edge one row wide, measured across the strand (a cell is
-// about twice as tall as wide) so steep parts keep their thickness.
-func (f *Flow) ribbon(i int) {
+// about twice as tall as wide) so steep parts keep their thickness. Off its
+// lane it first shades the strands behind it out to haloRows past its edge.
+func (f *Flow) ribbon(i int, lane bool) {
 	hw := f.hwInk
 	if i == flowAccent {
 		hw = f.hwAcc
@@ -309,10 +358,19 @@ func (f *Flow) ribbon(i int) {
 	for c, y := range ys {
 		slope := (ys[min(c+1, f.w-1)] - ys[max(c-1, 0)]) / 2
 		cos := 1 / math.Sqrt(1+4*slope*slope)
-		reach := (hw+1)/cos + 1
 		onLane := f.xs[c] >= flowFlat
+		if onLane != lane {
+			continue
+		}
+		reach := (hw+1)/cos + 1
+		if !onLane {
+			reach = (hw+0.5+haloRows)/cos + 1
+		}
 		for r := max(int(y-reach), 0); r <= min(int(y+reach), f.h-1); r++ {
 			d := math.Abs(float64(r)+0.5-y) * cos
+			if !onLane {
+				f.shade(r*f.w+c, i, d, hw+0.5)
+			}
 			if v := min(max(hw+0.5-d, 0), 1); v > 0 {
 				f.put(r*f.w+c, v, i, onLane)
 			}

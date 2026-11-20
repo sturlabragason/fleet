@@ -26,7 +26,7 @@ func flowRun(t *testing.T, w, h int, secs float64, each func(tt float64, cells [
 // TestFlowRightFixed: the lanes and squares keep every glyph in every
 // frame, sway, ripple and lean included; only their colour breathes.
 func TestFlowRightFixed(t *testing.T) {
-	for _, sz := range [][2]int{{160, 44}, {80, 20}, {220, 60}} {
+	for _, sz := range [][2]int{{160, 44}, {80, 20}, {220, 60}, {100, 10}} {
 		w, h := sz[0], sz[1]
 		var first []FlowCell
 		breathed := false
@@ -186,5 +186,129 @@ func TestFlowVaried(t *testing.T) {
 	f1.advance(10)
 	if math.Abs(f1.strands[0].y0.pos-f2.strands[0].y0.pos) < 0.01 {
 		t.Error("different seeds traced the same path")
+	}
+}
+
+// TestFlowDepthSwaps: on a normal overview two strands that overlap on
+// screen swap which is in front within 20 s, for every seed, and the accent
+// spends time both in front and behind another strand (ADR-186).
+func TestFlowDepthSwaps(t *testing.T) {
+	for seed := uint64(1); seed <= 8; seed++ {
+		f := NewFlowSeeded(160, 44, seed)
+		cells := make([]FlowCell, len(f.val))
+		first := -1.0
+		var accBehind, accFront bool
+		for n := 1; n <= 60*12; n++ {
+			tt := float64(n) / 12
+			before := f.depthOrder()
+			f.Frame(tt, Lean{}, cells)
+			after := f.depthOrder()
+			rank := func(o [5]int, i int) int {
+				for p, s := range o {
+					if s == i {
+						return p
+					}
+				}
+				return -1
+			}
+			for i := range 5 {
+				for j := i + 1; j < 5; j++ {
+					if (rank(before, i) < rank(before, j)) != (rank(after, i) < rank(after, j)) && f.overlap(i, j) && first < 0 {
+						first = tt
+					}
+				}
+			}
+			for j := range 5 {
+				if j != flowAccent && f.overlap(flowAccent, j) {
+					front := f.strands[flowAccent].z.pos > f.strands[j].z.pos
+					accFront, accBehind = accFront || front, accBehind || !front
+				}
+			}
+		}
+		if first < 0 || first > 20 {
+			t.Errorf("seed %d: first behind/in-front swap of overlapping strands at %.1f s, want within 20 s", seed, first)
+		}
+		if !accFront || !accBehind {
+			t.Errorf("seed %d: accent in front %v, behind %v; want both within a minute", seed, accFront, accBehind)
+		}
+	}
+}
+
+// overlap reports whether strands i and j cross somewhere left of the lanes
+// in the frame just drawn.
+func (f *Flow) overlap(i, j int) bool {
+	for c := range f.w {
+		if f.xs[c] < flowFlat && math.Abs(f.ys[i][c]-f.ys[j][c]) < 0.5 {
+			return true
+		}
+	}
+	return false
+}
+
+// TestFlowOcclusion: where two strands cross, the one with the greater depth
+// owns the crossing cell, and the one behind is shaded just beside the front
+// one's edge, more so once their depths are far apart (ADR-186).
+func TestFlowOcclusion(t *testing.T) {
+	f := NewFlowSeeded(160, 44, 3)
+	cells := make([]FlowCell, len(f.val))
+	var tt float64
+	j, col := -1, -1
+	for n := 1; n <= 120*12 && j < 0; n++ {
+		tt = float64(n) / 12
+		f.Frame(tt, Lean{}, cells)
+		for s := range 5 {
+			if s == flowAccent {
+				continue
+			}
+			for c := range f.w {
+				dy := f.ys[flowAccent][c] - f.ys[s][c]
+				if c > 0 && c < f.w-1 && f.xs[c] < flowFlat-4 && math.Abs(dy) < 0.3 &&
+					math.Abs(f.ys[flowAccent][c+1]-f.ys[s][c+1]) > 0.1 {
+					j, col = s, c
+					break
+				}
+			}
+			if j >= 0 {
+				break
+			}
+		}
+	}
+	if j < 0 {
+		t.Fatal("the accent never crossed another strand in two minutes")
+	}
+	draw := func(zAcc, zInk float64) []FlowCell {
+		f.strands[flowAccent].z.pos, f.strands[j].z.pos = zAcc, zInk
+		f.Frame(tt, Lean{}, cells) // same t: the strands do not move
+		return append([]FlowCell(nil), cells...)
+	}
+	r := int(f.ys[j][col])
+	k := r*f.w + col
+	if c := draw(1, 0)[k]; c.Col/FlowLevels != 1 {
+		t.Errorf("accent in front: crossing cell %+v is not the accent", c)
+	}
+	if c := draw(0, 1)[k]; c.Col < 0 || c.Col/FlowLevels != 0 {
+		t.Errorf("accent behind: crossing cell %+v is not the ink strand", c)
+	}
+	// A cell on the accent's centre line just past the ink strand's edge,
+	// in a column near the crossing, measured across the ink strand.
+	edge, ys := f.hwInk+0.5, f.ys[j]
+	kb := -1
+	for c := max(col-40, 1); c < min(col+40, f.w-1) && kb < 0; c++ {
+		slope := (ys[c+1] - ys[c-1]) / 2
+		rr := int(f.ys[flowAccent][c])
+		d := math.Abs(float64(rr)+0.5-ys[c]) / math.Sqrt(1+4*slope*slope)
+		if f.xs[c] < flowFlat && d > edge+0.2 && d < edge+haloRows-0.3 {
+			kb = rr*f.w + c
+		}
+	}
+	if kb < 0 {
+		t.Fatal("no accent cell beside the ink strand's edge")
+	}
+	front, near, far := draw(1, 0)[kb], draw(0.5, 0.52)[kb], draw(0, 1)[kb]
+	if front.Col/FlowLevels != 1 || far.Col/FlowLevels != 1 {
+		t.Fatalf("beside the crossing the accent should still show: front %+v far %+v", front, far)
+	}
+	if far.Col >= near.Col || near.Col > front.Col {
+		t.Errorf("accent behind not shaded by depth: front %d, just behind %d, far behind %d", front.Col, near.Col, far.Col)
 	}
 }
