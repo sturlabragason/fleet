@@ -131,6 +131,8 @@ type args struct {
 	Summary                                 summaryArg
 	Expect                                  string
 	To, From, Reason, Decision, A, B, State string
+	// Note is fleet_handover's word to the receiver (ADR-185).
+	Note string
 	// Label picks a menu option by its text, for menus whose options are
 	// not numbered on screen (fleet_answer).
 	Label                string

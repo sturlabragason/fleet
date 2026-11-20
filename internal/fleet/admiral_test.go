@@ -10,6 +10,8 @@ import (
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/mail"
 	"github.com/sturlabragason/fleet/internal/supervisor"
+	"github.com/sturlabragason/fleet/internal/todo"
+	"github.com/sturlabragason/fleet/internal/todo/todotest"
 )
 
 func twoAdmirals(t *testing.T) *Fleet {
@@ -68,7 +70,7 @@ func TestAdmiralGiveMovesReports(t *testing.T) {
 	f := twoAdmirals(t)
 	spawnFor(t, f, "", "m1")
 	f.Report("m1", "done", "one")
-	n, err := f.Give("", "m1", "print")
+	n, err := f.Give("", "m1", "print", "")
 	if err != nil || n != 1 {
 		t.Fatalf("give: %d %v", n, err)
 	}
@@ -78,8 +80,45 @@ func TestAdmiralGiveMovesReports(t *testing.T) {
 	if len(f.Mail().Peek(mail.Admiral)) != 0 || len(f.Mail().Peek("admiral.print")) != 1 {
 		t.Fatal("report did not move with the agent")
 	}
-	if _, err := f.Give("main", "m1", "print"); err == nil {
+	if _, err := f.Give("main", "m1", "print", ""); err == nil {
 		t.Fatal("main gave away an agent it no longer owns")
+	}
+}
+
+// ADR-185: a giver that read its agent's reports still hands the receiver
+// the newest one, its note as a handover notice and an open ask, and a wake.
+func TestAdmiralGiveAfterReadCarriesContext(t *testing.T) {
+	memTodo = todotest.New()
+	t.Cleanup(func() { memTodo = nil })
+	f := twoAdmirals(t)
+	spawnFor(t, f, "", "m1")
+	f.Report("m1", "progress", "old")
+	f.Report("m1", "question", "which db?")
+	if _, err := f.Mail().Inbox(mail.Admiral, false, 0); err != nil {
+		t.Fatal(err)
+	}
+	n, err := f.Give("main", "m1", "print", "pick postgres unless he says otherwise")
+	if err != nil || n != 1 {
+		t.Fatalf("give: %d %v", n, err)
+	}
+	if ms := f.Mail().Peek("admiral.print"); len(ms) != 1 || ms[0].Text != "question: which db?" {
+		t.Fatalf("print's reports: %+v", ms)
+	}
+	ms := f.Mail().PeekMsgs("admiral.print")
+	if len(ms) != 1 || ms[0].Kind != mail.KindHandover {
+		t.Fatalf("print's inbox: %+v", ms)
+	}
+	for _, want := range []string{"admiral main handed you m1", "question: which db?", "m1 is waiting on an answer", "Note from main: pick postgres"} {
+		if !strings.Contains(ms[0].Text, want) {
+			t.Errorf("notice %q lacks %q", ms[0].Text, want)
+		}
+	}
+	items, _ := memTodo.Admiral(t.Context(), "print")
+	if len(items) != 1 || items[0].Kind != todo.Ask || !strings.Contains(items[0].Description, "pick postgres") {
+		t.Fatalf("print's open items: %+v", items)
+	}
+	if w, _ := os.ReadFile(f.wakePath("admiral.print")); !strings.Contains(string(w), "main handed you m1") {
+		t.Fatalf("no wake queued: %q", w)
 	}
 }
 

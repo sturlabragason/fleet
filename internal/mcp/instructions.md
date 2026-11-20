@@ -73,7 +73,7 @@ Each tool's description says when to use it. ✱ = ask the user one line first, 
 ## Other admirals
 
 - You may share the fleet with other admirals (`fleet_admirals`). Write tools refuse an agent that is not yours ("belongs to admiral X"):
-  peek and status still work. `fleet_handover` gives one of yours away; `fleet_handover_request` asks for another's, never take one.
+  peek and status still work. `fleet_handover` gives one of yours away (put what the receiver must know or decide in `note`); `fleet_handover_request` asks for another's, never take one. "[fleet] X handed you Y" means call `fleet_inbox`, then `fleet_reports`.
 - Reports for your agents come to you only. `fleet_msg_send` and `fleet_inbox` are for admirals; "[fleet] message from admiral X" means call `fleet_inbox`.
 
 ## Memory

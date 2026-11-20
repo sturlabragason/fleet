@@ -41,6 +41,7 @@ func (s *Server) brief() (string, error) {
 	} else {
 		head.WriteString("## Handoff\nnone\n\n")
 	}
+	head.WriteString(s.handoverBrief())
 	head.WriteString(s.todoBrief())
 	pinned := supervisor.Pinned(s.F.Home)
 	head.WriteString(pinnedBrief(pinned, briefBudget-briefNotices-briefReserve-head.Len()))

@@ -3,6 +3,7 @@ package mail
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 )
 
 // MoveReports takes the unread reports in the admiral box from whose sender
@@ -47,4 +48,29 @@ func (s *Store) MoveReports(from, to string, who func(sender string) bool) ([]Ms
 		return writeAtomic(s.inboxPath(from), keep)
 	})
 	return moved, err
+}
+
+// CopyLatestReport files a fresh, unread copy of sender's newest report in
+// the admiral box from into the admiral box to, read or not, and leaves the
+// original (ADR-185: a handover whose reports the giver already read still
+// tells the receiver where the agent is). ok is false when sender has no
+// report in from.
+func (s *Store) CopyLatestReport(from, to, sender string) (m Msg, ok bool, err error) {
+	if !IsAdmiralBox(from) || !IsAdmiralBox(to) {
+		return Msg{}, false, fmt.Errorf("reports move between admirals only")
+	}
+	err = s.update(func(st *state) error {
+		all := s.read(from)
+		for _, x := range slices.Backward(all) {
+			if x.Kind != KindReport || x.From != sender {
+				continue
+			}
+			m = x
+			m.ID, m.To = st.nextID(), to
+			ok = true
+			return st.deliver(to, m.ID, m.From, to, KindReport, m.Text)
+		}
+		return nil
+	})
+	return m, ok, err
 }

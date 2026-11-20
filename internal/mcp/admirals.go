@@ -42,8 +42,8 @@ func (s *Server) teamScope(team string) error {
 }
 
 var admiralToolDefs = []tool{
-	{"fleet_handover", "Give one of your agents (and, for a leader, its squad) to another admiral, with its unread reports. You can give away only your own agents; taking one is the user's call.", obj([]string{"name", "to"}, map[string]any{
-		"name": str("agent name"), "to": str("admiral name, see fleet_admirals")})},
+	{"fleet_handover", "Give one of your agents (and, for a leader, its squad) to another admiral. Its unread reports go with it (its latest report if you read them all), and the receiver is woken with a handover notice that carries your note; no access grant needed. A note becomes an open ask for the receiver. You can give away only your own agents; taking one is the user's call.", obj([]string{"name", "to"}, map[string]any{
+		"name": str("agent name"), "to": str("admiral name, see fleet_admirals"), "note": str("optional: what the receiver needs to know or decide (open questions, context)")})},
 	{"fleet_handover_request", "Ask the admiral that owns an agent to hand it to you: mails its inbox; it approves with fleet_handover (or the user does). Moves nothing by itself.", obj([]string{"name"}, map[string]any{
 		"name": str("agent name")})},
 	{"fleet_admirals", "List the admirals on this fleet: name, profile, how many agents each owns, and your access with each. Admirals other than you may be reached with fleet_msg_send.", obj(nil, map[string]any{})},
@@ -76,11 +76,11 @@ func (s *Server) admiralCall(name string, a args) (string, error) {
 		if a.Name == "" || a.To == "" {
 			return "", fmt.Errorf("name and to are required")
 		}
-		n, err := f.Give(s.Me(), a.Name, a.To)
+		n, err := f.Give(s.Me(), a.Name, a.To, a.Note)
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("handed %s to %s (%d unread reports moved)", a.Name, a.To, n), nil
+		return fmt.Sprintf("handed %s to %s (%d reports went with it; %s was woken with the handover notice)", a.Name, a.To, n, a.To), nil
 	case "fleet_handover_request":
 		if strings.TrimSpace(a.Name) == "" {
 			return "", fmt.Errorf("name is required")
@@ -128,6 +128,21 @@ func (s *Server) admiralCall(name string, a args) (string, error) {
 		return "", err
 	}
 	return "revoked access with " + a.Name, nil
+}
+
+// handoverBrief is fleet_brief's "Handovers": the unread handover
+// notices and requests, open until fleet_inbox reads them (ADR-185); "" when none.
+func (s *Server) handoverBrief() string {
+	var b strings.Builder
+	for _, m := range s.F.Mail().PeekMsgs(s.box()) {
+		if m.Kind == mail.KindHandover {
+			b.WriteString("- " + mail.FoldSummary(m.Text) + "\n")
+		}
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	return "## Handovers (open until fleet_inbox reads them)\n" + b.String() + "\n"
 }
 
 func boxNames(boxes []string) []string {

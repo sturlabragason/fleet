@@ -6,6 +6,9 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
+## 2026-11-20
+- Handing an agent to another admiral now always tells the receiver: it is woken with a handover notice that carries the agent's latest report (even if you had read it), whether the agent waits on an answer, and your note (`fleet_handover note=...`, `fleet admiral give --note`), which also shows in its `fleet_brief` as an open item; no messaging access needed (ADR-185)
+
 ## 2026-11-19
 - The flowing fleet backdrop now shows through as a soft, blurred, very-low-opacity frosted-glass layer behind every fleet-drawn tile, panel (`?`, `w`, `r`, theme picker, extension views) and ACP agent pane (focused ACP panes drift gently at 8 fps; unfocused ones hold a still blurred frame at zero CPU), keeping all text, borders, badges and the input box crisp in every theme (ADR-183)
 - The overview backdrop's strands now roam freely across the full height with independently wandering Bezier control points and non-repeating lane breathing, like a classic ribbons screensaver, instead of looping back and forth in place; smoothness, low CPU, `z` pause and `animation = false` stay as before (ADR-181)

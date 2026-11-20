@@ -14,6 +14,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/mail"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/supervisor"
+	"github.com/sturlabragason/fleet/internal/todo"
 
 	"github.com/sturlabragason/fleet/internal/tmux"
 )
@@ -131,7 +132,7 @@ func (f *Fleet) RequestHandover(me, agent string) (string, error) {
 		return "", fmt.Errorf("%s is already yours", agent)
 	}
 	text := fmt.Sprintf("admiral %s asks for %s; approve with fleet_handover %s to=%s", me, agent, agent, me)
-	if err := f.Mail().Notice(mail.BoxOf(me), mail.BoxOf(owner), mail.KindHandover, text); err != nil {
+	if _, err := f.Mail().Notice(mail.BoxOf(me), mail.BoxOf(owner), mail.KindHandover, text); err != nil {
 		return "", err
 	}
 	f.announceAdmiral(mail.BoxOf(me), mail.BoxOf(owner))
@@ -161,10 +162,15 @@ func (f *Fleet) CheckScope(me, agent string) error {
 	return nil
 }
 
-// Give hands an agent (and, for a leader, its squad) to another admiral,
-// moving their unread reports with them. It returns how many reports moved.
-// from "" skips the owner check (the user's hand-over).
-func (f *Fleet) Give(from, agent, to string) (int, error) {
+// Give hands an agent (and, for a leader, its squad) to another admiral.
+// Their unread reports move with them; when none of the agent's own did
+// (the giver had read them), its newest report is copied, so the receiver
+// always learns where the agent stands. The receiver gets a handover notice
+// with note, the giver's words, in its inbox without an access grant, a
+// note becomes an open ask for it, and it is woken once (ADR-185). It
+// returns how many reports the receiver got. from "" skips the owner check
+// (the user's hand-over).
+func (f *Fleet) Give(from, agent, to, note string) (int, error) {
 	if !supervisor.Exists(f.Home, to) {
 		return 0, fmt.Errorf("no admiral %q (fleet admiral ls)", to)
 	}
@@ -183,12 +189,12 @@ func (f *Fleet) Give(from, agent, to string) (int, error) {
 	if old == to || (old == board.Main && to == "") {
 		return 0, fmt.Errorf("%s already belongs to %s", agent, to)
 	}
-	names := []string{agent}
+	set := map[string]bool{agent: true}
 	for _, m := range squadOf(b, agent) {
-		names = append(names, m.Name)
+		set[m.Name] = true
 	}
 	if err := f.Store.Update(func(bd *board.Board) error {
-		for _, n := range names {
+		for n := range set {
 			if x, ok := bd.Agents[n]; ok {
 				x.SetOwner(to)
 			}
@@ -197,13 +203,62 @@ func (f *Fleet) Give(from, agent, to string) (int, error) {
 	}); err != nil {
 		return 0, err
 	}
-	set := map[string]bool{}
-	for _, n := range names {
-		set[n] = true
+	reports := f.carryReports(mail.BoxOf(old), mail.BoxOf(to), agent, set)
+	f.handoverNotice(from, old, to, agent, strings.TrimSpace(note), reports)
+	logx.For("fleet").Info("agent handed over", "agent", agent, "from", old, "to", to, "reports", len(reports), "note", note != "")
+	return len(reports), nil
+}
+
+// carryReports moves the unread reports of set from one admiral box to
+// another and, when none is agent's own, copies agent's newest report.
+func (f *Fleet) carryReports(from, to, agent string, set map[string]bool) []mail.Msg {
+	moved, err := f.Mail().MoveReports(from, to, func(s string) bool { return set[s] })
+	if err != nil {
+		logx.For("fleet").Error("reports not moved", "from", from, "to", to, "err", err)
 	}
-	n := f.moveReports(mail.BoxOf(old), mail.BoxOf(to), func(s string) bool { return set[s] }, fmt.Sprintf("%s handed you %s", old, agent))
-	logx.For("fleet").Info("agent handed over", "agent", agent, "from", old, "to", to, "reports", n)
-	return n, nil
+	if slices.ContainsFunc(moved, func(m mail.Msg) bool { return m.From == agent }) {
+		return moved
+	}
+	m, ok, err := f.Mail().CopyLatestReport(from, to, agent)
+	if err != nil {
+		logx.For("fleet").Error("latest report not copied", "agent", agent, "to", to, "err", err)
+	}
+	if ok {
+		moved = append(moved, m)
+	}
+	return moved
+}
+
+// handoverNotice puts the handover in the receiver's inbox (no access grant
+// needed, like a handover request, ADR-109), records a note as an open ask
+// for the receiver, and wakes it once.
+func (f *Fleet) handoverNotice(by, old, to, agent, note string, reports []mail.Msg) {
+	who, noteBy := "admiral "+old, old
+	if by == "" {
+		who, noteBy = "the user (from admiral "+old+")", "the user"
+	}
+	text := fmt.Sprintf("%s handed you %s.", who, agent)
+	if n := len(reports); n > 0 {
+		last := reports[n-1]
+		text += fmt.Sprintf(" %d report(s) came with it, latest from %s: %s (fleet_reports has the full text).", n, last.From, mail.FoldSummary(last.Text))
+	}
+	if ag, ok := f.Store.Load().Agents[agent]; ok && ag.OpenAsk() {
+		text += fmt.Sprintf(" %s is waiting on an answer: fleet_answer or fleet_send.", agent)
+	}
+	if note != "" {
+		text += fmt.Sprintf(" Note from %s: %s", noteBy, note)
+		if _, _, err := f.AddItem(to, todo.Ask, fmt.Sprintf("%s (handover of %s, note from %s)", mail.FoldSummary(note), agent, noteBy), agent, ""); err != nil {
+			logx.For("fleet").Error("handover note not added as open ask", "agent", agent, "to", to, "err", err)
+		}
+	}
+	toBox := mail.BoxOf(to)
+	id, err := f.Mail().Notice(mail.BoxOf(old), toBox, mail.KindHandover, text)
+	if err != nil {
+		logx.For("fleet").Error("handover notice not delivered", "agent", agent, "to", to, "err", err)
+		return
+	}
+	// "message", not a report state: the wake line then points at fleet_inbox.
+	f.wakeBox(toBox, id, noteBy, "message", fmt.Sprintf("[fleet] %s handed you %s. Read the handover with fleet_inbox, reports with fleet_reports.", noteBy, agent))
 }
 
 // moveReports re-files unread reports from one admiral box to another and

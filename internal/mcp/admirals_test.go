@@ -202,4 +202,10 @@ func TestHandoverRequest(t *testing.T) {
 	if _, isErr := main.tool("fleet_handover_request", map[string]any{"name": "nope"}); !isErr {
 		t.Fatal("unknown agent accepted")
 	}
+	if msg, isErr := print.tool("fleet_handover", map[string]any{"name": "p1", "to": "main", "note": "ask the user about creds"}); isErr {
+		t.Fatalf("handover: %q", msg)
+	}
+	if brief, _ := main.tool("fleet_brief", map[string]any{}); !strings.Contains(brief, "## Handovers") || !strings.Contains(brief, "Note from print: ask the user about creds") {
+		t.Fatalf("main's brief lacks the handover: %q", brief)
+	}
 }

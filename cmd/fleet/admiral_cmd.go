@@ -261,17 +261,18 @@ func cmdAdmiralMin(f *fleet.Fleet, args []string) error {
 func cmdAdmiralGive(f *fleet.Fleet, args []string) error {
 	fs := flag.NewFlagSet("admiral give", flag.ContinueOnError)
 	to := fs.String("to", "", "admiral that takes the agent")
+	note := fs.String("note", "", "what the receiving admiral needs to know (an open ask for it)")
 	if err := fs.Parse(reorderFlags(args)); err != nil || fs.NArg() != 1 {
-		return fmt.Errorf("usage: fleet admiral give AGENT [--to NAME]")
+		return fmt.Errorf("usage: fleet admiral give AGENT [--to NAME] [--note TEXT]")
 	}
 	if *to == "" { // no target: ask in a menu (the overview's O and right-click)
 		return ownerMenu(f, fs.Arg(0))
 	}
-	n, err := f.Give("", fs.Arg(0), *to)
+	n, err := f.Give("", fs.Arg(0), *to, *note)
 	if err != nil {
 		return err
 	}
-	msg := fmt.Sprintf("→ %s · %s (%d unread reports moved)", *to, fs.Arg(0), n)
+	msg := fmt.Sprintf("→ %s · %s (%d reports went with it)", *to, fs.Arg(0), n)
 	display(f, msg)
 	fmt.Println(msg)
 	return nil

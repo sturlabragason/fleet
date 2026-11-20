@@ -43,7 +43,8 @@ const (
 	KindGrant   = "grant"
 	KindDeny    = "deny"
 	KindRevoke  = "revoke"
-	// KindHandover is an admiral asking another for one of its agents.
+	// KindHandover is an admiral asking another for one of its agents, or
+	// telling it that it has been handed one (ADR-185).
 	KindHandover = "handover"
 )
 
