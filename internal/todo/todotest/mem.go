@@ -20,6 +20,8 @@ type Mem struct {
 	sessions map[string]todo.Item
 	// Ended is each closed session's outcome, by agent.
 	Ended map[string]string
+	// Closed are the items Done completed, in order.
+	Closed []todo.Item
 	Ctx   string
 }
 
@@ -73,13 +75,18 @@ func (m *Mem) Queues(context.Context) (map[string]int, error) {
 	return n, nil
 }
 
-// Done drops the item whose uuid starts with ref.
-func (m *Mem) Done(_ context.Context, ref string) (todo.Item, error) {
+// Done drops the item whose uuid starts with ref, with by among its
+// sessions, and keeps it in Closed.
+func (m *Mem) Done(_ context.Context, ref string, by ...todo.Contributor) (todo.Item, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for k, i := range m.items {
 		if strings.HasPrefix(i.UUID, ref) {
+			for _, c := range by {
+				i.Sessions = todo.Contribute(i.Sessions, c)
+			}
 			m.items = append(m.items[:k], m.items[k+1:]...)
+			m.Closed = append(m.Closed, i)
 			return i, nil
 		}
 	}

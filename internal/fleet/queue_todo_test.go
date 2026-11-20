@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
+	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/todo"
 	"github.com/sturlabragason/fleet/internal/todo/todotest"
 )
@@ -66,6 +67,47 @@ func TestQueueGateAndSession(t *testing.T) {
 	}
 	if is, _ := memTodo.Admiral(t.Context(), board.Main); len(is) != 2 || is[0].Description != "also add docs" || is[1].Description != "write the docs" {
 		t.Fatalf("hand-over: %+v", is)
+	}
+}
+
+// ADR-184: an item carries the sessions that filed and closed it: the
+// admiral's and the agent's, each once.
+func TestTodoSessions(t *testing.T) {
+	memTodo = todotest.New()
+	t.Cleanup(func() { memTodo = nil })
+	f, _, _, _ := gateFleet(t, "pro")
+	if err := supervisor.Save(f.Home, supervisor.Session{SessionID: "adm00001-x", Profile: "claude"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Store.Update(func(b *board.Board) error {
+		b.Agents["w"].SessionID = "agt00001-y"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	adm := todo.Contributor{Name: board.Main, Profile: "claude", Session: "adm00001-x"}
+	w := todo.Contributor{Name: "w", Profile: "cat", Session: "agt00001-y"}
+	it, ok, err := f.AddItem(board.Main, todo.Ask, "which repo?", "w", "")
+	if err != nil || !ok || !slices.Equal(it.Sessions, []todo.Contributor{adm, w}) {
+		t.Fatalf("admiral item: %+v ok %v err %v", it, ok, err)
+	}
+	if _, err := f.DoneItem(board.Main, "w", it.ID(), ""); err != nil {
+		t.Fatal(err)
+	}
+	f.Tweak("w", todo.Steer, "use a tree")
+	if is, _ := memTodo.Queue(t.Context(), "w"); len(is) != 1 || !slices.Equal(is[0].Sessions, []todo.Contributor{w}) {
+		t.Fatalf("tweak: %+v", is)
+	}
+	if _, err := f.Report("w", "done", "shipped"); err != nil {
+		t.Fatal(err)
+	}
+	if len(memTodo.Closed) != 2 {
+		t.Fatalf("closed: %+v", memTodo.Closed)
+	}
+	for _, c := range memTodo.Closed {
+		if !slices.Contains(c.Sessions, w) || len(c.Sessions) != len(slices.Compact(slices.Clone(c.Sessions))) {
+			t.Errorf("closed %q sessions %+v", c.Description, c.Sessions)
+		}
 	}
 }
 

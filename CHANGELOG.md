@@ -7,6 +7,7 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
 ## 2026-11-20
+- Each open item and agent queue item now lists the sessions that worked on it (admiral and agents, with profile and session id), in `fleet info`, `fleet_brief` and the todo store, so you can resume one with `fleet adopt <id>` (ADR-184)
 - Handing an agent to another admiral now always tells the receiver: it is woken with a handover notice that carries the agent's latest report (even if you had read it), whether the agent waits on an answer, and your note (`fleet_handover note=...`, `fleet admiral give --note`), which also shows in its `fleet_brief` as an open item; no messaging access needed (ADR-185)
 
 ## 2026-11-19

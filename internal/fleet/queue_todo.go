@@ -109,7 +109,7 @@ func (f *Fleet) Tweak(name, kind, text string) {
 	}
 	f.sessionOpen(a)
 	todoDo("queue add", name, func(ctx context.Context, s todo.Store) error {
-		_, err := s.Add(ctx, todo.Item{Queue: name, Kind: kind, Ctx: s.Context(WorkDir(a)), Description: text})
+		_, err := s.Add(ctx, todo.Item{Queue: name, Kind: kind, Ctx: s.Context(WorkDir(a)), Description: text, Sessions: f.sessions(name)})
 		return err
 	})
 }
@@ -164,6 +164,7 @@ func (f *Fleet) queueClose(name string) (left []todo.Item) {
 		since = a.StatusSince
 	}
 	now := time.Now()
+	by := f.sessions(name)
 	todoDo("queue done", name, func(ctx context.Context, s todo.Store) error {
 		is, err := s.Queue(ctx, name)
 		if err != nil {
@@ -181,7 +182,7 @@ func (f *Fleet) queueClose(name string) (left []todo.Item) {
 				left = append(left, i)
 				continue
 			}
-			if _, err := s.Done(ctx, i.UUID); err != nil {
+			if _, err := s.Done(ctx, i.UUID, by...); err != nil {
 				return err
 			}
 		}
@@ -198,9 +199,9 @@ func (f *Fleet) queueNext(name, summary string) {
 		return
 	}
 	todoDo("queue next", name, func(ctx context.Context, s todo.Store) error {
-		c := s.Context(WorkDir(a))
+		c, by := s.Context(WorkDir(a)), f.sessions(name)
 		for _, n := range nexts {
-			if _, err := s.Add(ctx, todo.Item{Queue: name, Kind: todo.Next, Ctx: c, Description: n}); err != nil {
+			if _, err := s.Add(ctx, todo.Item{Queue: name, Kind: todo.Next, Ctx: c, Description: n, Sessions: by}); err != nil {
 				return err
 			}
 		}

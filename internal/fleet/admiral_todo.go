@@ -25,7 +25,7 @@ func (f *Fleet) AddItem(admiral, kind, text, agent, ctx string) (it todo.Item, o
 		if ctx == "" {
 			ctx = st.Context(dir)
 		}
-		it, err = st.Add(c, todo.Item{Admiral: admiral, Kind: kind, Ctx: ctx, Description: text})
+		it, err = st.Add(c, todo.Item{Admiral: admiral, Kind: kind, Ctx: ctx, Description: text, Sessions: f.sessions(admiral, agent)})
 		return err
 	})
 	return it, ok, err
@@ -37,7 +37,7 @@ func (f *Fleet) DoneItem(admiral, agent, ref, text string) (todo.Item, error) {
 	var it todo.Item
 	ok, err := TodoDo(func(c context.Context, st todo.Store) error {
 		var err error
-		it, err = st.Done(c, ref)
+		it, err = st.Done(c, ref, f.sessions(admiral, agent)...)
 		return err
 	})
 	if err != nil {
@@ -51,4 +51,22 @@ func (f *Fleet) DoneItem(admiral, agent, ref, text string) (todo.Item, error) {
 		line += " -- " + t
 	}
 	return it, supervisor.AppendNoteBy(f.Home, admiral, agent, line)
+}
+
+// sessions are the contributors among names (ADR-184), deduplicated; a
+// name that is neither an agent nor an admiral is left out.
+func (f *Fleet) sessions(names ...string) []todo.Contributor {
+	var cs []todo.Contributor
+	agents := f.Store.Load().Agents
+	for _, n := range names {
+		if a, ok := agents[n]; ok {
+			cs = todo.Contribute(cs, todo.Contributor{Name: a.Name, Profile: a.Profile, Session: a.SessionID})
+			continue
+		}
+		if n != "" && supervisor.Exists(f.Home, n) {
+			s, _ := supervisor.LoadOf(f.Home, n)
+			cs = todo.Contribute(cs, todo.Contributor{Name: n, Profile: s.Profile, Session: s.SessionID})
+		}
+	}
+	return cs
 }

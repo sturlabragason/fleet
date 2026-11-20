@@ -59,6 +59,54 @@ type Item struct {
 	Admiral     string
 	Queue       string
 	Kind        string
+	// Sessions are the sessions that added to the item, oldest first
+	// (ADR-184): the admiral or agent that filed it, and those whose
+	// reports, queue or done touched it.
+	Sessions []Contributor
+}
+
+// Contributor is one session that added to an item: an admiral's or an
+// agent's name, its tool profile and its session id, which `fleet adopt
+// <id>` resumes. Session is "" while the tool has not told fleet its id.
+type Contributor struct {
+	Name, Profile, Session string
+}
+
+// String is "name (profile id8)", the id shortened to what fleet adopt takes.
+func (c Contributor) String() string {
+	var in []string
+	if c.Profile != "" {
+		in = append(in, c.Profile)
+	}
+	if id := c.Session; id != "" {
+		in = append(in, id[:min(len(id), 8)])
+	}
+	if len(in) == 0 {
+		return c.Name
+	}
+	return c.Name + " (" + strings.Join(in, " ") + ")"
+}
+
+// Contribute adds c to cs unless it has no name or cs has it already: the
+// same name and session, or the same name with no session yet (that one is
+// filled in instead). It never writes into cs's array: stores share slices
+// between items.
+func Contribute(cs []Contributor, c Contributor) []Contributor {
+	if c.Name == "" {
+		return cs
+	}
+	for i, o := range cs {
+		switch {
+		case o.Name != c.Name:
+		case o.Session == c.Session, c.Session == "":
+			return cs
+		case o.Session == "":
+			cs = slices.Clone(cs)
+			cs[i] = c
+			return cs
+		}
+	}
+	return append(slices.Clip(cs), c)
 }
 
 // ID is the short id the admiral passes to fleet_note done=.
@@ -69,24 +117,35 @@ func (i Item) ID() string {
 	return i.UUID[:8]
 }
 
-// Line is "[id] kind (ctx): description".
+// Line is "[id] kind (ctx): description", then "; sessions: …" when the
+// item has any.
 func (i Item) Line() string {
 	c := ""
 	if i.Ctx != "" {
 		c = " (" + i.Ctx + ")"
 	}
-	return fmt.Sprintf("[%s] %s%s: %s", i.ID(), i.Kind, c, i.Description)
+	l := fmt.Sprintf("[%s] %s%s: %s", i.ID(), i.Kind, c, i.Description)
+	if len(i.Sessions) > 0 {
+		ss := make([]string, len(i.Sessions))
+		for k, s := range i.Sessions {
+			ss[k] = s.String()
+		}
+		l += "; sessions: " + strings.Join(ss, ", ")
+	}
+	return l
 }
 
 // Store is a backend. Lists are pending items, oldest first.
 type Store interface {
+	// Add files it with its Sessions.
 	Add(ctx context.Context, it Item) (Item, error)
 	Admiral(ctx context.Context, name string) ([]Item, error)
 	Queue(ctx context.Context, agent string) ([]Item, error)
 	// Queues counts every agent's pending queue items.
 	Queues(ctx context.Context) (map[string]int, error)
-	// Done completes the pending item whose id starts with ref.
-	Done(ctx context.Context, ref string) (Item, error)
+	// Done completes the pending item whose id starts with ref, adding by
+	// to its sessions first.
+	Done(ctx context.Context, ref string, by ...Contributor) (Item, error)
 	// Hand moves the agent's pending queue to leader's queue, or with no
 	// leader to admiral as Followup items.
 	Hand(ctx context.Context, agent, leader, admiral string) (int, error)
