@@ -183,3 +183,17 @@ func TestNoteUserIgnoresKeysBeforeSpawn(t *testing.T) {
 		t.Fatal("key press after spawn not recorded")
 	}
 }
+
+// ADR-187: typing is one user_pane burst per quiet minute, not one per poll.
+func TestNoteUserBursts(t *testing.T) {
+	now := time.Now()
+	a := &board.Agent{Created: now}
+	for _, tc := range []struct {
+		at   time.Duration
+		want bool
+	}{{time.Second, true}, {10 * time.Second, false}, {80 * time.Second, true}, {80 * time.Second, false}} {
+		if got := noteUser(a, []ClientSeen{{Pane: "%1", Active: now.Add(tc.at)}}, "%1"); got != tc.want {
+			t.Fatalf("key press at +%v: burst %v, want %v", tc.at, got, tc.want)
+		}
+	}
+}

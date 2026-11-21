@@ -83,5 +83,6 @@ func (f *Fleet) Takeover(name string, toACP bool) (*board.Agent, error) {
 		logx.For("fleet").Warn("take over: board not updated", "agent", name, "err", err)
 	}
 	logx.For("fleet").Info("taken over", "agent", name, "from", from, "to", to, "session_id", w.SessionID, "pane", w.PaneID)
+	f.Store.AppendEvent(board.Intervention(now, w, board.KindTakeover, "to_"+to))
 	return w, nil
 }

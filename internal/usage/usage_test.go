@@ -120,3 +120,17 @@ func TestLedgerSurvivesReloadAndPrunes(t *testing.T) {
 		t.Errorf("claude-work = %+v, want $15", got)
 	}
 }
+
+// ADR-187: --since sums whole days from the first day through today.
+func TestLedgerSince(t *testing.T) {
+	now := time.Date(2026, 11, 21, 12, 0, 0, 0, time.Local)
+	l := &Ledger{Days: map[string]map[string]Tally{
+		"2026-11-13": {"p": {AIC: 100}},
+		"2026-11-14": {"p": {AIC: 1, Tokens: 10, USD: 0.5}},
+		"2026-11-21": {"p": {AIC: 2, Unpriced: true}, "q": {Tokens: 7}},
+	}}
+	got := l.Since(now.AddDate(0, 0, -7))
+	if p := got["p"]; !near(p.AIC, 3) || p.Tokens != 10 || !near(p.USD, 0.5) || !p.Unpriced || got["q"].Tokens != 7 || len(got) != 2 {
+		t.Fatalf("since: %+v", got)
+	}
+}

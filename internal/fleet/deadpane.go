@@ -141,6 +141,9 @@ func (f *Fleet) reportDead(a *board.Agent, p tmux.PaneInfo) {
 	grace := f.Prefs.For(a.Profile).DeadPaneGrace
 	state, text, line := deadReport(a.Name, e, screen, AgentBlocker(a), grace)
 	log.Info("dead pane", "agent", a.Name, "state", state, "exit", exitHow(e))
+	if !e.Clean() {
+		f.Store.AppendEvent(board.Intervention(e.At, a, board.KindCrash, crashCode(a, e)))
+	}
 	up := f.ReportBox(a.Name)
 	if m, err := f.Mail().ReportTo(a.Name, up, state, text); err != nil {
 		// No unread mail: ClaimNudge would drop the wake line anyway.
@@ -179,6 +182,20 @@ func exitOf(p tmux.PaneInfo, at time.Time) *board.Exit {
 	}
 	e.Signal, _ = strconv.Atoi(strings.TrimSpace(p.DeadSignal))
 	return e
+}
+
+// crashCode is the crash event's detail (ADR-187): acp_exit for an ACP
+// host whose agent died, else exit=<N> or sig=<N>.
+func crashCode(a *board.Agent, e *board.Exit) string {
+	switch {
+	case a.ACP():
+		return "acp_exit"
+	case e.Signal != 0:
+		return "sig=" + strconv.Itoa(e.Signal)
+	case e.Code != nil:
+		return "exit=" + strconv.Itoa(*e.Code)
+	}
+	return "exit=unknown"
 }
 
 func exitHow(e *board.Exit) string {

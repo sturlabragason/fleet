@@ -8,6 +8,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/mail"
+	"github.com/sturlabragason/fleet/internal/runs"
 )
 
 // gateFleet is mailFleet with one more agent, "w", alone in a fresh repo
@@ -139,5 +140,32 @@ func TestDoneGateUnmergedWithoutMergeRightEscalates(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// ADR-187: a clean done after a refusal keeps the run's lifetime refusals,
+// by reason, on its run record.
+func TestDoneGateRefusalsReachRunRecord(t *testing.T) {
+	f, dir, _, _ := gateFleet(t, "pro")
+	os.WriteFile(filepath.Join(dir, "g"), []byte("mine"), 0o644)
+	if _, err := f.Report("w", "done", "shipped"); err != nil {
+		t.Fatal(err)
+	}
+	git(t, dir, "add", "g")
+	git(t, dir, "commit", "-q", "-m", "g")
+	if _, err := f.Report("w", "done", "shipped\nretro: slow build"); err != nil {
+		t.Fatal(err)
+	}
+	created := f.Store.Load().Agents["w"].Created
+	if err := f.Close("w"); err != nil {
+		t.Fatal(err)
+	}
+	rs, err := runs.Read(f.Home, created)
+	if err != nil || len(rs) != 1 {
+		t.Fatalf("runs %+v err %v", rs, err)
+	}
+	r := rs[0]
+	if r.DoneBounces != 1 || r.DoneRefusals["uncommitted"] != 1 || !r.HasRetro || r.Exit != "closed" {
+		t.Fatalf("record %+v", r)
 	}
 }

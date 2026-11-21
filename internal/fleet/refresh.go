@@ -87,7 +87,9 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 	}
 	err := f.Store.Update(func(b *board.Board) error {
 		for _, a := range b.Agents {
-			noteUser(a, cs, ids[a.Name])
+			if noteUser(a, cs, ids[a.Name]) && f.Housekeeping {
+				f.Store.AppendEvent(board.Intervention(a.UserAt, a, board.KindDeliver, "user_pane"))
+			}
 			prev := a.Status
 			var next string
 			if !a.ACP() && f.skipCapture(a, byAgent[a.Name] && !dead[a.Name], onWall[a.Name], now) {

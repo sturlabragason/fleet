@@ -131,6 +131,14 @@ func (f *Fleet) Deliver(name, text string, now, queue bool) (string, error) {
 	}
 	if err == nil {
 		f.Tweak(name, tweakKind(d), text)
+		mode := d
+		switch {
+		case now:
+			mode = acphost.DeliveryInterrupted // send now cancels the running turn (ADR-152)
+		case d == "":
+			mode = acphost.DeliverySent
+		}
+		f.Intervene(name, board.KindDeliver, mode)
 	}
 	return d, err
 }

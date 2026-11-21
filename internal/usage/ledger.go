@@ -131,6 +131,28 @@ func (l *Ledger) Prune(now time.Time) {
 // Today is today's tallies by profile.
 func (l *Ledger) Today(now time.Time) map[string]Tally { return l.Days[Day(now)] }
 
+// Since is the tallies by profile summed over the days from from's local
+// date through today, as far back as the ledger keeps (Keep).
+func (l *Ledger) Since(from time.Time) map[string]Tally {
+	first := Day(from)
+	out := map[string]Tally{}
+	for d, ts := range l.Days {
+		if d < first {
+			continue
+		}
+		for p, t := range ts {
+			sum := out[p]
+			sum.Kind = t.Kind
+			sum.AIC += t.AIC
+			sum.Tokens += t.Tokens
+			sum.USD += t.USD
+			sum.Unpriced = sum.Unpriced || t.Unpriced
+			out[p] = sum
+		}
+	}
+	return out
+}
+
 // MonthAIC is the AI credits Copilot profiles spent this calendar month.
 // GitHub resets the allowance at 00:00 UTC on the 1st; days are keyed by
 // local date, so the edge is off by the UTC offset at most.

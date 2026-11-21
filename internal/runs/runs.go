@@ -48,8 +48,13 @@ type Record struct {
 	CheckResult   string           `json:"check_result,omitempty"` // last verdict: pass or fail
 	Reports       map[string]int   `json:"reports,omitempty"`      // reports by state
 	Last          string           `json:"last,omitempty"`         // state of the last report
-	DoneBounces   int              `json:"done_bounces,omitempty"`
+	DoneBounces   int              `json:"done_bounces,omitempty"`  // done reports refused over the run
+	DoneRefusals  map[string]int   `json:"done_refusals,omitempty"` // refused dones by reason code (ADR-187)
 	Interventions map[string]int   `json:"interventions,omitempty"` // by event kind
+	Sends         map[string]int   `json:"sends,omitempty"`         // deliveries by mode, user_pane and takeover
+	TimeS         map[string]int   `json:"time_s,omitempty"`        // seconds in each status
+	Exit          string           `json:"exit,omitempty"`          // clean, crash or closed
+	HasRetro      bool             `json:"has_retro,omitempty"`     // a report had a retro: line
 	Spend         *Spend           `json:"spend,omitempty"`
 }
 

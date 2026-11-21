@@ -8,6 +8,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -22,13 +23,22 @@ func cmdSpend(f *fleet.Fleet, args []string) error {
 	fs := flag.NewFlagSet("spend", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "machine-readable output")
 	today := fs.Bool("today", false, "per-profile usage today and the Copilot month (raw units)")
+	since := fs.String("since", "", "per-profile usage since a duration (24h, 7d) or a date (2006-01-02), whole days, at most 40")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *today {
+	if *today || *since != "" {
 		now := time.Now()
+		from := now
+		if *since != "" {
+			t, err := parseSince(*since, now)
+			if err != nil {
+				return err
+			}
+			from = t
+		}
 		c := f.UsageConfig()
-		return writeUsage(os.Stdout, c, f.ObserveUsage(now, c), now, *asJSON)
+		return writeUsage(os.Stdout, c, f.ObserveUsage(now, c), from, now, *asJSON)
 	}
 	rows, total := f.SpendAll()
 	return writeSpend(os.Stdout, rows, total, *asJSON)
@@ -65,30 +75,36 @@ func writeSpend(out io.Writer, rows []fleet.AgentSpend, total spend.Spend, asJSO
 	return err
 }
 
-// writeUsage is the `--today` view (ADR-97, ADR-179): the day
-// ledger's tallies per profile with raw credits and tokens.
-func writeUsage(out io.Writer, c ubar.Config, l *ubar.Ledger, now time.Time, asJSON bool) error {
-	today := l.Today(now)
+// writeUsage is the `--today` and `--since` view (ADR-97, ADR-179,
+// ADR-187): the day ledger's tallies per profile from from's day through
+// today, with raw credits and tokens.
+func writeUsage(out io.Writer, c ubar.Config, l *ubar.Ledger, from, now time.Time, asJSON bool) error {
+	tallies := l.Since(from)
 	monthAIC := l.MonthAIC(now)
+	period := "TODAY"
+	if day := ubar.Day(from); day != ubar.Day(now) {
+		period = "SINCE " + day
+	}
 	if asJSON {
 		e := json.NewEncoder(out)
 		e.SetIndent("", "  ")
 		return e.Encode(struct {
 			Day             string                `json:"day"`
+			Since           string                `json:"since"`
 			Profiles        map[string]ubar.Tally `json:"profiles"`
 			CopilotMonthAIC float64               `json:"copilot_month_aic"`
 			CopilotAllow    float64               `json:"copilot_month_allowance"`
-		}{ubar.Day(now), today, monthAIC, c.CopilotMonthAIC})
+		}{ubar.Day(now), ubar.Day(from), tallies, monthAIC, c.CopilotMonthAIC})
 	}
-	names := make([]string, 0, len(today))
-	for n := range today {
+	names := make([]string, 0, len(tallies))
+	for n := range tallies {
 		names = append(names, n)
 	}
 	sort.Strings(names)
 	w := tabwriter.NewWriter(out, 0, 2, 2, ' ', 0)
-	fmt.Fprintf(w, "PROFILE\tAIC\tTOKENS\tEST. $ TODAY\n")
+	fmt.Fprintf(w, "PROFILE\tAIC\tTOKENS\tEST. $ %s\n", period)
 	for _, n := range names {
-		t := today[n]
+		t := tallies[n]
 		aic, cost := "-", ubar.USD(t.USD)
 		if t.Kind == spend.Copilot {
 			aic = spend.Credits(t.AIC)
@@ -102,7 +118,7 @@ func writeUsage(out io.Writer, c ubar.Config, l *ubar.Ledger, now time.Time, asJ
 		return err
 	}
 	if len(names) == 0 {
-		fmt.Fprintln(out, "nothing spent today")
+		fmt.Fprintln(out, "nothing spent "+strings.ToLower(period))
 	}
 	if pct, over, ok := c.CopilotPct(monthAIC); ok {
 		line := fmt.Sprintf("\nCopilot this month: %s of %s AIC (%d%%)", spend.Credits(monthAIC), spend.Credits(c.CopilotMonthAIC), pct)

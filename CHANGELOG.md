@@ -7,6 +7,7 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
 ## 2026-11-21
+- `fleet spend --since 7d` shows spend per profile over the last days, and each closed run in `runs.jsonl` now keeps its refused dones by reason, follow-up sends, takeovers, how it exited and time in each status (ADR-187)
 - Background warnings in the overview, such as a failed page publish during a network outage, now go to `~/.fleet/logs/fleet.log` and no longer print over the overview
 
 ## 2026-11-20

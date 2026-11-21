@@ -59,12 +59,20 @@ func userOn(cs []ClientSeen, pane string) (open bool, last time.Time) {
 	return open, last
 }
 
-// noteUser records the user's key presses in a's pane on the board. Called
-// under the board lock by Refresh, with the clients read before it.
-func noteUser(a *board.Agent, cs []ClientSeen, pane string) {
+// userPaneGap is the quiet time before a key press in an agent's pane
+// counts as a new user_pane deliver event (ADR-187), so typing is one event
+// per burst, not one per poll.
+const userPaneGap = time.Minute
+
+// noteUser records the user's key presses in a's pane on the board and
+// reports whether they start a new burst (userPaneGap). Called under the
+// board lock by Refresh, with the clients read before it.
+func noteUser(a *board.Agent, cs []ClientSeen, pane string) (burst bool) {
 	if _, last := userOn(cs, pane); last.After(a.UserAt) && last.After(a.Created) {
+		burst = last.Sub(a.UserAt) >= userPaneGap
 		a.UserAt = last
 	}
+	return burst
 }
 
 // userBlocker returns why a done agent must stay open for the user ("" =

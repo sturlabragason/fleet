@@ -52,7 +52,7 @@ func (f *Fleet) fingerprint(lvl playbook.Level, dir, pbText string, sources []st
 func (f *Fleet) recordRun(a board.Agent, box string, now time.Time) {
 	rec := runs.Record{Name: a.Name, Profile: a.Profile, Model: a.Model, Effort: a.Effort, Driver: a.DriverName(),
 		FleetVersion: a.FleetVersion, Interactive: a.Interactive, Leader: a.Leader, Created: a.Created, Closed: now,
-		Config: a.Config, Check: a.Card != nil && a.Card.Check != "", DoneBounces: a.DoneBounces}
+		Config: a.Config, Check: a.Card != nil && a.Card.Check != "", Exit: exitClass(a.Exit)}
 	repo := a.Dir
 	if wt := a.Worktree; wt != nil {
 		rec.Branch = wt.Branch
@@ -62,10 +62,10 @@ func (f *Fleet) recordRun(a board.Agent, box string, now time.Time) {
 	}
 	rec.Repo = filepath.Base(repo)
 	if ms, err := f.Mail().InboxFrom(box, a.Name, true, math.MaxInt32); err == nil {
-		rec.Reports, rec.Last, rec.FirstDone = tallyReports(ms, a.Created)
+		rec.Reports, rec.Last, rec.FirstDone, rec.HasRetro = tallyReports(ms, a.Created)
 	}
 	if evs, err := f.Store.ReadEvents(a.Created); err == nil {
-		rec.CheckResult, rec.Interventions = tallyEvents(evs, a.Name)
+		tallyEvents(&rec, evs, now)
 	}
 	if s, ok := f.SpendOf(&a); ok {
 		tok := s.Uncredited
@@ -79,9 +79,22 @@ func (f *Fleet) recordRun(a board.Agent, box string, now time.Time) {
 	}
 }
 
+// exitClass is how the run ended: clean (its process exited 0), crash (any
+// other exit or signal) or closed (fleet closed it with the process alive).
+func exitClass(e *board.Exit) string {
+	switch {
+	case e == nil:
+		return "closed"
+	case e.Clean():
+		return "clean"
+	}
+	return "crash"
+}
+
 // tallyReports counts the reports filed since start by state, and returns
-// the last state and the time of the first done.
-func tallyReports(ms []mail.Msg, start time.Time) (by map[string]int, last string, firstDone time.Time) {
+// the last state, the time of the first done and whether a report had a
+// retro: line.
+func tallyReports(ms []mail.Msg, start time.Time) (by map[string]int, last string, firstDone time.Time, retro bool) {
 	for _, m := range ms {
 		if m.Kind != mail.KindReport || m.T.Before(start) {
 			continue
@@ -95,25 +108,70 @@ func tallyReports(ms []mail.Msg, start time.Time) (by map[string]int, last strin
 		if st == "done" && firstDone.IsZero() {
 			firstDone = m.T
 		}
+		retro = retro || hasRetro(m.Text)
 	}
-	return by, last, firstDone
+	return by, last, firstDone, retro
 }
 
-// tallyEvents is name's last done-check verdict and its other interventions
-// by kind.
-func tallyEvents(evs []board.Event, name string) (check string, by map[string]int) {
-	for _, e := range evs {
-		if e.Agent != name || e.Kind == "" {
-			continue
+// hasRetro is whether a report has a "retro:" detail line.
+func hasRetro(text string) bool {
+	for l := range strings.SplitSeq(text, "\n") {
+		if strings.HasPrefix(strings.TrimPrefix(strings.TrimSpace(l), "- "), "retro:") {
+			return true
 		}
-		if e.Kind == board.KindDoneCheck {
-			check = e.Detail
-			continue
-		}
-		if by == nil {
-			by = map[string]int{}
-		}
-		by[e.Kind]++
 	}
-	return check, by
+	return false
+}
+
+// tallyEvents fills rec from the events of its agent in one pass (ADR-170,
+// ADR-187): the last done-check verdict, the friction kinds into their own
+// counters, other interventions by kind, and the seconds spent in each
+// status, the last one up to closed.
+func tallyEvents(rec *runs.Record, evs []board.Event, closed time.Time) {
+	var state string
+	var since time.Time
+	for _, e := range evs {
+		if e.Agent != rec.Name {
+			continue
+		}
+		switch e.Kind {
+		case "":
+			if e.To != "" {
+				addSecs(&rec.TimeS, state, since, e.Time)
+				state, since = e.To, e.Time
+			}
+		case board.KindDoneCheck:
+			rec.CheckResult = e.Detail
+		case board.KindDoneRefused:
+			inc(&rec.DoneRefusals, e.Detail)
+			rec.DoneBounces++
+		case board.KindDeliver:
+			inc(&rec.Sends, e.Detail)
+		case board.KindTakeover:
+			inc(&rec.Sends, board.KindTakeover)
+		case board.KindCrash: // the board's Exit says it already (exitClass)
+		default:
+			inc(&rec.Interventions, e.Kind)
+		}
+	}
+	addSecs(&rec.TimeS, state, since, closed)
+}
+
+func inc(m *map[string]int, k string) {
+	if *m == nil {
+		*m = map[string]int{}
+	}
+	(*m)[k]++
+}
+
+// addSecs adds the whole seconds from since to until to (*m)[state]; no
+// state (before the first transition) adds nothing.
+func addSecs(m *map[string]int, state string, since, until time.Time) {
+	if state == "" || !until.After(since) {
+		return
+	}
+	if *m == nil {
+		*m = map[string]int{}
+	}
+	(*m)[state] += int(until.Sub(since).Seconds())
 }

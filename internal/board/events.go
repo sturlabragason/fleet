@@ -38,6 +38,15 @@ const (
 	KindStatusDisagree = "status_disagree" // hook state and screen differ (ADR-49)
 )
 
+// Friction kinds (ADR-187): what happened to an agent's run besides
+// fleet's policy, each with a fixed short code as Detail.
+const (
+	KindDoneRefused = "done_refused" // uncommitted, unmerged, open_queue, no_merge_perm, max_bounces
+	KindDeliver     = "deliver"      // sent, steered, interrupted, queued, held, user_pane
+	KindTakeover    = "takeover"     // to_tmux, to_acp
+	KindCrash       = "crash"        // exit=<N>, sig=<N>, acp_exit
+)
+
 // Kinds lists every intervention kind.
 var Kinds = []string{
 	KindStopBlock, KindNoReportWake, KindStuckWake, KindRecycleWake, KindResurfaceWake,

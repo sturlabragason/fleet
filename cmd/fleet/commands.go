@@ -86,10 +86,11 @@ var usage = `usage:
                                             (--json: an array, each agent with "schema": 1)
   fleet info <name>                         one agent's facts, as fleet_info: driver (and ACP server),
                                             the fleet version that started it, status, git, session, spend
-  fleet spend [--today] [--json]            what each agent has cost so far and the fleet total, read from
+  fleet spend [--today|--since D] [--json]  what each agent has cost so far and the fleet total, read from
                                             the agents' own session files (AI credits for copilot, tokens
                                             for claude); no model is called. --today: spend per
-                                            profile since midnight and the Copilot month, raw units
+                                            profile since midnight and the Copilot month, raw units;
+                                            --since 7d: the same summed over whole days (40 at most)
   fleet stats [--since D] [--by kind|profile|model] [--json]
                                             how often fleet's own policy acted on agents (stop blocks,
                                             wakes, refused sends, done-checks, hook/screen disagreements),

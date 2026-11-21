@@ -1,7 +1,11 @@
 package fleet
 
 import (
+	"reflect"
 	"testing"
+	"time"
+
+	"github.com/sturlabragason/fleet/internal/board"
 
 	"github.com/sturlabragason/fleet/internal/runs"
 )
@@ -32,5 +36,35 @@ func TestCloseAppendsRunToLedger(t *testing.T) {
 	}
 	if r.Config == nil {
 		t.Fatal("no config fingerprint recorded at spawn")
+	}
+}
+
+// ADR-187: one pass over the events fills time in each status and the
+// friction counters; other agents' lines and crash events don't count.
+func TestTallyEvents(t *testing.T) {
+	t0 := time.Now()
+	at := func(s int) time.Time { return t0.Add(time.Duration(s) * time.Second) }
+	evs := []board.Event{
+		{Time: at(0), Agent: "a", To: "working"},
+		{Time: at(5), Agent: "b", To: "idle"},
+		{Time: at(30), Agent: "a", From: "working", To: "waiting"},
+		{Time: at(31), Agent: "a", Kind: board.KindDeliver, Detail: "steered"},
+		{Time: at(32), Agent: "a", Kind: board.KindDeliver, Detail: "user_pane"},
+		{Time: at(33), Agent: "a", Kind: board.KindTakeover, Detail: "to_tmux"},
+		{Time: at(34), Agent: "a", Kind: board.KindDoneRefused, Detail: "unmerged"},
+		{Time: at(35), Agent: "a", Kind: board.KindCrash, Detail: "exit=1"},
+		{Time: at(36), Agent: "a", Kind: board.KindStuckWake},
+		{Time: at(40), Agent: "a", From: "waiting", To: "working"},
+		{Time: at(41), Agent: "a", Kind: board.KindDoneCheck, Detail: "pass"},
+	}
+	rec := runs.Record{Name: "a"}
+	tallyEvents(&rec, evs, at(100))
+	want := runs.Record{Name: "a", CheckResult: "pass", DoneBounces: 1,
+		TimeS:         map[string]int{"working": 90, "waiting": 10},
+		Sends:         map[string]int{"steered": 1, "user_pane": 1, "takeover": 1},
+		DoneRefusals:  map[string]int{"unmerged": 1},
+		Interventions: map[string]int{board.KindStuckWake: 1}}
+	if !reflect.DeepEqual(rec, want) {
+		t.Fatalf("got  %+v\nwant %+v", rec, want)
 	}
 }

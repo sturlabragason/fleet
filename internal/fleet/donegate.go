@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/logx"
@@ -50,16 +51,21 @@ func (f *Fleet) doneGate(me, summary string, left []todo.Item) gateVerdict {
 		return gateVerdict{}
 	}
 	merge := mayMerge(a)
-	reason, reply := f.workLeft(b, a, summary), ""
+	reason, reply, code := f.workLeft(b, a, summary), "", "unmerged"
+	uncommitted := strings.Contains(reason, "uncommitted changes")
 	switch {
-	case reason != "" && !merge && !strings.Contains(reason, "uncommitted changes"):
+	case reason != "" && !merge && !uncommitted:
+		f.Store.AppendEvent(board.Intervention(time.Now(), a, board.KindDoneRefused, "no_merge_perm"))
 		return gateVerdict{state: "blocked", summary: fmt.Sprintf(
 			"done, but %s and this agent may not merge (effort %s, no merge-local): merge its branch or grant merge-local. %s",
 			reason, effortOf(a), summary)}
 	case reason != "":
 		reply = bounceText(reason, merge)
+		if uncommitted {
+			code = "uncommitted"
+		}
 	case len(left) > 0 && a.Where == "" && !queueException(summary):
-		reason = fmt.Sprintf("%d queued tweak(s) not handled yet", len(left))
+		reason, code = fmt.Sprintf("%d queued tweak(s) not handled yet", len(left)), "open_queue"
 		reply = queueText(left)
 	}
 	if reason == "" {
@@ -81,6 +87,10 @@ func (f *Fleet) doneGate(me, summary string, left []todo.Item) gateVerdict {
 		logx.For("fleet").Warn("done gate not recorded", "agent", me, "err", err)
 		return gateVerdict{}
 	}
+	if over {
+		code = "max_bounces"
+	}
+	f.Store.AppendEvent(board.Intervention(time.Now(), a, board.KindDoneRefused, code))
 	if over {
 		return gateVerdict{state: "blocked", summary: fmt.Sprintf(
 			"done refused %d times, work still left: %s. %s", n, reason, summary)}
@@ -130,7 +140,8 @@ func queueText(left []todo.Item) string {
 }
 
 // resetBounces clears the refusal count once a done passes clean, so the
-// agent's next task starts with its full MaxDoneBounces.
+// agent's next task starts with its full MaxDoneBounces. The run keeps its
+// lifetime refusals as done_refused events (ADR-187).
 func (f *Fleet) resetBounces(me string) {
 	if err := f.Store.Update(func(b *board.Board) error {
 		if a := b.Agents[me]; a != nil {
