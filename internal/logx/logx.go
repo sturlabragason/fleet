@@ -23,10 +23,12 @@ func Home() string {
 	return filepath.Join(h, ".fleet")
 }
 
-// Init makes the fleet home private and opens the log file. Safe to call
-// more than once.
+// Init makes the fleet home private, opens the log file and makes it slog's
+// default, so a bare slog call never writes to the terminal a TUI draws on.
+// Safe to call more than once.
 func Init() {
 	once.Do(func() {
+		defer func() { slog.SetDefault(base) }()
 		privateHome(Home())
 		dir := filepath.Join(Home(), "logs")
 		_ = os.MkdirAll(dir, 0o755)

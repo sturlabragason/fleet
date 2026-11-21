@@ -6,6 +6,9 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
+## 2026-11-21
+- Background warnings in the overview, such as a failed page publish during a network outage, now go to `~/.fleet/logs/fleet.log` and no longer print over the overview
+
 ## 2026-11-20
 - The overview backdrop's strands now pass behind and in front of each other: each wanders in depth, so the blue strand sometimes dips under the others and comes back over them, and a strand behind dims where another crosses it. Smoothness, frame rate, `z` pause and `animation = false` stay as before (ADR-186)
 - Each open item and agent queue item now lists the sessions that worked on it (admiral and agents, with profile and session id), in `fleet info`, `fleet_brief` and the todo store, so you can resume one with `fleet adopt <id>` (ADR-184)

@@ -1,8 +1,12 @@
 package logx
 
 import (
+	"bytes"
+	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -31,5 +35,25 @@ func TestPrivateHome(t *testing.T) {
 				t.Errorf("mode %o, want 700", got)
 			}
 		})
+	}
+}
+
+// After Init a bare slog call lands in fleet.log, not on stderr: the TUI
+// draws on that terminal (a threads page sync warning once did).
+func TestInitTakesSlogDefault(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FLEET_HOME", home)
+	var tty bytes.Buffer
+	log.SetOutput(&tty)
+	old := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(old); log.SetOutput(os.Stderr) })
+	Init()
+	slog.Warn("bare warning", "component", "ui")
+	if tty.Len() != 0 {
+		t.Errorf("written to the terminal: %q", tty.String())
+	}
+	data, _ := os.ReadFile(filepath.Join(home, "logs", "fleet.log"))
+	if !strings.Contains(string(data), "bare warning") {
+		t.Errorf("fleet.log = %q, want the warning", data)
 	}
 }

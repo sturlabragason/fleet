@@ -14,6 +14,8 @@ func TestNetError(t *testing.T) {
 		"API Error: Connection error.",
 		"request to https://api.anthropic.com failed, reason: getaddrinfo EAI_AGAIN api.anthropic.com",
 		"dial tcp: lookup github.com: no such host",
+		// curl in a threads page publish, DNS down (2026-11-21)
+		"artifact: artifact publish: exit status 1: curl: (6) Could not resolve host: artifacts.example.org",
 	} {
 		if !NetError(s) {
 			t.Errorf("not a network error: %q", s)

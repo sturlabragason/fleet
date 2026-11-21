@@ -92,7 +92,7 @@ func dialAny(addrs []string, timeout time.Duration) bool {
 var netErr = regexp.MustCompile(`(?i)network is unreachable|tcp connect error|error sending request|` +
 	`could not connect to the copilot api|failed to load models|connection error|unable to connect|` +
 	`getaddrinfo|enotfound|eai_again|econnrefused|econnreset|etimedout|enetunreach|ehostunreach|` +
-	`no such host|fetch failed|socket hang up|temporary failure in name resolution|` +
+	`no such host|could not resolve host|fetch failed|socket hang up|temporary failure in name resolution|` +
 	`dial tcp|i/o timeout|network error|connection refused|connection reset`)
 
 // NetError reports whether s reads as a network failure.
