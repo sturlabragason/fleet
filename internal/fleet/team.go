@@ -119,6 +119,7 @@ func (f *Fleet) TeamSend(team, text string, confirmed bool) ([]Result, error) {
 			rs = append(rs, Result{m, false, err.Error()})
 			continue
 		}
+		f.Intervene(m, board.KindDeliver, d)
 		rs = append(rs, Result{Agent: m, OK: true, Note: DeliveryWord(d)})
 	}
 	logx.For("fleet").Info("team send", "team", team, "bytes", len(text), "members", len(ms))

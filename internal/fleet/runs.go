@@ -144,7 +144,9 @@ func tallyEvents(rec *runs.Record, evs []board.Event, closed time.Time) {
 			rec.CheckResult = e.Detail
 		case board.KindDoneRefused:
 			inc(&rec.DoneRefusals, e.Detail)
-			rec.DoneBounces++
+			if bounced(e.Detail) {
+				rec.DoneBounces++
+			}
 		case board.KindDeliver:
 			inc(&rec.Sends, e.Detail)
 		case board.KindTakeover:
@@ -156,6 +158,10 @@ func tallyEvents(rec *runs.Record, evs []board.Event, closed time.Time) {
 	}
 	addSecs(&rec.TimeS, state, since, closed)
 }
+
+// bounced is whether a done_refused code sent the done back to the agent
+// (ADR-160), as DoneBounces counted; an escalation to the admiral is not one.
+func bounced(code string) bool { return code != "no_merge_perm" && code != "max_bounces" }
 
 func inc(m *map[string]int, k string) {
 	if *m == nil {

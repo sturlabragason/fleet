@@ -44,10 +44,10 @@ type Record struct {
 	Closed        time.Time        `json:"closed"`
 	FirstDone     time.Time        `json:"first_done,omitzero"`
 	Config        *board.RunConfig `json:"config,omitempty"`
-	Check         bool             `json:"check,omitempty"`        // the card had a done-check
-	CheckResult   string           `json:"check_result,omitempty"` // last verdict: pass or fail
-	Reports       map[string]int   `json:"reports,omitempty"`      // reports by state
-	Last          string           `json:"last,omitempty"`         // state of the last report
+	Check         bool             `json:"check,omitempty"`         // the card had a done-check
+	CheckResult   string           `json:"check_result,omitempty"`  // last verdict: pass or fail
+	Reports       map[string]int   `json:"reports,omitempty"`       // reports by state
+	Last          string           `json:"last,omitempty"`          // state of the last report
 	DoneBounces   int              `json:"done_bounces,omitempty"`  // done reports refused over the run
 	DoneRefusals  map[string]int   `json:"done_refusals,omitempty"` // refused dones by reason code (ADR-187)
 	Interventions map[string]int   `json:"interventions,omitempty"` // by event kind

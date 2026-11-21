@@ -62,11 +62,12 @@ func cmdStats(args []string) error {
 }
 
 // countInterventions counts the intervention lines of evs by key; a
-// transition line (no kind) is left out, an empty key counts as "-".
+// transition line (no kind) and a friction line (ADR-187) are left out, an
+// empty key counts as "-".
 func countInterventions(evs []board.Event, key func(board.Event) string) map[string]int {
 	out := map[string]int{}
 	for _, e := range evs {
-		if e.Kind == "" {
+		if !slices.Contains(board.Kinds, e.Kind) {
 			continue
 		}
 		k := key(e)

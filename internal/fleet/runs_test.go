@@ -68,3 +68,12 @@ func TestTallyEvents(t *testing.T) {
 		t.Fatalf("got  %+v\nwant %+v", rec, want)
 	}
 }
+
+// An escalation to the admiral is a refused done but not a bounce.
+func TestTallyEventsEscalationIsNoBounce(t *testing.T) {
+	rec := runs.Record{Name: "a"}
+	tallyEvents(&rec, []board.Event{{Agent: "a", Kind: board.KindDoneRefused, Detail: "no_merge_perm"}}, time.Now())
+	if rec.DoneBounces != 0 || rec.DoneRefusals["no_merge_perm"] != 1 {
+		t.Fatalf("record %+v", rec)
+	}
+}

@@ -137,6 +137,7 @@ func (s *Server) sendOne(a args, name string) (string, error) {
 		}
 		if held {
 			s.F.Tweak(name, todo.Queued, a.Text)
+			s.F.Intervene(name, board.KindDeliver, fleet.DeliveryHeld)
 			return fleet.DeliveryHeld, nil
 		}
 	}
