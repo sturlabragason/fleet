@@ -2,6 +2,7 @@
 """Render a `tmux capture-pane -e -p` dump to PNG on a fixed character grid.
 
 usage: ansi2png.py in.ans out.png [font-size] [cols] [rows]
+       ansi2png.py --frames font-size cols rows a.ans [b.ans ...]   (writes a.png, b.png, ...)
 
 Give cols and rows to pin the grid: every frame of an animation then comes out
 the same size, whatever the panes happen to hold.
@@ -10,6 +11,7 @@ Needs Pillow and fontTools. Used by scripts/screenshot.sh for docs/img.
 import re
 import sys
 import unicodedata
+from collections import Counter
 
 from fontTools.ttLib import TTFont
 from PIL import Image, ImageDraw, ImageFont
@@ -23,10 +25,11 @@ FONTS = [  # first font that has the glyph wins
     "/usr/share/fonts/google-noto/NotoSansMath-Regular.ttf",
 ]
 BOLD = "/usr/share/fonts/adwaita-mono-fonts/AdwaitaMono-Bold.ttf"
-# The ground and the default text are a pinned copy of the TUI's Base and Text
-# (Lane today, ADR-166), so the padding around the capture is the same colour
-# as the terminal inside it. It is a copy, not a read: if internal/theme changes
-# its Base or Text, edit these two tuples by hand and re-run scripts/screenshot.sh.
+# The fallback ground and the default text are a pinned copy of the TUI's Base
+# and Text (Lane today, ADR-166). The padding and unstyled cells take the
+# capture's most common background instead, so a frame in any theme (the theme
+# tour in docs/img/themes.gif) is padded in its own ground; BG is only used when
+# the capture sets no background at all.
 # No window chrome, no shadow, no rounded corners: a screenshot is a terminal,
 # not a device (docs/style.md §5).
 BG, FG = (22, 22, 22), (244, 244, 244)
@@ -148,7 +151,7 @@ def parse(text):
             for ch in tok:
                 f, b = fg or FG, bg
                 if rev:
-                    f, b = (bg or BG), (fg or FG)
+                    f, b = bg, (fg or FG)  # no bg: the frame's ground, filled in by render
                 row.append((ch, f, b, bold, dim))
                 if unicodedata.east_asian_width(ch) in "WF":
                     row.append(("", f, b, bold, dim))
@@ -158,30 +161,28 @@ def parse(text):
     return rows
 
 
-def main():
-    src, dst = sys.argv[1], sys.argv[2]
-    size = int(sys.argv[3]) if len(sys.argv) > 3 else 14
-    grid = (int(sys.argv[4]), int(sys.argv[5])) if len(sys.argv) > 5 else None
+def render(src, dst, fonts, bold, size, grid):
     rows = parse(open(src, encoding="utf-8").read())
     if grid:
         rows = (rows + [[]] * grid[1])[:grid[1]]
-    fonts = [(ImageFont.truetype(p, size), set(TTFont(p, fontNumber=0).getBestCmap())) for p in FONTS]
-    bold = ImageFont.truetype(BOLD, size)
+    grounds = Counter(c[2] for r in rows for c in r if c[2])
+    ground = grounds.most_common(1)[0][0] if grounds else BG
     cw = round(fonts[0][0].getlength("M"))
     ch = round(size * 1.3)
     pad = round(size * 1.4)
     cols = grid[0] if grid else max(len(r) for r in rows)
-    img = Image.new("RGB", (cols * cw + 2 * pad, len(rows) * ch + 2 * pad), BG)
+    img = Image.new("RGB", (cols * cw + 2 * pad, len(rows) * ch + 2 * pad), ground)
     d = ImageDraw.Draw(img)
     for y, row in enumerate(rows):
         for x, (c, f, b, bo, di) in enumerate(row):
             px, py = pad + x * cw, pad + y * ch
+            f = f or ground
             if b:
                 d.rectangle((px, py, px + cw - 1, py + ch - 1), fill=b)
             if not c or c == " ":
                 continue
             if di:
-                f = tuple((v + bb) // 2 for v, bb in zip(f, b or BG))
+                f = tuple((v + bb) // 2 for v, bb in zip(f, b or ground))
             if c in BOX:
                 draw_box(d, c, px, py, cw, ch, f)
                 continue
@@ -200,6 +201,20 @@ def main():
                 font = bold
             d.text((px, py + (ch - size) // 2 - 1), c, font=font, fill=f)
     img.save(dst, optimize=True)
+
+
+def main():
+    a = sys.argv[1:]
+    if a[0] == "--frames":
+        size, grid, jobs = int(a[1]), (int(a[2]), int(a[3])), [(f, f.rsplit(".", 1)[0] + ".png") for f in a[4:]]
+    else:
+        size = int(a[2]) if len(a) > 2 else 14
+        grid = (int(a[3]), int(a[4])) if len(a) > 4 else None
+        jobs = [(a[0], a[1])]
+    fonts = [(ImageFont.truetype(p, size), set(TTFont(p, fontNumber=0).getBestCmap())) for p in FONTS]
+    bold = ImageFont.truetype(BOLD, size)
+    for src, dst in jobs:
+        render(src, dst, fonts, bold, size, grid)
 
 
 if __name__ == "__main__":

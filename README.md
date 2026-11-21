@@ -13,9 +13,9 @@
 
 fleet runs your Copilot CLI, Claude Code, agy, vibe and Pi sessions side by side, shows each one as a status tile, puts the ones you are working with on a wall of live panes, and gives one agent, the admiral, the tools to report on the rest and act for you.
 
-![fleet: the admiral on the left, a tile per agent top right, a 2×2 wall of live agent panes below. Two agents ask for approval, they are answered, and work resumes](docs/img/demo.gif)
+![fleet: the admiral on the left and the overview on the right, a tile per agent over the animated fleet-mark backdrop. The theme picker steps through all 26 themes, dark and light, and the whole window recolours live while the backdrop keeps flowing](docs/img/themes.gif)
 
-<sub>Recorded with fake agents and a fake admiral, so no tokens were spent (`scripts/screenshot.sh`). Still frame: [docs/img/hero.png](docs/img/hero.png).</sub>
+<sub>Recorded with fake agents and a fake admiral, so no tokens were spent (`scripts/screenshot.sh`). Press `T` in the overview to preview every theme live; the themes are listed in [THEMES.md](THEMES.md).</sub>
 
 ## Why
 
@@ -82,6 +82,7 @@ Without `--admiral-profile`, the admiral runs the Copilot CLI. Other tools and y
 - **Memory without a model.** `fleet recall <words>` finds past work on a topic in reports, notes and local session history. `fleet day` lists what waits on you and what got done.
 - **Park and wake.** `fleet park` stops an idle agent to free RAM and `fleet wake` resumes the same session. `max_working` in config queues spawns past a limit.
 - **Claude Desktop as an admiral.** `fleet connect claude-desktop` adds fleet to Claude Desktop's config as a second admiral named `desktop`, with its own agents and reports. Quit and reopen Desktop, then ask it for `fleet_status`. The tmux fleet still has to be up for spawns. See [docs/admiral.md](docs/admiral.md#claude-desktop).
+- **Themes.** 26 palettes, dark and light, most of them taken from the most-installed VS Code themes. `T` in the overview previews each one live across the whole window. See [THEMES.md](THEMES.md).
 - **Optional integrations.** [cass](https://github.com/Dicklesworthstone/coding_agent_session_search), [graphify](https://github.com/Graphify-Labs/graphify) and `gh` are used when installed, configured under `[integrations.<name>]`. `fleet doctor` shows which features each one turns on.
 
 Every command is in `fleet --help`. What changed lately: [CHANGELOG.md](CHANGELOG.md), or `Alt+g` in the app.
@@ -96,6 +97,10 @@ Planned, not built: approve/reject keys and a spawn wizard in the TUI, workflow 
 - **Overview** top right: tiles for as many agents as fit, one-line chips for the rest.
 - **Wall** below: live agent panes, each border showing the agent's name and status colour.
 
+![fleet: the admiral on the left, a tile per agent top right, a 2×2 wall of live agent panes below. Two agents ask for approval, they are answered, and work resumes](docs/img/demo.gif)
+
+<sub>Fake agents and a fake admiral (`scripts/screenshot.sh`). Still frame: [docs/img/hero.png](docs/img/hero.png).</sub>
+
 | Key | Does |
 |---|---|
 | `Alt+?` | Every key, in a popup |
@@ -104,6 +109,7 @@ Planned, not built: approve/reject keys and a spawn wizard in the TUI, workflow 
 | `Enter` (overview) | Put the selected agent on the wall |
 | `Alt+1` `2` `4` `6` `9` `m` | Wall layout |
 | `Alt+z` | Zoom the focused pane |
+| `T` (overview) | Preview each theme live, `Enter` saves one |
 
 The mouse works: click a pane to type in it, drag to copy to the system clipboard. Every key: [docs/keys.md](docs/keys.md).
 

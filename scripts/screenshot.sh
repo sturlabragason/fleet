@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Regenerate docs/img/hero.png and docs/img/demo.gif from fake agents.
+# Regenerate docs/img/hero.png, docs/img/demo.gif and docs/img/themes.gif
+# (the README hero: the overview's theme picker steps through every theme
+# while the backdrop and the agents keep moving) from fake agents.
 # Runs a separate tmux server (own TMUX_TMPDIR and FLEET_HOME), so a running
 # fleet is never touched. The admiral pane runs the fake profile: no tokens.
 # Needs: tmux, python3 with Pillow + fontTools, ImageMagick (magick).
@@ -92,6 +94,37 @@ for i in $(seq -w 1 24); do
   esac
   sleep 0.5
 done
-for f in "$D"/frames/*.ans; do python3 scripts/ansi2png.py "$f" "${f%.ans}.png" $((FONT - 3)) "$COLS" "$ROWS"; done
+python3 scripts/ansi2png.py --frames $((FONT - 3)) "$COLS" "$ROWS" "$D"/frames/*.ans
 magick -delay 50 -loop 0 "$D"/frames/*.png -layers Optimize -colors 64 "$OUT/demo.gif"
 echo "wrote $OUT/demo.gif"
+
+# The theme tour: T opens the picker in the overview and every ↓ applies the
+# next theme live, to the overview, its backdrop and the tmux chrome alike.
+# Frames are captured at about 10 a second, HOLD of them per theme, so the
+# backdrop's motion carries straight across each swap. The wall is hidden for
+# it, so the overview, its backdrop and the tiles fill the right side.
+HOLD=${SHOT_HOLD:-9}
+OV=$($T list-panes -a -F '#{pane_id} #{@role}' | awk '$2=="ov"{print $1; exit}')
+if [ -z "$OV" ]; then echo "no overview pane: no theme tour" >&2; exit 1; fi
+"$B" send --force web-nav '!work polish the wall' >/dev/null
+"$B" send --force db-migrate '!work backfill old rows' >/dev/null
+"$B" wall hide-all >/dev/null
+sleep 1
+$T send-keys -t "$OV" T
+sleep 1
+N=$($S capture-pane -p -t shot | sed -n 's|.* theme [0-9]*/\([0-9]*\) ·.*|\1|p' | head -1)
+if [ -z "$N" ]; then echo "theme picker did not open: no theme tour" >&2; exit 1; fi
+rm -r "$D/frames" && mkdir "$D/frames"
+k=0
+for t in $(seq "$N"); do
+  for _ in $(seq "$HOLD"); do
+    k=$((k + 1))
+    $S capture-pane -e -p -t shot > "$D/frames/$(printf %04d $k).ans"
+    sleep 0.1
+  done
+  $T send-keys -t "$OV" Down
+done
+$T send-keys -t "$OV" Escape
+python3 scripts/ansi2png.py --frames $((FONT - 3)) "$COLS" "$ROWS" "$D"/frames/*.ans
+magick -delay 11 -loop 0 "$D"/frames/*.png -layers Optimize -colors 64 "$OUT/themes.gif"
+echo "wrote $OUT/themes.gif ($N themes, $k frames)"

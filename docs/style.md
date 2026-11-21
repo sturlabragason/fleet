@@ -341,6 +341,8 @@ Screenshots:
 - Every screenshot has a caption in `<sub>` saying what is in it and that it was made with fake
   agents. A reader must never mistake a demo for a measurement.
 - The terminal uses the default `lane` palette and the same font at the same size in every shot.
+  The one exception is `docs/img/themes.gif`, the README hero: it steps through every theme with
+  the overview's `T` picker and hides the wall, so the backdrop and the tiles fill the right side.
 - The GitHub social preview, `docs/img/social.png` (1280×640), is the hero under the lockup and one
   tagline, built by `scripts/social-card.sh`. GitHub has no API for it: upload it under Settings,
   Social preview, after regenerating.
