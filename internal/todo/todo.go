@@ -208,6 +208,13 @@ func Kind(text string) (kind, rest string) {
 	return "", text
 }
 
+// Same is whether two items say the same thing: one kind, and one text
+// ignoring case and spacing (ADR-188).
+func Same(a, b Item) bool {
+	norm := func(s string) string { return strings.ToLower(strings.Join(strings.Fields(s), " ")) }
+	return a.Kind == b.Kind && norm(a.Description) == norm(b.Description)
+}
+
 // OneLine is s's first line, spaces squeezed, at most 200 runes.
 func OneLine(s string) string {
 	s = strings.Join(strings.Fields(strings.SplitN(strings.TrimSpace(s), "\n", 2)[0]), " ")

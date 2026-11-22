@@ -224,8 +224,8 @@ func TestBriefStaysUnderBudget(t *testing.T) {
 		t.Error("older notes should have been cut")
 	}
 
-	// Pinned notes past what fits are cut, with a warning and the offset
-	// fleet_brief file=pinned reads the rest from.
+	// Pinned notes past what fits are cut oldest first (ADR-188), with a
+	// warning and a pointer to fleet_brief file=pinned, which has them all.
 	for i := range 30 {
 		callText(t, s, "fleet_note", map[string]any{"text": fmt.Sprintf("BIG-%d %s", i, strings.Repeat("y", 300)), "pin": true})
 	}
@@ -233,21 +233,15 @@ func TestBriefStaysUnderBudget(t *testing.T) {
 	if len(out) > briefBudget {
 		t.Errorf("big pinned brief is %d bytes, budget %d", len(out), briefBudget)
 	}
-	if !strings.Contains(out, "BIG-0 ") || strings.Contains(out, "BIG-29 ") || !strings.Contains(out, "ask the user which rules to retire") ||
-		!strings.Contains(out, "## Agents\nno agents\n") {
+	if strings.Contains(out, "PIN-0 ") || !strings.Contains(out, "BIG-29 ") || !strings.Contains(out, "ask the user which rules to retire") ||
+		!strings.Contains(out, "## Agents\nno agents\n") || !strings.Contains(out, "note-199 ") {
 		t.Errorf("big pinned brief:\n%s", out)
 	}
-	_, rest, ok := strings.Cut(out, "fleet_brief file=pinned offset=")
-	if !ok {
+	if !strings.Contains(out, "older pinned notes") || !strings.Contains(out, "fleet_brief file=pinned") {
 		t.Fatalf("no pointer to the cut pinned notes:\n%s", out)
 	}
-	var off int
-	fmt.Sscanf(rest, "%d", &off)
-	more, _ := callText(t, s, "fleet_brief", map[string]any{"file": "pinned", "offset": off})
-	if !strings.Contains(more, "BIG-29 ") || !strings.Contains(more, "; end") {
-		t.Errorf("file=pinned from the brief's offset:\n%s", more)
-	}
-	if first := strings.SplitN(more, "\n", 3)[1]; strings.Contains(out, first+"\n") {
-		t.Errorf("file=pinned repeats a note the brief showed: %s", first)
+	more, _ := callText(t, s, "fleet_brief", map[string]any{"file": "pinned"})
+	if !strings.Contains(more, "PIN-0 ") {
+		t.Errorf("file=pinned misses the oldest note:\n%s", more)
 	}
 }

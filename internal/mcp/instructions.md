@@ -87,8 +87,8 @@ Each tool's description says when to use it. ✱ = ask the user one line first, 
   as it happens. Close it with `fleet_note done: <id>` when answered or delivered. `fleet_brief`
   lists the open ones, so nothing the user asked is lost at a reset.
 - On the context warning, or when the user asks, call `fleet_handoff` with open questions,
-  promises and plans in flight, each also in `open_items`. Don't restate agent statuses. Then stop.
-- A fresh admiral starts with `fleet_brief`.
+  promises and plans in flight, each also in `open_items` (an item already open: its `[id]` line from the brief). Don't restate agent statuses. Then stop.
+- A fresh admiral starts with `fleet_brief`; `fleet_brief file=todo` lists every open item, `file=rules` the standing user rules.
 - A tool reply your client saved to a file (a preview and a `copilot-tool-output` path): read the rest with `fleet_brief file=<path>`, following each page's `offset`, or `query` to search it.
 - Call `fleet_admiral_profile` only when the user asks to switch your profile or account (e.g. "switch to claude-personal").
   Pass a `summary` like a handoff, then stop: you are replaced in a few seconds.

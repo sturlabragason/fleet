@@ -239,6 +239,11 @@ func TestAgentBlockerBaseline(t *testing.T) {
 		t.Fatalf("new file: %q", r)
 	}
 	os.RemoveAll(filepath.Join(dir, "d"))
+	os.WriteFile(filepath.Join(dir, "result-other.md"), []byte("x"), 0o644) // another agent's result (ADR-188)
+	if r := AgentBlocker(a); r != "" {
+		t.Fatalf("another agent's result file: %q", r)
+	}
+	os.Remove(filepath.Join(dir, "result-other.md"))
 	a.Name = "agent"
 	other := filepath.Join(t.TempDir(), "sibling")
 	git(t, dir, "worktree", "add", "-q", other, "-b", "sibling")

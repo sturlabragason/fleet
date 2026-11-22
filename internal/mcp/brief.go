@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/routes"
+	"github.com/sturlabragason/fleet/internal/rules"
 	"github.com/sturlabragason/fleet/internal/supervisor"
 )
 
@@ -32,6 +33,11 @@ const pinnedWarn = briefBudget / 2
 // maxBriefNotes is the most recent notes the brief shows when they fit.
 const maxBriefNotes = 30
 
+// briefNotesFloor is kept for the recent notes before the pinned notes,
+// reports and extension sections take theirs: today's decisions are what a
+// fresh admiral most needs, and they got none (ADR-188).
+const briefNotesFloor = 1536
+
 // brief is the handoff, the open asks, the pinned notes that fit, then the unread report
 // headlines, extensions, routes, recent notes and agents within briefBudget.
 func (s *Server) brief() (string, error) {
@@ -44,8 +50,9 @@ func (s *Server) brief() (string, error) {
 	head.WriteString(s.handoverBrief())
 	head.WriteString(s.todoBrief())
 	pinned := supervisor.Pinned(s.F.Home)
-	head.WriteString(pinnedBrief(pinned, briefBudget-briefNotices-briefReserve-head.Len()))
-	left := briefBudget - briefNotices - head.Len()
+	head.WriteString(pinnedBrief(pinned, briefBudget-briefNotices-briefReserve-briefNotesFloor-head.Len()))
+	head.WriteString(s.rulesBrief())
+	left := briefBudget - briefNotices - briefNotesFloor - head.Len()
 	take := func(full, short string) string {
 		if len(full) <= left || len(full) <= len(short) {
 			left -= len(full)
@@ -65,7 +72,7 @@ func (s *Server) brief() (string, error) {
 	agents = take(agents, "## Agents\nnot shown here: call fleet_status for the table\n")
 	rs := s.routesBrief(left)
 	left -= len(rs)
-	notes := s.notesBrief(pinned, left)
+	notes := s.notesBrief(pinned, max(left, 0)+briefNotesFloor)
 
 	return head.String() + rs + notes + reports + ext + agents, nil
 }
@@ -152,8 +159,19 @@ func (s *Server) notesBrief(pinned []string, room int) string {
 	return b.String()
 }
 
-// pinnedBrief is the pinned notes that fit in room, in file order; the cut
-// ones are named by the offset fleet_brief file=pinned reads them from.
+// rulesBrief points at the standing user rules every worker gets, which
+// never reached the admiral (ADR-188); "" when there are none.
+func (s *Server) rulesBrief() string {
+	rs, err := rules.List(rules.UserFile(s.F.Home))
+	if err != nil || len(rs) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("## Standing user rules\n%d rules every worker gets apply to you too: fleet_brief file=rules reads them.\n\n", len(rs))
+}
+
+// pinnedBrief is the newest pinned notes that fit in room, in file order:
+// a new rule must not be the first one cut (ADR-188). The cut older ones
+// are at the start of fleet_brief file=pinned.
 func pinnedBrief(pinned []string, room int) string {
 	if len(pinned) == 0 {
 		return ""
@@ -169,17 +187,17 @@ func pinnedBrief(pinned []string, room int) string {
 	const h = "## Pinned\n"
 	room -= len(h) + len(warn) + 120
 	n, used := 0, 0
-	for n < len(pinned) && used+len(pinned[n])+1 <= room {
-		used += len(pinned[n]) + 1
+	for n < len(pinned) && used+len(pinned[len(pinned)-1-n])+1 <= room {
+		used += len(pinned[len(pinned)-1-n]) + 1
 		n++
 	}
 	var b strings.Builder
 	b.WriteString(h)
-	for _, p := range pinned[:n] {
-		b.WriteString(p + "\n")
-	}
 	if n < len(pinned) {
-		fmt.Fprintf(&b, "(%d more pinned notes, %.1f KB, not shown: read them with fleet_brief file=pinned offset=%d)\n", len(pinned)-n, float64(size-used)/1024, used)
+		fmt.Fprintf(&b, "(%d older pinned notes, %.1f KB, not shown: read them with fleet_brief file=pinned)\n", len(pinned)-n, float64(size-used)/1024)
+	}
+	for _, p := range pinned[len(pinned)-n:] {
+		b.WriteString(p + "\n")
 	}
 	b.WriteString(warn + "\n")
 	return b.String()

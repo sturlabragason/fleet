@@ -229,19 +229,20 @@ func nextLines(summary string) []string {
 	return out
 }
 
-// queueHand moves a closed agent's pending items to its leader's queue, or
-// to its admiral as followups that fleet_brief shows. The lines the user
-// typed into the agent's pane (prompt tweaks) are completed instead: the
-// user saw that chat, and handed over they only filled the waits list with
-// "user: ..." followups (ADR-177).
+// queueHand moves a closed agent's queued tweaks, which its host may never
+// have delivered, to its leader's queue, or to its admiral as followups that
+// fleet_brief shows. Everything else is completed instead (ADR-177,
+// ADR-188): a steer or a prompt reached the agent when sent, so handing it
+// over only echoed the admiral's own steers back as followups, and a next:
+// line is in the agent's report already.
 func (f *Fleet) queueHand(name, leader, admiral string) {
-	todoDo("queue drop typed prompts", name, func(ctx context.Context, s todo.Store) error {
+	todoDo("queue complete delivered", name, func(ctx context.Context, s todo.Store) error {
 		is, err := s.Queue(ctx, name)
 		if err != nil {
 			return err
 		}
 		for _, i := range is {
-			if i.Kind != todo.Prompt {
+			if i.Kind != todo.Steer && i.Kind != todo.Prompt && i.Kind != todo.Next {
 				continue
 			}
 			if _, err := s.Done(ctx, i.UUID); err != nil {

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/sturlabragason/fleet/internal/rules"
 	"github.com/sturlabragason/fleet/internal/supervisor"
 )
 
@@ -25,8 +26,21 @@ const spillMark = "copilot-tool-output"
 // pinnedFile is the file= name for every pinned note.
 const pinnedFile = "pinned"
 
-// readFile is fleet_brief file=…: a page of a saved tool reply or of the
-// pinned notes from byte offset, or the lines matching query.
+// listFiles are the file= names fleet_brief reads from fleet's own state
+// rather than a saved tool reply: every pinned note, every open item ranked
+// as the brief ranks them, and the standing rules every worker gets
+// (ADR-188: the admiral got none of them).
+var listFiles = map[string]struct {
+	name  string
+	lines func(s *Server) []string
+}{
+	pinnedFile: {"pinned notes", func(s *Server) []string { return supervisor.Pinned(s.F.Home) }},
+	"todo":     {"open items", (*Server).todoLines},
+	"rules":    {"standing user rules", func(s *Server) []string { r, _ := rules.List(rules.UserFile(s.F.Home)); return r }},
+}
+
+// readFile is fleet_brief file=…: a page of a saved tool reply or of a
+// listFiles list from byte offset, or the lines matching query.
 func (s *Server) readFile(a args) (string, error) {
 	r, size, closeFn, err := s.openFile(a.File)
 	if err != nil {
@@ -34,8 +48,8 @@ func (s *Server) readFile(a args) (string, error) {
 	}
 	defer closeFn()
 	name := a.File
-	if name == pinnedFile {
-		name = "pinned notes"
+	if l, ok := listFiles[name]; ok {
+		name = l.name
 	}
 	if a.Query != "" {
 		return grepPage(name, io.NewSectionReader(r, 0, size), a.Query)
@@ -44,10 +58,10 @@ func (s *Server) readFile(a args) (string, error) {
 }
 
 func (s *Server) openFile(file string) (io.ReaderAt, int64, func(), error) {
-	if file == pinnedFile {
+	if l, ok := listFiles[file]; ok {
 		text := ""
-		if p := supervisor.Pinned(s.F.Home); len(p) > 0 {
-			text = strings.Join(p, "\n") + "\n"
+		if ls := l.lines(s); len(ls) > 0 {
+			text = strings.Join(ls, "\n") + "\n"
 		}
 		return strings.NewReader(text), int64(len(text)), func() {}, nil
 	}
@@ -70,7 +84,7 @@ func (s *Server) openFile(file string) (io.ReaderAt, int64, func(), error) {
 // spillPath is file resolved, when it is a saved tool reply under the temp
 // dir; anything else is refused, so the admiral can't read other files.
 func spillPath(file string) (string, error) {
-	refuse := fmt.Errorf("file must be pinned or the path of a saved tool reply (a *%s* file in %s)", spillMark, os.TempDir())
+	refuse := fmt.Errorf("file must be pinned, todo, rules or the path of a saved tool reply (a *%s* file in %s)", spillMark, os.TempDir())
 	if !filepath.IsAbs(file) {
 		return "", refuse
 	}

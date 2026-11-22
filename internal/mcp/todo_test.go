@@ -2,8 +2,10 @@ package mcp
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/todo"
@@ -72,5 +74,57 @@ func TestOpenItemsSurviveHandoff(t *testing.T) {
 	open, _, _ = strings.Cut(open, "## Notes")
 	if strings.Contains(open, "request (work): is the relay") || !strings.Contains(brief, "done ["+id[1]+"] request") {
 		t.Errorf("after done:\n%s", brief)
+	}
+}
+
+// ADR-188: a handoff that lists an open item again, by its text or by the
+// "[id]" line the brief showed, keeps that item instead of filing a copy,
+// and an id that is closed is not filed again.
+func TestHandoffItemsIdempotent(t *testing.T) {
+	useMemTodo(t)
+	s, _, _ := memServer(t)
+	out, _ := callText(t, s, "fleet_note", map[string]any{"text": "ask: which repo for the fix?"})
+	id := regexp.MustCompile(`open task \[([0-9a-f]{8})\]`).FindStringSubmatch(out)
+	if id == nil {
+		t.Fatalf("note: %q", out)
+	}
+	items := []string{"ask: Which  repo for the fix?", "[" + id[1] + "] ask (work): which repo for the fix?", "[deadbeef] request (work): gone", "[ADR-12] promise: write it up"}
+	if _, isErr := callText(t, s, "fleet_handoff", map[string]any{"summary": "x", "open_items": items}); isErr {
+		t.Fatal("handoff failed")
+	}
+	if is, _ := memStore.Admiral(t.Context(), s.Me()); len(is) != 2 || is[1].Description != "[ADR-12] promise: write it up" {
+		t.Fatalf("items after handoff: %+v", is)
+	}
+	if brief, _ := callText(t, s, "fleet_brief", nil); !strings.Contains(brief, "[deadbeef] request (work): gone (not open any more") {
+		t.Errorf("brief:\n%s", brief)
+	}
+}
+
+// ADR-188: the brief lists the user's items before followups, the last 72
+// hours before older ones, asks before promises and requests, newest first,
+// and folds a duplicate into the newest copy's line.
+func TestRankItems(t *testing.T) {
+	now := time.Now()
+	it := func(id, kind, text string, age time.Duration) todo.Item {
+		return todo.Item{UUID: id + "0000", Kind: kind, Description: text, Entry: now.Add(-age)}
+	}
+	in := []todo.Item{
+		it("f1", todo.Followup, "steer", time.Hour),
+		it("a1", todo.Ask, "old ask", 100*time.Hour),
+		it("r1", todo.Request, "req", 2*time.Hour),
+		it("a2", todo.Ask, "new ask", time.Hour),
+		it("a3", todo.Ask, "New  ask", 3*time.Hour),
+		it("p1", todo.Promise, "prom", 5*time.Hour),
+	}
+	got, dups := rankItems(in, now)
+	var ids []string
+	for _, i := range got {
+		ids = append(ids, i.ID())
+	}
+	if want := []string{"a20000", "p10000", "r10000", "a10000", "f10000"}; !slices.Equal(ids, want) {
+		t.Errorf("order %v, want %v", ids, want)
+	}
+	if d := dups["a20000"]; !slices.Equal(d, []string{"a30000"}) {
+		t.Errorf("dups %v", dups)
 	}
 }

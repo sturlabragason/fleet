@@ -33,7 +33,7 @@ func init() {
 // ADR-164: a spawn opens the agent's session; a steer the agent has had
 // closes on done, a queued tweak it has not had yet refuses the done until
 // the agent's stated exception; a close ends the session with its
-// outcome and hands what is left to the admiral.
+// outcome and hands the undelivered queued tweaks to the admiral.
 func TestQueueGateAndSession(t *testing.T) {
 	memTodo = todotest.New()
 	t.Cleanup(func() { memTodo = nil })
@@ -59,13 +59,14 @@ func TestQueueGateAndSession(t *testing.T) {
 	if _, err := f.Report("w", "done", "stopped\nqueue: stop\nnext: write the docs"); err != nil || !strings.HasPrefix(lastReport(t, f), "done: ") {
 		t.Fatalf("exception: err %v report %q", err, lastReport(t, f))
 	}
+	f.Tweak("w", todo.Steer, "late steer") // reached the agent: completed at close, not handed (ADR-188)
 	if err := f.Close("w"); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.HasPrefix(memTodo.Ended["w"], "done: stopped") {
 		t.Fatalf("outcome %q", memTodo.Ended["w"])
 	}
-	if is, _ := memTodo.Admiral(t.Context(), board.Main); len(is) != 2 || is[0].Description != "also add docs" || is[1].Description != "write the docs" {
+	if is, _ := memTodo.Admiral(t.Context(), board.Main); len(is) != 1 || is[0].Description != "also add docs" || is[0].Kind != todo.Followup {
 		t.Fatalf("hand-over: %+v", is)
 	}
 }

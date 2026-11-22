@@ -3,6 +3,7 @@ package fleet
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/sturlabragason/fleet/internal/supervisor"
@@ -11,7 +12,8 @@ import (
 
 // AddItem records one of admiral's open items (ADR-164), for fleet_note
 // open= and the `fleet note --open` CLI. Its context is ctx, else the one
-// the agent's dir maps to, else the configured default. ok is false
+// the agent's dir maps to, else the configured default. An open item that
+// says the same (todo.Same) is returned instead of a new one. ok is false
 // without a store.
 func (f *Fleet) AddItem(admiral, kind, text, agent, ctx string) (it todo.Item, ok bool, err error) {
 	dir := ""
@@ -25,7 +27,18 @@ func (f *Fleet) AddItem(admiral, kind, text, agent, ctx string) (it todo.Item, o
 		if ctx == "" {
 			ctx = st.Context(dir)
 		}
-		it, err = st.Add(c, todo.Item{Admiral: admiral, Kind: kind, Ctx: ctx, Description: text, Sessions: f.sessions(admiral, agent)})
+		want := todo.Item{Admiral: admiral, Kind: kind, Ctx: ctx, Description: text, Sessions: f.sessions(admiral, agent)}
+		open, err := st.Admiral(c, admiral)
+		if err != nil {
+			return fmt.Errorf("open items of %s: %w", admiral, err)
+		}
+		for _, o := range open {
+			if todo.Same(o, want) {
+				it = o // filing it again only made duplicates (ADR-188)
+				return nil
+			}
+		}
+		it, err = st.Add(c, want)
 		return err
 	})
 	return it, ok, err

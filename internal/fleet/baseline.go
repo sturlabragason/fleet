@@ -131,7 +131,7 @@ func worktrees(dir string) []string {
 // master); dirt that predates
 // the agent and an unchanged HEAD are fine. Without a baseline it is the
 // strict CloseBlocker rule. The agent's own task-card result file never
-// counts (#11).
+// counts (#11), nor does any untracked result*.md at the root.
 func AgentBlocker(a *board.Agent) string {
 	switch workTree(a.Dir) {
 	case treeNo:
@@ -152,7 +152,7 @@ func AgentBlocker(a *board.Agent) string {
 	skip := worktree.Ignored(a.Dir, own)
 	var mine []string
 	for p, fp := range now {
-		if base.Dirty[p] != fp && !skip[p] {
+		if base.Dirty[p] != fp && !skip[p] && !resultFile(p, fp) {
 			mine = append(mine, p)
 		}
 	}
@@ -181,6 +181,15 @@ func AgentBlocker(a *board.Agent) string {
 		return "not merged into " + g.Base
 	}
 	return ""
+}
+
+// resultFile is an untracked result*.md at the repo root: the result file
+// of whichever agent wrote it, as worktree.onlyResults treats it. Agents in
+// one checkout write theirs there, so it is never another agent's work left
+// behind (ADR-188: one blocked tr-upload-path's done twice).
+func resultFile(path, fp string) bool {
+	root, _ := filepath.Match("result*.md", path)
+	return root && strings.HasPrefix(fp, "?? ")
 }
 
 // worktreeResult is the agent's result file inside its own worktree w, for
