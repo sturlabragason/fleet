@@ -113,7 +113,7 @@ idle = ['^\s*[>❯]\s*$', '(?i)type @ to mention', '(?i)hold to record', '(?i)^\
 [claude]
 scan = 'window'
 input = ['^[\s\x{a0}]*[>❯][\s\x{a0}](.*)$', '^[\s\x{a0}]*[>❯]()[\s\x{a0}]*$']
-placeholder = ['^Try "']
+placeholder = ['^Try "', '^Press up to edit queued messages']
 waiting = ['Do you want to', 'Quick safety check', '(?i)this command requires approval', '❯ 1\. Yes', '\[y/n\]', '(?i)enter to confirm · esc to cancel']
 error = ['(?i)^\s*●?\s*API Error', '(?i)^\s*(fatal|panic):']
 working = ['(?i)esc to interrupt', '^\s*[✢✳✶✻✽] \w+…', '^[·*] \w+…']

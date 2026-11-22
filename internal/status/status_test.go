@@ -249,7 +249,7 @@ func TestInputBox(t *testing.T) {
 	}
 	// Claude's empty box is "❯" plus a non-breaking space, and an empty box
 	// shows a placeholder hint: both read as empty, so a wake can be typed.
-	for _, s := range []string{"\u00a0", ` Try "refactor <filepath>"`} {
+	for _, s := range []string{"\u00a0", ` Try "refactor <filepath>"`, "\u00a0Press up to edit queued messages"} {
 		if got, ok := cl.InputBox("────────\n❯" + s + "\n────────\n  ? for shortcuts\n"); !ok || got != "" {
 			t.Errorf("claude %q: got %q %v", s, got, ok)
 		}

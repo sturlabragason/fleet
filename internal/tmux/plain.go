@@ -10,15 +10,20 @@ import (
 // input is never faint, while a suggestion or placeholder in an input box is,
 // so the box reads as empty. Faint text followed by normal text on the same
 // line (Copilot's transcript bar, Claude's diff line numbers) is kept.
+// Claude draws its cursor as one inverse (SGR 7) cell on the ghost's first
+// character ("Press up to edit queued messages" shows as an inverse "P", then
+// faint "ress …"); that cell joins the ghost, or the box reads as typed "P".
 func Plain(s string) string {
 	out := make([]byte, 0, len(s))
-	faint := false
-	ghost := -1 // out offset where the line's trailing faint run starts
+	faint, inverse := false, false
+	ghost := -1      // out offset where the line's trailing faint run starts
+	cursor := -1     // out offset of the last character when it is a lone inverse, non-faint cell
+	prevInv := false // the last character was an inverse, non-faint cell
 	endLine := func() {
 		if ghost >= 0 {
 			out = out[:ghost]
 		}
-		ghost = -1
+		ghost, cursor, prevInv = -1, -1, false
 	}
 	for i := 0; i < len(s); i++ {
 		c := s[i]
@@ -29,7 +34,7 @@ func Plain(s string) string {
 				j++
 			}
 			if j < len(s) && s[j] == 'm' {
-				faint = sgrFaint(s[i+2:j], faint)
+				faint, inverse = sgrAttrs(s[i+2:j], faint, inverse)
 			}
 			i = j
 		case c == 0x1b && i+1 < len(s) && s[i+1] == ']': // OSC, e.g. a hyperlink
@@ -50,9 +55,20 @@ func Plain(s string) string {
 			if c != ' ' {
 				if faint && ghost < 0 {
 					ghost = len(out)
+					if cursor >= 0 {
+						ghost = cursor
+					}
 				} else if !faint {
 					ghost = -1
 				}
+			}
+			if c&0xc0 != 0x80 { // a character's first byte, not a UTF-8 continuation
+				cell := inverse && !faint && c != ' '
+				cursor = -1
+				if cell && !prevInv { // a lone cell only: the end of a longer inverse run (a badge) is content
+					cursor = len(out)
+				}
+				prevInv = cell
 			}
 			out = append(out, c)
 		}
@@ -61,22 +77,28 @@ func Plain(s string) string {
 	return string(out)
 }
 
-// sgrFaint applies one SGR parameter list to the faint flag. Colour
+// sgrAttrs applies one SGR parameter list to the faint and inverse flags. Colour
 // arguments (38;5;n, 38;2;r;g;b) are skipped so their 2s are not read as
 // faint; the colon form (38:2::r:g:b) is one field and needs no skipping.
-func sgrFaint(params string, faint bool) bool {
+func sgrAttrs(params string, faint, inverse bool) (bool, bool) {
 	if params == "" {
-		return false
+		return false, false
 	}
 	ps := strings.Split(params, ";")
 	for k := 0; k < len(ps); k++ {
 		head, _, _ := strings.Cut(ps[k], ":")
 		n, _ := strconv.Atoi(head)
 		switch n {
-		case 0, 22:
+		case 0:
+			faint, inverse = false, false
+		case 22:
 			faint = false
 		case 2:
 			faint = true
+		case 7:
+			inverse = true
+		case 27:
+			inverse = false
 		case 38, 48, 58:
 			if k+1 < len(ps) && ps[k+1] == "5" {
 				k += 2
@@ -85,5 +107,5 @@ func sgrFaint(params string, faint bool) bool {
 			}
 		}
 	}
-	return faint
+	return faint, inverse
 }
