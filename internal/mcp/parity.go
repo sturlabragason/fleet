@@ -40,6 +40,7 @@ var CLIParity = map[string]string{
 	"admiral close":   "fleet_admiral_close",
 	"admiral min":     "user: pane layout",
 	"admiral act":     "user: the admiral pane key bindings",
+	"admiral reply":   "user: quotes into the admiral's own input box (Alt-r)",
 	"admiral give":    "fleet_handover",
 	"admiral reset":   "fleet_handoff",
 	"admiral profile": "fleet_admiral_profile",
