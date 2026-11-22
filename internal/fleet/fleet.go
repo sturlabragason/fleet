@@ -429,7 +429,7 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	switch {
 	case pr.Playbook && prompt != "":
 		text, src := playbook.Resolve(lvl, f.Home, dir)
-		if tl := ToolLayers(p); tl != "" {
+		if tl := ToolLayers(p, f.Profiles); tl != "" {
 			text = strings.TrimRight(text, "\n") + "\n\n" + tl
 		}
 		if lead != "" {
@@ -443,8 +443,8 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 		pbText = lead
 	}
 	ex.Config = f.fingerprint(lvl, dir, pbText, pbSrc, card)
-	if fl := familyLayer(p); pr.Playbook && fl != "" && ex.Config.Layers != nil {
-		ex.Config.Layers["family:"+p.Family()] = runs.Hash([]byte(fl))
+	if fam := layerFamily(p, f.Profiles); pr.Playbook && ex.Config.Layers != nil && playbook.Family(fam) != "" {
+		ex.Config.Layers["family:"+fam] = runs.Hash([]byte(playbook.Family(fam)))
 	}
 	if gb := f.graphBrief(dir, prompt); gb != "" {
 		full = strings.TrimRight(full, "\n") + "\n\n" + gb
@@ -657,21 +657,21 @@ type startExtra struct {
 	Config     *board.RunConfig
 }
 
-// familyLayer is the built-in playbook layer for p's tool family, else for
-// the family of the profile it takes its ACP server from (kagent-homelab
-// gets kagent's), "" when there is none (ADR-194).
-func familyLayer(p tools.Profile) string {
-	if l := playbook.Family(p.Family()); l != "" || p.ACPFrom == "" {
-		return l
+// layerFamily is the tool family whose built-in layer p's agents get: p's
+// own when it has one, else that of the profile p takes its ACP server from
+// (kagent-homelab gets kagent's), ADR-194.
+func layerFamily(p tools.Profile, ps map[string]tools.Profile) string {
+	if b, ok := ps[p.ACPFrom]; ok && playbook.Family(p.Family()) == "" {
+		return b.Family()
 	}
-	return playbook.Family(p.ACPFrom)
+	return p.Family()
 }
 
-// ToolLayers is what a profile adds after the worker playbook, for its
-// agents only: its tool family's built-in layer (ADR-194), then its
+// ToolLayers is what profile p (one of ps) adds after the worker playbook,
+// for its agents only: its tool family's built-in layer (ADR-194), then its
 // prompt_note with the tool's quirks (ADR-156).
-func ToolLayers(p tools.Profile) string {
-	return strings.TrimSpace(familyLayer(p) + "\n\n" + strings.TrimSpace(p.PromptNote))
+func ToolLayers(p tools.Profile, ps map[string]tools.Profile) string {
+	return strings.TrimSpace(playbook.Family(layerFamily(p, ps)) + "\n\n" + strings.TrimSpace(p.PromptNote))
 }
 
 // Version is the running fleet build ("v1.2.0", else a revision), set by

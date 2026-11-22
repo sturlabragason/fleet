@@ -91,6 +91,11 @@ func TestToolLayersAppended(t *testing.T) {
 	from := f.Profiles["pa"]
 	from.ACPFrom = "kagent"
 	f.Profiles["pk"] = from
+	byName := f.Profiles["pa"]
+	byName.ACPFrom = "pv" // a profile name, not a family
+	if got := ToolLayers(byName, f.Profiles); got != playbook.Family("vibe") {
+		t.Errorf("acp_from by profile name: got %.80q, want the vibe layer", got)
+	}
 	light := strings.TrimRight(playbook.Text(playbook.Light), "\n")
 	for i, c := range []struct{ profile, want string }{
 		{"pn", playbook.Compose(light+"\n\nTool note.", "fix the bug")},

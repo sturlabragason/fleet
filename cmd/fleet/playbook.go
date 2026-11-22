@@ -81,7 +81,7 @@ func profileLayers(name string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("unknown profile %q (have %v)", name, tools.Names(ps))
 	}
-	return fleet.ToolLayers(p), nil
+	return fleet.ToolLayers(p, ps), nil
 }
 
 // resultFiles are the task-card result files of every agent on the board.

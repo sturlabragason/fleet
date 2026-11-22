@@ -111,11 +111,6 @@ func (f *Fleet) adopt(o AdoptOpts, rec *board.Agent, claimed bool, prompt string
 		return nil, err
 	}
 	ex.Model = model
-	// A session started outside fleet never got its tool's layer; a resumed
-	// one did at spawn (ADR-194).
-	if fl := familyLayer(p); rec == nil && prompt != "" && apr.Playbook && fl != "" {
-		prompt = fl + "\n\n" + prompt
-	}
 	var argv []string
 	if acp {
 		// A new host on the session, as a wake does; nothing an earlier

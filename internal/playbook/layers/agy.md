@@ -1,6 +1,6 @@
 ## agy (Gemini 4)
 
-On agy, this section overrides the Opus-for-subagents rule above.
+On agy, this section replaces any rule elsewhere in your prompt that puts subagents on Opus.
 - Models: pin by exact model id; never use the `flash` tier (in subagent frontmatter and `/run-workflow`, `flash` is legacy 3.8 Flash and `pro` is Argon; verify in `/agents`).
 - Roles: orchestrator `gemini-pro-orchestrator-neon` (Neon plans/reviews, Hydrogen executes; switch to `gemini-pro-orchestrator-g1-pro` Argon planner when Gemini quota is low); coding `gemini-4-hydrogen-high` (`xhigh` only after `high` fails); search/summary `gemini-4-hydrogen-low` (`medium` for multi-file synthesis); tests/docs `gemini-4-hydrogen-medium` (`high` on failures); reviewer on another model (`gemini-4-argon-medium` or `claude-opus-5-5-high`); hard bug `gemini-4-neon-xhigh` or `/boost`.
 - Thinking levels (`low`, `medium`, `high`, `xhigh`): set internal reasoning budget; higher adds latency/tokens (`xhigh` only on Neon/Hydrogen). Use the lowest level that passes; avoid `xhigh` on simple prompts (causes overthinking).
