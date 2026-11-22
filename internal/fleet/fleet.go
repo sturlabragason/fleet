@@ -24,6 +24,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/mail"
 	"github.com/sturlabragason/fleet/internal/playbook"
 	"github.com/sturlabragason/fleet/internal/prefs"
+	"github.com/sturlabragason/fleet/internal/runs"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/summary"
 	"github.com/sturlabragason/fleet/internal/sysx"
@@ -428,9 +429,8 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	switch {
 	case pr.Playbook && prompt != "":
 		text, src := playbook.Resolve(lvl, f.Home, dir)
-		// The profile's note carries its tool's quirks, for its agents only (ADR-156).
-		if n := strings.TrimSpace(p.PromptNote); n != "" {
-			text = strings.TrimRight(text, "\n") + "\n\n" + n
+		if tl := ToolLayers(p); tl != "" {
+			text = strings.TrimRight(text, "\n") + "\n\n" + tl
 		}
 		if lead != "" {
 			text = strings.TrimRight(text, "\n") + "\n\n" + lead
@@ -443,6 +443,9 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 		pbText = lead
 	}
 	ex.Config = f.fingerprint(lvl, dir, pbText, pbSrc, card)
+	if fl := familyLayer(p); pr.Playbook && fl != "" && ex.Config.Layers != nil {
+		ex.Config.Layers["family:"+p.Family()] = runs.Hash([]byte(fl))
+	}
 	if gb := f.graphBrief(dir, prompt); gb != "" {
 		full = strings.TrimRight(full, "\n") + "\n\n" + gb
 	}
@@ -652,6 +655,23 @@ type startExtra struct {
 	Driver     string // board.Agent.Driver
 	Resume     bool   // a resume: the name must still be free (ADR-95)
 	Config     *board.RunConfig
+}
+
+// familyLayer is the built-in playbook layer for p's tool family, else for
+// the family of the profile it takes its ACP server from (kagent-homelab
+// gets kagent's), "" when there is none (ADR-194).
+func familyLayer(p tools.Profile) string {
+	if l := playbook.Family(p.Family()); l != "" || p.ACPFrom == "" {
+		return l
+	}
+	return playbook.Family(p.ACPFrom)
+}
+
+// ToolLayers is what a profile adds after the worker playbook, for its
+// agents only: its tool family's built-in layer (ADR-194), then its
+// prompt_note with the tool's quirks (ADR-156).
+func ToolLayers(p tools.Profile) string {
+	return strings.TrimSpace(familyLayer(p) + "\n\n" + strings.TrimSpace(p.PromptNote))
 }
 
 // Version is the running fleet build ("v1.2.0", else a revision), set by

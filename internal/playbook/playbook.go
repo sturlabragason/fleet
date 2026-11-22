@@ -5,7 +5,7 @@
 package playbook
 
 import (
-	_ "embed"
+	"embed"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -91,6 +91,20 @@ var interactive string
 // first prompt: it reports progress, not done, until the user ends the
 // session, because done may close it under them (ADR-61).
 func Interactive() string { return interactive }
+
+//go:embed layers/*.md
+var layers embed.FS
+
+// Family returns the built-in layer for a tool family ("agy", "claude", ...):
+// which models to run, how to delegate to subagents and how to prompt them on
+// that tool. "" for a family with none (ADR-194).
+func Family(family string) string {
+	b, err := layers.ReadFile("layers/" + family + ".md")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
 
 // Text returns the built-in playbook for a level. An unknown level reads as
 // pro: more process is the safe way to be wrong.

@@ -392,3 +392,32 @@ func TestPlaybookGatesMergeOnCI(t *testing.T) {
 		}
 	}
 }
+
+// Every harness fleet ships a profile for has its own layer, short enough to
+// pay for on every spawn; agy's carries the async-subagent rule (ADR-194).
+func TestFamilyLayers(t *testing.T) {
+	for _, c := range []struct{ family, want string }{
+		{"copilot", "gemini-4-hydrogen"},
+		{"claude", "ultrathink"},
+		{"agy", "never end your turn while a subagent"},
+		{"pi", "--list-models"},
+		{"vibe", "mistral-large-4-0"},
+		{"kagent", "ModelConfig"},
+		{"fake", ""},
+		{"../worker", ""},
+	} {
+		got := Family(c.family)
+		if c.want == "" {
+			if got != "" {
+				t.Errorf("Family(%q) = %.60q, want none", c.family, got)
+			}
+			continue
+		}
+		if !strings.HasPrefix(got, "## "+c.family+" ") || !strings.Contains(got, c.want) {
+			t.Errorf("Family(%q) lacks its heading or %q:\n%s", c.family, c.want, got)
+		}
+		if n := strings.Count(got, "\n") + 1; n > 20 {
+			t.Errorf("Family(%q) is %d lines, keep it under 20", c.family, n)
+		}
+	}
+}

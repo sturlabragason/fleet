@@ -111,7 +111,7 @@ Each tool's description says when to use it. ✱ = ask the user one line first, 
   Default: `pro` with a worktree, `light` without one. Pick it deliberately: `pro` over-steers a small job.
 - Fleet agents run their profile's default model (Opus for copilot and claude) unless `model` names another. Any model the
   profile's tool offers is allowed: `fleet_profiles` with `profile` lists them; fleet refuses one the tool doesn't list,
-  and any model on a profile with no model flag (vibe). The model is kept across park, wake and resume (ADR-112).
+  and any model on a profile with no model flag (vibe). Never guess a model id. Each agent's playbook carries its tool's model, subagent and prompting guide (ADR-194); on agy, Gemini 4 Hydrogen replaces 3.8 Flash, never the `flash` tier. The model is kept across park, wake and resume (ADR-112).
   Subagents (yours, a leader's, an agent's): search and summary subagents (Copilot's `explore`) run Gemini 4
   Hydrogen; all else Opus, never Haiku. Design, review, debugging, judgment and code stay on Opus.
 - copilot and agy agents (claude-copilot too) run over ACP by default: their pane is fleet's transcript, not the tool's screen. The same

@@ -77,15 +77,25 @@ func TestSpawnPrependsPlaybook(t *testing.T) {
 	}
 }
 
-// A profile's prompt_note follows the playbook for its agents only (ADR-156).
-func TestPromptNoteAppended(t *testing.T) {
+// A profile's tool-family layer (ADR-194), then its prompt_note (ADR-156),
+// follow the playbook for its agents only; a profile with no family layer of
+// its own takes its acp_from profile's.
+func TestToolLayersAppended(t *testing.T) {
 	f, out := argvFleet(t, "")
 	noted := f.Profiles["pa"]
 	noted.PromptNote = "Tool note."
 	f.Profiles["pn"] = noted
-	light := playbook.Text(playbook.Light)
+	fam := noted
+	fam.FamilyKey = "vibe"
+	f.Profiles["pv"] = fam
+	from := f.Profiles["pa"]
+	from.ACPFrom = "kagent"
+	f.Profiles["pk"] = from
+	light := strings.TrimRight(playbook.Text(playbook.Light), "\n")
 	for i, c := range []struct{ profile, want string }{
-		{"pn", playbook.Compose(strings.TrimRight(light, "\n")+"\n\nTool note.", "fix the bug")},
+		{"pn", playbook.Compose(light+"\n\nTool note.", "fix the bug")},
+		{"pv", playbook.Compose(light+"\n\n"+playbook.Family("vibe")+"\n\nTool note.", "fix the bug")},
+		{"pk", playbook.Compose(light+"\n\n"+playbook.Family("kagent"), "fix the bug")},
 		{"pa", playbook.Compose(light, "fix the bug")},
 	} {
 		os.Remove(out)

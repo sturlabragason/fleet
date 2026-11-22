@@ -13,6 +13,8 @@ import (
 	"github.com/sturlabragason/fleet/internal/graph"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/playbook"
+	"github.com/sturlabragason/fleet/internal/prefs"
+	"github.com/sturlabragason/fleet/internal/tools"
 	"github.com/sturlabragason/fleet/internal/worktree"
 )
 
@@ -23,10 +25,13 @@ func (e exitCode) Error() string { return fmt.Sprintf("exit %d", int(e)) }
 
 // cmdPlaybook prints the worker playbook text for a directory at one effort
 // level (ADR-57). The level is the flag's, not the one a spawn into that dir
-// would pick: --effort shows any of them, and the default is pro.
+// would pick: --effort shows any of them, and the default is pro. --profile
+// adds what that profile's agents get after it: the tool family's layer and
+// the prompt_note (ADR-194).
 func cmdPlaybook(args []string) error {
 	fs := flag.NewFlagSet("playbook", flag.ContinueOnError)
 	effort := fs.String("effort", string(playbook.Pro), "effort level: light, standard or pro")
+	profile := fs.String("profile", "", "tool profile whose layers to add, e.g. agy")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -36,19 +41,47 @@ func cmdPlaybook(args []string) error {
 	}
 	rest := fs.Args()
 	if len(rest) > 1 {
-		return fmt.Errorf("usage: fleet playbook [--effort light|standard|pro] [dir]")
+		return fmt.Errorf("usage: fleet playbook [--effort light|standard|pro] [--profile NAME] [dir]")
 	}
 	dir := "."
 	if len(rest) == 1 {
 		dir = rest[0]
 	}
 	text, src := playbook.Resolve(lvl, logx.Home(), dir)
+	if *profile != "" {
+		tl, err := profileLayers(*profile)
+		if err != nil {
+			return err
+		}
+		if tl != "" {
+			text = strings.TrimRight(text, "\n") + "\n\n" + tl
+			src = append(src, "profile "+*profile)
+		}
+	}
 	fmt.Fprintf(os.Stderr, "# sources: %s\n", strings.Join(src, ", "))
 	fmt.Print(text)
 	if text != "" && !strings.HasSuffix(text, "\n") {
 		fmt.Println()
 	}
 	return nil
+}
+
+// profileLayers is fleet.ToolLayers for the named profile as tools.toml and
+// config.toml define it.
+func profileLayers(name string) (string, error) {
+	pr, err := prefs.Load()
+	if err != nil {
+		return "", fmt.Errorf("config.toml: %w", err)
+	}
+	ps, err := tools.LoadWith(logx.Home(), pr.ToolsDoc())
+	if err != nil {
+		return "", fmt.Errorf("tools.toml: %w", err)
+	}
+	p, ok := ps[name]
+	if !ok {
+		return "", fmt.Errorf("unknown profile %q (have %v)", name, tools.Names(ps))
+	}
+	return fleet.ToolLayers(p), nil
 }
 
 // resultFiles are the task-card result files of every agent on the board.

@@ -41,6 +41,16 @@ func strList(desc string) map[string]any {
 
 var confirmedProp = map[string]any{"type": "boolean", "description": "true only after the user explicitly said yes in chat"}
 
+// modelParamDesc describes the spawn tools' model parameter; profilesTool
+// is the tool that lists a profile's models.
+func modelParamDesc(profilesTool string) string {
+	return "a model id the profile's tool offers, in the tool's own ids (" + profilesTool + " with profile lists them, " +
+		"e.g. gemini-4-hydrogen or claude-sonnet-5.5 for copilot, gemini-pro-orchestrator-neon or gemini-4-hydrogen-high for agy, sonnet for claude; " +
+		"never gemini-3.8-flash or agy's flash tier). Checked against the tool's own list when it has an ACP server; a model it doesn't list is refused, " +
+		"never swapped for another, and so is any model for a profile with no model flag (vibe). Default: the profile's (Opus for copilot and claude, " +
+		"the tool's own for agy), at every effort. The model is kept across park, wake and resume."
+}
+
 // toolDefs are the admiral's tools. The built-in ones are all in this
 // initializer, which runs before any init(), so an extension's Register sees
 // every one of them; extension tools follow.
@@ -80,7 +90,7 @@ var baseToolDefs = []tool{
 		"leader":      map[string]any{"type": "boolean", "description": "make it a leader: it gets squad tools and may spawn a squad of its own, whose reports come to it instead of you. Use for a job you want planned, split and summarised by one agent."},
 		"driver":      map[string]any{"type": "string", "enum": []string{"tmux", "acp"}, "description": "how fleet runs the agent: tmux (the tool's own screen) or acp (the tool's ACP server under fleet acp-host: status, questions and sends over the protocol, no screen reading). Default: the user's config, else acp for every profile that runs copilot or agy (claude-copilot too) and tmux for the rest. Claude runs over acp only when asked (this field or the profile's config), never from [defaults]; vibe refuses acp."},
 		"effort":      map[string]any{"type": "string", "enum": []string{"light", "standard", "pro"}, "description": "how much process the agent is given. light: an errand or a quick read-only question (a few lines: stay in your dir, no secrets, report). standard: a contained change (plan, build and test, commit on its branch; no ADR, no review, no merge). pro: professional code work in this repo (the full playbook: worktree, failing test first, subagent review, pre-merge checklist, merge into local main). Default: pro with a worktree, light without one."},
-		"model":       map[string]any{"type": "string", "description": "a model id the profile's tool offers, in the tool's own ids (fleet_profiles with profile lists them, e.g. claude-sonnet-5.5 or gemini-3.8-flash for copilot, sonnet for claude). Checked against the tool's own list when it has an ACP server; a model it doesn't list is refused, never swapped for another, and so is any model for a profile with no model flag (vibe). Default: the profile's (Opus for copilot and claude, the tool's own for agy), at every effort. The model is kept across park, wake and resume."}})},
+		"model":       map[string]any{"type": "string", "description": modelParamDesc("fleet_profiles")}})},
 	{"fleet_sessions", "Find copilot/claude sessions the user started outside fleet, newest first: id | age | profile | dir | title | flags. Use before fleet_adopt, with the user's words as the query; if more than one fits, ask which. Never guess an id.", obj(nil, map[string]any{
 		"query": str("optional words; every word must appear in title, dir, branch or id"), "limit": map[string]any{"type": "integer", "description": "max sessions (default 15)"}})},
 	{"fleet_adopt", "Resume an existing session the user started outside fleet as a fleet agent. Pass session_id (full id or unique 8+ char prefix) or query (words that match exactly one session), not both. Refuses if the session is missing or still open elsewhere.", obj(nil, map[string]any{
