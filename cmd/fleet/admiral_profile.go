@@ -375,6 +375,7 @@ func swapAdmiralOf(f *fleet.Fleet, adm, name string) (string, error) {
 	if err := supervisor.WriteHandoffOf(f.Home, adm, text); err != nil {
 		return "", err
 	}
+	d = withUnanswered(f, adm, old.SessionID, d)
 	sl, err := admiralLaunchOf(f, adm, name, "", bootPrompt(d))
 	if err != nil {
 		return "", err

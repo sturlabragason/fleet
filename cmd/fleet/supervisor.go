@@ -209,6 +209,7 @@ func resetSupervisorOf(f *fleet.Fleet, adm string, handoff bool) (int, error) {
 		return 0, err
 	}
 	old := supervisor.CurrentOf(f.Home, f.T, mainTarget(), adm)
+	d = withUnanswered(f, adm, old.SessionID, d)
 	_, hTime, hOK := supervisor.ReadHandoffOf(f.Home, adm)
 	stale := !hOK || (!old.Started.IsZero() && hTime.Before(old.Started)) || (old.Started.IsZero() && !handoff)
 	if stale {

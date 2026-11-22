@@ -1,12 +1,15 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/logx"
+	"github.com/sturlabragason/fleet/internal/sessions"
 	"github.com/sturlabragason/fleet/internal/supervisor"
 )
 
@@ -14,7 +17,7 @@ import (
 // the user had typed but not submitted there (ADR-140), and a message the
 // user submitted while the restart was held (ADR-178). holdForDraft defers
 // the replacement while the input box holds text; bootPrompt hands a sent
-// message to the new admiral; restoreDraft saves the text and puts unsent
+// message and the old session's unanswered ones to the new admiral; restoreDraft saves the text and puts unsent
 // text back in the new admiral's box.
 var (
 	draftWait        = 2 * time.Minute        // how long a restart waits for the user
@@ -29,6 +32,58 @@ type draft struct {
 	Pending bool   // still in the box at the deadline
 	Sent    bool   // submitted to the old admiral during the hold: the restart kills that turn
 	Carried bool   // the restarted admiral was given the sent message
+	// Unanswered are messages the user had already submitted that the old
+	// session never saw, e.g. one queued while the admiral was calling
+	// fleet_handoff (ADR-196). UnansweredFile holds them when they are too
+	// long for the launch command.
+	Unanswered     []string
+	UnansweredFile string
+}
+
+// maxUnanswered is how many messages a boot prompt carries; maxInline is
+// the most the "## Last user messages" section may add to the launch
+// command, which tmux refuses at about 16 KB.
+const (
+	maxUnanswered = 5
+	maxInline     = 2048
+)
+
+// withUnanswered adds the user's unseen messages in admiral session id to
+// d, without fleet's own wake lines and boot prompts. Too long for the
+// launch command, they go to a file the boot prompt names.
+func withUnanswered(f *fleet.Fleet, adm, id string, d draft) draft {
+	found := sessions.Lookup(f.Profiles, id, "")
+	if len(found) != 1 {
+		return d
+	}
+	var out []string
+	for _, m := range sessions.Unanswered(found[0].Path) {
+		if !strings.HasPrefix(m, "[fleet]") && !strings.HasPrefix(m, supervisor.BootPrompt) {
+			out = append(out, m)
+		}
+	}
+	if len(out) == 0 {
+		return d
+	}
+	d.Unanswered = out[max(len(out)-maxUnanswered, 0):]
+	log := logx.For("admiral")
+	// Quoting for the shell and tmux turns each ' into up to 17 bytes.
+	if m := unansweredMessage(d.Unanswered, ""); len(m)+16*strings.Count(m, "'") > maxInline {
+		dir := filepath.Join(f.Home, "drafts")
+		path := filepath.Join(dir, adm+"-unanswered-"+time.Now().Format("20060102-150405")+".md")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			log.Warn("save unanswered", "err", err)
+		} else if err := os.WriteFile(path, []byte(m+"\n"), 0o600); err != nil {
+			log.Warn("save unanswered", "err", err)
+		} else {
+			d.UnansweredFile = path
+		}
+		if d.UnansweredFile == "" {
+			d.Unanswered = nil // never inline past what tmux takes
+		}
+	}
+	log.Info("unanswered messages carried", "admiral", adm, "session_id", id, "n", len(d.Unanswered), "file", d.UnansweredFile)
+	return d
 }
 
 // holdForDraft waits up to draftWait for admiral adm's input box to empty,
@@ -75,18 +130,46 @@ func sentMessage(d draft) string {
 	return "The user sent this message just before the admiral restart, so it was never answered (the last few characters may be missing). Answer it first:\n\n" + d.Text
 }
 
-// bootPrompt is a fresh admiral's first prompt, with the sent message.
-func bootPrompt(d draft) string {
-	if m := sentMessage(d); m != "" {
-		return supervisor.BootPrompt + "\n\n" + m
+// unansweredMessage asks the restarted admiral to answer the messages the
+// old session never saw, inline or in file ("" = none).
+func unansweredMessage(msgs []string, file string) string {
+	if len(msgs) == 0 {
+		return ""
 	}
-	return supervisor.BootPrompt
+	head := "## Last user messages\n\nThe user sent these to the previous admiral and it was replaced before it saw them. Answer them first, oldest first"
+	if file != "" {
+		return head + ". They are in " + file + "; read it."
+	}
+	var b strings.Builder
+	b.WriteString(head + ":")
+	for _, m := range msgs {
+		b.WriteString("\n\n> " + strings.ReplaceAll(m, "\n", "\n> "))
+	}
+	return b.String()
+}
+
+// bootPrompt is a fresh admiral's first prompt, with the unanswered and
+// sent messages. A sent message that is already the newest unanswered one
+// is not repeated.
+func bootPrompt(d draft) string {
+	parts := []string{supervisor.BootPrompt}
+	if m := unansweredMessage(d.Unanswered, d.UnansweredFile); m != "" {
+		parts = append(parts, m)
+	}
+	n := len(d.Unanswered)
+	if m := sentMessage(d); m != "" && (n == 0 || !strings.HasPrefix(d.Unanswered[n-1], d.Text)) {
+		parts = append(parts, m)
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 // restoreDraft saves the text under ~/.fleet/drafts and, when the user left
 // it in the box (pending), types it into the new admiral's input box.
 func restoreDraft(f *fleet.Fleet, adm string, d draft) {
 	if d.Text == "" {
+		if len(d.Unanswered) > 0 {
+			draftNotice(f, "15000", fmt.Sprintf("%d unanswered message(s) to the old %s were passed to the new one", len(d.Unanswered), admiralLabel(adm)))
+		}
 		return
 	}
 	log := logx.For("admiral")

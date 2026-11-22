@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/supervisor"
+	"github.com/sturlabragason/fleet/internal/tools"
 )
 
 func TestDraftSurvivesAdmiralRestart(t *testing.T) {
@@ -66,6 +68,88 @@ func TestDraftSurvivesAdmiralRestart(t *testing.T) {
 			}
 			if b, _ := os.ReadFile(saved[0]); string(b) != tt.wantDraft+"\n" {
 				t.Errorf("saved %q", b)
+			}
+		})
+	}
+}
+
+func TestBootPromptCarriesUnanswered(t *testing.T) {
+	tests := []struct {
+		name  string
+		d     draft
+		want  []string
+		count string // text that must appear exactly once
+	}{
+		{"nothing to carry", draft{}, nil, ""},
+		{"queued message the old admiral never answered", draft{Unanswered: []string{"still waiting for the amounts\nall at 1150"}},
+			[]string{"## Last user messages", "> still waiting for the amounts\n> all at 1150"}, "still waiting"},
+		{"sent during the hold and also in the session: once", draft{Text: "deploy it no", Sent: true, Unanswered: []string{"deploy it now"}},
+			[]string{"> deploy it now"}, "deploy it no"},
+		{"sent during the hold, not in the session yet", draft{Text: "deploy it", Sent: true, Unanswered: []string{"earlier"}},
+			[]string{"> earlier", "never answered", "deploy it"}, "deploy it"},
+		{"sent during the hold, an older message shares its start", draft{Text: "ok", Sent: true, Unanswered: []string{"ok but check first", "later"}},
+			[]string{"Answer it first:\n\nok"}, ""},
+		{"too long for the launch command: named file", draft{Unanswered: []string{"long"}, UnansweredFile: "/x/main-unanswered.md"},
+			[]string{"## Last user messages", "They are in /x/main-unanswered.md"}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			boot := bootPrompt(tt.d)
+			if !strings.HasPrefix(boot, supervisor.BootPrompt) {
+				t.Fatalf("boot prompt %q lost the boot text", boot)
+			}
+			if tt.want == nil && boot != supervisor.BootPrompt {
+				t.Errorf("boot prompt %q carries something", boot)
+			}
+			for _, w := range tt.want {
+				if !strings.Contains(boot, w) {
+					t.Errorf("boot prompt %q lacks %q", boot, w)
+				}
+			}
+			if tt.count != "" && strings.Count(boot, tt.count) != 1 {
+				t.Errorf("boot prompt %q has %q %d times", boot, tt.count, strings.Count(boot, tt.count))
+			}
+		})
+	}
+}
+
+func TestWithUnanswered(t *testing.T) {
+	long := strings.Repeat("it's ", 100)
+	tests := []struct {
+		name     string
+		msgs     []string
+		wantN    int
+		wantFile bool
+	}{
+		{"short: inline", []string{"still waiting for the amounts"}, 1, false},
+		{"fleet's own lines are not carried", []string{"[fleet] report from a1", supervisor.BootPrompt}, 0, false},
+		{"too long for tmux: in a file", []string{long}, 1, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := testFleet(t)
+			store := t.TempDir()
+			f.Profiles = map[string]tools.Profile{"copilot": {Name: "copilot", SessionPath: store + "/{id}"}}
+			sess := filepath.Join(store, "0123456789abcdef")
+			os.MkdirAll(sess, 0o700)
+			ev := `{"type":"assistant.message","data":{"content":"ok"}}` + "\n"
+			for _, m := range tt.msgs {
+				b, _ := json.Marshal(map[string]any{"type": "user.message", "data": map[string]string{"content": m}})
+				ev += string(b) + "\n"
+			}
+			os.WriteFile(filepath.Join(sess, "events.jsonl"), []byte(ev), 0o600)
+			d := withUnanswered(f, supervisor.Main, "0123456789abcdef", draft{})
+			if len(d.Unanswered) != tt.wantN || (d.UnansweredFile != "") != tt.wantFile {
+				t.Fatalf("got %d messages, file %q; want %d, file %v", len(d.Unanswered), d.UnansweredFile, tt.wantN, tt.wantFile)
+			}
+			boot := bootPrompt(d)
+			if len(boot)+16*strings.Count(boot, "'") > len(supervisor.BootPrompt)+maxInline+2 {
+				t.Errorf("boot prompt is %d bytes, too long for the launch command", len(boot))
+			}
+			if tt.wantFile {
+				if b, _ := os.ReadFile(d.UnansweredFile); !strings.Contains(string(b), "it's") {
+					t.Errorf("file %s lacks the message", d.UnansweredFile)
+				}
 			}
 		})
 	}
