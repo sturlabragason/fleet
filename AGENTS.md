@@ -1,6 +1,6 @@
 # fleet: agent notes
 
-The spec is DESIGN.md (requirements in §0, decisions in §14). Read it before changing behaviour.
+The spec is DESIGN.md (requirements in §0, decisions in §14). Read the parts a change touches before changing behaviour, by section: `fleet design <ADR-N | §x | words>` (the file is bigger than a context window).
 How docs, screenshots and colours should look is docs/style.md. Read it before changing prose, a
 README, a screenshot or anything in internal/theme.
 

@@ -118,8 +118,8 @@ ready_timeout = "15s"
 # work to a fresh agent after this many context compactions or this many AI
 # credits (Copilot agents; DESIGN §7b, ADR-71). Agents that compacted cost
 # about ten times as much. 0 turns a threshold off. [defaults] only.
-# recycle_compactions = 2
-# recycle_aic = 1000
+# recycle_compactions = 1
+# recycle_aic = 500
 
 # An agent's question or blocked report that has waited on you longer than this
 # wakes its owner once more: "[fleet] <name> has waited 2h on the user: ...".

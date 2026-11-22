@@ -70,7 +70,7 @@ func TestExternalAdmiral(t *testing.T) {
 	if st, _ := callText(t, s, "fleet_status", nil); !strings.HasPrefix(st, "admiral desktop: external") || strings.Contains(st, "fleet_handoff]") {
 		t.Errorf("status: %q", st)
 	}
-	if s.instructions() != ExternalPointer || !strings.Contains(s.currentInstructions(), Instructions) {
+	if s.instructions() != ExternalPointer || !strings.Contains(s.currentInstructions(nil), Instructions) {
 		t.Error("external admiral: want the pointer at initialize and the full rules from fleet_instructions")
 	}
 }

@@ -16,9 +16,10 @@ type Recycle struct {
 	AIC         float64 // [defaults] recycle_aic
 }
 
-// DefaultRecycle: two compactions or 1,000 AIC. In 14 days of sessions the
-// agents that compacted had a median of 1,108 AIC against 105 for the rest.
-func DefaultRecycle() Recycle { return Recycle{Compactions: 2, AIC: 1000} }
+// DefaultRecycle: one compaction or 500 AIC (ADR-195). Agents that compacted
+// were 18% of fleet sessions but 50% of fleet credits (median 525 AIC
+// against 96 for the rest), so the first compaction is the signal.
+func DefaultRecycle() Recycle { return Recycle{Compactions: 1, AIC: 500} }
 
 // Off reports whether both thresholds are disabled.
 func (r Recycle) Off() bool { return r.Compactions <= 0 && r.AIC <= 0 }

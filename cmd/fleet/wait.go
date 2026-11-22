@@ -16,7 +16,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/supervisor"
 )
 
-const waitUsage = `usage: fleet wait [--agents a,b] [--timeout 300s] [--as NAME] [--admiral NAME]`
+const waitUsage = `usage: fleet wait [--agents a,b] [--timeout 270s] [--as NAME] [--admiral NAME]`
 
 // cmdWait is fleet_wait for a shell (ADR-72): block until a new report or
 // message lands in the caller's mailbox. Exit 0 with the headlines, or 2

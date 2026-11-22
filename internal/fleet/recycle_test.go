@@ -86,3 +86,27 @@ func TestRecycleLine(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestSendAdvice(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		pct  int
+		cold bool
+		want string // substring; "" = no advice
+	}{
+		{"unknown", 0, true, ""},
+		{"low", 20, false, ""},
+		{"full", 61, false, "at 61% context"},
+		{"at the line", 60, false, ""},
+		{"cold and used", 40, true, "idled over an hour"},
+		{"cold but small", 25, true, ""},
+		{"full wins over cold", 80, true, "at 80% context"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			got := sendAdvice("a1", c.pct, c.cold)
+			if c.want == "" && got != "" || c.want != "" && !strings.Contains(got, c.want) {
+				t.Errorf("sendAdvice(%d, %v) = %q, want %q", c.pct, c.cold, got, c.want)
+			}
+		})
+	}
+}

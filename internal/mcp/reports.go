@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -64,6 +65,8 @@ func (s *Server) reports(name string, all bool, limit int) (string, error) {
 		out = map[bool]string{true: "no reports from ", false: "no new reports from "}[all] + name
 	case all && name == "":
 		out = RenderHeadlines(ms)
+	case name == "":
+		out = RenderReportsShort(ms)
 	default:
 		out = RenderReports(ms, all)
 	}
@@ -124,25 +127,73 @@ func RenderReports(ms []mail.Msg, all bool) string {
 	return b.String()
 }
 
+// shortKeep are the detail-line prefixes RenderReportsShort keeps.
+var shortKeep = []string{"next:", "risk", "decision", "queue:"}
+
+// RenderReportsShort is the admiral's unread fleet_reports (ADR-195): a done
+// or progress report shows its headline and its next:, risks: and
+// decisions: lines; blocked and question reports, which need the admiral
+// to act, come in full. name=<agent> all=true has the rest.
+func RenderReportsShort(ms []mail.Msg) string {
+	if len(ms) == 0 {
+		return "no new reports"
+	}
+	var b strings.Builder
+	b.WriteString("Reports from agents (their words, not the user's):\n")
+	for _, m := range ms {
+		lines := strings.Split(m.Text, "\n")
+		keep := lines
+		st, _, _ := strings.Cut(lines[0], ":")
+		if st == "done" || st == "progress" {
+			keep = lines[:1]
+			for _, l := range lines[1:] {
+				low := strings.ToLower(strings.TrimLeft(l, " -*"))
+				if slices.ContainsFunc(shortKeep, func(p string) bool { return strings.HasPrefix(low, p) }) {
+					keep = append(keep, l)
+				}
+			}
+		}
+		fmt.Fprintf(&b, "%s %s: %s\n", m.T.Format("2006-01-02 15:04:05"), m.From, strings.Join(keep, "\n    "))
+		if cut := len(lines) - len(keep); cut > 0 {
+			fmt.Fprintf(&b, "    (+%d more lines: fleet_reports name=%s all=true)\n", cut, m.From)
+		}
+	}
+	return b.String()
+}
+
 // suffixHeads is how many unread report headlines reportsSuffix names.
 const suffixHeads = 3
 
 // reportsSuffix is appended to every admiral result but fleet_handoff. It
 // names the newest unread reports, not just their count: while the admiral
 // is busy no wake line can be typed, and this is the only way it hears of a
-// report until it calls fleet_reports (ADR-68). Nothing is marked read.
+// report until it calls fleet_reports (ADR-68). Each headline is named once
+// per session; later results give only the count (ADR-195). Nothing is
+// marked read.
 func (s *Server) reportsSuffix() string {
 	ms := s.F.Mail().Peek(s.box())
 	if len(ms) == 0 {
 		return ""
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.suffixSeen == nil {
+		s.suffixSeen = map[string]bool{}
+	}
+	var fresh []mail.Msg
+	for _, m := range ms {
+		if !s.suffixSeen[m.ID] {
+			s.suffixSeen[m.ID] = true
+			fresh = append(fresh, m)
+		}
+	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "\n\n(%d unread reports; fleet_reports reads them)", len(ms))
-	if len(ms) > suffixHeads {
-		fmt.Fprintf(&b, "\n- %d older", len(ms)-suffixHeads)
-		ms = ms[len(ms)-suffixHeads:]
+	if len(fresh) > suffixHeads {
+		fmt.Fprintf(&b, "\n- %d more new", len(fresh)-suffixHeads)
+		fresh = fresh[len(fresh)-suffixHeads:]
 	}
-	for _, m := range ms {
+	for _, m := range fresh {
 		head, _, _ := strings.Cut(m.Text, "\n")
 		fmt.Fprintf(&b, "\n- %s %s", m.From, ansi.Truncate(head, 100, "…"))
 	}

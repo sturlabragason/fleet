@@ -226,6 +226,10 @@ var usage = `usage:
                                             atomic, so parallel agents never pick the same one
   fleet adr ls [--json] [-C dir]            ADR numbers claimed but not yet on main
   fleet adr release <N> [-C dir]            give a number back (a claim also frees itself once its ADR is on main)
+  fleet design [-C dir] <ADR-N | §x | words>
+                                            print one ADR or section of the nearest DESIGN.md
+                                            (words match headings and ADR titles); read that,
+                                            never the whole file
   fleet merge [-C dir] [--dry-run [--json]] [--check CMD] [--retries N]
                                             rebase this worktree's branch onto main, run the checks,
                                             merge into the local main checkout and run them again.
@@ -367,6 +371,7 @@ var statelessCmds = map[string]func(args []string) error{
 	"touching":  cmdTouching,
 	"exec":      cmdExec,
 	"adr":       cmdADR,
+	"design":    cmdDesign,
 	"stats":     cmdStats,
 	"merge":     cmdMerge,
 	"graph":     cmdGraph,

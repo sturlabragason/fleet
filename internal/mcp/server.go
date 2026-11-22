@@ -84,7 +84,13 @@ type Server struct {
 	// served is the hash of the instructions the client last got, inherited
 	// across a reload (ADR-102).
 	served string
-	mu     sync.Mutex
+	// suffixSeen holds the unread reports whose headline reportsSuffix
+	// already named (ADR-195); guarded by mu.
+	suffixSeen map[string]bool
+	// had is the hash of the instructions text the client holds, the base
+	// of fleet_instructions' diff (ADR-195).
+	had string
+	mu  sync.Mutex
 
 	// out writes protocol messages; progress, while a tools/call that
 	// carries a progressToken runs, sends it a notifications/progress
@@ -271,6 +277,8 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 	switch req.Method {
 	case "initialize":
 		s.served = instructionsHash(s.rulesText())
+		s.had = s.served
+		s.keepInstructions(s.rulesText())
 		return map[string]any{
 			"protocolVersion": ProtocolVersion,
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": true}},
@@ -306,7 +314,7 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		var err error
 		switch {
 		case p.Name == "fleet_instructions":
-			text = s.currentInstructions()
+			text = s.currentInstructions(p.Arguments)
 		case s.Agent != "":
 			text, err = s.agentCall(p.Name, p.Arguments)
 		default:

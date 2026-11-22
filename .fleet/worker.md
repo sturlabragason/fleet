@@ -1,4 +1,5 @@
 Repo rules (fleet)
+- DESIGN.md is about 700 KB, bigger than a context window: read the part you need with `fleet design <ADR-N | §x | words>`, never the whole file.
 - Checks: locally `make build && make lint && go vet ./<changed pkgs>/...`, no test runs beyond the one test you are fixing; tests and `-race` of the packages your change reaches (`scripts/affected-pkgs.sh`, ADR-149) and golangci-lint on new lines (ADR-134) run in GitHub Actions on your pushed `fleet/<name>` branch and must be green before you merge (ADR-69); main runs the full suite. `make test` always exits 0, so it is not a check.
 - Tests use only `fleet-test-*` tmux sockets and the fake agent; pin `FLEET_CONFIG` to a nonexistent path or a temp file.
 - A user-facing feature or fix adds one line to `CHANGELOG.md` (top of today's `## YYYY-MM-DD` section, what the user can do now) in the same commit; `fleet changes` / `Alt-g` show it from the binary.

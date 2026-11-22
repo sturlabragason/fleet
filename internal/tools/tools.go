@@ -290,13 +290,22 @@ const copilotLean = "--excluded-tools run_dynamic_workflow dynamic_workflows_man
 // review with a subagent or delegate.
 const copilotNoAgents = " task read_agent list_agents write_agent"
 
+// copilotSkills lists skills by embedding lookup instead of all of them in
+// every prompt (ADR-195). Copilot keeps the choice in its own config.
+const copilotSkills = " --dynamic-retrieval skills=on"
+
 // copilotContext is the context_args table shared by the Copilot profiles.
-// --disable-builtin-mcps comes last: --excluded-tools takes every argument
-// up to the next flag.
-const copilotContext = `context_args = { light = "` + copilotLean + copilotNoAgents + ` --disable-builtin-mcps", ` +
-	`standard = "` + copilotLean + copilotNoAgents + ` --disable-builtin-mcps", ` +
-	`pro = "` + copilotLean + ` --disable-builtin-mcps", ` +
-	`leader = "` + copilotLean + ` --disable-builtin-mcps" }`
+// --disable-builtin-mcps comes after --excluded-tools, which takes every
+// argument up to the next flag. A light errand also thinks less (ADR-195).
+const copilotContext = `context_args = { light = "` + copilotLean + copilotNoAgents + ` --disable-builtin-mcps --reasoning-effort low` + copilotSkills + `", ` +
+	`standard = "` + copilotLean + copilotNoAgents + ` --disable-builtin-mcps` + copilotSkills + `", ` +
+	`pro = "` + copilotLean + ` --disable-builtin-mcps` + copilotSkills + `", ` +
+	`leader = "` + copilotLean + ` --disable-builtin-mcps` + copilotSkills + `" }`
+
+// claudeContext caps Claude's 1M window at 250k before it compacts, so a
+// long session stops re-reading half a million tokens a call, and runs a
+// light errand at low effort (ADR-195).
+const claudeContext = `context_args = { light = "--effort low --autocompact 250000", standard = "--autocompact 250000", pro = "--autocompact 250000", leader = "--autocompact 250000" }`
 
 // copilotNote is the copilot family's prompt_note (ADR-156).
 const copilotNote = "Copilot: if your MCP tools are deferred, load the fleet tools in your first response with one `tool_search_tool` call, pattern `^fleet-peer-fleet_`, never later. " +
@@ -374,6 +383,7 @@ acp_env = { CLAUDE_CODE_EXECUTABLE = "{command_path}", ANTHROPIC_MODEL = "` + Cl
 acp_mcp = "session"
 acp_meta = "claude"
 acp_unset_env = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"]
+` + claudeContext + `
 ` + claudeModels + `
 
 [agy]
@@ -517,6 +527,9 @@ func LoadWith(home string, local conf.Doc) (map[string]Profile, error) {
 		}
 		if p.HookArgs == nil {
 			p.HookArgs = b.HookArgs
+		}
+		if p.ContextArgs == nil { // effort, skills and compaction per level (ADR-195); {} opts out
+			p.ContextArgs = b.ContextArgs
 		}
 		if p.UserMCPConfig == "" {
 			p.UserMCPConfig = b.UserMCPConfig

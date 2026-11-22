@@ -597,7 +597,7 @@ func TestACPArgv(t *testing.T) {
 	// Peer MCP args go in, the context args come last before extra args.
 	cp, _ := PeerMCP("/bin/fleet", "a1")
 	got := ps["copilot"].ACPArgv(Vars{Fleet: "/bin/fleet", Name: "a1", PeerMCP: cp}, Launch{Context: "pro", Extra: []string{"--x"}})
-	if got[1] != "--additional-mcp-config" || got[3] != "--acp" || got[len(got)-2] != "--disable-builtin-mcps" || got[len(got)-1] != "--x" {
+	if got[1] != "--additional-mcp-config" || got[3] != "--acp" || got[len(got)-4] != "--disable-builtin-mcps" || got[len(got)-2] != "skills=on" || got[len(got)-1] != "--x" {
 		t.Errorf("copilot acp argv with peer/context/extra: %q", got)
 	}
 }
@@ -884,6 +884,16 @@ command = "foo"
 	}
 	if ps["other"].PeerArgs != nil || ps["other"].HookArgs != nil {
 		t.Errorf("other: %+v", ps["other"])
+	}
+	// Per-level effort, skills and compaction args come along too (ADR-195).
+	if l := ps["claude-personal"].ContextArgs["light"]; indexOf(l, "--effort") < 0 || indexOf(l, "--autocompact") < 0 {
+		t.Errorf("claude-personal light context args: %v", l)
+	}
+	if l := ps["copilot-work"].ContextArgs["light"]; indexOf(l, "--reasoning-effort") < 0 {
+		t.Errorf("copilot-work light context args: %v", l)
+	}
+	if indexOf(ps["copilot-work"].ContextArgs["pro"], "--reasoning-effort") >= 0 {
+		t.Error("pro must keep the model's default effort")
 	}
 }
 

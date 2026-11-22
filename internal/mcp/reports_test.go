@@ -7,6 +7,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/mail"
 	"github.com/sturlabragason/fleet/internal/wall"
 )
 
@@ -41,7 +42,7 @@ func TestReportRoundTrip(t *testing.T) {
 		t.Fatalf("status suffix: %q", st)
 	}
 	br, _ := sup.tool("fleet_brief", nil)
-	if !strings.Contains(br, "## Unread reports\n") || !strings.Contains(br, "a: done: nav fixed") || !strings.HasSuffix(br, "(1 unread reports; fleet_reports reads them)\n- a done: nav fixed on feat/nav") {
+	if !strings.Contains(br, "## Unread reports\n") || !strings.Contains(br, "a: done: nav fixed") || !strings.HasSuffix(br, "(1 unread reports; fleet_reports reads them)") {
 		t.Fatalf("brief must list and not mark read: %q", br)
 	}
 	msg, isErr := sup.tool("fleet_reports", nil)
@@ -134,5 +135,23 @@ func TestReportCellAgeAnsweredAndStatus(t *testing.T) {
 	a.Report = &board.Report{State: "done", Summary: "shipped", At: now.Add(-30 * time.Second)}
 	if got := reportCellAt(a, now); got != "done, 30s ago: shipped" {
 		t.Fatalf("done cell %q", got)
+	}
+}
+
+// The admiral's unread reports keep a done's headline and its next:, risks:
+// and decisions: lines; a question comes in full (ADR-195).
+func TestRenderReportsShort(t *testing.T) {
+	ms := []mail.Msg{
+		{ID: "1", From: "a", Text: "done: shipped x\nlong detail\nnext: y\nrisks: z\ndecisions: w"},
+		{ID: "2", From: "b", Text: "question: which?\ncontext line"},
+	}
+	got := RenderReportsShort(ms)
+	for _, want := range []string{"a: done: shipped x\n    next: y\n    risks: z\n    decisions: w\n", "(+1 more lines: fleet_reports name=a all=true)", "b: question: which?\n    context line\n"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in %q", want, got)
+		}
+	}
+	if strings.Contains(got, "long detail") || strings.Contains(got, "name=b") {
+		t.Errorf("kept a dropped line: %q", got)
 	}
 }

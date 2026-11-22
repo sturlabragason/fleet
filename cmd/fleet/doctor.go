@@ -140,6 +140,16 @@ func doctor(env doctorEnv) []doctorCheck {
 	if c, ok := checkGraphs(graph.List(env.home), graph.Reads(env.home, now.Add(-graphReadsWindow)), env.userHome, now); ok {
 		cs = append(cs, c)
 	}
+	if c, ok := checkRules(env.home); ok {
+		cs = append(cs, c)
+	}
+	look := env.look
+	if look == nil {
+		look = func(cmd string) error { _, err := exec.LookPath(cmd); return err }
+	}
+	if c, ok := checkRTK(env.userHome, look); ok {
+		cs = append(cs, c)
+	}
 	return cs
 }
 

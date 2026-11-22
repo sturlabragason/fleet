@@ -91,7 +91,11 @@ func (s *Server) send(a args) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return fleet.DeliveryNote(a.Name, d), nil
+		out := fleet.DeliveryNote(a.Name, d)
+		if adv := s.F.SendAdvice(a.Name, time.Now()); adv != "" && len(a.Keys) == 0 {
+			out += "\n" + adv
+		}
+		return out, nil
 	}
 	names := a.Names
 	if a.Team != "" {

@@ -49,8 +49,12 @@ func TestInstructionsChangedHint(t *testing.T) {
 	}
 	c.send(`{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"fleet_instructions","arguments":{}}}` + "\n")
 	txt := resultText(c.next())
-	if !strings.Contains(txt, "rules v2") || !strings.Contains(txt, instructionsHash("rules v2")) {
-		t.Fatalf("fleet_instructions: %q", txt)
+	if !strings.Contains(txt, "+ rules v2\n- rules v1") || !strings.Contains(txt, instructionsHash("rules v2")) {
+		t.Fatalf("fleet_instructions must return the changed lines (ADR-195): %q", txt)
+	}
+	c.send(`{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"fleet_instructions","arguments":{"full":true}}}` + "\n")
+	if txt := resultText(c.next()); strings.Contains(txt, "+ ") || !strings.Contains(txt, "rules v2") {
+		t.Fatalf("full=true: %q", txt)
 	}
 	if s.served != instructionsHash("rules v2") {
 		t.Fatal("served hash not updated, so a later reload would repeat the hint")

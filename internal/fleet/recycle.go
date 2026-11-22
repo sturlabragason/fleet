@@ -104,3 +104,41 @@ func (f *Fleet) reportRecycle(name string, sp spend.Spend) {
 	}
 	f.wakeBox(up, m.ID, name, "question", line)
 }
+
+// Send-time advice (ADR-195): fleet_send to a full or long-idle agent says
+// a fresh agent would be cheaper. The text is still delivered.
+const (
+	// SendFullPct is the context fill above which a send warns.
+	SendFullPct = 60
+	// SendColdAfter is the idle time after which the agent's prompt cache
+	// has expired, so its next turn rewrites the whole context.
+	SendColdAfter = time.Hour
+	// sendColdPct is the fill above which a cold rewrite is worth naming.
+	sendColdPct = 30
+)
+
+// SendAdvice is the note fleet_send adds for agent name, "" when none: its
+// context is over SendFullPct, or it has idled past SendColdAfter with more
+// than sendColdPct of its context in use.
+func (f *Fleet) SendAdvice(name string, now time.Time) string {
+	a := f.Store.Load().Agents[name]
+	if a == nil || a.SessionID == "" && !a.ACP() {
+		return ""
+	}
+	sp, ok := f.SpendOf(a)
+	if !ok {
+		return ""
+	}
+	return sendAdvice(name, sp.Context, a.Status == "idle" && now.Sub(a.StatusSince) >= SendColdAfter)
+}
+
+func sendAdvice(name string, pct int, cold bool) string {
+	const recipe = " For new work, have it write result.md, close it, and spawn a fresh agent with result.md plus a brief."
+	switch {
+	case pct > SendFullPct:
+		return fmt.Sprintf("[fleet] %s is at %d%% context: every turn re-reads it.", name, pct) + recipe
+	case cold && pct > sendColdPct:
+		return fmt.Sprintf("[fleet] %s idled over an hour at %d%% context: its prompt cache expired, so this turn rewrites it all.", name, pct) + recipe
+	}
+	return ""
+}

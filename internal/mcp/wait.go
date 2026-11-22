@@ -16,8 +16,10 @@ import (
 // arrives, instead of sleep-polling with full-context model turns.
 
 const (
-	// WaitDefault is how long fleet_wait and `fleet wait` block by default.
-	WaitDefault = 300 * time.Second
+	// WaitDefault is how long fleet_wait and `fleet wait` block by default:
+	// under the 5-minute prompt cache, so the wake re-reads the cache
+	// instead of rewriting it (ADR-195).
+	WaitDefault = 270 * time.Second
 	// WaitMax caps a wait; the next request from the client ends it.
 	WaitMax = 600 * time.Second
 	// WaitNoProgress caps fleet_wait for a client that sent no progress
@@ -33,9 +35,9 @@ var (
 	progressEvery = 30 * time.Second
 )
 
-var waitToolDef = tool{"fleet_wait", "Block until a new report or message arrives for you, a prompt is sent to your ACP pane, or timeout_s passes (default 300, max 600; 170 if your client sends no progress token). Use it instead of sleep or calling fleet_reports again and again. Returns only headlines (who, state, first line) and marks nothing read: fleet_reports, fleet_squad_reports or fleet_inbox give the full text. Call it on its own: another fleet tool call ends it.", obj(nil, map[string]any{
+var waitToolDef = tool{"fleet_wait", "Block until a new report or message arrives for you, a prompt is sent to your ACP pane, or timeout_s passes (default 270, max 600; 170 if your client sends no progress token). Use it instead of sleep or calling fleet_reports again and again. Returns only headlines (who, state, first line) and marks nothing read: fleet_reports, fleet_squad_reports or fleet_inbox give the full text. Call it on its own: another fleet tool call ends it.", obj(nil, map[string]any{
 	"agents":    strList("only wake for these agents (default: anyone)"),
-	"timeout_s": map[string]any{"type": "integer", "description": "seconds to wait (default 300, max 600)"}})}
+	"timeout_s": map[string]any{"type": "integer", "description": "seconds to wait (default 270, max 600)"}})}
 
 func init() {
 	agentToolDefs = append(agentToolDefs, waitToolDef)
