@@ -93,6 +93,8 @@ func cmdSupervisor(f *fleet.Fleet, args []string) error {
 			return cmdAdmiralMin(f, args[1:])
 		case "act":
 			return cmdAdmiralAct(f, args[1:])
+		case "reply":
+			return cmdAdmiralReply(f, args[1:])
 		}
 	}
 	if len(args) > 0 && args[0] == "profile" {
@@ -127,7 +129,7 @@ func cmdSupervisor(f *fleet.Fleet, args []string) error {
 	}
 	asJSON := len(args) > 0 && args[0] == "--json"
 	if len(args) > 0 && !asJSON {
-		return fmt.Errorf("usage: fleet admiral [--name N] [--json] | add NAME [--profile P | --external] | ls | close NAME | give AGENT --to NAME | reset [--name N] [--handoff] | profile [--name N] [NAME|--pick] | restart [--name N]")
+		return fmt.Errorf("usage: fleet admiral [--name N] [--json] | add NAME [--profile P | --external] | ls | close NAME | give AGENT --to NAME | reset [--name N] [--handoff] | profile [--name N] [NAME|--pick] | restart [--name N] | reply [--name N]")
 	}
 	s := supervisor.CurrentOf(f.Home, f.T, mainTarget(), adm)
 	used, max, ok := supervisor.Fill(supervisor.CopilotHome(), s.SessionID)

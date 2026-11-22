@@ -170,6 +170,7 @@ Each tool's description says when to use it. ✱ = ask the user one line first, 
 
 Reply in 1–3 lines. List waiting and error agents first, longest wait first.
 Summarise; don't paste raw screen output.
+A user message that starts `[re #N, HH:MM]` (or `[re todo ID]`, `[re report ID from AGENT]`) then `>` lines quotes one of your earlier replies, an open item or a report (Alt-r): answer about that quote.
 While agents work, end your turn with no tool call: a report line wakes you. Never end your turn through an autopilot finish tool, and never poll `fleet_reports` or `fleet_status` in a row.
 
 ## Updates

@@ -434,6 +434,7 @@ The bottom tmux status line and the overview header show a short hint in plain w
 | Admiral | `Alt-S` | move the admiral left/right |
 | Admiral | `Alt-R` | reset the admiral to a fresh chat (asks y/n) |
 | Admiral | `Alt-P` | pick the admiral's profile (copilot, claude, …) |
+| Admiral | `Alt-r` | reply to an earlier admiral message: pick it, ⏎ quotes it into the input box |
 | Overview | `Alt-c` | overview: tiles ↔ compact chips |
 | Overview | `⏎ / click` | put the selected agent into the ▶ pane (or onto the wall if no pane is ▶) |
 | Overview | `a / +` | add the selected agent as a new pane (more slots if full) |
@@ -1091,6 +1092,15 @@ What fleet adds is the part an agent can't do for itself: one graph per repo, bu
   - **Usage measure.** Every one of these reads appends `{"at","use","auto","n","agent"}` to `~/.fleet/graphs/reads.jsonl` (`use` is `touching`, `merge`, `recall` or `brief`; `auto` means fleet chose the graph; `n` is how many results it returned; `agent` comes from `FLEET_OWNER`). `fleet doctor`'s `code graphs` line counts the last 7 days by use. A failed write is logged and never fails the read.
 - **Cost.** No fleet tokens: building is local and model-free. An agent pays for what it reads: a `graphify query` answer is capped at about 2,000 tokens by default (6.5 KB measured), and a vague question on this repo matched 1,717 nodes and was cut to 75, so `affected` and `path` on a named file or symbol are the useful calls. Agents told about the graph did not use it (ADR-141: 0 graphify calls in 30 Copilot and 6 Claude runs), so spawns no longer carry a prompt line for it; the graph pays through fleet's own reads (`touching --graph`, `recall`). graphify's "80% fewer tokens" is a claim for its paid cloud service, not this.
 - **Privacy.** The code-only build sends nothing anywhere (no telemetry in 0.9.109; the network code is limited to URL ingest and LLM backends, neither of which `update` reaches). graphify logs every query, question included, to `~/.cache/graphify-queries.log`; that is the user's machine and the user's tool.
+
+### 6.16 Replying to one admiral message (ADR-189, built 2026-11-22)
+
+No admiral harness has a "reply to this message" feature, and the admirals run in the tools' own TUIs in the alternate screen, so tmux copy-mode can't reach older replies. `Alt-r` (`fleet admiral act reply`, then `fleet admiral reply [--name N]` in a `display-popup`) is a quote picker:
+
+- It lists the admiral's last 20 replies, newest first, numbered from the newest (`#1`), with their age and first line. They come from the tool's session log through the reader `fleet_peek last_message` uses (`status.Replies` for a Copilot `events.jsonl`, `status.ClaudeReplies` for a Claude session `.jsonl`, the last 1 MB of either). A profile with no log fleet reads (agy, vibe, pi, …) falls back to the visible screen, split at blank lines, and the footer says "(from the screen)".
+- Typed text filters by words. Text of 4+ characters that starts an open item's id (todo store, read-only `Store.Admiral`) or a report id in the admiral's mailbox adds that item at the top.
+- ⏎ pastes (bracketed, no Enter) a header `[re #N, HH:MM]` (`[re todo ID]`, `[re report ID from AGENT]`), at most 8 `> ` lines of the original with `> …` when cut, and an empty line, into the admiral's input box, and focuses that pane. `Esc` cancels.
+- Several admirals: the focused admiral pane, else `main` when it is the only one, else a menu asks which (as `Alt-R`, `Alt-P`).
 
 ## 7. Memory (RAM): parking (ADR-44, built)
 
@@ -2763,3 +2773,13 @@ Trade-offs of the amendment: a session's place in the tree is fixed when it open
 **Trade-offs.** A queued tweak the agent did get before it closed is still handed over; fleet can't tell from the store whether the host delivered it. Item dedupe is exact after case and spacing, so a reworded copy stays (the brief and `w` show both). The 1.5 KB notes floor comes out of the pinned notes when the brief is full.
 
 **Found, not changed (PROPOSED).** (a) Four lists track the same open work: the todo store, threads (pro: ideas from `next:` lines, quiet, where you left off), `promise:` lines in `decisions.log`, and the handoff's open items, and none is the authority. PROPOSED by us: the todo store is the one list for asks, promises and requests; threads link to its items instead of deriving their own, and the handoff's open items are only `[id]` references. (b) `fleet_recall` does not search the todo store, so a closed or handed-over item is found only through its `done` note. PROPOSED: add the store to recall's sources. (c) A decision note does not close the ask it answers. PROPOSED: the `fleet_note` reply names open items whose text the note resembles ("close [id]?"). (d) An unread report and the todo ask filed from it are two records of one wait; reading the report closes nothing. PROPOSED: link a question report to its ask so answering one closes both. (e) `wake waiting for an idle, empty input box` was logged 937 times on 2026-11-22: log noise while the admiral pane is busy, not lost reports. PROPOSED: log it once per stall. (f) The pro store's `Hand` does not fold a handed item into an open admiral item with the same text. PROPOSED: make it use `todo.Same` too.
+
+**ADR-189: Alt-r quotes an earlier admiral reply into its input box** (§6.16) — accepted 2026-11-22.
+
+**Context.** The user wanted to answer one specific earlier admiral message, as in Teams or Telegram. Research (2026-11-22) found no native reply-to in Claude Code, Copilot CLI or ACP: ACP's `messageId` is stable but has no reply relation, Claude has hooks that could number replies, Copilot has no display hook. Chat protocols that do have replies (Matrix, IRCv3) also put the quoted text in the body as a fallback, and a model only gains from text it can read.
+
+**Decision.** (1) An inline picker on `Alt-r` in the admiral pane pastes the chosen reply as a `> quote` under a `[re #N, HH:MM]` header; the user answers under it and sends it themselves. (2) Replies come from the transcript, not the screen; tools with no reader use the screen blocks, so every harness works. (3) The quote keeps at most 8 lines, cut with `…`, with no flag to quote it all. (4) The picker's filter also resolves a todo id or report id, read-only, through the existing `todo.Store.Admiral` and mailbox reads; reply numbers stay their own namespace (newest = `#1`, as listed). (5) `status.LastMessage` and `status.LastClaudeMessage` are replaced by `Replies` and `ClaudeReplies`; `fleet.LogReplies` is the one place that picks the log for a profile, shared by `fleet_peek last_message` and the picker.
+
+**Rejected.** Numbered replies with a typed `re N:` resolved by prompt hooks (option 2): native only on Claude, needs the model to echo numbers on Copilot and is a prompt rule elsewhere; the user declined building it now. A prompt rule alone (option 3): the model guesses again for ordinary messages. Copy-mode quoting: the alternate screen has no scrollback.
+
+**Trade-offs.** Numbers count from the newest reply when the picker opens, so `#1` names a different reply later; the header's time and the quote itself carry the meaning. Only the last 1 MB of the log is read, and a reset admiral starts a new log, so replies from before the last reset are not offered. Copilot logs each assistant turn segment as its own message, so a turn with tool calls can show as several short replies.

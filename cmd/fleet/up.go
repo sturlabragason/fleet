@@ -578,9 +578,10 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		{"bind-key", "-n", "M-S", wallCmd("side")},
 		{"bind-key", "-n", "M-c", wallCmd("chips")},
 		{"bind-key", "-n", "M-o", "select-pane", "-t", "{marked}"},
-		// M-R and M-P act on the focused admiral, or ask which (DESIGN §6.12).
+		// M-R, M-P and M-r act on the focused admiral, or ask which (DESIGN §6.12).
 		{"bind-key", "-n", "M-R", wallCmdAct(f.Exe, "reset")},
 		{"bind-key", "-n", "M-P", wallCmdAct(f.Exe, "pick")},
+		{"bind-key", "-n", "M-r", wallCmdAct(f.Exe, "reply")},
 		{"bind-key", "-n", keys.HelpTmuxKey, "display-popup", "-E", "-b", "rounded",
 			"-w", strconv.Itoa(keys.PopupWidth()), "-h", strconv.Itoa(keys.PopupHeight() + logo.HeadRows),
 			"-T", " fleet keys · any key closes ", exe + " keys --popup"},

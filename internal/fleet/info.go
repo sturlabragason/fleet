@@ -11,7 +11,6 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/acphost"
 	"github.com/sturlabragason/fleet/internal/board"
-	"github.com/sturlabragason/fleet/internal/spend"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/tools"
@@ -316,16 +315,11 @@ func (f *Fleet) loggedMessage(name string) (string, bool) {
 			return capMessage(t), true
 		}
 	}
-	p := f.Profiles[a.Profile]
-	var msg string
-	if path := p.SubagentLogPath(a.SessionID); path != "" {
-		msg, ok, _ = status.LastMessage(path)
-	} else if path, kind := spend.Source(p, a.SessionID); kind == spend.Claude {
-		msg, ok, _ = status.LastClaudeMessage(path)
-	} else {
+	rs, ok := LogReplies(f.Profiles[a.Profile], a.SessionID)
+	if !ok || len(rs) == 0 {
 		return "", false
 	}
-	return capMessage(msg), ok
+	return capMessage(rs[len(rs)-1].Text), true
 }
 
 // capMessage keeps the last LastMessageMax runes of msg.

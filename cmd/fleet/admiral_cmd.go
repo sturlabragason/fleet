@@ -278,25 +278,30 @@ func cmdAdmiralGive(f *fleet.Fleet, args []string) error {
 	return nil
 }
 
-// cmdAdmiralAct is behind M-R and M-P: `fleet admiral act reset|pick --pane %N`.
+// actArgs maps each `fleet admiral act` verb to the tmux command it runs
+// for one admiral: M-R's y/n reset, M-P's profile picker, M-r's quote picker.
+var actArgs = map[string]func(f *fleet.Fleet, adm string) []string{
+	"reset": func(f *fleet.Fleet, adm string) []string { return confirmResetArgsOf(f.Exe, adm) },
+	"pick":  pickPopupArgsOf,
+	"reply": replyPopupArgsOf,
+}
+
+// cmdAdmiralAct is behind M-R, M-P and M-r: `fleet admiral act reset|pick|reply --pane %N`.
 // Focused on an admiral pane it acts on that admiral; with one admiral it
 // acts on main; otherwise it asks which, never guessing main (DESIGN §6.12).
 func cmdAdmiralAct(f *fleet.Fleet, args []string) error {
 	fs := flag.NewFlagSet("admiral act", flag.ContinueOnError)
 	pane := fs.String("pane", "", "focused pane id")
 	if err := fs.Parse(reorderFlags(args)); err != nil || fs.NArg() != 1 {
-		return fmt.Errorf("usage: fleet admiral act reset|pick [--pane %%N]")
+		return fmt.Errorf("usage: fleet admiral act reset|pick|reply [--pane %%N]")
 	}
 	verb := fs.Arg(0)
-	if verb != "reset" && verb != "pick" {
+	args0, ok := actArgs[verb]
+	if !ok {
 		return fmt.Errorf("unknown verb %q", verb)
 	}
 	run := func(adm string) error {
-		if verb == "reset" {
-			_, err := f.T.Run(confirmResetArgsOf(f.Exe, adm)...)
-			return err
-		}
-		_, err := f.T.Run(pickPopupArgsOf(f, adm)...)
+		_, err := f.T.Run(args0(f, adm)...)
 		return err
 	}
 	var names []string
@@ -331,12 +336,7 @@ func cmdAdmiralAct(f *fleet.Fleet, args []string) error {
 func admiralMenu(f *fleet.Fleet, verb string, names []string) error {
 	a := []string{"display-menu", "-T", " " + verb + " which admiral? "}
 	for i, n := range names {
-		var cmd string
-		if verb == "reset" {
-			cmd = tmuxCmdString(confirmResetArgsOf(f.Exe, n))
-		} else {
-			cmd = tmuxCmdString(pickPopupArgsOf(f, n))
-		}
+		cmd := tmuxCmdString(actArgs[verb](f, n))
 		key := ""
 		if i < 9 {
 			key = fmt.Sprint(i + 1)

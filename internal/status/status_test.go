@@ -3,6 +3,7 @@ package status
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -150,25 +151,38 @@ func TestCleanScreen(t *testing.T) {
 	}
 }
 
-func TestLastMessage(t *testing.T) {
+// texts is the Text of each reply, for comparing.
+func texts(rs []Reply) []string {
+	out := make([]string, len(rs))
+	for i, r := range rs {
+		out[i] = r.Text
+	}
+	return out
+}
+
+func TestReplies(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "events.jsonl")
-	os.WriteFile(p, []byte(`{"type":"assistant.message","data":{"content":"first"}}
+	os.WriteFile(p, []byte(`{"type":"assistant.message","timestamp":"2026-11-22T14:05:00Z","data":{"content":"first"}}
 {"type":"assistant.message","data":{"content":"main answer","toolRequests":[]}}
 {"type":"assistant.message","data":{"content":"","toolRequests":[{"name":"bash"}]}}
 {"type":"assistant.message","data":{"content":"sub","agentId":"a1"}}
 {"type":"assistant.message","data":{"content":"sub2","parentToolCallId":"toolu_1"}}
 {"type":"tool.execution_start","data":{"toolName":"bash"}}
 `), 0o644)
-	if got, ok, err := LastMessage(p); err != nil || !ok || got != "main answer" {
-		t.Errorf("got %q %v %v", got, ok, err)
+	rs, err := Replies(p)
+	if got := texts(rs); err != nil || !slices.Equal(got, []string{"first", "main answer"}) {
+		t.Errorf("got %q %v", got, err)
+	}
+	if len(rs) > 0 && rs[0].T.Hour() != 14 {
+		t.Errorf("timestamp: %v", rs[0].T)
 	}
 	old := LastMessageTail
 	LastMessageTail = 120 // only the tail: the main answers are cut off
 	defer func() { LastMessageTail = old }()
-	if got, ok, _ := LastMessage(p); ok {
-		t.Errorf("tail read found %q", got)
+	if rs, _ := Replies(p); len(rs) != 0 {
+		t.Errorf("tail read found %q", texts(rs))
 	}
-	if _, _, err := LastMessage(p + ".missing"); err == nil {
+	if _, err := Replies(p + ".missing"); err == nil {
 		t.Error("missing file: want error")
 	}
 }
@@ -176,10 +190,10 @@ func TestLastMessage(t *testing.T) {
 // The fixture is a scrubbed real Claude Code session: thinking and tool_use
 // lines, an api-request-blob carrying text, then a sidechain reply after the
 // main one.
-func TestLastClaudeMessage(t *testing.T) {
+func TestClaudeReplies(t *testing.T) {
 	p := filepath.Join("testdata", "claude-session.jsonl")
-	if got, ok, err := LastClaudeMessage(p); err != nil || !ok || got != "1\n2\n3" {
-		t.Errorf("got %q %v %v", got, ok, err)
+	if rs, err := ClaudeReplies(p); err != nil || len(rs) == 0 || rs[len(rs)-1].Text != "1\n2\n3" {
+		t.Errorf("got %q %v", texts(rs), err)
 	}
 	// Text blocks of one message come on separate lines and are joined.
 	q := filepath.Join(t.TempDir(), "s.jsonl")
@@ -188,12 +202,12 @@ func TestLastClaudeMessage(t *testing.T) {
 {"type":"assistant","message":{"id":"m2","role":"assistant","content":[{"type":"tool_use","name":"Bash"}]}}
 {"type":"assistant","message":{"id":"m2","role":"assistant","content":[{"type":"text","text":"part two"}]}}
 `), 0o644)
-	if got, ok, _ := LastClaudeMessage(q); !ok || got != "part one\n\npart two" {
-		t.Errorf("joined: got %q %v", got, ok)
+	if rs, _ := ClaudeReplies(q); !slices.Equal(texts(rs), []string{"old", "part one\n\npart two"}) {
+		t.Errorf("joined: got %q", texts(rs))
 	}
 	os.WriteFile(q, []byte(`{"type":"user","message":{"role":"user","content":"hi"}}`+"\n"), 0o644)
-	if got, ok, err := LastClaudeMessage(q); ok || err != nil {
-		t.Errorf("no reply: got %q %v %v", got, ok, err)
+	if rs, err := ClaudeReplies(q); len(rs) != 0 || err != nil {
+		t.Errorf("no reply: got %q %v", texts(rs), err)
 	}
 }
 

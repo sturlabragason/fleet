@@ -15,6 +15,8 @@ It was called the supervisor until ADR-26. The old names still work (`fleet supe
 
 `fleet admiral` prints its profile, session id and context fill; `fleet admiral reset` replaces it with a fresh chat, `fleet admiral profile NAME` swaps the tool.
 
+To answer one earlier admiral message, press `Alt-r` (`fleet admiral reply`): a popup lists its last 20 replies, newest first, read from the tool's session log (Copilot `events.jsonl`, Claude session `.jsonl`; other tools: the blocks on its screen). Type words to filter, or a todo or report id to quote that item. ⏎ pastes `[re #N, HH:MM]` and at most 8 `>` lines of it into the admiral's input box, unsent; type your answer under it (ADR-189).
+
 To use a tool fleet doesn't start itself, register `fleet mcp --admiral main` (or another admiral's name) as a stdio MCP server in that tool's own config. Without `--admiral`, a server outside an admiral pane can't tell which admiral it serves: reads work, changes are refused.
 
 ## MCP tools

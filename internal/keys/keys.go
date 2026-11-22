@@ -80,6 +80,8 @@ var Bindings = []Binding{
 		Desc: "reset the admiral to a fresh chat (asks y/n)"},
 	{Group: Supervisor, Key: "Alt-P", Tmux: []string{"M-P"},
 		Desc: "pick the admiral's profile (copilot, claude, …)"},
+	{Group: Supervisor, Key: "Alt-r", Tmux: []string{"M-r"},
+		Desc: "reply to an earlier admiral message: pick it, ⏎ quotes it into the input box"},
 	// After the Admiral rows so its hint comes after "Alt-s admiral"
 	// (the first hint item dropped when the status line is narrow).
 	{Group: Review, Key: "Alt-g", Tmux: []string{ChangesTmuxKey},

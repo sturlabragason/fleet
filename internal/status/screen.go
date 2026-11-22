@@ -2,8 +2,6 @@ package status
 
 import (
 	"bufio"
-	"bytes"
-	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -52,82 +50,6 @@ func stripBorders(l string) string {
 		}
 		return t
 	}
-}
-
-// LastMessageTail is how much of the event log LastMessage reads.
-var LastMessageTail int64 = 1 << 20
-
-// LastMessage returns the content of the last main-agent assistant.message
-// in a Copilot events.jsonl, reading only the last LastMessageTail bytes.
-// Subagent messages (data.agentId or data.parentToolCallId set) and empty
-// ones are skipped. ok=false when none is found.
-func LastMessage(path string) (string, bool, error) {
-	last, found := "", false
-	err := scanTail(path, func(line []byte) {
-		if !bytes.Contains(line, []byte(`"assistant.message"`)) {
-			return
-		}
-		var e struct {
-			Type string `json:"type"`
-			Data struct {
-				Content          string `json:"content"`
-				AgentID          string `json:"agentId"`
-				ParentToolCallID string `json:"parentToolCallId"`
-			} `json:"data"`
-		}
-		if json.Unmarshal(line, &e) == nil && e.Type == "assistant.message" &&
-			e.Data.AgentID == "" && e.Data.ParentToolCallID == "" && strings.TrimSpace(e.Data.Content) != "" {
-			last, found = e.Data.Content, true
-		}
-	})
-	return last, found && err == nil, err
-}
-
-// LastClaudeMessage returns the text of the last main-agent assistant reply
-// in a Claude Code session .jsonl, reading only the last LastMessageTail
-// bytes. Claude writes one line per content block, so the text blocks of
-// that one message are joined. Sidechain (subagent) lines, thinking and
-// tool_use blocks are skipped. ok=false when none is found.
-func LastClaudeMessage(path string) (string, bool, error) {
-	var parts []string
-	lastID := ""
-	err := scanTail(path, func(line []byte) {
-		if !bytes.Contains(line, []byte(`"assistant"`)) || !bytes.Contains(line, []byte(`"text"`)) {
-			return
-		}
-		var e struct {
-			Type        string `json:"type"`
-			IsSidechain bool   `json:"isSidechain"`
-			Message     struct {
-				ID      string `json:"id"`
-				Role    string `json:"role"`
-				Content []struct {
-					Type string `json:"type"`
-					Text string `json:"text"`
-				} `json:"content"`
-			} `json:"message"`
-		}
-		if json.Unmarshal(line, &e) != nil || e.Type != "assistant" || e.IsSidechain || e.Message.Role != "assistant" {
-			return
-		}
-		var text []string
-		for _, c := range e.Message.Content {
-			if c.Type == "text" && strings.TrimSpace(c.Text) != "" {
-				text = append(text, c.Text)
-			}
-		}
-		if len(text) == 0 {
-			return
-		}
-		if e.Message.ID == "" || e.Message.ID != lastID {
-			parts = nil
-		}
-		parts, lastID = append(parts, text...), e.Message.ID
-	})
-	if err != nil || len(parts) == 0 {
-		return "", false, err
-	}
-	return strings.Join(parts, "\n\n"), true, nil
 }
 
 // scanTail calls fn with each whole line in the last LastMessageTail bytes
