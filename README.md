@@ -17,6 +17,30 @@ fleet runs your Copilot CLI, Claude Code, agy, vibe and Pi sessions side by side
 
 <sub>Recorded with fake agents and a fake admiral, so no tokens were spent (`scripts/screenshot.sh`). Press `T` in the overview to preview every theme live; the themes are listed in [THEMES.md](THEMES.md).</sub>
 
+## About
+
+fleet is for running many coding-agent sessions at once without visiting each one to see how it is doing. Everything lives in one tmux window: an overview with a tile per agent, a wall of live panes you can type into, and the admiral, an agent with tools to read the others' status, look at their screens, send them prompts, and spawn or close them. You hand work to the admiral and it reports back. In a git repo each agent works in its own worktree and branch, so parallel changes stay apart until you merge them.
+
+## What you get
+
+- **Status tiles.** Every agent is working, waiting, error, stuck or idle, refreshed every second and sorted so the ones waiting on you come first. Copilot and agy report status over the Agent Client Protocol ([docs/acp.md](docs/acp.md)); Claude and vibe are read from their screen, and Pi reports through a small extension fleet loads into it.
+- **A live wall.** Real, interactive tmux panes in layouts of 1, 2, 4, 6 or 9, or main plus stack. The pane that needs you gets the big slot. `fleet up --monitors 2` puts the wall on a second screen.
+- **The admiral.** An agent with `fleet_*` MCP tools to read status, peek at screens, send prompts, answer, spawn and close. `fleet peek --summary <name>` gives it about five lines from a small model instead of a full screen. It shows how full its context is, and `Alt+R` hands it off to a fresh session. See [docs/admiral.md](docs/admiral.md).
+- **A worktree per agent.** Spawning into a git repo gives the agent `<repo>.wt/<name>` on branch `fleet/<name>`. `fleet touching` shows which other worktrees change the same files, and `fleet merge` rebases, checks and merges one into local main.
+- **Task cards.** `fleet spawn --goal "..." --check "go build ./... && go vet ./..."` runs the check when the agent reports done and tells the admiral whether it passed.
+- **Spend per agent.** `fleet spend` shows AI credits or tokens per agent and the fleet total, read from the tools' own session files.
+- **Adopt sessions.** `fleet sessions` lists Copilot and Claude sessions started outside fleet, and `fleet adopt` resumes one as an agent.
+- **Teams, mail and squads.** Group agents with `fleet team`, let them message each other with `fleet mail`, and give a leader a squad of up to four agents with `fleet spawn --leader`.
+- **Memory without a model.** `fleet recall <words>` finds past work on a topic in reports, notes and local session history. `fleet day` lists what waits on you and what got done.
+- **Park and wake.** `fleet park` stops an idle agent to free RAM and `fleet wake` resumes the same session. `max_working` in config queues spawns past a limit.
+- **Claude Desktop as an admiral.** `fleet connect claude-desktop` adds fleet to Claude Desktop's config as a second admiral named `desktop`, with its own agents and reports. Quit and reopen Desktop, then ask it for `fleet_status`. The tmux fleet still has to be up for spawns. See [docs/admiral.md](docs/admiral.md#claude-desktop).
+- **Themes.** 26 palettes, dark and light, most of them taken from the most-installed VS Code themes. `T` in the overview previews each one live across the whole window. See [THEMES.md](THEMES.md).
+- **Optional integrations.** [cass](https://github.com/Dicklesworthstone/coding_agent_session_search), [graphify](https://github.com/Graphify-Labs/graphify) and `gh` are used when installed, configured under `[integrations.<name>]`. `fleet doctor` shows which features each one turns on.
+
+Every command is in `fleet --help`. What changed lately: [CHANGELOG.md](CHANGELOG.md), or `Alt+g` in the app.
+
+Planned, not built: approve/reject keys and a spawn wizard in the TUI, workflow files (`fleet run`), desktop notifications. See [DESIGN.md §18](DESIGN.md#18-review-after-the-prototype-2026-11-04-what-would-make-it-a-real-agentic-fleet-manager).
+
 ## Why
 
 Once you run more than a few agent sessions, the hard part is keeping up with them:
@@ -68,26 +92,6 @@ You need tmux 3.3 or newer and the agent CLIs you want to run. `fleet doctor` ch
    In a git repo the agent gets its own worktree, `~/src/api.wt/api-auth` on branch `fleet/api-auth`. It shows up as a tile in the overview; select it and press `Enter` to put it on the wall. `tmux -L fleet kill-server` stops everything.
 
 Without `--admiral-profile`, the admiral runs the Copilot CLI. Other tools and your own variants are profiles: [docs/profiles.md](docs/profiles.md); the admiral's setup is in [docs/admiral.md](docs/admiral.md). To try fleet without spending tokens, use the built-in fake agents: [docs/admiral.md](docs/admiral.md#try-it-without-tokens).
-
-## What you get
-
-- **Status tiles.** Every agent is working, waiting, error, stuck or idle, refreshed every second and sorted so the ones waiting on you come first. Copilot and agy report status over the Agent Client Protocol ([docs/acp.md](docs/acp.md)); Claude and vibe are read from their screen, and Pi reports through a small extension fleet loads into it.
-- **A live wall.** Real, interactive tmux panes in layouts of 1, 2, 4, 6 or 9, or main plus stack. The pane that needs you gets the big slot. `fleet up --monitors 2` puts the wall on a second screen.
-- **The admiral.** An agent with `fleet_*` MCP tools to read status, peek at screens, send prompts, answer, spawn and close. `fleet peek --summary <name>` gives it about five lines from a small model instead of a full screen. It shows how full its context is, and `Alt+R` hands it off to a fresh session. See [docs/admiral.md](docs/admiral.md).
-- **A worktree per agent.** Spawning into a git repo gives the agent `<repo>.wt/<name>` on branch `fleet/<name>`. `fleet touching` shows which other worktrees change the same files, and `fleet merge` rebases, checks and merges one into local main.
-- **Task cards.** `fleet spawn --goal "..." --check "go build ./... && go vet ./..."` runs the check when the agent reports done and tells the admiral whether it passed.
-- **Spend per agent.** `fleet spend` shows AI credits or tokens per agent and the fleet total, read from the tools' own session files.
-- **Adopt sessions.** `fleet sessions` lists Copilot and Claude sessions started outside fleet, and `fleet adopt` resumes one as an agent.
-- **Teams, mail and squads.** Group agents with `fleet team`, let them message each other with `fleet mail`, and give a leader a squad of up to four agents with `fleet spawn --leader`.
-- **Memory without a model.** `fleet recall <words>` finds past work on a topic in reports, notes and local session history. `fleet day` lists what waits on you and what got done.
-- **Park and wake.** `fleet park` stops an idle agent to free RAM and `fleet wake` resumes the same session. `max_working` in config queues spawns past a limit.
-- **Claude Desktop as an admiral.** `fleet connect claude-desktop` adds fleet to Claude Desktop's config as a second admiral named `desktop`, with its own agents and reports. Quit and reopen Desktop, then ask it for `fleet_status`. The tmux fleet still has to be up for spawns. See [docs/admiral.md](docs/admiral.md#claude-desktop).
-- **Themes.** 26 palettes, dark and light, most of them taken from the most-installed VS Code themes. `T` in the overview previews each one live across the whole window. See [THEMES.md](THEMES.md).
-- **Optional integrations.** [cass](https://github.com/Dicklesworthstone/coding_agent_session_search), [graphify](https://github.com/Graphify-Labs/graphify) and `gh` are used when installed, configured under `[integrations.<name>]`. `fleet doctor` shows which features each one turns on.
-
-Every command is in `fleet --help`. What changed lately: [CHANGELOG.md](CHANGELOG.md), or `Alt+g` in the app.
-
-Planned, not built: approve/reject keys and a spawn wizard in the TUI, workflow files (`fleet run`), desktop notifications. See [DESIGN.md §18](DESIGN.md#18-review-after-the-prototype-2026-11-04-what-would-make-it-a-real-agentic-fleet-manager).
 
 ## The window
 
