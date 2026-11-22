@@ -267,3 +267,33 @@ mode_args = { autopilot = "--allow-all --autopilot", plan = "--plan" }
 # [update]
 # auto = true
 # interval = "6h"
+
+# Quota burn before subscription resets (ADR-190, docs/burn.md).
+# Phase 1 defaults to dry_run = true: `fleet burn --tick` reads quotas, sizes
+# runs from runs.jsonl and logs what it would spawn without spawning anything.
+# Only profiles listed in `profiles` are ever considered; exclusions live here,
+# not in code. Set dry_run = false (or pass --live) when ready to spawn.
+# [burn]
+# dry_run = true
+# profiles = ["agy", "pi", "claude"]
+# window = "18h"            # burn window before reset
+# reserve_pct = 15          # stop burning at 15% remaining
+# wrap_up_before = "30m"    # ask running burn agents to wrap up before reset
+# max_per_tick = 2          # cap new spawns per profile per tick
+# max_concurrent = 3        # cap total concurrent burn agents
+# default_cost_pct = 5.0    # fallback % per run when runs.jsonl has < min_samples
+# default_cost_tokens = 2000000
+# min_samples = 3
+# tag = "burn"              # backlog tag for burnable items
+# allow_overage = false     # skip profiles with paid overage/extra usage enabled
+#
+# Per-profile overrides (reader: "agy", "nanogpt", or "ai-usagebar"):
+# [burn.pi]
+# reader = "nanogpt"
+# token_env = "NANOGPT_MANAGEMENT_TOKEN"
+#
+# [burn.claude]
+# reader = "ai-usagebar"
+# account = "default"
+# projects = ["my-project"] # optional: restrict this profile to specific task projects
+# max_per_tick = 1          # optional: tighter cap for scoped seats

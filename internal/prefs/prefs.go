@@ -137,6 +137,7 @@ type Prefs struct {
 	recycle      Recycle
 	resurface    time.Duration
 	usage        map[string]conf.Value
+	burn         Burn
 }
 
 // AdmiralProfile is [admiral] profile: the admiral's tool profile when no
@@ -202,7 +203,7 @@ func Load() (*Prefs, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	p := &Prefs{Path: path, defaults: Neutral(), profiles: map[string]map[string]conf.Value{}, maxWorking: DefaultMaxWorking, summary: DefaultSummary(), memory: DefaultMemory(), squad: DefaultSquad(), recycle: DefaultRecycle(), resurface: DefaultResurface}
+	p := &Prefs{Path: path, defaults: Neutral(), profiles: map[string]map[string]conf.Value{}, maxWorking: DefaultMaxWorking, summary: DefaultSummary(), memory: DefaultMemory(), squad: DefaultSquad(), recycle: DefaultRecycle(), resurface: DefaultResurface, burn: DefaultBurn()}
 	if sec, ok := d["defaults"]; ok {
 		p.defaults = applySpawn(p.defaults, sec)
 		if v := conf.Str(sec, "max_working"); v != "" {
@@ -255,8 +256,20 @@ func Load() (*Prefs, error) {
 			p.admiralMax = min(n, MaxAdmirals)
 		}
 	}
+	if sec, ok := d["burn"]; ok {
+		if p.burn, err = applyBurn(p.burn, sec, path); err != nil {
+			return nil, err
+		}
+	}
 	p.usage = d["usage"]
 	for name, sec := range d {
+		if n, ok := strings.CutPrefix(name, "burn."); ok && n != "" {
+			bp, err := applyBurnProfile(sec, path, n)
+			if err != nil {
+				return nil, err
+			}
+			p.burn.PerProfile[n] = bp
+		}
 		if n, ok := strings.CutPrefix(name, "profile."); ok && n != "" {
 			p.profiles[n] = sec
 		}

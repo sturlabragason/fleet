@@ -1,0 +1,13 @@
+# fleet quota burn timer (ADR-190, docs/burn.md).
+# Fires every 30 minutes with a small jitter.
+
+[Unit]
+Description=Run fleet burn --tick every 30 minutes
+
+[Timer]
+OnCalendar=*:00,30:00
+RandomizedDelaySec=2m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

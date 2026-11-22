@@ -1,0 +1,21 @@
+# fleet quota burn tick (ADR-190, docs/burn.md).
+# Install:
+#   mkdir -p ~/.config/systemd/user
+#   cp examples/systemd/fleet-burn.service examples/systemd/fleet-burn.timer ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now fleet-burn.timer
+# Undo:
+#   systemctl --user disable --now fleet-burn.timer
+#   rm ~/.config/systemd/user/fleet-burn.{service,timer} && systemctl --user daemon-reload
+
+[Unit]
+Description=fleet quota burn tick
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/fleet burn --tick
+Nice=10
+IOSchedulingClass=idle
+StandardOutput=journal
+StandardError=journal

@@ -91,6 +91,11 @@ var usage = `usage:
                                             for claude); no model is called. --today: spend per
                                             profile since midnight and the Copilot month, raw units;
                                             --since 7d: the same summed over whole days (40 at most)
+  fleet burn [--tick] [--live|--dry-run] [--json] [--profile P] [--review [--out FILE]]
+                                            read per-harness quotas for profiles in [burn] and plan or
+                                            spawn worktree-only +burn agents before reset (dry-run by
+                                            default; --tick logs to logs/burn.jsonl; --review writes
+                                            the morning Accept/Reject HTML page; ADR-190)
   fleet stats [--since D] [--by kind|profile|model] [--json]
                                             how often fleet's own policy acted on agents (stop blocks,
                                             wakes, refused sends, done-checks, hook/screen disagreements),
@@ -380,6 +385,7 @@ var fleetCmds = map[string]func(f *fleet.Fleet, args []string) error{
 	"sessions":  cmdSessions,
 	"ls":        cmdLs,
 	"spend":     cmdSpend,
+	"burn":      cmdBurn,
 	"worktrees": cmdWorktrees,
 	"branches":  cmdBranches,
 	"info":      cmdInfo,
