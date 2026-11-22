@@ -79,11 +79,11 @@ func Plan(in PlanInput) TickResult {
 	totalWorking := 0
 	for _, a := range in.Active {
 		activeNames[a.Name] = true
-		if strings.HasPrefix(a.Name, "burn-") {
-			activeBurn++
-		}
 		if a.Working {
 			totalWorking++
+			if strings.HasPrefix(a.Name, "burn-") {
+				activeBurn++
+			}
 		}
 	}
 
@@ -139,7 +139,7 @@ func planProfile(in PlanInput, q Quota, activeBurn, totalWorking *int, queue []T
 	// this profile to commit and finish, and do not start new ones.
 	if in.Config.WrapUpBefore > 0 && ttr <= in.Config.WrapUpBefore {
 		for _, a := range in.Active {
-			if strings.HasPrefix(a.Name, "burn-") && a.Profile == q.Profile {
+			if a.Working && strings.HasPrefix(a.Name, "burn-") && a.Profile == q.Profile {
 				pp.WrapUps = append(pp.WrapUps, WrapUpPlan{
 					Agent:       a.Name,
 					Profile:     q.Profile,

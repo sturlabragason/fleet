@@ -29,7 +29,7 @@ type NanoGPTReader struct {
 func (NanoGPTReader) Name() string { return "nanogpt" }
 
 // Read queries the NanoGPT usage endpoint and returns the parsed Quota snapshot.
-func (r NanoGPTReader) Read(ctx context.Context, profile string, cfg prefs.BurnProfile, _ map[string]string) Quota {
+func (r NanoGPTReader) Read(ctx context.Context, profile string, cfg prefs.BurnProfile, env map[string]string) Quota {
 	now := time.Now().UTC()
 	q := Quota{
 		Profile:   profile,
@@ -37,7 +37,7 @@ func (r NanoGPTReader) Read(ctx context.Context, profile string, cfg prefs.BurnP
 		FetchedAt: now,
 	}
 
-	token, err := r.resolveToken(ctx, cfg.TokenEnv)
+	token, err := r.resolveToken(ctx, cfg.TokenEnv, env)
 	if err != nil {
 		q.Available = false
 		q.Error = err.Error()
@@ -99,14 +99,20 @@ func (r NanoGPTReader) Read(ctx context.Context, profile string, cfg prefs.BurnP
 	return parsed
 }
 
-func (r NanoGPTReader) resolveToken(ctx context.Context, tokenEnv string) (string, error) {
+func (r NanoGPTReader) resolveToken(ctx context.Context, tokenEnv string, env map[string]string) (string, error) {
+	lookup := func(name string) string {
+		if v := strings.TrimSpace(env[name]); v != "" {
+			return v
+		}
+		return strings.TrimSpace(os.Getenv(name))
+	}
 	if tokenEnv != "" {
-		if v := strings.TrimSpace(os.Getenv(tokenEnv)); v != "" {
+		if v := lookup(tokenEnv); v != "" {
 			return v, nil
 		}
 	}
-	for _, env := range []string{"NANOGPT_MANAGEMENT_TOKEN", "NANOGPT_API_KEY"} {
-		if v := strings.TrimSpace(os.Getenv(env)); v != "" {
+	for _, name := range []string{"NANOGPT_MANAGEMENT_TOKEN", "NANOGPT_API_KEY"} {
+		if v := lookup(name); v != "" {
 			return v, nil
 		}
 	}
@@ -144,6 +150,9 @@ func (r NanoGPTReader) resolveToken(ctx context.Context, tokenEnv string) (strin
 			return "", errors.New("empty nanogpt token command")
 		}
 		cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
+		if len(env) > 0 {
+			cmd.Env = append(os.Environ(), mapToEnvSlice(env)...)
+		}
 		out, err := cmd.Output()
 		if err != nil {
 			return "", fmt.Errorf("run nanogpt token command: %w", err)
@@ -155,7 +164,7 @@ func (r NanoGPTReader) resolveToken(ctx context.Context, tokenEnv string) (strin
 		return tok, nil
 	}
 	if strings.HasPrefix(key, "$") {
-		tok := strings.TrimSpace(os.Getenv(strings.TrimSpace(key[1:])))
+		tok := lookup(strings.TrimSpace(key[1:]))
 		if tok == "" {
 			return "", errors.New("nanogpt API token env var is empty")
 		}

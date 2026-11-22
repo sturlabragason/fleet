@@ -80,6 +80,14 @@ func parseUsageBarForProfile(out []byte, account, profile string) ([]Window, boo
 		if windows, overage, err := ParseUsageBarJSON(out, profile); err == nil {
 			return windows, overage, nil
 		}
+		if strings.HasPrefix(strings.ToLower(profile), "claude") {
+			if windows, overage, err := ParseUsageBarJSON(out, "anthropic"); err == nil {
+				return windows, overage, nil
+			}
+			if windows, overage, err := ParseUsageBarJSON(out, "claude"); err == nil {
+				return windows, overage, nil
+			}
+		}
 	}
 	return ParseUsageBarJSON(out, "")
 }
@@ -239,8 +247,11 @@ func decodeUsageBarEntries(trimmed []byte) ([]usageBarEntry, error) {
 }
 
 func filterUsageBarEntries(entries []usageBarEntry, account string) ([]usageBarEntry, error) {
-	if account == "" || len(entries) == 1 {
-		return entries, nil
+	if account == "" {
+		if len(entries) == 1 {
+			return entries, nil
+		}
+		return nil, fmt.Errorf("ai-usagebar returned %d entries; set [burn.<profile>] account to pick one", len(entries))
 	}
 	needle := strings.ToLower(strings.TrimSpace(account))
 

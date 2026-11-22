@@ -24,9 +24,15 @@ func CollectBurnBranches(ctx context.Context, dir string) ([]BranchSummary, erro
 	if err != nil {
 		return nil, fmt.Errorf("list burn branches: %w", err)
 	}
-	base := "main"
-	if _, err := gitOut(ctx, dir, "rev-parse", "--verify", "main"); err != nil {
-		base = "master"
+	base := ""
+	for _, cand := range []string{"main", "master", "origin/HEAD", "HEAD"} {
+		if _, err := gitOut(ctx, dir, "rev-parse", "--verify", cand); err == nil {
+			base = cand
+			break
+		}
+	}
+	if base == "" {
+		return nil, fmt.Errorf("resolve base branch in %s: no main, master, or HEAD ref", dir)
 	}
 	var branches []BranchSummary
 	for line := range strings.SplitSeq(strings.TrimSpace(out), "\n") {
