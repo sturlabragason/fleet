@@ -107,7 +107,7 @@ func CardPrompt(c *board.Card) string {
 		fmt.Fprintf(&b, "\nPermissions: you may %s without asking.%s Ask before anything else public or irreversible.\n", strings.Join(may, ", "), gate)
 	}
 	if slices.Contains(c.May, ReviewOnly) {
-		b.WriteString("\nReview-only: commit your work on your own branch and report done with it unmerged. Do not merge, push or release; the user reviews the branch first.\n")
+		b.WriteString("\nReview-only: commit your work on your own branch and report done with it unmerged. Do not merge or release, and push nothing but your own fleet/ branch; the user reviews it first.\n")
 	}
 	fmt.Fprintf(&b, "\nResult file: write `%s` in your dir before you report done: what you changed, the branch and commit, what is left and any open questions.\n", c.Result)
 	return strings.TrimRight(b.String(), "\n")

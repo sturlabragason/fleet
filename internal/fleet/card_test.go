@@ -397,3 +397,11 @@ func TestResultForSharedDir(t *testing.T) {
 		t.Fatal("no card became a card")
 	}
 }
+
+// ADR-190: review-only is its own instruction, not a "you may" permission.
+func TestCardPromptReviewOnly(t *testing.T) {
+	p := CardPrompt(NormalizeCard(&board.Card{May: []string{ReviewOnly}}))
+	if strings.Contains(p, "Permissions:") || !strings.Contains(p, "Review-only:") || !strings.Contains(p, "Do not merge") {
+		t.Fatalf("review-only card prompt:\n%s", p)
+	}
+}

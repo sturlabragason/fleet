@@ -130,7 +130,7 @@ func TestPlanWrapUpAndReserve(t *testing.T) {
 			},
 		},
 		Active: []ActiveAgent{
-			{Name: "burn-aaaaaaaa", Profile: "pi", Live: true}, // waiting on a prompt: still wrapped up
+			{Name: "burn-aaaaaaaa", Profile: "pi", Working: true, Live: true},
 			{Name: "regular-agent", Profile: "pi", Working: true},
 		},
 	})

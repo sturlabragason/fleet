@@ -72,19 +72,11 @@ func (r UsageBarReader) Read(ctx context.Context, profile string, cfg prefs.Burn
 	return q
 }
 
-func parseUsageBarForProfile(out []byte, account, profile string) ([]Window, bool, error) {
-	if account != "" {
-		return ParseUsageBarJSON(out, account)
-	}
-	if profile != "" {
-		if windows, overage, err := ParseUsageBarJSON(out, profile); err == nil {
-			return windows, overage, nil
-		}
-	}
-	// No vendor-name fallback ("claude", "anthropic"): it matches every Claude
-	// seat and would judge this profile on another owner's quota. Unmatched
-	// output with several accounts errors and asks for [burn.<profile>] account.
-	return ParseUsageBarJSON(out, "")
+func parseUsageBarForProfile(out []byte, account, _ string) ([]Window, bool, error) {
+	// Only account picks an entry: a profile name like "claude" also matches
+	// the vendor of every Claude seat and would judge this profile on another
+	// owner's quota. With no account, only single-account output is used.
+	return ParseUsageBarJSON(out, account)
 }
 
 type usageBarEntry struct {

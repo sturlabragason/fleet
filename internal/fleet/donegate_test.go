@@ -177,3 +177,17 @@ func TestDoneGateRefusalsReachRunRecord(t *testing.T) {
 		t.Fatalf("record %+v", r)
 	}
 }
+
+// ADR-190: a review-only spawn that gets no worktree is refused, never run
+// in the dir itself.
+func TestSpawnReviewOnlyNeedsWorktree(t *testing.T) {
+	f, _ := mailFleet(t)
+	yes := true
+	_, err := f.SpawnWith(SpawnOpts{Worktree: &yes, Card: &board.Card{May: []string{ReviewOnly}}}, "burn-x", "cat", t.TempDir(), "")
+	if err == nil || !strings.Contains(err.Error(), "review-only") {
+		t.Fatalf("want review-only refusal, got %v", err)
+	}
+	if _, ok := f.Store.Load().Agents["burn-x"]; ok {
+		t.Fatal("refused spawn left a board entry")
+	}
+}

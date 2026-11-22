@@ -19,9 +19,8 @@ type ActiveAgent struct {
 	Name    string
 	Profile string
 	Working bool
-	// Live: still on the board and not reported done (waiting, idle, stuck,
-	// queued...). A live burn agent counts toward max_concurrent and gets the
-	// wrap-up message.
+	// Live: on the board, not failed and not reported done (waiting, idle,
+	// stuck, queued...). A live burn agent counts toward max_concurrent.
 	Live bool
 }
 
@@ -143,7 +142,7 @@ func planProfile(in PlanInput, q Quota, activeBurn, totalWorking *int, queue []T
 	// this profile to commit and finish, and do not start new ones.
 	if in.Config.WrapUpBefore > 0 && ttr <= in.Config.WrapUpBefore {
 		for _, a := range in.Active {
-			if a.Live && strings.HasPrefix(a.Name, "burn-") && a.Profile == q.Profile {
+			if a.Working && strings.HasPrefix(a.Name, "burn-") && a.Profile == q.Profile {
 				pp.WrapUps = append(pp.WrapUps, WrapUpPlan{
 					Agent:       a.Name,
 					Profile:     q.Profile,
@@ -333,7 +332,7 @@ func ActiveFromBoard(agents []*board.Agent) []ActiveAgent {
 			Name:    a.Name,
 			Profile: a.Profile,
 			Working: a.Status == "working" || a.Status == "starting",
-			Live:    a.Status != "parked" && a.Status != "gone" && (a.Report == nil || a.Report.State != "done"),
+			Live:    a.Status != "parked" && a.Status != "gone" && a.Status != "error" && (a.Report == nil || a.Report.State != "done"),
 		})
 	}
 	return out
