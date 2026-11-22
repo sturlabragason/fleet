@@ -12,8 +12,10 @@ import (
 // itself, and how often it checks (ADR-114). Read on its own, not by Load,
 // so only the watcher pays for it.
 type Update struct {
-	Auto  bool          // [update] auto, default true
-	Every time.Duration // [update] interval, default DefaultUpdateEvery
+	Auto         bool          // [update] auto, default true
+	Every        time.Duration // [update] interval, default DefaultUpdateEvery
+	WaitQuiet    bool          // [update] wait_quiet, default true (ADR-114)
+	BuildCommand string        // [update] build_command, optional local builder for source builds (ADR-191)
 }
 
 // DefaultUpdateEvery is how often a release install looks for a release.
@@ -23,8 +25,10 @@ const DefaultUpdateEvery = 6 * time.Hour
 // to it, so a typo can't hammer GitHub.
 const MinUpdateEvery = 10 * time.Minute
 
-// DefaultUpdate: on, every six hours.
-func DefaultUpdate() Update { return Update{Auto: true, Every: DefaultUpdateEvery} }
+// DefaultUpdate: on, every six hours, waiting for idle agents.
+func DefaultUpdate() Update {
+	return Update{Auto: true, Every: DefaultUpdateEvery, WaitQuiet: true}
+}
 
 // LoadUpdate reads [update] from the config file. A missing file or section
 // is the default; a bad value is an error with the default alongside it.
@@ -54,6 +58,20 @@ func applyUpdate(u Update, sec map[string]conf.Value, path string) (Update, erro
 			return u, fmt.Errorf("%s: [update] interval %q: want a duration such as \"6h\"", path, v)
 		}
 		u.Every = max(d, MinUpdateEvery)
+	}
+	if _, ok := sec["wait_quiet"]; ok {
+		v, ok := conf.Bool(sec, "wait_quiet")
+		if !ok {
+			return u, fmt.Errorf("%s: [update] wait_quiet: want true or false", path)
+		}
+		u.WaitQuiet = v
+	}
+	if raw, ok := sec["build_command"]; ok {
+		s, ok := raw.(string)
+		if !ok {
+			return u, fmt.Errorf("%s: [update] build_command: want a string", path)
+		}
+		u.BuildCommand = strings.TrimSpace(s)
 	}
 	return u, nil
 }

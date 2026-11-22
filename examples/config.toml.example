@@ -260,13 +260,19 @@ mode_args = { autopilot = "--allow-all --autopilot", plan = "--plan" }
 # max_members = 4
 # max_depth = 1
 
-# Auto-upgrade of a release install (ADR-114). On by default: the watcher
-# checks GitHub every interval, verifies a new release and swaps it in once
-# no agent is working. Builds from source never upgrade themselves.
+# Auto-upgrade of a release install (ADR-114, ADR-191). On by default: the
+# watcher checks GitHub every interval, verifies a new release and swaps it in
+# once no agent is working. wait_quiet = false swaps immediately once verified
+# without killing running agents. build_command builds a release tag locally
+# into $FLEET_UPDATE_OUT (with $FLEET_UPDATE_VERSION set) for custom or
+# source builds; it runs in ~/.fleet, so it must cd to a checkout of that tag
+# itself. Unconfigured source builds never upgrade themselves.
 # `fleet update` shows the state.
 # [update]
 # auto = true
 # interval = "6h"
+# wait_quiet = true
+# build_command = ""
 
 # Quota burn before subscription resets (ADR-190, docs/burn.md).
 # Phase 1 defaults to dry_run = true: `fleet burn --tick` reads quotas, sizes

@@ -22,4 +22,16 @@ func TestLoadUpdate(t *testing.T) {
 	if _, err := LoadUpdate(); err == nil {
 		t.Fatal("bad auto accepted")
 	}
+	write(t, "[update]\nwait_quiet = false\nbuild_command = \"  make build  \"\n")
+	if u, err := LoadUpdate(); err != nil || u.WaitQuiet || u.BuildCommand != "make build" {
+		t.Fatalf("wait_quiet / build_command: %+v %v", u, err)
+	}
+	write(t, "[update]\nwait_quiet = 1\n")
+	if _, err := LoadUpdate(); err == nil {
+		t.Fatal("bad wait_quiet accepted")
+	}
+	write(t, "[update]\nbuild_command = [\"make\", \"build\"]\n")
+	if _, err := LoadUpdate(); err == nil {
+		t.Fatal("bad build_command accepted")
+	}
 }

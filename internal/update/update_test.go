@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -29,6 +30,11 @@ func TestNewer(t *testing.T) {
 		{"v1.3.0", "v1.2.3-4-gabc-dirty", false},
 		{"1.3.0", "v1.2.0", false},
 		{"v1.3.0-snapshot-abc", "v1.2.0", false},
+		{"v1.66.1", "v1.65.1+custom.6ef063c", true},
+		{"v1.66.1", "v1.66.1+custom.6ef063c", false},
+		{"v1.66.1+a", "v1.66.1+b", false},
+		{"v1.66.1", "v1.65.1+", false},
+		{"v1.66.1", "v1.65.1+a..b", false},
 	} {
 		if got := Newer(c.a, c.b); got != c.want {
 			t.Errorf("Newer(%q, %q) = %v", c.a, c.b, got)
@@ -58,6 +64,18 @@ func TestEligible(t *testing.T) {
 		if ok, why := Eligible(c[0], c[1]); ok || why == "" {
 			t.Errorf("Eligible(%q, %q) = %v %q, want a reason to skip", c[0], c[1], ok, why)
 		}
+	}
+	if ok, why := EligibleFor("v1.65.1+custom.abc", "", ""); ok || why == "" {
+		t.Errorf("source build without build_command must not be eligible: %v %q", ok, why)
+	}
+	if ok, why := EligibleFor("v1.65.1+custom.abc", "", "make build"); !ok {
+		t.Errorf("source build with build_command must be eligible: %q", why)
+	}
+	if ok, why := EligibleFor("v1.65.1+custom.abc", Channel, ""); !ok {
+		t.Errorf("release build with +build metadata must be eligible: %q", why)
+	}
+	if ok, why := EligibleFor("v1.65.1-4-gabc", "", "make build"); ok || why == "" {
+		t.Errorf("git-describe dev build with build_command must not be eligible: %v %q", ok, why)
 	}
 }
 
@@ -262,5 +280,165 @@ func TestSumFor(t *testing.T) {
 	}
 	if _, err := sumFor([]byte(h+"  fleet-linux-arm64.tar.gz\n"), "fleet-linux-arm64"); err == nil {
 		t.Fatal("matched another asset")
+	}
+}
+
+func TestVersionMatches(t *testing.T) {
+	for _, c := range []struct {
+		out, want string
+		match     bool
+	}{
+		{"fleet v1.66.1", "v1.66.1", true},
+		{"fleet v1.66.1 (abcdef1 · built 2026-11-22)", "v1.66.1", true},
+		{"fleet v1.66.1+custom.6ef063c", "v1.66.1", true},
+		{"fleet v1.66.1+custom.6ef063c (abcdef1)", "v1.66.1", true},
+		{"fleet v1.66.1+", "v1.66.1", false},
+		{"fleet v1.66.1+a..b", "v1.66.1", false},
+		{"fleet v1.66.10", "v1.66.1", false},
+		{"fleet v1.66.1-rc1", "v1.66.1", false},
+		{"v1.66.1", "v1.66.1", false},
+	} {
+		if got := versionMatches(c.out, c.want); got != c.match {
+			t.Errorf("versionMatches(%q, %q) = %v, want %v", c.out, c.want, got, c.match)
+		}
+	}
+}
+
+func TestAnnounceWithBuildMetadata(t *testing.T) {
+	r := &release{tag: "v1.66.1", body: "new"}
+	r.sum = sum(r.body)
+	u, _ := setup(t, r)
+	u.Current = "v1.65.1+custom.old"
+	if !u.Step(t.Context()) {
+		t.Fatalf("upgrade failed: %+v", Load(u.Home))
+	}
+	if n := Announce(u.Home, "v1.65.1+custom.old", "main", u.Now()); n != "" {
+		t.Fatalf("announced to old build: %q", n)
+	}
+	n := Announce(u.Home, "v1.66.1+custom.new", "main", u.Now())
+	if !strings.Contains(n, "v1.65.1+custom.old → v1.66.1") {
+		t.Fatalf("did not announce to +build release: %q", n)
+	}
+	if n2 := Announce(u.Home, "v1.66.1+custom.new", "main", u.Now()); n2 != "" {
+		t.Fatalf("announced twice: %q", n2)
+	}
+}
+
+func TestBuildCommand(t *testing.T) {
+	r := &release{tag: "v1.1.0", body: "unused"}
+	r.sum = sum(r.body)
+	u, exe := setup(t, r)
+	u.Current = "v1.0.0+custom.old"
+
+	// Even if VerifySums is set, build_command builds locally instead of downloading assets.
+	var verifyCalled atomic.Bool
+	VerifySums = func(_, _ []byte) error { verifyCalled.Store(true); return errors.New("should not run") }
+
+	// Default public base does not leak Authorize tokens when BuildCommand is set.
+	if u2 := (&Updater{BuildCommand: "true"}); u2.hasCustomBase() {
+		t.Fatal("empty base reported as custom")
+	}
+	t.Setenv("FLEET_UPDATE_URL", "")
+	if u2 := (&Updater{BaseURL: u.BaseURL, BuildCommand: "true"}); !u2.hasCustomBase() {
+		t.Fatal("BaseURL should count as custom base")
+	}
+
+	outMarker := filepath.Join(t.TempDir(), "built-env.txt")
+	if runtime.GOOS == "windows" {
+		u.BuildCommand = `echo built-%FLEET_UPDATE_VERSION%> "%FLEET_UPDATE_OUT%"`
+		if _, err := exec.LookPath("sh"); err == nil { // sysx.ShellCommand prefers sh (Git Bash on CI)
+			u.BuildCommand = `echo "built-$FLEET_UPDATE_VERSION" > "$FLEET_UPDATE_OUT"`
+		}
+		u.Probe = func(path, want string) error {
+			b, err := os.ReadFile(path)
+			if err != nil || !strings.Contains(string(b), "built-"+want) {
+				return errors.New("unexpected output")
+			}
+			return nil
+		}
+	} else {
+		u.BuildCommand = `printf '%s|%s|%s\n' "$FLEET_UPDATE_VERSION" "$FLEET_UPDATE_CURRENT" "$(pwd -P)" > "` + outMarker + `"` +
+			` && printf '#!/bin/sh\nif [ "$1" = "version" ]; then echo "fleet %s+custom.new"; elif [ "$1" = "mcp" ] && [ "$2" = "--probe" ]; then echo "ok"; else exit 1; fi\n' "$FLEET_UPDATE_VERSION" > "$FLEET_UPDATE_OUT"`
+		u.Probe = nil // run the real Probe on the produced executable
+	}
+
+	if !u.Step(t.Context()) {
+		t.Fatalf("build_command upgrade failed: %+v", Load(u.Home))
+	}
+	if verifyCalled.Load() {
+		t.Fatal("VerifySums should not be called for build_command")
+	}
+	if r.downloads.Load() != 0 {
+		t.Fatalf("downloads = %d, want 0", r.downloads.Load())
+	}
+	s := Load(u.Home)
+	if s.Applied == nil || s.Applied.From != "v1.0.0+custom.old" || s.Applied.To != "v1.1.0" {
+		t.Fatalf("applied state = %+v", s.Applied)
+	}
+	if runtime.GOOS != "windows" {
+		realHome, err := filepath.EvalSymlinks(u.Home) // build_command runs in the fleet home
+		if err != nil {
+			t.Fatal(err)
+		}
+		if env := content(t, outMarker); strings.TrimSpace(env) != "v1.1.0|v1.0.0+custom.old|"+realHome {
+			t.Fatalf("env = %q", env)
+		}
+		if got := content(t, exe); !strings.Contains(got, "+custom.new") {
+			t.Fatalf("exe not replaced: %q", got)
+		}
+	}
+
+	// Failure cases: non-zero exit, symlink output, empty output keep old binary.
+	for name, cmd := range map[string]string{
+		"nonzero": "exit 2",
+		"empty":   `: > "$FLEET_UPDATE_OUT"`,
+	} {
+		if runtime.GOOS == "windows" && name == "empty" {
+			continue
+		}
+		rf := &release{tag: "v1.2.0", body: "unused"}
+		rf.sum = sum(rf.body)
+		uf, exef := setup(t, rf)
+		uf.BuildCommand = cmd
+		if uf.Step(t.Context()) || content(t, exef) != "old" {
+			t.Fatalf("%s: expected failure keeping old binary, got %+v", name, Load(uf.Home))
+		}
+		if st := Load(uf.Home); st.Failed != "v1.2.0" || st.Err == "" {
+			t.Fatalf("%s: failed state = %+v", name, st)
+		}
+	}
+	if runtime.GOOS != "windows" {
+		rs := &release{tag: "v1.2.0", body: "unused"}
+		rs.sum = sum(rs.body)
+		us, exes := setup(t, rs)
+		target := filepath.Join(t.TempDir(), "target")
+		os.WriteFile(target, []byte("x"), 0o755)
+		us.BuildCommand = `ln -s "` + target + `" "$FLEET_UPDATE_OUT"`
+		if us.Step(t.Context()) || content(t, exes) != "old" {
+			t.Fatalf("symlink output must be rejected: %+v", Load(us.Home))
+		}
+		if st := Load(us.Home); !strings.Contains(st.Err, "not a regular file") {
+			t.Fatalf("symlink err = %+v", st)
+		}
+	}
+}
+
+func TestUpdateLock(t *testing.T) {
+	r := &release{tag: "v1.1.0", body: "new"}
+	r.sum = sum(r.body)
+	u, exe := setup(t, r)
+	unlock, ok, err := u.tryLock()
+	if err != nil || !ok {
+		t.Fatalf("tryLock = %v %v", ok, err)
+	}
+	defer unlock()
+
+	// Step skips quietly when another updater holds the lock.
+	if u.Step(t.Context()) || content(t, exe) != "old" || r.downloads.Load() != 0 {
+		t.Fatalf("Step proceeded under held lock: %+v", Load(u.Home))
+	}
+	// Install fails clearly when another updater holds the lock.
+	if _, err := u.Install(t.Context()); err == nil || !strings.Contains(err.Error(), "already in progress") {
+		t.Fatalf("Install err = %v, want already in progress", err)
 	}
 }

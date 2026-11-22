@@ -64,10 +64,14 @@ const (
 	maxSums   = 64 << 10
 )
 
-var semverRE = regexp.MustCompile(`^v(\d+)\.(\d+)\.(\d+)$`)
+var (
+	semverRE = regexp.MustCompile(`^v(\d+)\.(\d+)\.(\d+)(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$`)
+	tagRE    = regexp.MustCompile(`^v(\d+)\.(\d+)\.(\d+)$`)
+)
 
-// Parse reads a release tag vX.Y.Z; anything else (a git describe of a
-// dev build, a snapshot) is not a release.
+// Parse reads a release tag vX.Y.Z with optional SemVer 2.0.0 build metadata
+// (+...); build metadata is ignored for version precedence. Anything else (a
+// git describe with -N-g..., a snapshot) is not a release.
 func Parse(v string) ([3]int, bool) {
 	m := semverRE.FindStringSubmatch(v)
 	if m == nil {
@@ -104,7 +108,15 @@ func Newer(a, b string) bool {
 // release build (main.channel = "release" and a vX.Y.Z tag) does: a make
 // build, a go install or a dirty tree is the user's own and is left alone.
 func Eligible(version, channel string) (bool, string) {
-	if channel != Channel {
+	return EligibleFor(version, channel, "")
+}
+
+// EligibleFor says whether this binary may upgrade itself with an optional
+// local build_command. Either a release build (main.channel = "release") or a
+// build with build_command configured is eligible, provided version parses as
+// a vX.Y.Z release tag (optional +build metadata allowed per SemVer 2.0.0).
+func EligibleFor(version, channel, buildCmd string) (bool, string) {
+	if strings.TrimSpace(buildCmd) == "" && channel != Channel {
 		return false, "not a release build (built from source)"
 	}
 	if _, ok := Parse(version); !ok {
@@ -214,9 +226,14 @@ type Updater struct {
 	Quiet func() bool
 	// Verify checks provenance beyond the checksum; nil = Attest.
 	Verify func(path string) error
-	// Probe runs the downloaded binary; nil = Probe.
+	// Probe runs the downloaded or built binary; nil = Probe.
 	Probe func(path, want string) error
-	Now   func() time.Time
+	// BuildCommand, when set, stages a release by running this shell command
+	// instead of downloading release assets.
+	BuildCommand string
+	// BuildTimeout caps BuildCommand (default DefaultBuildTimeout).
+	BuildTimeout time.Duration
+	Now          func() time.Time
 
 	applied bool   // this process swapped the binary: nothing more to do
 	waiting string // the staged release last logged as waiting
@@ -304,6 +321,15 @@ func (u *Updater) Step(ctx context.Context) (done bool) {
 			done = false
 		}
 	}()
+	unlock, acquired, err := u.tryLock()
+	if err != nil {
+		log.Warn("update lock", "err", err)
+		return false
+	}
+	if !acquired {
+		return false
+	}
+	defer unlock()
 	s := Load(u.Home)
 	now := u.now()
 	if s.Staged != "" && !Newer(s.Staged, u.Current) {
@@ -380,8 +406,10 @@ func (u *Updater) Latest(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := authorize(req); err != nil {
-		return "", err
+	if strings.TrimSpace(u.BuildCommand) == "" || u.hasCustomBase() {
+		if err := authorize(req); err != nil {
+			return "", err
+		}
 	}
 	resp, err := c.Do(req)
 	if err != nil {
@@ -393,7 +421,7 @@ func (u *Updater) Latest(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("latest release: %s with no redirect", resp.Status)
 	}
 	tag := loc[strings.LastIndex(loc, "/")+1:]
-	if _, ok := Parse(tag); !ok {
+	if !tagRE.MatchString(tag) {
 		return "", fmt.Errorf("latest release: %q is not a release tag", tag)
 	}
 	return tag, nil
@@ -404,9 +432,15 @@ func (u *Updater) stagedPath(version string) string {
 }
 
 // Stage downloads release version, checks it against SHA256SUMS and its
-// attestation, runs it, and leaves it at <home>/update/fleet-<version>. It
+// attestation, runs it, and leaves it at <home>/update/fleet-<version>. When
+// BuildCommand is set, it runs that command instead of downloading assets. It
 // returns the checked sum. Nothing is staged on any failure.
 func (u *Updater) Stage(ctx context.Context, version string) (string, error) {
+	if strings.TrimSpace(u.BuildCommand) != "" {
+		path := u.stagedPath(version)
+		tmp := strings.TrimSuffix(path, exeExt()) + ".part" + exeExt()
+		return u.stageBuild(ctx, version, path, tmp)
+	}
 	asset := Asset(u.target())
 	url := u.base() + "/download/" + version + "/"
 	sums, err := u.get(ctx, url+"SHA256SUMS", maxSums)
@@ -582,7 +616,7 @@ func Probe(path, want string) error {
 	if err != nil {
 		return fmt.Errorf("%s version: %w", filepath.Base(path), err)
 	}
-	if out != "fleet "+want && !strings.HasPrefix(out, "fleet "+want+" ") {
+	if !versionMatches(out, want) {
 		return fmt.Errorf("downloaded binary says %q, want fleet %s", out, want)
 	}
 	if out, err := run("mcp", "--probe"); err != nil || out != "ok" {
@@ -642,7 +676,7 @@ func Attest(path string) error {
 func Announce(home, running, who string, now time.Time) string {
 	s := Load(home)
 	a := s.Applied
-	if a == nil || a.To != running || now.Sub(a.At) > AnnounceFor {
+	if a == nil || !sameRelease(a.To, running) || now.Sub(a.At) > AnnounceFor {
 		return ""
 	}
 	if who == "" {
@@ -661,6 +695,14 @@ func Announce(home, running, who string, now time.Time) string {
 // waiting for a quiet moment: `fleet update --now`. It returns the release
 // installed, "" when the running one is the latest.
 func (u *Updater) Install(ctx context.Context) (string, error) {
+	unlock, acquired, err := u.tryLock()
+	if err != nil {
+		return "", err
+	}
+	if !acquired {
+		return "", errors.New("another update is already in progress")
+	}
+	defer unlock()
 	s := Load(u.Home)
 	now := u.now()
 	s.CheckedAt = now

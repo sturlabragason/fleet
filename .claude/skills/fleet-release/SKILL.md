@@ -115,6 +115,9 @@ are `scripts/next-version.sh`, `git tag -a`, `git push origin <tag>` and
 
 - Check the release: `gh release view vX.Y.Z -R sturlabragason/fleet` lists five files
   (`fleet-{linux,darwin}-{amd64,arm64}`, `SHA256SUMS`).
+- If `fleet update` shows auto-upgrade enabled on this machine, run `fleet update --now` so the
+  running fleet hotloads the new release immediately instead of waiting for the next poll (skipped on
+  unconfigured source builds).
 - Report: the commit pushed, the tag, the release URL, CI result, and anything the check made you
   leave out of this release.
 - Record it with `fleet note` so the next publisher knows where the line is.
