@@ -230,6 +230,12 @@ var usage = `usage:
                                             print one ADR or section of the nearest DESIGN.md
                                             (words match headings and ADR titles); read that,
                                             never the whole file
+  fleet page check <brief.json>             lint a page brief against the executive page format (ADR-197):
+                                            answer first, short text, cited sources, decision cards
+  fleet page render <brief.json> <dir>      write the page (index.html, and answer.json when it asks)
+  fleet page publish [--replace] <brief.json>
+                                            check, render and publish it with the artifact CLI; prints
+                                            the URL. Submit sends the answers back (artifact answer)
   fleet merge [-C dir] [--dry-run [--json]] [--check CMD] [--retries N]
                                             rebase this worktree's branch onto main, run the checks,
                                             merge into the local main checkout and run them again.
@@ -372,6 +378,7 @@ var statelessCmds = map[string]func(args []string) error{
 	"exec":      cmdExec,
 	"adr":       cmdADR,
 	"design":    cmdDesign,
+	"page":      cmdPage,
 	"stats":     cmdStats,
 	"merge":     cmdMerge,
 	"graph":     cmdGraph,

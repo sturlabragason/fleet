@@ -1,0 +1,37 @@
+{
+  "page": "decide-cache-host",
+  "kind": "decision",
+  "title": "Move the build cache to the NAS: it halves CI time for 4 € a month",
+  "date": "2026-11-22",
+  "author": "cache-agent",
+  "summary": {
+    "answer": "Move the build cache to the NAS. CI runs drop from 11 to 5 minutes [1] and the cost is the disk we already own.",
+    "points": ["The laptop cache is wiped on every reboot, so each Monday run is cold [1].", "The NAS has 2 TB free and is on the same network."],
+    "ask": "Pick where the cache lives and say if anything should stay local."
+  },
+  "confidence": {"level": "medium", "basis": "one week of CI timings [1]; the NAS was not load-tested"},
+  "kpis": [{"value": "11 → 5 min", "label": "CI run, measured", "state": "ok"}, {"value": "4 €", "label": "per month, power"}],
+  "thread": [
+    {"label": "Problem", "text": "CI takes 11 minutes after each reboot."},
+    {"label": "Evidence", "text": "Cold runs are the slow ones [1]."},
+    {"label": "Recommendation", "text": "Keep the cache where reboots do not wipe it."}
+  ],
+  "sections": [{
+    "heading": "Cold caches make CI twice as slow",
+    "text": "Median of 40 runs, 15-22 Nov [1].",
+    "bars": {"unit": "min", "items": [{"label": "cold cache", "value": 11, "state": "bad"}, {"label": "warm cache", "value": 5, "state": "ok"}]}
+  }],
+  "decisions": [{
+    "id": "host",
+    "question": "Where should the build cache live?",
+    "options": [
+      {"id": "nas", "label": "On the NAS", "consequence": "Every run is warm.", "cost": "4 € a month", "risk": "CI stalls if the NAS is down"},
+      {"id": "laptop", "label": "Stay on the laptop (do nothing)", "consequence": "Monday runs stay slow.", "cost": "none"}
+    ],
+    "recommend": "nas",
+    "why": "Halves CI time at almost no cost [1]."
+  }],
+  "defaults": ["Keep the old cache for a week, then delete it."],
+  "sources": [{"id": 1, "title": "CI timings 15-22 Nov", "url": "https://example.com/ci-timings", "quote": "median 11m02s cold, 4m48s warm", "date": "2026-11-22"}],
+  "details": [{"heading": "How the timings were taken", "text": "Each run's wall-clock time from the CI log.\n\nCold means the first run after a reboot."}]
+}

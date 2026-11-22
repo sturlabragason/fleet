@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{.B.Title}}</title>
+<style>{{.CSS}}</style>
+</head>
+<body>
+<header>
+<p class="meta"><span class="kind">{{.B.Kind}}</span>{{with .B.Confidence}} · <span class="conf conf-{{.Level}}" title="{{.Basis}}">{{.Level}} confidence</span>{{end}} · about {{.Minutes}} min{{with .B.Decisions}} · {{len .}} decision{{if gt (len .) 1}}s{{end}}{{end}}{{with .B.Date}} · {{.}}{{end}}</p>
+<h1>{{.B.Title}}</h1>
+<div class="answer-first">{{rich .B.Summary.Answer}}</div>
+{{with .B.Summary.Points}}<ul class="points">{{range .}}<li>{{inline .}}</li>{{end}}</ul>{{end}}
+{{with .B.Summary.Ask}}<p class="ask"><b>What I need from you:</b> {{inline .}}{{if $.B.Decisions}} <a href="#decide">Go to the decisions</a>{{end}}</p>{{end}}
+{{with .B.Confidence}}<p class="meta">Confidence is {{.Level}}: {{inline .Basis}}</p>{{end}}
+</header>
+
+{{with .B.KPIs}}<section class="kpis">{{range .}}<div class="kpi {{.State}}"><b>{{.Value}}</b><span>{{.Label}}</span></div>{{end}}</section>{{end}}
+
+{{with .B.Thread}}<section><h2>How we got here</h2>
+<ol class="thread">{{range .}}<li><b>{{.Label}}</b><span>{{inline .Text}}</span></li>{{end}}</ol></section>{{end}}
+
+{{range .B.Sections}}<section><h2>{{.Heading}}</h2>{{rich .Text}}
+{{with .Bars}}{{$bs := .}}<figure class="bars">{{range .Items}}<div class="bar"><span class="l">{{.Label}}</span><span class="track"><i class="{{.State}}" style="--v:{{pct .Value $bs}}%"></i></span><span class="v">{{num .Value}}{{with $bs.Unit}} {{.}}{{end}}</span></div>{{end}}</figure>{{end}}
+{{with .Table}}<div class="scroll"><table><thead><tr>{{range .Columns}}<th>{{.}}</th>{{end}}</tr></thead><tbody>{{range .Rows}}<tr>{{range .}}<td>{{inline .}}</td>{{end}}</tr>{{end}}</tbody></table></div>{{end}}
+</section>{{end}}
+
+{{with .B.Status}}<section><h2>Status</h2><div class="scroll"><table><thead><tr><th>Item</th><th>State</th><th>Note</th><th>Next</th></tr></thead><tbody>
+{{range .}}<tr><td>{{.Item}}</td><td><span class="badge {{.State}}">{{.State}}</span></td><td>{{inline .Note}}</td><td>{{inline .Next}}</td></tr>{{end}}
+</tbody></table></div></section>{{end}}
+
+{{if or .B.Decisions .B.Defaults}}<form id="f" data-page="{{.B.Page}}" data-decision="{{.Decision}}">
+<h2 id="decide">Your decisions</h2>
+<p class="meta">My recommendation is preselected. Pick another option, or write your own answer in the box: your text overrides the pick. Submit sends everything at once.</p>
+{{$n := 0}}{{range .Groups}}{{with .Name}}<h3>{{.}}</h3>{{end}}
+{{range .Decisions}}{{$n = plus $n 1}}{{$d := .}}<fieldset class="card" data-key="{{.ID}}">
+<legend><span class="num">{{$n}}</span> {{.Question}}</legend>
+{{with .Context}}<div class="ctx">{{rich .}}</div>{{end}}
+<div class="opts">{{range .Options}}<label class="opt"><input type="radio" name="{{$d.ID}}" value="{{.ID}}"{{if eq .ID $d.Recommend}} checked{{end}}>
+<b>{{.Label}}</b>{{if eq .ID $d.Recommend}} <span class="badge ok">recommended</span>{{end}}
+{{with .Consequence}}<span class="c">{{inline .}}</span>{{end}}
+{{with .Cost}}<span class="c"><i>Cost</i> {{inline .}}</span>{{end}}
+{{with .Risk}}<span class="c"><i>Risk</i> {{inline .}}</span>{{end}}</label>{{end}}
+{{if not .Recommend}}<label class="opt"><input type="radio" name="{{.ID}}" value="later" checked><b>Decide later</b><span class="c">Nothing changes until you pick.</span></label>{{end}}</div>
+{{with .Why}}<p class="why"><b>{{if $d.Recommend}}Why I recommend it:{{else}}No recommendation:{{end}}</b> {{inline .}}</p>{{end}}
+<label class="free">Your own answer (overrides the pick)<textarea rows="1" maxlength="500" placeholder="optional"></textarea></label>
+</fieldset>{{end}}{{end}}
+{{with .B.Defaults}}<fieldset class="card" data-key="defaults"><legend>Minor calls I will make unless you untick them</legend>
+{{range $i, $d := .}}<label class="dflt"><input type="checkbox" class="d" checked> <span class="num">{{plus $i 1}}</span> {{inline $d}}</label>{{end}}</fieldset>{{end}}
+<div class="submit">
+<label>Anything else (optional)<input type="text" id="note" maxlength="500" placeholder="free text, sent with your answer"></label>
+<textarea id="reply" rows="2" readonly aria-label="Your answer as one line"></textarea>
+<p><button type="submit" form="sendf" id="send" class="primary">Submit</button> <button type="button" id="copy" hidden>Copy answer</button></p>
+<p class="meta" id="status" role="status">Submit hands your answers to the agent once. Nothing is published or sent anywhere else.</p>
+</div>
+</form>
+<form id="sendf" method="post"><input type="hidden" name="token" value="{{.Token}}"></form>{{end}}
+
+{{with .B.Sources}}<section id="sources"><h2>Sources</h2><p class="meta">Hover a number in the text to see the quote.</p><ol class="sources">
+{{range .}}<li id="src-{{.ID}}" value="{{.ID}}">{{if .URL}}<a href="{{.URL}}">{{.Title}}</a>{{else}}{{.Title}}{{end}}{{with .Date}} <span class="meta">read {{.}}</span>{{end}}{{with .Quote}}<q>{{.}}</q>{{end}}</li>{{end}}
+</ol></section>{{end}}
+
+{{with .B.Details}}<section><h2>Full analysis</h2>{{range .}}<details><summary>{{.Heading}}</summary>{{rich .Text}}</details>{{end}}</section>{{end}}
+
+<footer>{{with .B.Author}}By {{.}}. {{end}}Executive page format, fleet ADR-197.</footer>
+{{if or .B.Decisions .B.Defaults}}<script>{{.JS}}</script>{{end}}
+</body>
+</html>
