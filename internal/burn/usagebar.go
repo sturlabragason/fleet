@@ -80,15 +80,10 @@ func parseUsageBarForProfile(out []byte, account, profile string) ([]Window, boo
 		if windows, overage, err := ParseUsageBarJSON(out, profile); err == nil {
 			return windows, overage, nil
 		}
-		if strings.HasPrefix(strings.ToLower(profile), "claude") {
-			if windows, overage, err := ParseUsageBarJSON(out, "anthropic"); err == nil {
-				return windows, overage, nil
-			}
-			if windows, overage, err := ParseUsageBarJSON(out, "claude"); err == nil {
-				return windows, overage, nil
-			}
-		}
 	}
+	// No vendor-name fallback ("claude", "anthropic"): it matches every Claude
+	// seat and would judge this profile on another owner's quota. Unmatched
+	// output with several accounts errors and asks for [burn.<profile>] account.
 	return ParseUsageBarJSON(out, "")
 }
 

@@ -20,12 +20,12 @@ On each tick (`fleet burn --tick`), for every profile listed in `[burn] profiles
 4. **Size N**:
    - Computes `N = floor((left - reserve) / mean_cost)` using the profile's mean run cost from `~/.fleet/runs.jsonl` (falling back to `default_cost_tokens` / `default_cost_pct` when fewer than `min_samples` runs have spend data).
    - Caps `N` by `max_per_tick`, `max_concurrent` burn agents, and `[defaults] max_working`.
-5. **Select tasks**: queries the `task` companion (`task +burn status:pending export`, ordered by urgency), skips tasks already running as `burn-<id8>`, and maps the optional `effort` field (`light`, `standard`, `pro`; default `standard`).
+5. **Select tasks**: queries the `task` companion (`task +burn status:pending export`, ordered by urgency), skips tasks already running as `burn-<id8>`, and maps the optional `effort` field (`light` or `standard`, default `standard`; `pro` runs as `standard` so a burn agent never merges itself).
 6. **Worktree-only isolation**: spawned burn agents work strictly in `<repo>.wt/burn-<id8>` on branch `fleet/burn-<id8>`. They never merge to `main`, push `main`, or write to external systems.
 
 ## Configuration
 
-Add `[burn]` to `~/.config/fleet/config.toml`. No profile is burned unless listed in `profiles`:
+Add `[burn]` to `~/.config/fleet/config.toml`. No profile is burned unless listed in `profiles`, and `--profile P` is refused for a profile not listed there:
 
 ```toml
 [burn]
@@ -69,7 +69,7 @@ fleet burn --review             # write morning Accept/Reject HTML review page f
 ```
 
 ## Systemd user timer
-
+Unit files are shipped in `examples/systemd/` and are not installed automatically. Edit `WorkingDirectory` in the service to the repo that `+burn` tasks without a `dir` field run in, then enable the 30-minute timer:
 Unit files are shipped in `examples/systemd/` and are not installed automatically. To enable the 30-minute timer:
 
 ```sh

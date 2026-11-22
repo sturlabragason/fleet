@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -377,6 +378,11 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 		if ex.Worktree != nil {
 			dir = ex.Worktree.Path
 		}
+	}
+	// A review-only agent (fleet burn) runs unattended: no branch of its own
+	// means its work would land in the user's checkout, unreviewed.
+	if ex.Worktree == nil && card != nil && slices.Contains(card.May, ReviewOnly) {
+		return nil, fmt.Errorf("%s is review-only and needs its own git worktree in %s", name, dir)
 	}
 	// Only now is it known whether the agent shares its dir, which decides
 	// its default result file.

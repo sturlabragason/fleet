@@ -80,3 +80,21 @@ func ParseTasksJSON(data []byte) ([]Task, error) {
 	})
 	return tasks, nil
 }
+
+// WorkDir is the repo the task runs in: its dir field, else def.
+func (t Task) WorkDir(def string) string {
+	if d := expandHome(t.Dir); d != "" {
+		return d
+	}
+	return def
+}
+
+// DropPendingReview leaves out tasks whose fleet/burn-<id8> branch already
+// exists in their repo: that work waits for the morning review, and a
+// respawn would burn quota on it again.
+func DropPendingReview(ctx context.Context, tasks []Task, def string) []Task {
+	return slices.DeleteFunc(tasks, func(t Task) bool {
+		_, err := gitOut(ctx, t.WorkDir(def), "rev-parse", "--verify", "--quiet", "refs/heads/fleet/"+t.AgentName())
+		return err == nil
+	})
+}

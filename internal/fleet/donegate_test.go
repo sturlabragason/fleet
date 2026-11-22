@@ -3,6 +3,7 @@ package fleet
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -120,6 +121,7 @@ func TestDoneGateUnmergedWithoutMergeRightEscalates(t *testing.T) {
 		{"standard", "standard", nil, false},
 		{"standard with merge-local", "standard", []string{"merge-local"}, true},
 		{"pro", "pro", nil, true},
+		{"review-only pro", "pro", []string{ReviewOnly}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f, dir, told, _ := gateFleet(t, tc.effort, tc.may...)
@@ -132,6 +134,12 @@ func TestDoneGateUnmergedWithoutMergeRightEscalates(t *testing.T) {
 			}
 			if bounced := len(*told) == 1; bounced != tc.bounce {
 				t.Fatalf("bounced %v, want %v (%q)", bounced, tc.bounce, *told)
+			}
+			if slices.Contains(tc.may, ReviewOnly) {
+				if got := lastReport(t, f); !strings.HasPrefix(got, "done: ") {
+					t.Fatalf("review-only done: %q", got)
+				}
+				return
 			}
 			if !tc.bounce {
 				got := lastReport(t, f)

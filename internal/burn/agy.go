@@ -31,7 +31,7 @@ func (AgyReader) Name() string { return "agy" }
 
 // Read executes `agy -p /quota` via companion and parses the reported windows.
 func (r AgyReader) Read(ctx context.Context, profile string, _ prefs.BurnProfile, env map[string]string) Quota {
-	now := time.Now().UTC()
+	now := time.Now() // local: agy prints zone-less reset times in local time
 	q := Quota{
 		Profile:   profile,
 		Reader:    r.Name(),

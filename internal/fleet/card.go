@@ -97,13 +97,17 @@ func CardPrompt(c *board.Card) string {
 	if c.Check != "" {
 		fmt.Fprintf(&b, "\nDone-check: `%s`, run in your dir, must exit %d. fleet runs it itself when you report done and tells the admiral whether it passed, so run it yourself first.\n", c.Check, c.Want)
 	}
-	if len(c.May) > 0 {
+	may := slices.DeleteFunc(slices.Clone(c.May), func(m string) bool { return m == ReviewOnly })
+	if len(may) > 0 {
 		gate := ""
 		// ADR-129: CI and the pre-merge checks are the gate, not the user.
-		if slices.ContainsFunc(c.May, grantsMerge) {
+		if slices.ContainsFunc(may, grantsMerge) {
 			gate = " For merge-local, push-main and release the gate is green CI on your branch head and the pre-merge checks: once both pass, do it yourself. Release once per batch, through the release skill and its lock."
 		}
-		fmt.Fprintf(&b, "\nPermissions: you may %s without asking.%s Ask before anything else public or irreversible.\n", strings.Join(c.May, ", "), gate)
+		fmt.Fprintf(&b, "\nPermissions: you may %s without asking.%s Ask before anything else public or irreversible.\n", strings.Join(may, ", "), gate)
+	}
+	if slices.Contains(c.May, ReviewOnly) {
+		b.WriteString("\nReview-only: commit your work on your own branch and report done with it unmerged. Do not merge, push or release; the user reviews the branch first.\n")
 	}
 	fmt.Fprintf(&b, "\nResult file: write `%s` in your dir before you report done: what you changed, the branch and commit, what is left and any open questions.\n", c.Result)
 	return strings.TrimRight(b.String(), "\n")

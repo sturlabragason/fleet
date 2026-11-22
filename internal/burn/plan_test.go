@@ -1,6 +1,7 @@
 package burn
 
 import (
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -60,7 +61,7 @@ func TestPlanSizingAndGates(t *testing.T) {
 	}
 
 	active := []ActiveAgent{
-		{Name: "burn-33333333", Profile: "agy", Working: true},
+		{Name: "burn-33333333", Profile: "agy", Working: true, Live: true},
 	}
 
 	res := Plan(PlanInput{
@@ -89,7 +90,7 @@ func TestPlanSizingAndGates(t *testing.T) {
 	if len(pi.PlannedSpawns) != 2 {
 		t.Fatalf("pi PlannedSpawns = %d, want 2", len(pi.PlannedSpawns))
 	}
-	if pi.PlannedSpawns[0].Agent != "burn-11111111" || pi.PlannedSpawns[0].Effort != "pro" {
+	if pi.PlannedSpawns[0].Agent != "burn-11111111" || pi.PlannedSpawns[0].Effort != "standard" {
 		t.Fatalf("first spawn = %+v", pi.PlannedSpawns[0])
 	}
 	if pi.PlannedSpawns[1].Agent != "burn-22222222" || pi.PlannedSpawns[1].Effort != "light" {
@@ -129,7 +130,7 @@ func TestPlanWrapUpAndReserve(t *testing.T) {
 			},
 		},
 		Active: []ActiveAgent{
-			{Name: "burn-aaaaaaaa", Profile: "pi", Working: true},
+			{Name: "burn-aaaaaaaa", Profile: "pi", Live: true}, // waiting on a prompt: still wrapped up
 			{Name: "regular-agent", Profile: "pi", Working: true},
 		},
 	})
@@ -178,5 +179,25 @@ func TestRenderReviewHTML(t *testing.T) {
 		if !strings.Contains(html, want) {
 			t.Errorf("review html missing %q", want)
 		}
+	}
+}
+
+func TestDropPendingReview(t *testing.T) {
+	dir := t.TempDir()
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main"},
+		{"-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"},
+		{"branch", "fleet/burn-aaaaaaaa"},
+	} {
+		if out, err := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	got := DropPendingReview(t.Context(), []Task{
+		{UUID: "aaaaaaaa-0000-0000-0000-000000000001"},
+		{UUID: "bbbbbbbb-0000-0000-0000-000000000002"},
+	}, dir)
+	if len(got) != 1 || got[0].AgentName() != "burn-bbbbbbbb" {
+		t.Fatalf("want only burn-bbbbbbbb, got %+v", got)
 	}
 }

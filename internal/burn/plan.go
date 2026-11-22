@@ -19,6 +19,10 @@ type ActiveAgent struct {
 	Name    string
 	Profile string
 	Working bool
+	// Live: still on the board and not reported done (waiting, idle, stuck,
+	// queued...). A live burn agent counts toward max_concurrent and gets the
+	// wrap-up message.
+	Live bool
 }
 
 // PlanInput bundles everything Plan needs so it stays pure and testable.
@@ -81,9 +85,9 @@ func Plan(in PlanInput) TickResult {
 		activeNames[a.Name] = true
 		if a.Working {
 			totalWorking++
-			if strings.HasPrefix(a.Name, "burn-") {
-				activeBurn++
-			}
+		}
+		if a.Live && strings.HasPrefix(a.Name, "burn-") {
+			activeBurn++
 		}
 	}
 
@@ -139,7 +143,7 @@ func planProfile(in PlanInput, q Quota, activeBurn, totalWorking *int, queue []T
 	// this profile to commit and finish, and do not start new ones.
 	if in.Config.WrapUpBefore > 0 && ttr <= in.Config.WrapUpBefore {
 		for _, a := range in.Active {
-			if a.Working && strings.HasPrefix(a.Name, "burn-") && a.Profile == q.Profile {
+			if a.Live && strings.HasPrefix(a.Name, "burn-") && a.Profile == q.Profile {
 				pp.WrapUps = append(pp.WrapUps, WrapUpPlan{
 					Agent:       a.Name,
 					Profile:     q.Profile,
@@ -197,11 +201,12 @@ func planProfile(in PlanInput, q Quota, activeBurn, totalWorking *int, queue []T
 			continue
 		}
 		claimed[t.UUID] = true
-		dir := expandHome(t.Dir)
-		if dir == "" {
-			dir = in.DefaultDir
-		}
+		dir := t.WorkDir(in.DefaultDir)
 		effort := t.NormalizedEffort()
+		if effort == "pro" {
+			// A pro agent may merge into main itself (donegate.mayMerge); burn work stays on its branch for review.
+			effort = "standard"
+		}
 		pp.PlannedSpawns = append(pp.PlannedSpawns, SpawnPlan{
 			Agent:   t.AgentName(),
 			Profile: q.Profile,
@@ -328,6 +333,7 @@ func ActiveFromBoard(agents []*board.Agent) []ActiveAgent {
 			Name:    a.Name,
 			Profile: a.Profile,
 			Working: a.Status == "working" || a.Status == "starting",
+			Live:    a.Status != "parked" && a.Status != "gone" && (a.Report == nil || a.Report.State != "done"),
 		})
 	}
 	return out

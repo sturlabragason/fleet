@@ -53,6 +53,9 @@ func (f *Fleet) doneGate(me, summary string, left []todo.Item) gateVerdict {
 	merge := mayMerge(a)
 	reason, reply, code := f.workLeft(b, a, summary), "", "unmerged"
 	uncommitted := strings.Contains(reason, "uncommitted changes")
+	if reviewOnly(a) && !uncommitted {
+		reason = "" // its committed branch waits for the user's review, not a merge
+	}
 	switch {
 	case reason != "" && !merge && !uncommitted:
 		f.Store.AppendEvent(board.Intervention(time.Now(), a, board.KindDoneRefused, "no_merge_perm"))
@@ -189,6 +192,9 @@ func sharedDir(b *board.Board, a *board.Agent) bool {
 // mayMerge is whether the agent may merge into local main itself: a pro
 // playbook does, and any card that grants merge-local, push-main or release.
 func mayMerge(a *board.Agent) bool {
+	if reviewOnly(a) {
+		return false
+	}
 	if effortOf(a) == playbook.Pro {
 		return true
 	}
@@ -196,6 +202,15 @@ func mayMerge(a *board.Agent) bool {
 		return false
 	}
 	return slices.ContainsFunc(a.Card.May, grantsMerge)
+}
+
+// ReviewOnly is the `may` entry for an agent whose branch the user reviews
+// before anything merges (fleet burn, ADR-190): it never merges itself, and
+// a done that leaves only its committed branch passes the gate.
+const ReviewOnly = "review-only"
+
+func reviewOnly(a *board.Agent) bool {
+	return a.Card != nil && slices.Contains(a.Card.May, ReviewOnly)
 }
 
 // grantsMerge is whether one `may` entry lets the agent merge into local

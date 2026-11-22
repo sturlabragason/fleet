@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -48,6 +49,10 @@ func cmdBurn(f *fleet.Fleet, args []string) error {
 
 	profiles := cfg.Profiles
 	if p := strings.TrimSpace(*profileFlag); p != "" {
+		// --profile narrows the allowlist, never widens it: an owner's opt-in is the gate.
+		if !slices.Contains(cfg.Profiles, p) {
+			return fmt.Errorf("profile %q is not in [burn] profiles; add it there to allow burning it", p)
+		}
 		profiles = []string{p}
 	}
 	if len(profiles) == 0 {
@@ -87,12 +92,14 @@ func cmdBurn(f *fleet.Fleet, args []string) error {
 		taskErrStr = taskErr.Error()
 	}
 
+	cwd, _ := os.Getwd()
+	tasks = burn.DropPendingReview(ctx, tasks, cwd)
+
 	st := f.Store.Load()
 	agents := make([]*board.Agent, 0, len(st.Agents))
 	for _, a := range st.Agents {
 		agents = append(agents, a)
 	}
-	cwd, _ := os.Getwd()
 
 	res := burn.Plan(burn.PlanInput{
 		Now:        now,
@@ -143,6 +150,7 @@ func executeBurnActions(f *fleet.Fleet, res *burn.TickResult) {
 				Card: &board.Card{
 					Goal:   sp.Task.Description,
 					Result: "result.md",
+					May:    []string{fleet.ReviewOnly},
 				},
 			}
 			if _, err := f.SpawnWith(opts, sp.Agent, sp.Profile, sp.Dir, sp.Prompt); err != nil {
