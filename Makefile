@@ -16,8 +16,9 @@ test:
 # golangci-lint v2 (.golangci.yml) on what changed since main, as CI gates it (ADR-134).
 # LINT_BASE=<rev> moves the base; LINT_BASE= lints everything.
 LINT_BASE ?= main
+GOLANGCI_LINT ?= $(or $(shell command -v golangci-lint),$(shell go env GOPATH)/bin/golangci-lint)
 lint:
-	golangci-lint run $(if $(LINT_BASE),--new-from-merge-base=$(LINT_BASE)) ./...
+	$(GOLANGCI_LINT) run $(if $(LINT_BASE),--new-from-merge-base=$(LINT_BASE)) ./...
 
 install: build
 	mkdir -p $(HOME)/.local/bin

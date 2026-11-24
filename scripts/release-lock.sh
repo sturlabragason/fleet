@@ -4,7 +4,8 @@
 #   scripts/release-lock.sh acquire <agent>   take the lock (exit 1 if another agent holds it)
 #   scripts/release-lock.sh release <agent>   drop it (exit 1 if another agent holds it)
 #   scripts/release-lock.sh status            print the holder, exit 1 if free
-# A lock older than FLEET_RELEASE_LOCK_TTL seconds (default 7200) is stale and may be taken.
+# A lock older than FLEET_RELEASE_LOCK_TTL seconds (default 7200) is stale and may be taken,
+# and so is one whose holder `fleet info` no longer knows on this host (the agent is gone).
 # The same agent may acquire again; that refreshes the time.
 set -euo pipefail
 
@@ -16,6 +17,13 @@ age() {
 	local t
 	t=$(sed -n 's/^time=//p' "$lock" 2>/dev/null || true)
 	echo $(($(date +%s) - ${t:-0}))
+}
+
+# The holder is gone when the lock was taken on this host and fleet no longer knows the agent.
+gone() {
+	[[ $(sed -n 's/^host=//p' "$lock" 2>/dev/null) == "$(hostname)" ]] || return 1
+	command -v fleet >/dev/null || return 1
+	! fleet info "$1" >/dev/null 2>&1
 }
 
 write() {
@@ -35,8 +43,8 @@ acquire)
 		if write "$agent"; then echo "release lock taken by $agent"; exit 0; fi
 		h=$(holder)
 		[[ -n $h ]] || continue # released between ln and read: try again
-		if [[ $h == "$agent" || $(age) -gt $ttl ]]; then
-			[[ $h == "$agent" ]] || echo "taking stale release lock from $h ($(age)s old)" >&2
+		if [[ $h == "$agent" || $(age) -gt $ttl ]] || gone "$h"; then
+			[[ $h == "$agent" ]] || echo "taking stale release lock from $h ($(age)s old, or the agent is gone)" >&2
 			# mv is atomic: of two takers only one moves the old lock away; the other
 			# finds the winner's fresh lock on the next pass.
 			seen=$(cat "$lock" 2>/dev/null || true)

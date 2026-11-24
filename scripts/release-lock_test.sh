@@ -9,6 +9,10 @@ trap 'rm -rf "$tmp"' EXIT
 export HOME=$tmp GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.org GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.org
 unset FLEET_RELEASE_LOCK_TTL
+# A fake fleet: `fleet info X` succeeds only for agents listed in $tmp/live.
+mkdir -p "$tmp/bin" && printf '#!/bin/sh\ngrep -qx "$2" %q\n' "$tmp/live" >"$tmp/bin/fleet" && chmod +x "$tmp/bin/fleet"
+export PATH=$tmp/bin:$PATH
+printf 'a\nb\n' >"$tmp/live"
 failed=0
 d=$tmp/r
 git init -q -b main "$d" && git -C "$d" commit -q --allow-empty -m base
@@ -28,6 +32,12 @@ ok "a releases" at "$d" release a
 ok "b acquires after release" at "$tmp/wt" acquire b
 ok "stale lock taken" env FLEET_RELEASE_LOCK_TTL=-1 bash -c "cd '$d' && '$script' acquire a"
 [[ $(at "$d" status | sed -n 's/^agent=//p') == a ]] || { echo "FAIL: holder after stale take"; failed=1; }
+no "c blocked while a is live" at "$d" acquire c
+printf 'b\n' >"$tmp/live"
+ok "c takes the lock of gone agent a" at "$d" acquire c
+sed -i 's/^host=.*/host=elsewhere/' "$(git -C "$d" rev-parse --path-format=absolute --git-common-dir)/fleet-release.lock"
+printf '' >"$tmp/live"
+no "a lock from another host is not taken as gone" at "$d" acquire a
 
 [[ $failed == 0 ]] && echo "release-lock: ok"
 exit $failed

@@ -35,7 +35,7 @@ README, a screenshot or anything in internal/theme.
 CI runs golangci-lint v2 (`.golangci.yml`) on the lines a change adds or edits; old findings don't block, new ones do.
 1. Before committing Go code, run `make lint` (golangci-lint v2.15, `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0`) and fix what it reports. A `//nolint:<linter> // reason` needs a specific linter and a reason.
 2. Add context and wrap errors: `fmt.Errorf("open inbox: %w", err)`. Compare errors with `errors.Is` or `errors.As`. Never `return nil` on an error without a comment saying why.
-3. Keep functions under about 80 lines and switches under about 10 cases. A new command or MCP tool is an entry in its handler table, not another `case`.
+3. Keep functions under about 80 lines and switches under about 10 cases. A new command or MCP tool is an entry in its handler table, not another `case`. A new CLI command also needs its `mcp.CLIParity` entry (`cmd/fleet/parity_test.go` fails without it).
 4. Code that does I/O or runs a process takes `ctx context.Context` first and uses `exec.CommandContext`. `context.Background()` belongs only in `main` and tests (use `t.Context()` there).
 5. Delete what you replace. No unused functions kept for later, and no new uses of deprecated identifiers. Check what depends on code with `fleet recall <file|pkg.Func>` before you move or delete it.
 6. Tests are table-driven and use `t.Helper`, `t.TempDir` and `t.Setenv`. Don't wait with `time.Sleep`: poll with a deadline or use `testing/synctest`.
@@ -45,6 +45,7 @@ CI runs golangci-lint v2 (`.golangci.yml`) on the lines a change adds or edits; 
 # Gotchas
 - Bash aliases don't exist inside tmux spawns; tool variants are profiles.
 - Spawn behaviour (starting mode, auto-submit, extra args, local profile overrides) comes from the user's uncommitted `$XDG_CONFIG_HOME/fleet/config.toml`. Tests must pin `FLEET_CONFIG` to a nonexistent path so the real file can't change results. See `examples/config.toml.example`.
+- `make install` replaces `~/.local/bin/fleet` with a symlink to this plain build. If the installed binary is a release build with extra build tags, reinstall it the way it was installed instead.
 - `fleet mcp` re-execs itself when bin/fleet changes (DESIGN §6.9); after `make build` the next admiral/agent tool call runs the new code.
 
 # Process
