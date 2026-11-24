@@ -6,6 +6,9 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
+## 2026-11-24
+- When the overview stops answering keys for 10 s, fleet.log gets an `event loop stalled` error with every goroutine's stack and a line when it recovers, so a frozen overview can be diagnosed afterwards (ADR-198)
+
 ## 2026-11-22
 - `fleet send` no longer refuses an idle Claude agent with `input box holds unsubmitted text ("P")` when the box only shows the "Press up to edit queued messages" hint under the cursor; text you really typed still blocks the send.
 - **Changed default:** a `light` spawn on the built-in claude and copilot profiles runs at low reasoning effort, Copilot spawns look skills up instead of listing all of them in every prompt, and claude spawns compact at 250k tokens; profiles you define in tools.toml for those tools now inherit these per-effort args (`context_args = {}` keeps them off). `fleet doctor` warns when your standing rules pass 4 KB and says whether rtk is hooked into Claude Code and Copilot (ADR-195)

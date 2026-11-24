@@ -1,9 +1,12 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/sturlabragason/fleet/internal/board"
 )
 
 type stubView struct{ open *bool }
@@ -64,4 +67,34 @@ func TestExtensionsCompose(t *testing.T) {
 		}
 	}()
 	Register(Extension{Name: "c", Keys: map[string]func(*Model) tea.Cmd{"1x": nil}})
+}
+
+// escView closes on Esc, like the remote inbox panel.
+type escView struct{ open *bool }
+
+func (v escView) Open(*Model) bool { return *v.open }
+func (v escView) Key(_ *Model, k string) tea.Cmd {
+	if k == "esc" {
+		*v.open = false
+	}
+	return nil
+}
+func (escView) Lines(*Model) []string { return nil }
+
+// TestExtViewThroughUpdate: with an extension view open, polls still refresh
+// the header and Esc, sent through Update, closes the view. The frozen
+// overview of 2026-11-24 showed neither.
+func TestExtViewThroughUpdate(t *testing.T) {
+	open := true
+	withExts(t, Extension{Name: "inbox", View: escView{&open}})
+	m := New(&fakeBE{}, t.TempDir())
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m.Update(agentsMsg{agents: []*board.Agent{{Name: "a"}, {Name: "b"}, {Name: "c"}}})
+	if h := m.header(); !strings.Contains(h, "3 agents") {
+		t.Fatalf("header after a poll with the view open: %q", h)
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if open || extViewOpen(m) {
+		t.Fatal("Esc through Update did not close the view")
+	}
 }

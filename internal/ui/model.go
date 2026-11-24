@@ -22,6 +22,7 @@ import (
 // Model is the overview state.
 type Model struct {
 	be        Backend
+	watch     loopWatch      // notices a stalled event loop (stall.go)
 	still     bool           // the header logo holds still (ADR-173)
 	tick      int            // housekeeping ticks seen, the header logo's frame
 	agents    []*board.Agent // display order: by tier, stable within a tier (tiers.go)
@@ -88,6 +89,7 @@ type infoMsg string
 // New builds a model. stateDir holds ui.json (cursor survives restarts).
 func New(be Backend, stateDir string) *Model {
 	m := &Model{be: be, onWall: map[string]bool{}, stateDir: stateDir, cfg: layout.Default, now: time.Now}
+	m.watch.origin = time.Now()
 	if b, err := os.ReadFile(filepath.Join(stateDir, "ui.json")); err == nil {
 		var s struct {
 			Selected string
@@ -161,6 +163,7 @@ func pollLater() tea.Cmd {
 
 // Update handles messages; panics are logged and swallowed.
 func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
+	m.watch.beatNow()
 	prevMsg := m.msg
 	defer func() { // runs after the recover below, so it sees its message too
 		if m.msg != prevMsg {

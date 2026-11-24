@@ -462,6 +462,7 @@ func cmdUI(f *fleet.Fleet) error {
 	re := newUIReexec(f.Exe, "", probeBinary, p.Quit)
 	ctx, stop := context.WithCancel(context.Background())
 	go re.run(ctx, watch.StopEvery)
+	go m.WatchLoop(ctx, 2*time.Second) // a frozen overview logs its stacks
 	runExtUI(ctx, f)
 	_, err := p.Run()
 	stop()
