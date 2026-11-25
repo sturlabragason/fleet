@@ -343,9 +343,10 @@ Screenshots:
 - The terminal uses the default `lane` palette and the same font at the same size in every shot.
   The one exception is `docs/img/themes.gif`, the README hero: it steps through every theme with
   the overview's `T` picker and hides the wall, so the backdrop and the tiles fill the right side.
-- The GitHub social preview, `docs/img/social.png` (1280×640), is the hero under the lockup and one
-  tagline, built by `scripts/social-card.sh`. GitHub has no API for it: upload it under Settings,
-  Social preview, after regenerating.
+- The GitHub social preview, `docs/img/social.png` (1280×640), is the hero under the lockup, a
+  two-line tagline that says what fleet does, and the supported tools, built by
+  `scripts/social-card.sh`. GitHub has no API for it: upload it under Settings, Social preview,
+  after regenerating.
 
 Diagrams are Mermaid, checked with mermaid-cli before committing:
 

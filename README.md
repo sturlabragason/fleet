@@ -13,6 +13,16 @@
 
 fleet runs your Copilot CLI, Claude Code, agy, vibe and Pi sessions side by side, shows each one as a status tile, puts the ones you are working with on a wall of live panes, and gives one agent, the admiral, the tools to report on the rest and act for you.
 
+It is for developers who already run two or more coding agents at once in a terminal and lose track of which one is waiting on them.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/sturlabragason/fleet/main/install.sh | sh
+fleet doctor                        # checks tmux 3.3+ and your agent CLIs
+fleet up --admiral-profile claude   # or --admiral-profile fake to try it without tokens
+```
+
+Prerequisites, Windows and the full walkthrough: [Install](#install) and [Quick start](#quick-start-claude-admiral).
+
 ![fleet: the admiral on the left and the overview on the right, a tile per agent over the animated fleet-mark backdrop. The theme picker steps through all 26 themes, dark and light, and the whole window recolours live while the backdrop keeps flowing](docs/img/themes.gif)
 
 <sub>Recorded with fake agents and a fake admiral, so no tokens were spent (`scripts/screenshot.sh`). Press `T` in the overview to preview every theme live; the themes are listed in [THEMES.md](THEMES.md).</sub>
