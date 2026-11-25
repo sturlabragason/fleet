@@ -1,0 +1,30 @@
+# Publishes site/index.html and the README images to https://sturlabragason.github.io/fleet/.
+name: pages
+on:
+  push:
+    branches: [main]
+    paths: [site/**, docs/img/**, .github/workflows/pages.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-26.04
+    environment:
+      name: github-pages
+      url: ${{ steps.publish.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Assemble the site
+        run: |
+          mkdir -p _site
+          cp site/index.html _site/
+          cp docs/img/demo.gif docs/img/themes.gif docs/img/social.png docs/img/logo.svg _site/
+      - uses: actions/upload-pages-artifact@v5
+      - id: publish
+        uses: actions/deploy-pages@v5

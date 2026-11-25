@@ -1,0 +1,36 @@
+# Monday digest: one Discussion in Announcements with the week's user-facing changes.
+# Posts nothing in a week without changes, and never twice with the same title.
+name: digest
+on:
+  schedule:
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: read
+  discussions: write
+jobs:
+  digest:
+    runs-on: ubuntu-26.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Post the digest
+        run: |
+          scripts/weekly-digest.sh > digest.md
+          if [ ! -s digest.md ]; then echo "no user-facing changes this week"; exit 0; fi
+          title=$(head -1 digest.md)
+          tail -n +3 digest.md > body.md
+          owner=${REPO%/*} name=${REPO#*/}
+          if gh api graphql -f q="repo:$REPO in:title \"$title\"" \
+              -f query='query($q:String!){search(query:$q,type:DISCUSSION,first:1){discussionCount}}' \
+              -q '.data.search.discussionCount' | grep -qv '^0$'; then
+            echo "already posted: $title"; exit 0
+          fi
+          read -r repo_id cat_id < <(gh api graphql -f owner="$owner" -f name="$name" \
+            -f query='query($owner:String!,$name:String!){repository(owner:$owner,name:$name){id discussionCategories(first:20){nodes{id name}}}}' \
+            -q '.data.repository | .id + " " + (.discussionCategories.nodes[] | select(.name=="Announcements") | .id)')
+          gh api graphql -f repo="$repo_id" -f cat="$cat_id" -f title="$title" -f body="$(cat body.md)" \
+            -f query='mutation($repo:ID!,$cat:ID!,$title:String!,$body:String!){createDiscussion(input:{repositoryId:$repo,categoryId:$cat,title:$title,body:$body}){discussion{url}}}' \
+            -q '.data.createDiscussion.discussion.url'

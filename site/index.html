@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fleet: see and steer many coding agents from one tmux window</title>
+<meta name="description" content="fleet runs Claude Code, Copilot CLI, agy, vibe and Pi side by side in one tmux window: a status tile per agent, a wall of live panes, a git worktree each.">
+<meta property="og:title" content="fleet">
+<meta property="og:description" content="See and steer many coding agents from one tmux window.">
+<meta property="og:image" content="https://sturlabragason.github.io/fleet/social.png">
+<link rel="icon" href="logo.svg">
+<style>
+:root { --ink:#161616; --grey:#525252; --hair:#e0e0e0; --ground:#fff; --code:#f4f4f4; --lane:#0033cc; color-scheme: light dark; }
+@media (prefers-color-scheme: dark) { :root { --ink:#f4f4f4; --grey:#8d8d8d; --hair:#393939; --ground:#161616; --code:#262626; --lane:#8aa4ff; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--ground); color:var(--ink); font:16px/1.55 "IBM Plex Sans", system-ui, sans-serif; }
+main { max-width: 880px; margin: 0 auto; padding: 48px 20px 64px; }
+h1 { font-size: 2rem; line-height:1.2; margin: 24px 0 8px; }
+h2 { font-size: 1.2rem; margin: 40px 0 8px; border-top: 1px solid var(--hair); padding-top: 24px; }
+p, li { max-width: 68ch; }
+.lede { color: var(--grey); font-size: 1.1rem; }
+a { color: var(--lane); }
+pre { background: var(--code); padding: 14px 16px; overflow-x: auto; font: 14px/1.5 "IBM Plex Mono", ui-monospace, monospace; }
+code { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+img.shot { width: 100%; height: auto; display: block; border: 1px solid var(--hair); }
+small { color: var(--grey); }
+.logo { height: 48px; }
+nav a { margin-right: 16px; }
+</style>
+</head>
+<body>
+<main>
+<img class="logo" src="logo.svg" alt="">
+<h1>See and steer many coding agents from one tmux window</h1>
+<p class="lede">fleet runs your Claude Code, Copilot CLI, agy, vibe and Pi sessions side by side. Each one gets a status tile, the ones you work with sit on a wall of live panes, and one agent, the admiral, can report on the rest and act for you.</p>
+<nav><a href="https://github.com/sturlabragason/fleet">GitHub</a><a href="https://github.com/sturlabragason/fleet/blob/main/docs/install.md">Install guide</a><a href="https://github.com/sturlabragason/fleet/releases">Releases</a></nav>
+
+<h2>Try it without spending tokens</h2>
+<pre>curl -fsSL https://raw.githubusercontent.com/sturlabragason/fleet/main/install.sh | sh
+fleet doctor                       # checks tmux 3.3+ and your agent CLIs
+fleet up --admiral-profile fake    # fake agents cycle through working, waiting and error</pre>
+<p>When that looks right, start it for real with <code>fleet up --admiral-profile claude</code> (or <code>copilot</code>). Windows: see the <a href="https://github.com/sturlabragason/fleet/blob/main/docs/install.md">install guide</a>.</p>
+
+<h2>The wall</h2>
+<img class="shot" src="demo.gif" alt="The admiral on the left, a tile per agent top right, a 2 by 2 wall of live agent panes below. Two agents ask for approval, they are answered, and work resumes" loading="lazy">
+<small>Fake agents and a fake admiral, so no tokens were spent.</small>
+
+<h2>What it does</h2>
+<ul>
+<li>A tile per agent, sorted so the ones waiting on you come first. Status is read from each tool's own screen.</li>
+<li>A wall of live panes you can type into. <code>Tab</code> jumps to the next agent that needs you.</li>
+<li>In a git repo each agent gets its own worktree and branch, and <code>fleet merge</code> rebases and checks one back into main.</li>
+<li>The admiral has MCP tools to read the others' status, peek at their screens, answer them and spawn new ones.</li>
+<li>Runs on its own tmux socket, so your tmux config and sessions are not touched.</li>
+</ul>
+
+<h2>Themes</h2>
+<img class="shot" src="themes.gif" alt="The theme picker steps through the themes, dark and light, and the whole window recolours live" loading="lazy">
+<small>Press <code>T</code> in the overview to preview every theme.</small>
+
+<h2>Status</h2>
+<p>Go, MIT licence. Linux is used daily; macOS builds but is less tested; Windows runs without the wall. Questions go to <a href="https://github.com/sturlabragason/fleet/discussions">Discussions</a>, bugs to <a href="https://github.com/sturlabragason/fleet/issues/new/choose">issues</a>.</p>
+</main>
+</body>
+</html>

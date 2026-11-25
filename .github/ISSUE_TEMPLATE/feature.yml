@@ -1,0 +1,20 @@
+name: Feature request
+description: Something fleet should do that it does not do today.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do, and where fleet gets in the way.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: How you picture it working. Rough is fine.
+  - type: textarea
+    id: now
+    attributes:
+      label: What you do today instead

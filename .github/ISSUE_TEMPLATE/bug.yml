@@ -1,0 +1,42 @@
+name: Bug
+description: Something in fleet does not work as documented.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you saw instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: fleet version
+      description: Output of `fleet version`.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: fleet doctor
+      description: Output of `fleet doctor`. Remove anything private.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: tool
+    attributes:
+      label: Agent tool and profile
+      description: For example `claude`, `copilot`, `agy`, `vibe`, `pi`, or `fake`.
+  - type: input
+    id: tmux
+    attributes:
+      label: tmux version and OS
+      description: Output of `tmux -V`, and your OS.
+  - type: textarea
+    id: log
+    attributes:
+      label: Log lines
+      description: The relevant lines from `~/.fleet/logs/fleet.log`, if any.
+      render: text
