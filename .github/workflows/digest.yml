@@ -23,14 +23,16 @@ jobs:
           title=$(head -1 digest.md)
           tail -n +3 digest.md > body.md
           owner=${REPO%/*} name=${REPO#*/}
-          if gh api graphql -f q="repo:$REPO in:title \"$title\"" \
-              -f query='query($q:String!){search(query:$q,type:DISCUSSION,first:1){discussionCount}}' \
-              -q '.data.search.discussionCount' | grep -qv '^0$'; then
-            echo "already posted: $title"; exit 0
-          fi
-          read -r repo_id cat_id < <(gh api graphql -f owner="$owner" -f name="$name" \
+          ids=$(gh api graphql -f owner="$owner" -f name="$name" \
             -f query='query($owner:String!,$name:String!){repository(owner:$owner,name:$name){id discussionCategories(first:20){nodes{id name}}}}' \
             -q '.data.repository | .id + " " + (.discussionCategories.nodes[] | select(.name=="Announcements") | .id)')
+          read -r repo_id cat_id <<< "$ids"
+          [ -n "$cat_id" ] || { echo "no Announcements category"; exit 1; }
+          # Exact titles, not search: search lags, and a failed lookup must stop the step.
+          titles=$(gh api graphql -f owner="$owner" -f name="$name" -f cat="$cat_id" \
+            -f query='query($owner:String!,$name:String!,$cat:ID!){repository(owner:$owner,name:$name){discussions(first:20,categoryId:$cat,orderBy:{field:CREATED_AT,direction:DESC}){nodes{title}}}}' \
+            -q '.data.repository.discussions.nodes[].title')
+          if grep -qxF -- "$title" <<< "$titles"; then echo "already posted: $title"; exit 0; fi
           gh api graphql -f repo="$repo_id" -f cat="$cat_id" -f title="$title" -f body="$(cat body.md)" \
             -f query='mutation($repo:ID!,$cat:ID!,$title:String!,$body:String!){createDiscussion(input:{repositoryId:$repo,categoryId:$cat,title:$title,body:$body}){discussion{url}}}' \
             -q '.data.createDiscussion.discussion.url'
