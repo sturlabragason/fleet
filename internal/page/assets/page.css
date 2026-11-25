@@ -66,9 +66,12 @@ fieldset{border:0;margin:0;padding:0;min-width:0}
 button{font:inherit;padding:.5rem 1.2rem;cursor:pointer;border:1px solid var(--line-strong);background:var(--bg)}
 button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 button:disabled{opacity:.6;cursor:default}
-#status.ok{color:var(--ok)}
+#status.ok{color:var(--ok)} #status.warn{color:var(--warn)} #status.bad{color:var(--bad)}
+.live{position:sticky;top:0;z-index:10;margin:-2rem -1rem 1rem;padding:.5rem 1rem;font-size:.9rem;background:var(--surface-2);border-bottom:2px solid var(--line-strong)}
+.live.ok{border-color:var(--ok)} .live.warn{border-color:var(--warn);background:#fff4e0} .live.bad{border-color:var(--bad);background:#ffe8e8}
+.live button{padding:.15rem .7rem;margin-left:.4rem}
 .sources{padding-left:1.5rem;font-size:.9rem} .sources li{margin:.5rem 0}
 .sources q{display:block;color:var(--muted);font-style:italic}
 details{border-top:1px solid var(--line);padding:.5rem 0} summary{cursor:pointer;font-weight:500}
 footer{margin-top:3rem;color:var(--muted);font-size:.8rem;border-top:1px solid var(--line);padding-top:.6rem}
-@media print{.submit,#sendf{display:none}}
+@media print{.submit,#sendf,.live{display:none}}

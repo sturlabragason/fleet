@@ -51,22 +51,26 @@ func cmdPage(args []string) error {
 }
 
 // publishPage renders b into a temp dir and publishes it with the artifact
-// companion, refusing to overwrite another page unless replace is set.
+// companion, refusing to overwrite another page unless replace is set. It
+// warns when the replaced version is open unanswered, since the publish
+// voids that tab's Submit, and says how long Submit stays open (ADR-199).
 func publishPage(ctx context.Context, b page.Brief, replace bool) error {
 	t, err := companion.Find(pages.Spec)
 	if err != nil {
 		return fmt.Errorf("find artifact: %w", err)
 	}
-	if !replace {
-		list, err := t.Run(ctx, companion.Opts{}, "list")
-		if err != nil {
-			return fmt.Errorf("list artifacts: %w", err)
+	list, err := t.Run(ctx, companion.Opts{}, "list")
+	switch {
+	case err != nil && !replace:
+		return fmt.Errorf("list artifacts: %w", err)
+	case err != nil:
+		fmt.Fprintf(os.Stderr, "warning: could not list artifacts (%v); not checking who has %s open\n", err, b.Page)
+	}
+	if published, ok := pages.Published(string(list), b.Page); ok {
+		if !replace {
+			return fmt.Errorf("artifact %s exists: pass --replace to publish over it, or bump round to ask again", b.Page)
 		}
-		for l := range strings.SplitSeq(string(list), "\n") {
-			if name, _, _ := strings.Cut(l, "\t"); name == b.Page {
-				return fmt.Errorf("artifact %s exists: pass --replace to publish over it, or bump round to ask again", b.Page)
-			}
-		}
+		warnOpenTab(ctx, t, b.Page, published)
 	}
 	dir, err := os.MkdirTemp("", "fleet-page-")
 	if err != nil {
@@ -81,5 +85,22 @@ func publishPage(ctx context.Context, b page.Brief, replace bool) error {
 		return fmt.Errorf("publish %s: %w", b.Page, err)
 	}
 	fmt.Print(string(out))
+	if page.Asks(b) {
+		fmt.Println("Submit stays open until this page is republished or deleted; there is no timer. An answer no agent takes within a minute goes to the admiral.")
+	}
 	return nil
+}
+
+// warnOpenTab tells the publisher when someone opened the live version of
+// name and sent no answer: they may be filling it in.
+func warnOpenTab(ctx context.Context, t companion.Tool, name string, published time.Time) {
+	log, err := t.Run(ctx, companion.Opts{}, "access-log", name, "--since", "7d")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not read who has %s open (%v); a republish voids the Submit of an open tab\n", name, err)
+		return
+	}
+	if who, at, ok := pages.Unanswered(string(log), name, published); ok {
+		fmt.Fprintf(os.Stderr, "warning: %s opened %s at %s UTC and has sent no answer. This publish voids the Submit of that open tab: within 30 seconds the page says so, and what they typed comes back when they reload.\n",
+			who, name, at.Format("15:04"))
+	}
 }

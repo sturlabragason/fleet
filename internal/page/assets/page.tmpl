@@ -7,6 +7,7 @@
 <style>{{.CSS}}</style>
 </head>
 <body>
+{{if or .B.Decisions .B.Defaults}}<div id="live" class="live" role="status" aria-live="polite" hidden><span id="live-text"></span> <button type="button" id="reload" hidden>Reload</button></div>{{end}}
 <header>
 <p class="meta"><span class="kind">{{.B.Kind}}</span>{{with .B.Confidence}} · <span class="conf conf-{{.Level}}" title="{{.Basis}}">{{.Level}} confidence</span>{{end}} · about {{.Minutes}} min{{with .B.Decisions}} · {{len .}} decision{{if gt (len .) 1}}s{{end}}{{end}}{{with .B.Date}} · {{.}}{{end}}</p>
 <h1>{{.B.Title}}</h1>
@@ -30,7 +31,7 @@
 {{range .}}<tr><td>{{.Item}}</td><td><span class="badge {{.State}}">{{.State}}</span></td><td>{{inline .Note}}</td><td>{{inline .Next}}</td></tr>{{end}}
 </tbody></table></div></section>{{end}}
 
-{{if or .B.Decisions .B.Defaults}}<form id="f" data-page="{{.B.Page}}" data-decision="{{.Decision}}">
+{{if or .B.Decisions .B.Defaults}}<form id="f" data-page="{{.B.Page}}" data-decision="{{.Decision}}" data-version="{{.Version}}">
 <h2 id="decide">Your decisions</h2>
 <p class="meta">My recommendation is preselected. Pick another option, or write your own answer in the box: your text overrides the pick. Submit sends everything at once.</p>
 {{$n := 0}}{{range .Groups}}{{with .Name}}<h3>{{.}}</h3>{{end}}
@@ -51,7 +52,7 @@
 <div class="submit">
 <label>Anything else (optional)<input type="text" id="note" maxlength="500" placeholder="free text, sent with your answer"></label>
 <textarea id="reply" rows="2" readonly aria-label="Your answer as one line"></textarea>
-<p><button type="submit" form="sendf" id="send" class="primary">Submit</button> <button type="button" id="copy" hidden>Copy answer</button></p>
+<p><button type="submit" form="sendf" id="send" class="primary">Submit</button> <span id="rescue" hidden><button type="button" id="recheck">Check again</button> <button type="button" id="copy">Copy answers</button> <button type="button" id="download">Download</button></span></p>
 <p class="meta" id="status" role="status">Submit hands your answers to the agent once. Nothing is published or sent anywhere else.</p>
 </div>
 </form>

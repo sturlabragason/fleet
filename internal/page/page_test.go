@@ -113,6 +113,18 @@ func TestWrite(t *testing.T) {
 	if len(sc.Items) != 3 || sc.Items[1].Choices[2] != Later || sc.Items[0].Text != freeText || sc.Items[2].Defaults != 1 {
 		t.Errorf("schema = %+v", sc)
 	}
+	// The page polls version.json and compares it with its own stamp (ADR-199).
+	var v Version
+	data, err = os.ReadFile(filepath.Join(dir, "version.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &v); err != nil {
+		t.Fatal(err)
+	}
+	if v.Version == "" || v.Decision != "decide-x-1" || !strings.Contains(s, `data-version="`+v.Version+`"`) {
+		t.Errorf("version.json = %+v, page stamp missing", v)
+	}
 }
 
 func TestWriteNoAsks(t *testing.T) {
@@ -126,8 +138,10 @@ func TestWriteNoAsks(t *testing.T) {
 	if err := Write(b, dir); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "answer.json")); !os.IsNotExist(err) {
-		t.Errorf("a page without asks has an answer.json: %v", err)
+	for _, f := range []string{"answer.json", "version.json"} {
+		if _, err := os.Stat(filepath.Join(dir, f)); !os.IsNotExist(err) {
+			t.Errorf("a page without asks has %s: %v", f, err)
+		}
 	}
 	page, _ := os.ReadFile(filepath.Join(dir, "index.html"))
 	if strings.Contains(string(page), SendToken) {

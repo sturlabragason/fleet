@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var (
@@ -30,8 +31,10 @@ const SendToken = "__ARTIFACT_SEND_TOKEN__"
 
 var codeRe = regexp.MustCompile("`([^`\n]+)`")
 
-// Render returns the page's HTML. It does not Check b.
-func Render(b Brief) ([]byte, error) {
+// Render returns the page's HTML. It does not Check b. version stamps this
+// publish: the page polls version.json and says when it was replaced
+// (ADR-199).
+func Render(b Brief, version string) ([]byte, error) {
 	t, err := template.New("page").Funcs(funcs(b)).Parse(pageTmpl)
 	if err != nil {
 		return nil, fmt.Errorf("parse page template: %w", err)
@@ -40,7 +43,7 @@ func Render(b Brief) ([]byte, error) {
 	err = t.Execute(&buf, map[string]any{
 		"B": b, "CSS": template.CSS(pageCSS), "JS": template.JS(sendJS), // #nosec G203 -- our own embedded files
 		"Token": SendToken, "Decision": b.DecisionID(), "Groups": groups(b.Decisions),
-		"Minutes": minutes(b),
+		"Minutes": minutes(b), "Version": version,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("render page: %w", err)
@@ -48,10 +51,18 @@ func Render(b Brief) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// Write renders b into dir as index.html, plus answer.json when the page
-// takes answers.
+// Version is what version.json holds: the publish stamp the page compares
+// with its own (ADR-199).
+type Version struct {
+	Version  string `json:"version"`
+	Decision string `json:"decision"`
+}
+
+// Write renders b into dir as index.html, plus answer.json and version.json
+// when the page takes answers.
 func Write(b Brief, dir string) error {
-	out, err := Render(b)
+	version := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+	out, err := Render(b, version)
 	if err != nil {
 		return err
 	}
@@ -61,20 +72,28 @@ func Write(b Brief, dir string) error {
 	if err := os.WriteFile(filepath.Join(dir, "index.html"), out, 0o644); err != nil {
 		return fmt.Errorf("write page: %w", err)
 	}
-	if !asks(b) {
+	if !Asks(b) {
 		return nil
 	}
-	data, err := json.MarshalIndent(AnswerSchema(b), "", " ")
-	if err != nil {
-		return fmt.Errorf("encode answer schema: %w", err)
+	if err := writeJSON(filepath.Join(dir, "answer.json"), AnswerSchema(b)); err != nil {
+		return err
 	}
-	if err := os.WriteFile(filepath.Join(dir, "answer.json"), append(data, '\n'), 0o644); err != nil {
-		return fmt.Errorf("write answer schema: %w", err)
+	return writeJSON(filepath.Join(dir, "version.json"), Version{Version: version, Decision: b.DecisionID()})
+}
+
+func writeJSON(path string, v any) error {
+	data, err := json.MarshalIndent(v, "", " ")
+	if err != nil {
+		return fmt.Errorf("encode %s: %w", filepath.Base(path), err)
+	}
+	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", filepath.Base(path), err)
 	}
 	return nil
 }
 
-func asks(b Brief) bool { return len(b.Decisions) > 0 || len(b.Defaults) > 0 }
+// Asks reports whether the page has cards or defaults, so it takes a Submit.
+func Asks(b Brief) bool { return len(b.Decisions) > 0 || len(b.Defaults) > 0 }
 
 // Item is one answer field the artifact host accepts.
 type Item struct {
