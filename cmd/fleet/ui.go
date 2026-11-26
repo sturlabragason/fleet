@@ -450,6 +450,7 @@ func cmdUI(f *fleet.Fleet) error {
 	m := ui.New(be, f.Home)
 	still := !f.Prefs.Animation() || logo.Still(os.Getenv)
 	m.SetStill(still)
+	m.SetThemeReloader(themeReloader())
 	if !still {
 		m.SetBackdropSeed(rand.Uint64() | 1)
 		m.SetBackdropStart(12)

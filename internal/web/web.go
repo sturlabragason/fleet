@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
@@ -47,6 +48,8 @@ type Server struct {
 	Hosts map[string]bool
 	// Poll is how often /events re-reads the board.
 	Poll time.Duration
+
+	themeMu sync.Mutex // the active palette, between a page and WatchTheme
 }
 
 // New builds a Server listening as listen, accepting the loopback names, the
@@ -167,7 +170,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) index(w http.ResponseWriter) {
+	s.themeMu.Lock()
 	p := theme.Active()
+	s.themeMu.Unlock()
 	css := map[string]string{
 		"bg": p.Base, "mantle": p.Mantle, "crust": p.Crust, "surface": p.Surface0, "surface1": p.Surface1,
 		"fg": p.Text, "sub": p.Subtext0, "dim": p.Overlay0, "select": p.Select,

@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/prefs"
+	"github.com/sturlabragason/fleet/internal/theme"
 )
 
 // The overview's theme picker (T, ADR-175): ui.ThemeBackend.
@@ -55,4 +58,34 @@ func (b *backend) SaveTheme(name string) func() error {
 		}
 		return nil
 	}
+}
+
+// themeReloader watches config.toml and the theme files for a live reload
+// (ADR-201).
+func themeReloader() *theme.Reloader {
+	return &theme.Reloader{Config: prefs.Path(), Dir: prefs.ThemeDir(), Name: func() (string, error) {
+		p, err := prefs.Load()
+		if err != nil {
+			return "", fmt.Errorf("read config: %w", err)
+		}
+		return p.Theme(), nil
+	}}
+}
+
+// reloadTheme is the watcher's half of a live theme reload: a changed
+// palette re-colours the tmux chrome and drops the status tags, so this
+// refresh re-draws every agent's pane border from it. The overview and the
+// web board reload their own copy.
+func reloadTheme(f *fleet.Fleet, r *theme.Reloader) {
+	changed, warn := r.Check()
+	if warn != "" {
+		logx.For("theme").Warn(warn)
+	}
+	if !changed || !f.T.HasSession(fleet.Session) {
+		return
+	}
+	logx.For("theme").Info("theme reloaded", "theme", theme.Active().Name)
+	configure(f)
+	dropStatusTags(f)
+	f.T.Run("set-option", "-t", fleet.Session, "@fleet_theme", theme.Active().Name)
 }

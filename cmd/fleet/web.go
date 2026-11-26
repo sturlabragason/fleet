@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net"
@@ -33,6 +34,7 @@ func cmdWeb(f *fleet.Fleet, args []string) error {
 		return err
 	}
 	s := web.New(f, token, *listen, strings.Split(*hosts, ","))
+	go s.WatchTheme(context.Background(), themeReloader(), time.Second)
 	host, port, _ := net.SplitHostPort(ln.Addr().String())
 	if ip := net.ParseIP(host); ip == nil || !ip.IsLoopback() {
 		fmt.Fprintf(os.Stderr, "fleet web: listening on %s, not only on this machine: anyone who reaches it needs the token\n", ln.Addr())

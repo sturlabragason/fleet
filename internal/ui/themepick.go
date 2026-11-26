@@ -143,3 +143,24 @@ func (m *Model) themeRow(name string, cur, saved bool) string {
 	}
 	return row
 }
+
+// SetThemeReloader turns on the live reload of the theme files (ADR-201):
+// each poll checks them, on the UI goroutine that owns the palette.
+func (m *Model) SetThemeReloader(r *theme.Reloader) { m.themes = r }
+
+// reloadTheme applies a changed theme file or theme setting; the OnChange
+// hooks re-style, the next frame draws it. While the picker is open its
+// preview wins, and the change applies once it closes.
+func (m *Model) reloadTheme() {
+	if m.themes == nil || m.tp != nil {
+		return
+	}
+	changed, warn := m.themes.Check()
+	switch {
+	case warn != "":
+		logx.For("ui").Warn(warn)
+		m.msg, m.msgAt = warn, m.now()
+	case changed:
+		m.msg, m.msgAt = "theme "+theme.Active().Name+" reloaded", m.now()
+	}
+}

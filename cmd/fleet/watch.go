@@ -86,9 +86,11 @@ func cmdWatch(f *fleet.Fleet, args []string) error {
 	// The agents of the last good refresh name the session logs to watch,
 	// so the board is parsed once a pass, not again for this (ADR-138).
 	var agents []*board.Agent
+	themes := themeReloader()
 	w := &watch.Watcher{
 		Home: f.Home,
 		Refresh: func() error {
+			reloadTheme(f, themes)
 			a, err := f.Refresh()
 			if err == nil {
 				agents = a

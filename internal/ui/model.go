@@ -16,6 +16,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/layout"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/team"
+	"github.com/sturlabragason/fleet/internal/theme"
 	"github.com/sturlabragason/fleet/internal/wall"
 )
 
@@ -56,6 +57,8 @@ type Model struct {
 	ans       *answerView // r: answering one agent's prompt, over everything else
 	tp        *themePick  // T: the theme picker above the tiles (ADR-175)
 	bg        backdrop    // the flowing mark behind the tiles (ADR-176)
+
+	themes *theme.Reloader // live reload of the theme files (ADR-201)
 }
 
 type agentsMsg struct {
@@ -215,6 +218,7 @@ func (m *Model) Update(msg tea.Msg) (_ tea.Model, cmd tea.Cmd) {
 	case replyMsg:
 		return m, m.gotReply(msg)
 	case pollMsg:
+		m.reloadTheme()
 		return m, m.poll()
 	case bgMsg:
 		return m, m.bgTick(msg)

@@ -338,12 +338,7 @@ func rethemeTo(f *fleet.Fleet, name string, stopWatcher bool) {
 	}
 	log := logx.For("theme")
 	log.Info("palette changed", "theme", name)
-	panes, _ := f.T.ListPanes("")
-	for _, p := range panes {
-		if p.Agent != "" && p.Status != "" {
-			f.T.UnsetPaneOption(p.ID, "@fleet_status")
-		}
-	}
+	dropStatusTags(f)
 	if pid, ok := watch.Running(f.Home); stopWatcher && ok {
 		if err := sysx.Kill(pid, syscall.SIGTERM); err != nil {
 			log.Error("stop watcher for the new palette", "pid", pid, "err", err)
@@ -352,6 +347,17 @@ func rethemeTo(f *fleet.Fleet, name string, stopWatcher bool) {
 		}
 	}
 	f.T.Run("set-option", "-t", fleet.Session, "@fleet_theme", name)
+}
+
+// dropStatusTags unsets every agent pane's status tag, so the next refresh
+// re-draws each border from the active palette.
+func dropStatusTags(f *fleet.Fleet) {
+	panes, _ := f.T.ListPanes("")
+	for _, p := range panes {
+		if p.Agent != "" && p.Status != "" {
+			f.T.UnsetPaneOption(p.ID, "@fleet_status")
+		}
+	}
 }
 
 func ensureOverview(f *fleet.Fleet, target string) {

@@ -289,7 +289,7 @@ The roles are `base`, `mantle`, `crust`, `surface0`-`surface2`, `text`, `subtext
 `idle`, `gone`, `select` and `supervisor`. A status such as `queued` is not a role: it draws with
 the role in `internal/theme/states.go` (`queued` with `gone`). `fleet doctor` lists each file's
 problems: an unknown role or key, a value that is not `#rrggbb` (the base's colour is kept), and a
-role below its contrast floor on the theme's base (drawn as written). A picked theme whose file does not parse draws the default until you fix it. Team colours come from the
+role below its contrast floor on the theme's base (drawn as written). A picked theme whose file does not parse draws the default until you fix it. A running fleet picks up a saved file, or a new `theme =` line, within about two seconds; if the edit does not parse it keeps the last good colours and says why on the overview's message line. Team colours come from the
 base and can't be overridden.
 
 The VS Code themes are `github-dark`, `github-light`, `one-dark-pro`, `dracula`, `atom-one-dark`,
