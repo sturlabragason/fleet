@@ -389,7 +389,12 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	// The dir is final: the repo there may give the card its done-check
 	// (ADR-202). Only now is it known whether the agent shares its dir,
 	// which decides its default result file.
-	card = ResultFor(RepoCheck(card, dir), name, ex.Worktree != nil)
+	// A spawn without a task (no prompt, or the user drives it) owes no
+	// report, so it gets no card of its own from the repo.
+	if card != nil || (prompt != "" && !role.Interactive) {
+		card = RepoCheck(card, dir)
+	}
+	card = ResultFor(card, name, ex.Worktree != nil)
 	ex.Card = card
 	// The board records the level actually used, so wake can give the
 	// resumed process the same context args (ADR-60).

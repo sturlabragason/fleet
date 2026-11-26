@@ -22,6 +22,10 @@ func TestRepoCheck(t *testing.T) {
 	}
 	done := withToml("merge_check = \"make ci\"\ndone_check = \"make build\"\n")
 	merge := withToml("merge_check = \"make ci\"\n")
+	sub := filepath.Join(done, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	optOut := withToml("merge_check = \"make ci\"\ndone_check = \"none\"\n")
 	cases := []struct {
 		name string
@@ -38,6 +42,7 @@ func TestRepoCheck(t *testing.T) {
 		{"none alone drops the card", done, &board.Card{Check: NoCheck, Result: DefaultResult}, nil},
 		{"none keeps the rest", done, &board.Card{Goal: "g", Check: NoCheck, Result: DefaultResult}, &board.Card{Goal: "g", Result: DefaultResult}},
 		{"repo opts out", optOut, nil, nil},
+		{"subfolder keeps the card", sub, nil, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

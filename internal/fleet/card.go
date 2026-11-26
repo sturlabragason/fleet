@@ -91,9 +91,10 @@ const NoCheck = "none"
 // RepoCheck gives a card the done-check of the repo holding dir when it names
 // none (ADR-202): done_check in .fleet/repo.toml, else its merge_check. An
 // explicit check wins, NoCheck clears the check, and a dir outside git or a
-// repo without either key leaves the card as it is. A spawn without a card
-// gets one holding only the check, so every spawn in such a repo is judged by
-// fleet, not by its own word. It returns a copy and never changes c.
+// repo without either key leaves the card as it is, as does a dir below the
+// repo's top, where the check would run in the wrong place. A spawn without
+// a card gets one holding only the check, so its done is judged by fleet,
+// not by its own word. It returns a copy and never changes c.
 func RepoCheck(c *board.Card, dir string) *board.Card {
 	if c != nil && c.Check == NoCheck {
 		n := *c
@@ -106,9 +107,15 @@ func RepoCheck(c *board.Card, dir string) *board.Card {
 	if c != nil && c.Check != "" {
 		return c
 	}
+	// The check runs in dir, so it is the repo's only at the repo's top: a
+	// subfolder (or a dir outside git) keeps the card as it is.
+	top, err := worktree.TopLevel(dir)
+	if real, rerr := filepath.EvalSymlinks(dir); err != nil || rerr != nil || real != top {
+		return c
+	}
 	rc, err := worktree.LoadRepoConfig(dir)
-	if err != nil { // most often a dir outside git: no repo, no default
-		logx.For("fleet").Debug("no repo done-check", "dir", dir, "err", err)
+	if err != nil {
+		logx.For("fleet").Warn("repo done-check not read", "dir", dir, "err", err)
 		return c
 	}
 	if rc.DoneCheck == "" || rc.DoneCheck == NoCheck {
