@@ -17,7 +17,9 @@ import (
 // Deps is a graph's code dependencies between files: Deps[a][b] means code
 // in a calls, references, embeds or dispatches to code in b (ADR-136).
 // Package imports are left out (graphify links them to every file of the
-// package, tests included), and so is code depending on a test file.
+// package, tests included), and so is code depending on a test file, and a
+// document naming code (DESIGN.md citing a file is not a dependency, and it
+// made every docs change look coupled to that code; ADR-207).
 type Deps map[string]map[string]bool
 
 // depRelations are the graphify edge kinds that make one file depend on
@@ -190,13 +192,15 @@ func (g *graphJSON) files(name string) []string {
 // deps is the graph's file dependencies (see LoadDeps).
 func (g *graphJSON) deps() Deps {
 	file := make(map[string]string, len(g.Nodes))
+	doc := map[string]bool{}
 	for _, n := range g.Nodes {
 		file[n.ID] = n.File
+		doc[n.ID] = n.Type == "document"
 	}
 	d := Deps{}
 	for _, l := range g.Links {
 		from, to := file[l.Source], file[l.Target]
-		if !depRelations[l.Relation] || from == "" || to == "" || from == to || strings.HasSuffix(to, "_test.go") {
+		if !depRelations[l.Relation] || doc[l.Source] || from == "" || to == "" || from == to || strings.HasSuffix(to, "_test.go") {
 			continue
 		}
 		if d[from] == nil {
@@ -285,6 +289,12 @@ func Resolve(home, dir string, words []string) Lookup {
 	return l
 }
 
+// codeWord: a path, pkg.Symbol or exported name. A URL or a host path
+// (github.com/owner/repo) is not code: scripts that recall repo URLs made
+// 251 of 256 recall reads empty graph loads (ADR-207).
 func codeWord(w string) bool {
+	if host, _, ok := strings.Cut(w, "/"); strings.Contains(w, "://") || ok && strings.Contains(strings.Trim(host, "."), ".") {
+		return false
+	}
 	return strings.ContainsAny(w, "/.") || (w != "" && unicode.IsUpper(rune(w[0])))
 }

@@ -1,0 +1,87 @@
+{
+  "$schema": "floorplan/architecture@1",
+  "audience": "developers",
+  "project": {
+    "name": "fleet",
+    "summary": "fleet runs many coding agents (Claude Code, Copilot CLI, agy, vibe, pi and others) side by side for one user: each agent gets a tmux window, a git worktree and a board entry, an admiral agent steers them over MCP, and a TUI overview and live wall show who needs attention. One Go binary; no server, no database: state is flock-guarded JSON under ~/.fleet.",
+    "entrypoints": ["cmd/fleet/main.go", "internal/mcp/server.go", "internal/acphost/server.go", "cmd/fakeagent/main.go"]
+  },
+  "ignore": ["**/testdata/**", "site/**", "bucket/**"],
+  "nodes": [
+    { "id": "cli", "label": "CLI commands", "kind": "service", "summary": "cmd/fleet: every `fleet <verb>` (spawn, ls, merge, touching, recall, graph, doctor, page, ...) is an entry in a handler table that calls into the core.", "paths": ["cmd/fleet", "changelog.go"], "exclude": ["**/*_test.go"] },
+
+    { "id": "core", "label": "Agent orchestration", "kind": "service", "summary": "Spawns, watches, steers and stops agents: tmux panes, tool profiles, status read from the screen, the board, and the ACP path for tools that speak it.", "exclude": ["**/*_test.go"] },
+    { "id": "core.fleet", "parent": "core", "label": "Fleet core", "kind": "feature", "summary": "internal/fleet: the only place that combines board, tmux and tools; spawn, send, peek, kill, resume, queue, park, merge plumbing.", "paths": ["internal/fleet"] },
+    { "id": "core.board", "parent": "core", "label": "Board", "kind": "data", "summary": "~/.fleet/board.json (flock + atomic rename) and events.jsonl: the state every other part reads.", "paths": ["internal/board", "internal/runs", "internal/team", "internal/jsonx"] },
+    { "id": "core.tmux", "parent": "core", "label": "tmux and panes", "kind": "library", "summary": "Thin tmux adapter on fleet's own sockets, plus process-tree stop and cgroup cache drop.", "paths": ["internal/tmux", "internal/proc", "internal/cgroup", "internal/park"] },
+    { "id": "core.tools", "parent": "core", "label": "Tool profiles", "kind": "config", "summary": "Data-driven profiles per agent CLI (built-ins + ~/.fleet/tools.toml): launch and resume command lines, trust pre-marking, finding the tools' own session stores.", "paths": ["internal/tools", "internal/trust", "internal/sessions"] },
+    { "id": "core.status", "parent": "core", "label": "Status reading", "kind": "feature", "summary": "Classifies each agent (working, idle, waiting, error) from the bottom of its pane with per-tool patterns, summarises screens, and keeps it fresh in the background watcher.", "paths": ["internal/status", "internal/summary", "internal/watch", "internal/netwatch"] },
+    { "id": "core.acp", "parent": "core", "label": "ACP agents", "kind": "feature", "summary": "Agent Client Protocol client and `fleet acp-host`, which runs a tool's ACP server in the agent's window; kagent runs one in Kubernetes; rexec runs a command for a worktree on another machine.", "paths": ["internal/acp", "internal/acphost", "internal/kagent", "internal/rexec"] },
+    { "id": "core.fake", "parent": "core", "label": "Fake agent", "kind": "script", "summary": "Scripted fake agent for tests and the dev loop, so no test spends tokens.", "paths": ["internal/fake", "cmd/fakeagent"] },
+
+    { "id": "admiral", "label": "Admiral and MCP", "kind": "service", "summary": "The admiral agent steers the fleet through fleet's MCP server; this holds the tools it calls, its memory on disk, and the text every worker is given.", "exclude": ["**/*_test.go"] },
+    { "id": "admiral.mcp", "parent": "admiral", "label": "MCP server", "kind": "feature", "summary": "Minimal stdio MCP server: admiral tools, peer tools for workers (fleet_report, fleet_msg_send, ...), the CLI parity table, and the injected instructions.md.", "paths": ["internal/mcp"] },
+    { "id": "admiral.memory", "parent": "admiral", "label": "Admiral memory", "kind": "data", "summary": "Session records, decisions.log, handoffs, the open-items queue and the waits-on-you list.", "paths": ["internal/supervisor", "internal/todo", "internal/waits", "internal/legacy"] },
+    { "id": "admiral.playbook", "parent": "admiral", "label": "Playbook and rules", "kind": "config", "summary": "Worker playbook by effort level (light, standard, pro) with user and repo layers, the user's standing rules, and request routes.", "paths": ["internal/playbook", "internal/rules", "internal/routes"] },
+    { "id": "admiral.pages", "parent": "admiral", "label": "Pages", "kind": "feature", "summary": "Briefs rendered to one self-contained HTML page (fleet page) and the answers sent back from decision pages.", "paths": ["internal/page", "internal/pages"] },
+
+    { "id": "coord", "label": "Agents working together", "kind": "feature", "summary": "What lets parallel agents avoid stepping on each other: mail and access grants, worktree overlap, ADR number claims, the code graph and recall of who changed what.", "exclude": ["**/*_test.go"] },
+    { "id": "coord.mail", "parent": "coord", "label": "Mail", "kind": "feature", "summary": "Inter-agent mailbox, access grants and reports under ~/.fleet/mail.", "paths": ["internal/mail"] },
+    { "id": "coord.worktree", "parent": "coord", "label": "Worktrees and merge", "kind": "feature", "summary": "Lists other worktrees and the files each changes (fleet touching), merge planning and conflict rules for append-only docs.", "paths": ["internal/worktree", "internal/adr"] },
+    { "id": "coord.graph", "parent": "coord", "label": "Code graph", "kind": "feature", "summary": "Builds one graphify graph per repo under ~/.fleet/graphs, rebuilt after each merge, and reads it for touching, merge --dry-run, recall and the spawn brief.", "paths": ["internal/graph"] },
+    { "id": "coord.recall", "parent": "coord", "label": "Recall", "kind": "feature", "summary": "Answers 'what was I doing on X' from fleet's own reports, notes, sessions and git, without a model; `fleet recall <file|pkg.Func>` adds who changed that code and what uses it.", "paths": ["internal/recall"] },
+
+    { "id": "screens", "label": "Screens", "kind": "ui", "summary": "What the user looks at: the overview TUI, the live wall of agent panes, keys, colours and the browser front end.", "exclude": ["**/*_test.go"] },
+    { "id": "screens.ui", "parent": "screens", "label": "Overview TUI", "kind": "ui", "summary": "Bubble Tea grid of agent tiles sorted by attention.", "paths": ["internal/ui"] },
+    { "id": "screens.wall", "parent": "screens", "label": "Wall and layout", "kind": "ui", "summary": "The main window: admiral, overview strip and live agent panes; all pane geometry lives in layout.", "paths": ["internal/wall", "internal/layout"] },
+    { "id": "screens.look", "parent": "screens", "label": "Keys, theme, logo", "kind": "library", "summary": "The one hotkey registry, colour palettes and state glyphs, and the fleet mark.", "paths": ["internal/keys", "internal/theme", "internal/logo"] },
+    { "id": "screens.web", "parent": "screens", "label": "Web front end", "kind": "ui", "summary": "fleet web: a browser view of the board beside the TUI.", "paths": ["internal/web"] },
+
+    { "id": "cost", "label": "Spend and quota", "kind": "feature", "summary": "What agents cost and how much quota is left: per-session spend from the tools' own files, the day ledger, and quota-aware spawning before resets.", "paths": ["internal/spend", "internal/usage", "internal/burn"], "exclude": ["**/*_test.go"] },
+
+    { "id": "platform", "label": "Shared plumbing", "kind": "library", "summary": "Logging, config, the small TOML parser, OS calls, the companion contract for external CLIs, self-update, the changelog, the browser guard and the test leak checker.", "paths": ["internal/logx", "internal/conf", "internal/prefs", "internal/sysx", "internal/companion", "internal/update", "internal/whatsnew", "internal/browser", "internal/testenv"], "exclude": ["**/*_test.go"] },
+
+    { "id": "ops", "label": "Build, release and site", "kind": "infra", "summary": "Makefile-driven checks, the public check and release lock, install scripts, examples and image builders.", "paths": ["scripts", "examples", "install.sh", "install.ps1"] },
+
+    { "id": "tests", "label": "Tests", "kind": "test", "summary": "Go tests beside each package; tests use only fleet-test-* tmux sockets and the fake agent.", "paths": ["**/*_test.go"] },
+
+    { "id": "agentclis", "label": "Agent CLIs", "kind": "external", "summary": "Claude Code, Copilot CLI, agy, vibe, pi and the others fleet runs in tmux panes or over ACP; never installed by fleet." },
+    { "id": "charm", "label": "Charm TUI libraries", "kind": "external", "summary": "Bubble Tea, Lip Gloss and friends: the only third-party Go dependencies.", "packages": ["go:github.com/charmbracelet/*", "go:github.com/lrstanley/bubblezone", "go:golang.org/x/term"] },
+    { "id": "graphify", "label": "graphify", "kind": "external", "summary": "Companion CLI that builds the code graph; optional." },
+    { "id": "github", "label": "GitHub", "kind": "external", "summary": "Releases for self-update and gh for CI runs.", "hosts": ["github.com"] }
+  ],
+  "edges": [
+    { "from": "core.tools", "to": "agentclis", "kind": "call", "label": "launch in tmux", "description": "Profiles build the command line each agent CLI is started and resumed with." },
+    { "from": "core.acp", "to": "agentclis", "kind": "rpc", "label": "ACP over stdio" },
+    { "from": "coord.graph", "to": "graphify", "kind": "call", "label": "graphify update", "description": "Run detached after each fleet merge; output in ~/.fleet/graphs/<repo>." },
+    { "from": "agentclis", "to": "admiral.mcp", "kind": "rpc", "label": "MCP tools", "description": "The admiral and each worker call fleet over MCP (fleet mcp)." },
+    { "from": "core.status", "to": "core.board", "kind": "data", "label": "writes status" }
+  ],
+  "annotations": [
+    { "path": "internal/logx/logx.go", "note": "Most-used file in the code graph (126 files call it).", "tags": ["hotspot"] },
+    { "path": "internal/fleet/fleet.go", "note": "Spawn path; used by 77 files. Playbook, graph brief and task card are composed here.", "tags": ["hotspot"] },
+    { "path": "internal/board/board.go", "note": "Board state; used by 73 files.", "tags": ["hotspot"] }
+  ],
+  "flows": [
+    { "id": "spawn", "title": "Spawning an agent", "steps": [
+      { "node": "admiral.mcp", "note": "The admiral calls fleet_spawn (or the user runs fleet spawn)." },
+      { "node": "core.fleet", "note": "Makes the worktree, composes playbook + prompt + graph brief + task card." },
+      { "node": "core.tools", "note": "Builds the tool's launch command from its profile." },
+      { "node": "core.tmux", "note": "Starts it in a hidden tmux window with GRAPHIFY_OUT and the browser guard in its env." },
+      { "node": "core.board", "note": "Writes the board entry; the watcher takes it from there." }
+    ]},
+    { "id": "merge", "title": "Merging a finished branch", "steps": [
+      { "node": "cli", "note": "The agent runs fleet merge after green CI." },
+      { "node": "coord.worktree", "note": "Rebases, keeps both sides of append-only docs, runs the repo's checks, fast-forwards main." },
+      { "node": "coord.graph", "note": "Starts a background graph rebuild of main." },
+      { "node": "graphify", "note": "Updates graph.json; the floorplan is regenerated from the new main." }
+    ]}
+  ],
+  "tour": [
+    { "node": "cli", "title": "One binary", "note": "Everything starts from a fleet command; the handler table in cmd/fleet routes it." },
+    { "node": "core", "title": "Agents in tmux", "note": "The core spawns agent CLIs in tmux windows and reads their state from the screen." },
+    { "node": "admiral", "title": "The admiral", "note": "An agent that steers the others through fleet's MCP tools, with memory on disk." },
+    { "node": "coord", "title": "Working in parallel", "note": "Mail, worktree overlap, ADR claims and the code graph keep parallel agents out of each other's way." },
+    { "node": "screens", "title": "What the user sees", "note": "The overview TUI and the live wall." }
+  ]
+}

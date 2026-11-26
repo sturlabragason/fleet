@@ -6,7 +6,7 @@ README, a screenshot or anything in internal/theme.
 
 # Commands
 - Build: make build
-- Code graph: fleet reads it for you (ADR-165): `fleet touching <files>` and `fleet merge --dry-run` add code one call away, `fleet recall <file|pkg.Func>` shows who changed that code and what uses it. Never commit `graphify-out/`.
+- Code map (ADR-207): before a change, orient with the floorplan (`node $GRAPHIFY_OUT/floorplan/query.mjs find "<words>"`, `show <file>`; parts in `.fleet/floorplan/architecture.json`, update it when you add a package) and `$GRAPHIFY_OUT/GRAPH_REPORT.md`; blast radius with `fleet recall <file|pkg.Func>` before editing, `fleet touching <files>` and `fleet merge --dry-run` before merging. Never commit `graphify-out/` or `floorplan/`.
 - Lint: make lint (golangci-lint v2 on lines changed since main, as CI gates it)
 - All tests: make test (non-blocking; failures go to ~/.fleet/logs/fleet.log)
 - One package: go test ./internal/<pkg>/

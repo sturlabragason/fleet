@@ -346,9 +346,9 @@ func (s *Server) spawnCall(_ string, a args, raw json.RawMessage) (string, error
 		return s.queuedReply(ag) + cardNote(ag), nil
 	}
 	if w := ag.Worktree; w != nil {
-		return fmt.Sprintf("spawned %s (%s) in its own worktree %s on branch %s (of %s)", ag.Name, s.spawnLabel(ag), w.Path, w.Branch, w.Repo) + cardNote(ag) + leaderNote(ag) + via, nil
+		return fmt.Sprintf("spawned %s (%s) in its own worktree %s on branch %s (of %s)", ag.Name, s.spawnLabel(ag), w.Path, w.Branch, w.Repo) + cardNote(ag) + leaderNote(ag) + s.mapNote(ag) + via, nil
 	}
-	return fmt.Sprintf("spawned %s (%s) in %s%s", ag.Name, s.spawnLabel(ag), ag.Dir, s.dirNote(ag.Dir)) + cardNote(ag) + leaderNote(ag) + via, nil
+	return fmt.Sprintf("spawned %s (%s) in %s%s", ag.Name, s.spawnLabel(ag), ag.Dir, s.dirNote(ag.Dir)) + cardNote(ag) + leaderNote(ag) + s.mapNote(ag) + via, nil
 }
 
 func (s *Server) adoptCall(a args) (string, error) {

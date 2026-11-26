@@ -114,6 +114,7 @@ func fakeGraphify(t *testing.T, run func(out string) error) *[][]string {
 	os.Chmod(bin, 0o755)
 	t.Setenv("FLEET_GRAPHIFY", bin)
 	t.Setenv("FLEET_CONFIG", filepath.Join(t.TempDir(), "none.toml"))
+	t.Setenv("FLEET_FLOORPLAN", "off")
 	var calls [][]string
 	old := companion.Runner
 	companion.Runner = func(_ context.Context, _ string, args []string, o companion.Opts) ([]byte, error) {

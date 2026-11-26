@@ -454,7 +454,7 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	if fam := layerFamily(p, f.Profiles); pr.Playbook && ex.Config.Layers != nil && playbook.Family(fam) != "" {
 		ex.Config.Layers["family:"+fam] = runs.Hash([]byte(playbook.Family(fam)))
 	}
-	if gb := f.graphBrief(dir, prompt); gb != "" {
+	if gb := f.graphBrief(dir, prompt, lvl); gb != "" {
 		full = strings.TrimRight(full, "\n") + "\n\n" + gb
 	}
 	// The task card goes last, so it is the final thing the agent reads

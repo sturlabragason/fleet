@@ -12,14 +12,16 @@ import (
 
 // depsGraph: a.go calls b.go, b.go references c.go, a.go imports c's
 // package (ignored), d_test.go calls a.go, and c.go calls into a test file
-// (ignored: code never depends on a test).
+// (ignored: code never depends on a test). DESIGN.md names a.go (ignored:
+// a document is not a dependency).
 const depsGraph = `{"nodes":[
  {"id":"a","source_file":"a.go","community":1},
  {"id":"a2","source_file":"a.go","community":1},
  {"id":"b","source_file":"b.go","community":1},
  {"id":"c","source_file":"c.go","community":2},
  {"id":"d","source_file":"d_test.go","community":1},
- {"id":"pkg","source_file":""}],
+ {"id":"pkg","source_file":""},
+ {"id":"m","source_file":"DESIGN.md","file_type":"document"}],
  "links":[
  {"source":"a","target":"b","relation":"calls"},
  {"source":"a","target":"a2","relation":"calls"},
@@ -27,7 +29,8 @@ const depsGraph = `{"nodes":[
  {"source":"a","target":"c","relation":"imports_from"},
  {"source":"d","target":"a","relation":"calls"},
  {"source":"c","target":"d","relation":"calls"},
- {"source":"a","target":"pkg","relation":"calls"}]}`
+ {"source":"a","target":"pkg","relation":"calls"},
+ {"source":"m","target":"a","relation":"references"}]}`
 
 func writeGraph(t *testing.T, body string) string {
 	t.Helper()
@@ -171,6 +174,17 @@ func TestUsedBy(t *testing.T) {
 	for _, c := range cases {
 		if got := d.UsedBy(c.files); !reflect.DeepEqual(got, c.want) {
 			t.Errorf("UsedBy(%v) = %v, want %v", c.files, got, c.want)
+		}
+	}
+}
+
+func TestCodeWord(t *testing.T) {
+	for w, want := range map[string]bool{
+		"internal/graph": true, "deps.go": true, "graph.Resolve": true, "Resolve": true, "./internal/x": true,
+		"github.com/owner/repo": false, "https://example.com/a": false, "theme": false, "": false,
+	} {
+		if got := codeWord(w); got != want {
+			t.Errorf("codeWord(%q) = %v, want %v", w, got, want)
 		}
 	}
 }

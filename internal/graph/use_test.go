@@ -90,3 +90,25 @@ func TestBrief(t *testing.T) {
 		t.Errorf("reads after now = %d", n)
 	}
 }
+
+func TestMapNote(t *testing.T) {
+	t.Setenv("FLEET_GRAPHIFY", "off")
+	repo, wt := gitRepo(t)
+	home := t.TempDir()
+	if got := MapNote(t.Context(), home, t.TempDir()); got != "" {
+		t.Errorf("outside a repo: %q", got)
+	}
+	if got := MapNote(t.Context(), home, wt); !strings.Contains(got, "graphify is not installed") {
+		t.Errorf("no graph, no graphify: %q", got)
+	}
+	freshGraph(t, home, repo)
+	out := Dir(home, repo)
+	got := MapNote(t.Context(), home, wt)
+	if !strings.Contains(got, "GRAPH_REPORT.md") || strings.Contains(got, "floorplan") || !strings.Contains(got, "fleet merge --dry-run") {
+		t.Errorf("graph, no floorplan: %q", got)
+	}
+	write(t, FloorplanQuery(out), "")
+	if got := MapNote(t.Context(), home, wt); !strings.Contains(got, FloorplanQuery(out)+" find") {
+		t.Errorf("graph and floorplan: %q", got)
+	}
+}

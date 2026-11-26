@@ -1,0 +1,314 @@
+#!/usr/bin/env python3
+"""fleet-floorplan ROOT OUT: the floorplan companion fleet runs after each code
+graph build (DESIGN §6.15, ADR-207). It works for any git repo.
+
+It keeps a clone of ROOT's checked-out branch in OUT/floorplan-src, maps it
+with haydenschmitty/floorplan (plain Node scripts, no install, no network) and
+writes the map to OUT/floorplan: index.html (the map), map.html (an export
+without the Ask bar) and query.mjs (lookups for agents:
+`node OUT/floorplan/query.mjs find "<words>"`).
+
+The map's parts come from the repo's own .fleet/floorplan/architecture.json
+when it has one (written by a person or an agent, see the floorplan skill's
+references/schema.md); otherwise one part per top-level folder is generated.
+Links between files come from the graphify graph in OUT (every language
+graphify parses) on top of floorplan's own import scan; file descriptions
+come from the code's own doc comments. ASP.NET Core Minimal API routes
+(MapGet/MapPost/... under MapGroup chains and route-builder helpers) are
+resolved here, since floorplan has no C# route parser, and fed to its scan
+through a per-run copy of the skill, so HTTP calls link to them too.
+
+Setup: clone https://github.com/haydenschmitty/floorplan to
+~/.local/share/floorplan (or $FLOORPLAN_DIR), check out the vetted commit
+below, and put this script on PATH as fleet-floorplan. A checkout at another
+commit is refused until $FLOORPLAN_COMMIT names it, so an upstream update is
+vetted before it runs.
+"""
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+VETTED = os.environ.get("FLOORPLAN_COMMIT", "8195eb6")  # v0.7.3, vetted 2026-11-12
+QUIET = {"FLOORPLAN_NO_PROMPTS": "1", "FLOORPLAN_WAITLIST_URL": ""}
+
+
+def run(*argv, cwd=None):
+    subprocess.run(argv, cwd=cwd, check=True, env={**os.environ, **QUIET}, stdout=subprocess.DEVNULL)
+
+
+def git(*args):
+    return subprocess.run(["git", *args], check=True, capture_output=True, text=True).stdout.strip()
+
+
+def skill_dir():
+    fp = Path(os.environ.get("FLOORPLAN_DIR", Path.home() / ".local/share/floorplan"))
+    head = git("-C", str(fp), "rev-parse", "HEAD")
+    if not head.startswith(VETTED):
+        sys.exit(f"fleet-floorplan: {fp} is at {head[:12]}, not the vetted {VETTED}; vet it and set FLOORPLAN_COMMIT")
+    return fp / "skills" / "floorplan"
+
+
+# The hook that hands floorplan's extractor the C# routes resolved here. It
+# goes into a copy of the skill in OUT, so the vetted checkout is never edited.
+EXTRACT_ANCHOR = "  const r = extractByLang(src, lang, filePath);\n"
+EXTRACT_HOOK = (
+    "  if (lang === 'csharp' && CS_ROUTES[filePath]) "
+    "r.routes = CS_ROUTES[filePath].map((x) => ({ ...x, var: null, framework: 'aspnet' }));\n"
+)
+EXTRACT_HEAD = (
+    "import fs from 'node:fs';\n"
+    "const CS_ROUTES = process.env.FLOORPLAN_CS_ROUTES ? "
+    "JSON.parse(fs.readFileSync(process.env.FLOORPLAN_CS_ROUTES, 'utf8')) : {};\n"
+)
+
+
+def tool_copy(skill, out):
+    """A copy of the floorplan skill in OUT/floorplan-tool with the C# route hook."""
+    tool = out / "floorplan-tool"
+    shutil.rmtree(tool, ignore_errors=True)
+    shutil.copytree(skill, tool)
+    ex = tool / "scripts" / "lib" / "extract.mjs"
+    code = ex.read_text()
+    if EXTRACT_ANCHOR not in code:
+        sys.exit(f"fleet-floorplan: no C# route hook point in {ex}; floorplan changed, re-vet it")
+    ex.write_text(EXTRACT_HEAD + code.replace(EXTRACT_ANCHOR, EXTRACT_ANCHOR + EXTRACT_HOOK, 1))
+    return tool / "scripts"
+
+
+# ASP.NET Core Minimal API routes. A regex pass, not a C# parser: a group
+# built from a non-literal path is dropped, as is a route under it.
+CS_VERB = re.compile(r'\.\s*Map(Get|Post|Put|Delete|Patch)\s*\(\s*(?:pattern:\s*)?"([^"]*)"')
+CS_GROUP = re.compile(r'\b(?:var\s+)?(\w+)\s*=\s*(\w+)\s*\.\s*MapGroup\s*\(\s*(?:"([^"]*)")?')
+# helpers taking a route builder first: `MapFoo(this RouteGroupBuilder api)` or `MapArea(RouteGroupBuilder g, ...)`
+CS_HELPER = re.compile(r'static\s+[\w<>?,() ]+?\s+(\w+)\s*(?:<[^<>]*>)?\s*\(\s*(this\s+)?(?:RouteGroupBuilder|IEndpointRouteBuilder|WebApplication)\s+(\w+)')
+CS_EXT_CALL = re.compile(r'\.\s*(\w+)\s*(?:<[^<>]*>)?\s*\(')
+CS_PLAIN_CALL = re.compile(r'(?<![.\w])(\w+)\s*\(\s*(\w+)\s*[,)]')
+
+
+def cs_strip_comments(s):
+    s = re.sub(r"/\*.*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group()), s, flags=re.S)
+    return re.sub(r"//[^\n]*", "", s)
+
+
+def cs_scope(code):
+    """Rename each helper's builder parameter to <param>__<helper> in its body,
+    so two helpers that both call their parameter `api` stay apart."""
+    ms = list(CS_HELPER.finditer(code))
+    out, last = [], 0
+    for i, m in enumerate(ms):
+        end = ms[i + 1].start() if i + 1 < len(ms) else len(code)
+        body = re.sub(r"\b%s\b" % re.escape(m.group(3)), m.group(3) + "__" + m.group(1), code[m.start():end])
+        out += [code[last:m.start()], body]
+        last = end
+    out.append(code[last:])
+    return "".join(out)
+
+
+def cs_receiver(code, i):
+    """Walk back from the '.' at i over `.Call(...)` links: (head identifier, [group prefixes])."""
+    groups, j = [], i
+    while True:
+        k = j - 1
+        while k >= 0 and code[k].isspace():
+            k -= 1
+        if k < 0 or code[k] != ")":
+            m = re.search(r"(\w+)\s*$", code[: k + 1])
+            return (m.group(1) if m else None), groups
+        depth, k2 = 0, k
+        while k2 >= 0:
+            depth += code[k2] == ")"
+            depth -= code[k2] == "("
+            if depth == 0:
+                break
+            k2 -= 1
+        m = re.search(r"\.\s*(\w+)\s*(?:<[^<>]*>)?\s*$", code[:k2])
+        if not m:
+            return None, groups
+        if m.group(1) == "MapGroup":
+            a = re.match(r'\(\s*"([^"]*)"', code[k2: k + 1])
+            groups.insert(0, a.group(1) if a else None)
+        j = m.start()
+
+
+def cs_join(*parts):
+    return "/" + "/".join(x.strip("/") for x in parts if x and x.strip("/"))
+
+
+def cs_routes(root):
+    """{file.cs: [{method, path, line}]} with MapGroup prefixes resolved
+    across files and through route-builder helpers."""
+    files = {p.relative_to(root).as_posix(): cs_scope(cs_strip_comments(p.read_text(errors="ignore")))
+             for p in root.rglob("*.cs") if ".git" not in p.parts}
+    helper, decls, callers = {}, {}, {}  # name -> (file, param, is extension); (file, var) -> [(base, prefix)]; (file, param) -> [(file, var, groups)]
+    for f, code in files.items():
+        for m in CS_HELPER.finditer(code):
+            helper[m.group(1)] = (f, m.group(3), bool(m.group(2)))
+        for m in CS_GROUP.finditer(code):
+            decls.setdefault((f, m.group(1)), []).append((m.group(2), m.group(3)))
+    for f, code in files.items():
+        for m in CS_EXT_CALL.finditer(code):
+            d = helper.get(m.group(1))
+            if d and d[2]:
+                head, groups = cs_receiver(code, m.start())
+                if head:
+                    callers.setdefault(d[:2], []).append((f, head, groups))
+        for m in CS_PLAIN_CALL.finditer(code):
+            d = helper.get(m.group(1))
+            if d and not d[2]:
+                callers.setdefault(d[:2], []).append((f, m.group(2), []))
+    memo = {}
+
+    def prefixes(f, var, seen=()):
+        key = (f, var)
+        if key in memo:
+            return memo[key]
+        if key in seen:
+            return []
+        seen += (key,)
+        res = []
+        for base, pre in decls.get(key, []):
+            if pre is not None:
+                res += [cs_join(p, pre) for p in prefixes(f, base, seen)]
+        for cf, cv, groups in callers.get(key, []):
+            if None not in groups:
+                res += [cs_join(p, *groups) for p in prefixes(cf, cv, seen)]
+        # an unknown receiver (app, endpoints) is the root
+        memo[key] = sorted(set(res)) if key in decls or key in callers else [""]
+        return memo[key]
+
+    routes = {}
+    for f, code in files.items():
+        for m in CS_VERB.finditer(code):
+            head, groups = cs_receiver(code, m.start())
+            if head is None or None in groups:
+                continue
+            line = code.count("\n", 0, m.start()) + 1
+            for p in prefixes(f, head):
+                routes.setdefault(f, []).append({"method": m.group(1).upper(), "path": cs_join(p, *groups, m.group(2)), "line": line})
+    return routes
+
+
+def sync(root, src):
+    """src becomes a clean copy of what root has checked out."""
+    if not (src / ".git").is_dir():
+        git("clone", "-q", str(root), str(src))
+    git("-C", str(src), "fetch", "-q", str(root), "HEAD")
+    git("-C", str(src), "reset", "-q", "--hard", "FETCH_HEAD")
+    git("-C", str(src), "clean", "-fdq")  # floorplan/ ignores itself, so it stays
+
+
+def first_line(text, limit=200):
+    text = " ".join(text.split())
+    end = text.find(". ")
+    text = text[: end + 1] if 0 < end < limit else text
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def generated_arch(src, scan):
+    """One part per top-level folder holding code, split one level down when
+    it is big; loose top-level files go to their own part."""
+    code = [f["path"] for f in scan["files"] if f["category"] == "code"]
+    top = {}
+    for p in code:
+        top.setdefault(p.split("/")[0] if "/" in p else "", []).append(p)
+    nodes = []
+    for d, files in sorted(top.items()):
+        if d == "":
+            nodes.append({"id": "toplevel", "label": "Top-level files", "kind": "library",
+                          "summary": "Code files at the repo root.", "paths": ["*"]})
+            continue
+        nid = d.strip(".").replace(".", "-") or "dot"
+        nodes.append({"id": nid, "label": d, "kind": "library", "summary": f"Code under {d}/ ({len(files)} files).", "paths": [d]})
+        subs = {p.split("/")[1] for p in files if p.count("/") >= 2}
+        if len(files) > 24 and len(subs) > 1:
+            for s in sorted(subs):
+                n = sum(p.startswith(f"{d}/{s}/") for p in files)
+                nodes.append({"id": f"{nid}.{s.replace('.', '-')}", "parent": nid, "label": s, "kind": "library",
+                              "summary": f"Code under {d}/{s}/ ({n} files).", "paths": [f"{d}/{s}"]})
+    summary = f"Generated map of {src.name}: one part per top-level folder. Add .fleet/floorplan/architecture.json to the repo for a hand-drawn one."
+    return {"$schema": "floorplan/architecture@1", "audience": "developers",
+            "project": {"name": src.name, "summary": summary}, "nodes": nodes}
+
+
+# The graphify relations that make one file depend on another: fleet's own
+# set (internal/graph/deps.go) plus "uses", which C# type references carry.
+DEP_RELATIONS = {"calls", "references", "embeds", "method", "dispatches_to", "indirect_call", "implements", "inherits", "uses"}
+
+
+def merge_graph_edges(graph, scan):
+    """Add graphify's file-to-file code dependencies to floorplan's scan as
+    import edges. Floorplan parses imports itself and misses whole languages
+    (no C# usings, for one); graphify covers every language it parses. A
+    document naming code is not a dependency. Returns how many were added."""
+    known = {f["path"] for f in scan["files"]}
+    node = {n["id"]: n for n in graph["nodes"]}
+    pairs = {}
+    for e in graph["links"]:
+        s, t = node.get(e["source"]), node.get(e["target"])
+        if e.get("relation") not in DEP_RELATIONS or not s or not t or s.get("file_type") == "document":
+            continue
+        a, b = s.get("source_file", ""), t.get("source_file", "")
+        if a == b or a not in known or b not in known:
+            continue
+        pairs.setdefault((a, b), set()).add(t.get("label", "").strip(".").removesuffix("()"))
+    have = {(e["from"], e["to"]) for e in scan["edges"]}
+    new = [{"from": a, "to": b, "names": sorted(n for n in names if n)[:12]} for (a, b), names in sorted(pairs.items()) if (a, b) not in have]
+    scan["edges"].extend(new)
+    return len(new)
+
+
+def doc_descriptions(graph):
+    """A file's description is its first documented symbol's doc comment."""
+    files = {}
+    for f in graph["files"]:
+        doc = next((s[4] for s in f.get("s") or [] if len(s) > 4 and s[4]), "")
+        if doc:
+            files[f["p"]] = {"name": f["name"], "description": first_line(doc)}
+    return {"files": files}
+
+
+def main():
+    if len(sys.argv) != 3:
+        sys.exit("usage: fleet-floorplan ROOT OUT")
+    root, out = Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve()
+    skill = skill_dir()
+    src = out / "floorplan-src"
+    sync(root, src)
+    scripts = tool_copy(skill, out)
+    cs = out / "floorplan-cs-routes.json"
+    routes = cs_routes(src)
+    cs.write_text(json.dumps(routes))
+    os.environ["FLOORPLAN_CS_ROUTES"] = str(cs)
+    if routes:
+        print(f"{sum(map(len, routes.values()))} C# routes in {len(routes)} files")
+    fp = out / "floorplan"  # outside the clone, so a repo's own floorplan/ folder is never touched
+    (fp / "descriptions").mkdir(parents=True, exist_ok=True)
+    scan, arch = fp / ".cache" / "scan.json", fp / "architecture.json"
+    build = ["node", str(scripts / "build.mjs"), str(src), "--arch", str(arch), "--scan", str(scan), "--out", str(fp), "--unattended"]
+    run("node", str(scripts / "scan.mjs"), str(src), "--out", str(scan), "--unattended")
+    gj = out / "graph.json"
+    if gj.is_file():  # fleet runs this after a graphify build into OUT
+        data = json.loads(scan.read_text())
+        n = merge_graph_edges(json.loads(gj.read_text()), data)
+        scan.write_text(json.dumps(data))
+        print(f"{n} file links added from the code graph")
+    own = src / ".fleet" / "floorplan" / "architecture.json"
+    if own.is_file():
+        shutil.copyfile(own, arch)
+    else:
+        arch.write_text(json.dumps(generated_arch(src, json.loads(scan.read_text())), indent=1))
+    auto = fp / "descriptions" / "doc-comments.json"
+    auto.unlink(missing_ok=True)  # the first build must not keep last run's names
+    run(*build)
+    auto.write_text(json.dumps(doc_descriptions(json.loads((fp / "graph.json").read_text())), indent=1))
+    run(*build)
+    run("node", str(fp / "serve.mjs"), "--export", str(fp / "map.html"), cwd=src)
+    print(f"floorplan of {root} in {fp}")
+
+
+if __name__ == "__main__":
+    main()

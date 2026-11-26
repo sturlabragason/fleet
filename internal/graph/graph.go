@@ -183,6 +183,7 @@ func buildLocked(ctx context.Context, home, root string, force bool) (Stamp, err
 			break
 		}
 	}
+	buildFloorplan(ctx, root, out)
 	return st, nil
 }
 
