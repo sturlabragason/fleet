@@ -56,13 +56,12 @@ func (r *Reloader) reload() (bool, string) {
 	prev := active
 	probs, err := LoadDir(r.Dir)
 	if err != nil {
+		keepListed(prev)
 		return false, fmt.Sprintf("theme not reloaded, kept %s: %v", prev.Name, err)
 	}
 	p, ok := Get(name)
 	if !ok {
-		if _, kept := Get(prev.Name); !kept {
-			user[prev.Name] = prev // still listed in the picker
-		}
+		keepListed(prev)
 		why := "unknown theme"
 		if len(probs[name]) > 0 {
 			why = name + ".toml: " + strings.Join(probs[name], "; ")
@@ -78,6 +77,14 @@ func (r *Reloader) reload() (bool, string) {
 	}
 	apply(p)
 	return true, warn
+}
+
+// keepListed puts the kept palette back among the user themes when its file
+// no longer loads, so the picker still lists it and Esc can return to it.
+func keepListed(prev Palette) {
+	if _, ok := Get(prev.Name); !ok {
+		user[prev.Name] = prev
+	}
 }
 
 // stamp is the mtime and size of the config file, the themes directory and

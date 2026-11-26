@@ -87,5 +87,14 @@ func reloadTheme(f *fleet.Fleet, r *theme.Reloader) {
 	logx.For("theme").Info("theme reloaded", "theme", theme.Active().Name)
 	configure(f)
 	dropStatusTags(f)
-	f.T.Run("set-option", "-t", fleet.Session, "@fleet_theme", theme.Active().Name)
+	name := theme.Active().Name
+	f.T.Run("set-option", "-t", fleet.Session, "@fleet_theme", name)
+	// The overview reloads itself; stamp its pane so the next fleet up does
+	// not respawn it for a theme it already shows.
+	panes, _ := f.T.ListPanes("")
+	for _, p := range panes {
+		if p.Role == "ov" {
+			f.T.SetPaneOption(p.ID, "@fleet_theme", name)
+		}
+	}
 }

@@ -104,3 +104,25 @@ func bump(t *testing.T, dir string, n int) {
 		}
 	}
 }
+
+// TestReloaderUnreadableDir: a themes path that can't be read keeps the
+// active user theme, still listed.
+func TestReloaderUnreadableDir(t *testing.T) {
+	dir := writeThemes(t, map[string]string{"mine.toml": "[overrides]\nwaiting = \"#ffff11\"\n"})
+	if _, err := LoadDir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := Load("mine"); err != nil {
+		t.Fatal(err)
+	}
+	r := &Reloader{Dir: dir, Name: func() (string, error) { return "mine", nil }}
+	r.Check()
+	r.Dir = filepath.Join(dir, "mine.toml") // a file: ReadDir fails
+	r.Check()
+	if ch, w := r.Check(); ch || !strings.Contains(w, "kept mine") {
+		t.Fatalf("changed=%v warn=%q, want kept mine", ch, w)
+	}
+	if _, ok := Get("mine"); !ok || Active().Name != "mine" {
+		t.Errorf("mine listed=%v active=%s, want listed and active", ok, Active().Name)
+	}
+}
