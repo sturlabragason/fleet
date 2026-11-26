@@ -217,6 +217,9 @@ falls back to the pin) and `TestUnknownWindowShown`. Then the CI check.
 
 ## WP6: events decide status
 
+**Status: done (ADR-205, 2026-11-26).** The hook file stands in for the profile trait; the four tests are
+the table in `internal/fleet/hook_test.go` `TestHookPrecedence`.
+
 **Goal.** For a profile with an event source (ACP, hooks or an extension), the tool's own events
 decide working and idle; the screen fills in what events cannot say.
 

@@ -132,10 +132,19 @@ func TestCmdHookPlugin(t *testing.T) {
 	if subs, _ := status.ReadHookSubs(f.Home, "a1", time.Now()); len(subs) != 1 || subs[0].State != status.SubDone {
 		t.Errorf("subs after stop %+v", subs)
 	}
-	// A notification's kind is what it waits for.
-	withStdin(t, `{"notification_type":"idle_prompt"}`, func() { cmdHook(f, []string{"Notification", "--agent", "a1"}) })
-	if s, ok := status.ReadState(dir, "a1"); !ok || s.Status != status.Waiting || s.WaitingFor != "idle prompt" {
-		t.Errorf("notification: %+v %v", s, ok)
+	// A notification's kind is what it waits for; Claude's idle_prompt is
+	// an agent at rest, not a question (ADR-205).
+	for _, c := range []struct {
+		payload, waitingFor string
+		want                status.Status
+	}{
+		{`{"notification_type":"permission_prompt"}`, "permission prompt", status.Waiting},
+		{`{"notification_type":"idle_prompt","message":"Claude is waiting for your input"}`, "", status.Idle},
+	} {
+		withStdin(t, c.payload, func() { cmdHook(f, []string{"Notification", "--agent", "a1"}) })
+		if s, ok := status.ReadState(dir, "a1"); !ok || s.Status != c.want || s.WaitingFor != c.waitingFor {
+			t.Errorf("notification %s: %+v %v", c.payload, s, ok)
+		}
 	}
 }
 

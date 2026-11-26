@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/tmux"
 )
@@ -91,26 +92,63 @@ func TestHookDrivesStatusAndBorder(t *testing.T) {
 	}
 }
 
-// A hook older than the pane's last change loses to the screen; a newer one
-// wins.
+// Events decide working and idle; the screen keeps menus, prompts and
+// errors; a waiting hook yields to a pane that changed after it; a stale
+// working hook and no hook at all leave the screen in charge (ADR-205).
+// Screens are real Claude captures, fed through the capture cache so no
+// tmux server is needed.
 func TestHookPrecedence(t *testing.T) {
-	f, _ := hookFleet(t)
-	a := f.Store.Load().Agents["h1"]
-	a.LastChange = time.Now()
-	old, _ := status.EventState("stop", "", a.LastChange.Add(-time.Minute))
-	if err := status.WriteState(status.StateDir(f.Home), "h1", old); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := f.hookState(a, true); ok {
-		t.Error("a stale hook beat a matching screen")
-	}
-	if _, ok := f.hookState(a, false); !ok {
-		t.Error("a hook must decide when the screen says nothing")
-	}
-	fresh, _ := status.EventState("stop", "", a.LastChange.Add(time.Second))
-	status.WriteState(status.StateDir(f.Home), "h1", fresh)
-	if _, ok := f.hookState(a, true); !ok {
-		t.Error("a hook fired after the pane changed must win")
+	const (
+		none   = ""
+		before = -time.Minute                  // fired before the pane last changed
+		after  = time.Second                   // fired after it
+		stale  = -HookWorkingMax - time.Minute // a working hook past its bound
+	)
+	for _, c := range []struct {
+		name, screen, event string
+		at                  time.Duration
+		want                status.Status
+	}{
+		{"event beats screen: stop under a spinner", "working.txt", "stop", before, status.Idle},
+		{"event beats screen: tool call at a quiet prompt", "idle.txt", "pretooluse", before, status.Working},
+		{"event beats screen: newer hook", "working.txt", "stop", after, status.Idle},
+		{"menu beats event: trust dialog", "waiting-trust.txt", "pretooluse", after, status.Waiting},
+		{"menu beats event: approval", "waiting-approval.txt", "stop", after, status.Waiting},
+		{"screen error beats event", "error.txt", "pretooluse", after, status.Error},
+		{"waiting hook yields to a newer pane", "idle.txt", "notification", before, status.Idle},
+		{"newer waiting hook stands", "idle.txt", "notification", after, status.Waiting},
+		{"stale working hook falls back", "idle.txt", "pretooluse", stale, status.Idle},
+		{"no event uses screen: working", "working.txt", none, 0, status.Working},
+		{"no event uses screen: idle", "idle.txt", none, 0, status.Idle},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			b, err := os.ReadFile(filepath.Join("..", "status", "testdata", "claude", c.screen))
+			if err != nil {
+				t.Fatal(err)
+			}
+			home := t.TempDir()
+			t.Setenv("FLEET_CONFIG", filepath.Join(home, "no-config.toml"))
+			f, err := New(&tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}, home, "/nonexistent")
+			if err != nil {
+				t.Fatal(err)
+			}
+			f.caps.by = map[string]capEntry{"%1": {key: "k", text: string(b)}}
+			a := &board.Agent{Name: "h1", Patterns: "claude", Status: string(status.Unknown)}
+			start := time.Now().Add(-10 * time.Second)
+			f.classify(a, true, false, "%1", "k", start) // the pane last changed 10s ago
+			if c.event != none {
+				hs, _ := status.EventState(c.event, "", a.LastChange.Add(c.at))
+				if c.at == stale {
+					hs.At = time.Now().Add(stale)
+				}
+				if err := status.WriteState(status.StateDir(home), "h1", hs); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := f.classify(a, true, false, "%1", "k", start.Add(time.Second)); got != string(c.want) {
+				t.Errorf("status %q, want %q", got, c.want)
+			}
+		})
 	}
 }
 

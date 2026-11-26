@@ -304,7 +304,10 @@ func cmdHook(f *fleet.Fleet, args []string) error {
 	if status.PromptEvent(ev) {
 		f.UserPrompt(*agent, p.Prompt)
 	}
-	if s.WaitingFor == "" {
+	switch {
+	case p.IdleNotice():
+		s.Status, s.WaitingFor = status.Idle, ""
+	case s.WaitingFor == "":
 		s.WaitingFor = p.WaitingFor(ev)
 	}
 	if err := status.WriteState(status.StateDir(f.Home), *agent, s); err != nil {

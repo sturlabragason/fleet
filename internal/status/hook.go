@@ -33,7 +33,7 @@ type State struct {
 var hookEvents = map[string]Status{
 	"stop":                Idle, // the turn finished: the agent is back at its prompt
 	"agentstop":           Idle,
-	"notification":        Waiting, // permission prompt or idle nudge: it needs me
+	"notification":        Waiting, // a prompt: it needs me (idle_prompt is idle, Payload.IdleNotice)
 	"pretooluse":          Working,
 	"posttooluse":         Working,
 	"posttoolusefailure":  Working,

@@ -326,10 +326,13 @@ func (f *Fleet) classify(a *board.Agent, alive, dead bool, pane, ck string, now 
 	if st == status.Error && errLine == "" {
 		errLine = a.LastLine
 	}
-	// A hook the tool fired itself beats a guess from the screen, and beats
-	// the screen outright when it happened after the pane last changed
-	// (DESIGN §18 #3, ADR-49).
-	hs, hok := f.hookState(a, ok)
+	// A hook the tool fired itself decides working and idle; the screen
+	// keeps menus, prompts and errors (DESIGN §7c, ADR-49, ADR-205).
+	var screen status.Status
+	if ok {
+		screen = st
+	}
+	hs, hok := f.hookState(a, screen)
 	f.noteDisagree(a, hs.Status, st, rule, hok && ok && hs.Status != st, now)
 	if hok {
 		st = applyHook(a, hs)

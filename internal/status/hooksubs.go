@@ -88,6 +88,12 @@ func (p Payload) WaitingFor(event string) string {
 	return ""
 }
 
+// IdleNotice reports whether a hook only says the agent sits at its empty
+// prompt: Claude's idle_prompt Notification ("Claude is waiting for your
+// input"), sent after a minute at rest. That is idle, not a question; read
+// as waiting it was 267 of 281 recorded status disagreements (ADR-205).
+func (p Payload) IdleNotice() bool { return p.NotificationType == "idle_prompt" }
+
 // hookSubs is the subagents file: the list, and a counter that names a
 // subagent whose start carried no id.
 type hookSubs struct {

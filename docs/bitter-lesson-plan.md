@@ -69,6 +69,10 @@ The rest of this document goes area by area, largest first.
 
 ### 1. Status is read from the screen first, events second (b)
 
+**Status (2026-11-26): done in ADR-205.** Events decide working and idle; the screen keeps menus,
+prompts and errors. The week's ledger showed one wrong event, Claude's `idle_prompt` read as waiting
+(267 of 281 disagreements), fixed at the mapping. Pattern retirement is still WP9.
+
 Under tmux, a pane's status is the result of about 77 regexes in six per-tool sets
 (`internal/status/status.go:96-144`), a 14-line scan window (`status.go:217`), menu scraping
 (`internal/status/menu.go`, `menu_plain.go`, about 274 lines) and a box-glyph cleaner
@@ -415,7 +419,7 @@ Then a week of normal use with the ledger recording.
 
 ### Phase 2: protocols over inference
 
-6. **Events decide status** (finding 1, WP6), only if the week shows events and screen agree.
+6. **Events decide status** (finding 1, WP6), only if the week shows events and screen agree. Done: ADR-205.
 7. **Fill for every admiral** (finding 8, WP7).
 8. **Per-profile nudge switches** (finding 7, WP8) for the stop-hook block and the recycle advice.
 

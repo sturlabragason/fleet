@@ -80,21 +80,25 @@ func (f *Fleet) resolveGlob(agent, g string) string {
 }
 
 // hookState is the last thing an agent's own hooks said about it
-// (~/.fleet/status/<name>.json, DESIGN §4). ok=false when there is none, or
-// when the screen is more recent evidence: a hook only overrides the pane
-// when the pane said nothing fleet recognises, or when the hook fired after
-// the pane last changed.
-func (f *Fleet) hookState(a *board.Agent, screenOK bool) (status.State, bool) {
+// (~/.fleet/status/<name>.json, DESIGN §4). An agent whose tool sends hooks
+// has its status decided by them (ADR-205): the screen, which matched
+// screen (empty when it matched nothing), keeps only what no hook reports.
+// ok=false when there is no hook state, or when:
+//
+//   - the screen shows a menu, prompt, modal or error (Waiting or Error):
+//     a folder-trust dialog or an API error fires no hook;
+//   - the hook says waiting and the pane changed since: a waiting hook
+//     does not say when the question was answered, the screen does;
+//   - the hook says working and is older than HookWorkingMax: a tool killed
+//     mid-tool-call leaves its last PreToolUse behind (ADR-49).
+func (f *Fleet) hookState(a *board.Agent, screen status.Status) (status.State, bool) {
 	s, ok := status.ReadState(status.StateDir(f.Home), a.Name)
-	if !ok {
+	if !ok || screen == status.Waiting || screen == status.Error {
 		return status.State{}, false
 	}
-	if screenOK && !s.At.After(a.LastChange) {
+	if s.Status == status.Waiting && screen != "" && !s.At.After(a.LastChange) {
 		return status.State{}, false
 	}
-	// "Working" is the one hook state that goes stale on its own: idle and
-	// waiting are where an agent rests, but a tool killed mid-tool-call
-	// leaves its last PreToolUse behind and would stay working forever.
 	if s.Status == status.Working && time.Since(s.At) > HookWorkingMax {
 		return status.State{}, false
 	}
