@@ -429,6 +429,7 @@ Then a week of normal use with the ledger recording.
 10. **Adapter freeze and first removal** (finding 2, WP10).
 11. **Rule measurement** (findings 5, 7, WP11): ledger rates first, a small ablation only where the
     ledger can't see a rule.
+    Status 2026-11-26: built as `fleet retro` (ADR-204): per-rule firing counts and recurring retro themes from the ledger (findings 5, 12), and a human-started A/B trial of a playbook layer that `fleet retro promote` applies only when the ledger says it is not worse.
 12. **One tool vocabulary** (finding 6, WP12), as an experiment with a recorded result.
 
 Not in a package: per-client result caps (finding 9) and the Copilot exclusion list (finding 3) wait

@@ -30,7 +30,7 @@ var statsKey = map[string]func(board.Event) string{
 func cmdStats(args []string) error {
 	fs := flag.NewFlagSet("stats", flag.ContinueOnError)
 	since := fs.String("since", "", "only events since a duration (24h, 7d) or a date (2006-01-02)")
-	by := fs.String("by", "", "group by kind, profile or model; with --runs also effort, version, repo, week, playbook, agents_md or route")
+	by := fs.String("by", "", "group by kind, profile or model; with --runs also effort, version, repo, week, playbook, agents_md, route or arm")
 	ledger := fs.Bool("runs", false, "score closed runs from runs.jsonl instead of counting interventions (ADR-170)")
 	asJSON := fs.Bool("json", false, "machine-readable output: an object of counts, or with --runs a list of rows")
 	if err := fs.Parse(args); err != nil {

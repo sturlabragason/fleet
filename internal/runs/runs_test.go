@@ -53,8 +53,8 @@ func TestSummarize(t *testing.T) {
 	if v := verified(x); v != "33%" {
 		t.Fatalf("verified = %q, want 33%%", v)
 	}
-	lo, hi := wilson(3, 4)
+	lo, hi := Wilson(3, 4)
 	if lo < 0.29 || lo > 0.31 || hi < 0.95 || hi > 0.96 {
-		t.Fatalf("wilson(3,4) = %.3f-%.3f", lo, hi)
+		t.Fatalf("Wilson(3,4) = %.3f-%.3f", lo, hi)
 	}
 }

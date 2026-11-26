@@ -66,6 +66,23 @@ func TestResolveHomeAndRepoAppend(t *testing.T) {
 	}
 }
 
+// A trial layer (ADR-204) goes between the user and the repo layers, where
+// promoting it into the user layer puts it.
+func TestResolveTrialOrder(t *testing.T) {
+	home, _, repo := fixture(t)
+	hf := filepath.Join(home, "worker.md")
+	rf := filepath.Join(repo, ".fleet", "worker.md")
+	put(t, hf, "HOME RULE")
+	put(t, rf, "REPO RULE")
+	text, src := ResolveTrial(Pro, home, repo, "TRIAL RULE\n")
+	if !strings.HasSuffix(text, "HOME RULE\n\nTRIAL RULE\n\nREPO RULE") {
+		t.Fatalf("trial order: %q", text[len(text)-40:])
+	}
+	if !reflect.DeepEqual(src, []string{BuiltIn + " (pro)", hf, TrialSource, rf}) {
+		t.Fatalf("sources %v", src)
+	}
+}
+
 func TestResolveEmptyHomeIgnored(t *testing.T) {
 	home, _, repo := fixture(t)
 	put(t, filepath.Join(home, "worker.md"), "  \n\n")

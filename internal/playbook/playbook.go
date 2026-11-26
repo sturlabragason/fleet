@@ -127,18 +127,31 @@ func Default() string { return worker }
 // user's and the repo's layers apply at every level. sources lists what was
 // used, in order.
 func Resolve(l Level, home, dir string) (text string, sources []string) {
+	return ResolveTrial(l, home, dir, "")
+}
+
+// TrialSource is the source name of a playbook trial's variant layer.
+const TrialSource = "trial"
+
+// ResolveTrial is Resolve with a trial's variant layer (ADR-204) applied
+// right after the user layer, where `fleet retro promote` would put it, and
+// before the repo layer. An empty trial is no layer.
+func ResolveTrial(l Level, home, dir, trial string) (text string, sources []string) {
 	text, sources = Text(l), []string{BuiltIn + " (" + string(l) + ")"}
-	files := []string{filepath.Join(home, "worker.md")}
-	if p := repoFile(dir); p != "" {
-		files = append(files, p)
-	}
-	for _, p := range files {
-		layer, ok := read(p)
-		if !ok {
-			continue
-		}
+	user := filepath.Join(home, "worker.md")
+	if layer, ok := read(user); ok {
 		text = apply(text, layer)
-		sources = append(sources, p)
+		sources = append(sources, user)
+	}
+	if t := strings.TrimSpace(trial); t != "" {
+		text = apply(text, t)
+		sources = append(sources, TrialSource)
+	}
+	if p := repoFile(dir); p != "" {
+		if layer, ok := read(p); ok {
+			text = apply(text, layer)
+			sources = append(sources, p)
+		}
 	}
 	return text, sources
 }

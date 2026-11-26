@@ -12,6 +12,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/mail"
 	"github.com/sturlabragason/fleet/internal/playbook"
+	"github.com/sturlabragason/fleet/internal/retro"
 	"github.com/sturlabragason/fleet/internal/routes"
 	"github.com/sturlabragason/fleet/internal/runs"
 )
@@ -25,6 +26,9 @@ func (f *Fleet) fingerprint(lvl playbook.Level, dir, pbText string, sources []st
 	if len(sources) > 0 {
 		c.Layers = map[string]string{"builtin:" + string(lvl): runs.Hash([]byte(playbook.Text(lvl)))}
 		for _, src := range sources[1:] {
+			if src == playbook.TrialSource { // hashed by the spawn, which has its text
+				continue
+			}
 			label := "repo"
 			if src == filepath.Join(f.Home, "worker.md") {
 				label = "user"
@@ -43,6 +47,18 @@ func (f *Fleet) fingerprint(lvl playbook.Level, dir, pbText string, sources []st
 		}
 	}
 	return c
+}
+
+// trialArm is the running playbook trial's variant layer for agent name
+// ("" in the control arm) and the arm to record (ADR-204). A broken trial
+// file is logged and the spawn runs without a trial.
+func (f *Fleet) trialArm(name string) (layer, arm string) {
+	layer, arm, err := retro.Assign(f.Home, name)
+	if err != nil {
+		logx.For("fleet").Warn("playbook trial skipped", "agent", name, "err", err)
+		return "", ""
+	}
+	return layer, arm
 }
 
 // recordRun appends a closed agent's run to the ledger (ADR-170): its
@@ -166,19 +182,9 @@ func tallyReports(ms []mail.Msg, start time.Time) (by map[string]int, last strin
 		if st == "done" && firstDone.IsZero() {
 			firstDone = m.T
 		}
-		retro = retro || hasRetro(m.Text)
+		retro = retro || len(mail.RetroLines(m.Text)) > 0
 	}
 	return by, last, firstDone, retro
-}
-
-// hasRetro is whether a report has a "retro:" detail line.
-func hasRetro(text string) bool {
-	for l := range strings.SplitSeq(text, "\n") {
-		if strings.HasPrefix(strings.TrimPrefix(strings.TrimSpace(l), "- "), "retro:") {
-			return true
-		}
-	}
-	return false
 }
 
 // tallyEvents fills rec from the events of its agent in one pass (ADR-170,

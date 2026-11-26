@@ -27,6 +27,7 @@ var Keys = map[string]func(Record) string{
 	"agents_md": func(r Record) string { return cfg(r).AgentsMD },
 	"route":     func(r Record) string { return cfg(r).Route },
 	"stage":     func(r Record) string { return r.Stage },
+	"arm":       func(r Record) string { return cfg(r).Arm },
 }
 
 func cfg(r Record) board.RunConfig {
@@ -52,7 +53,8 @@ type Row struct {
 	Tokens        int64   `json:"tokens"` // from tools that report no credits
 	Compactions   int     `json:"compactions"`
 	Interventions int     `json:"interventions"`
-	Few           bool    `json:"few"` // under MinRuns
+	Intervened    int     `json:"intervened"` // runs with at least one intervention
+	Few           bool    `json:"few"`        // under MinRuns
 }
 
 // Summarize groups the runs by key. Interactive runs are left out: the user
@@ -112,14 +114,17 @@ func summarize(k string, g []Record) Row {
 		for _, n := range r.Interventions {
 			row.Interventions += n
 		}
+		if len(r.Interventions) > 0 {
+			row.Intervened++
+		}
 	}
-	row.DoneLo, row.DoneHi = wilson(row.Done, row.Runs)
+	row.DoneLo, row.DoneHi = Wilson(row.Done, row.Runs)
 	row.MedianMinutes = median(mins)
 	return row
 }
 
-// wilson is the 95% Wilson score interval of k successes in n trials.
-func wilson(k, n int) (lo, hi float64) {
+// Wilson is the 95% Wilson score interval of k successes in n trials.
+func Wilson(k, n int) (lo, hi float64) {
 	if n == 0 {
 		return 0, 0
 	}

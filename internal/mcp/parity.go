@@ -22,6 +22,7 @@ var CLIParity = map[string]string{
 	"burn":            "infra: quota-burn tick driven by a systemd user timer (ADR-190); the user reviews branches from --review",
 	"estimate":        "user: tunes the estimator and shows its calibration (ADR-208); the admiral gets the estimate in the spawn reply",
 	"stats":           "user: counts fleet's own interventions for tuning its policy (ADR-154); the admiral needs no tool",
+	"retro":           "user: playbook trials are started and promoted by a human only, so no agent tool (ADR-204)",
 	"send":            "fleet_send",
 	"peek":            "fleet_peek",
 	"close":           "fleet_close",

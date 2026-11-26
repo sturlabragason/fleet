@@ -122,7 +122,7 @@ var usage = `usage:
                                             how often fleet's own policy acted on agents (stop blocks,
                                             wakes, refused sends, done-checks, hook/screen disagreements),
                                             counted from events.jsonl; --json: an object of counts
-  fleet stats --runs [--since D] [--by profile|model|effort|version|repo|week|playbook|agents_md|route|stage] [--json]
+  fleet stats --runs [--since D] [--by profile|model|effort|version|repo|week|playbook|agents_md|route|stage|arm] [--json]
                                             score closed runs from runs.jsonl: done rate with a 95%
                                             interval, done-check passes, rework, time to done, spend per
                                             done, compactions and interventions per run (ADR-170)
@@ -131,6 +131,17 @@ var usage = `usage:
                                             done) from past runs at that effort level, with median
                                             phases; --backtest scores it and the pinned table on the
                                             latest runs (ADR-208)
+  fleet retro [--since 30d] [--json]
+                                            trace-to-improvement report (ADR-204): runs by playbook,
+                                            the running trial's control vs variant with a verdict,
+                                            playbook rules whose intervention no longer fires, and
+                                            recurring retro: themes; counting only, no model call
+  fleet retro trial [--share 50] <patch-file> | fleet retro trial --stop
+                                            A/B test a playbook layer (worker.md format) on a share
+                                            of new spawns, by agent name; the arm goes in the ledger.
+                                            Human only: refused inside an agent
+  fleet retro promote                       write the trial's variant into ~/.fleet/worker.md, only
+                                            when the verdict is not worse; human only
   fleet send [--force] [--resume] [--now|--queue] <name> ["text"]
                                             refused while the user is typing in that pane (keys
                                             there in the last 30 s, unsubmitted text in its box);
@@ -416,6 +427,7 @@ var statelessCmds = map[string]func(args []string) error{
 	"page":      cmdPage,
 	"stats":     cmdStats,
 	"estimate":  cmdEstimate,
+	"retro":     cmdRetro,
 	"merge":     cmdMerge,
 	"graph":     cmdGraph,
 	"acp-host":  cmdACPHost,

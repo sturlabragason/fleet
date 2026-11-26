@@ -424,7 +424,7 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	// playbook. A leader also gets its squad orientation, at every effort
 	// level and whether or not the playbook is on (ADR-58).
 	full := prompt
-	pbText, pbSrc := "", []string(nil)
+	pbText, pbSrc, trial, arm := "", []string(nil), "", ""
 	lead := ""
 	if role.Leader {
 		lead = playbook.Leader()
@@ -436,7 +436,8 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	}
 	switch {
 	case pr.Playbook && prompt != "":
-		text, src := playbook.Resolve(lvl, f.Home, dir)
+		trial, arm = f.trialArm(name)
+		text, src := playbook.ResolveTrial(lvl, f.Home, dir, trial)
 		if tl := ToolLayers(p, f.Profiles); tl != "" {
 			text = strings.TrimRight(text, "\n") + "\n\n" + tl
 		}
@@ -451,6 +452,10 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 		pbText = lead
 	}
 	ex.Config = f.fingerprint(lvl, dir, pbText, pbSrc, card)
+	ex.Config.Arm = arm
+	if trial != "" {
+		ex.Config.Layers[playbook.TrialSource] = runs.Hash([]byte(trial))
+	}
 	if fam := layerFamily(p, f.Profiles); pr.Playbook && ex.Config.Layers != nil && playbook.Family(fam) != "" {
 		ex.Config.Layers["family:"+fam] = runs.Hash([]byte(playbook.Family(fam)))
 	}

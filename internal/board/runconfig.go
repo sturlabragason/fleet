@@ -16,4 +16,7 @@ type RunConfig struct {
 	// Route is the route's name and the hash of its saved settings,
 	// "<name>@<hash>".
 	Route string `json:"route,omitempty"`
+	// Arm is the playbook trial arm the spawn fell in, "<trial id>/control"
+	// or "<trial id>/variant" (ADR-204); "" when no trial ran.
+	Arm string `json:"arm,omitempty"`
 }

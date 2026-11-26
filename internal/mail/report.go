@@ -194,3 +194,15 @@ func (s *Store) peek(agent string, reports bool) []Msg {
 	ms, v := s.readView(agent, reports)
 	return v.unread(ms)
 }
+
+// RetroLines returns the text after "retro:" on each detail line of a
+// report that has one (ADR-170, ADR-204), trimmed; nil when none.
+func RetroLines(text string) []string {
+	var out []string
+	for l := range strings.SplitSeq(text, "\n") {
+		if r, ok := strings.CutPrefix(strings.TrimPrefix(strings.TrimSpace(l), "- "), "retro:"); ok {
+			out = append(out, strings.TrimSpace(r))
+		}
+	}
+	return out
+}
