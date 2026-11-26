@@ -50,6 +50,13 @@ func (f *Fleet) Report(me, state, summary string) (note string, err error) {
 	}
 	if state == "done" {
 		f.queueNext(me, summary)
+		if reply == "" { // a plan stage without a done-check passes here (ADR-203)
+			if f.Go != nil {
+				f.Go(f.PlanTick)
+			} else {
+				f.PlanTick()
+			}
+		}
 	}
 	if reply != "" {
 		f.tell(me, reply)
@@ -192,6 +199,9 @@ func (f *Fleet) doneCheck(job checkJob, msgID, sum string) string {
 	if !recorded {
 		logx.For("fleet").Info("done-check dropped (agent gone or replaced)", "agent", job.name)
 		return ""
+	}
+	if res.Pass {
+		f.PlanTick() // before the auto-close takes the agent off the board (ADR-203)
 	}
 	note := ""
 	switch {

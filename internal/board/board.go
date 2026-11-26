@@ -208,6 +208,9 @@ type Card struct {
 	// Route is the saved route that filled this spawn's arguments, "" for
 	// none (ADR-170).
 	Route string `json:"route,omitempty"`
+	// Stage is the plan stage the agent runs, write or review, "" outside
+	// a plan (ADR-203).
+	Stage string `json:"stage,omitempty"`
 	// Checked is the last done-check run; nil until one has finished.
 	Checked *Check `json:"checked,omitempty"`
 	// Started is when a done-check run was claimed. It is the claim marker

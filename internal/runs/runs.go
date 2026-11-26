@@ -40,6 +40,7 @@ type Record struct {
 	Branch        string           `json:"branch,omitempty"`
 	Interactive   bool             `json:"interactive,omitempty"`
 	Leader        bool             `json:"leader,omitempty"`
+	Stage         string           `json:"stage,omitempty"` // plan stage: write or review (ADR-203)
 	Created       time.Time        `json:"created"`
 	Closed        time.Time        `json:"closed"`
 	FirstDone     time.Time        `json:"first_done,omitzero"`

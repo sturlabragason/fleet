@@ -57,7 +57,8 @@ func modelParamDesc(profilesTool string) string {
 var toolDefs = slices.Concat(baseToolDefs, cliToolDefs, []tool{instructionsToolDef, routeToolDef}, admiralToolDefs, []tool{waitToolDef})
 
 var baseToolDefs = []tool{
-	{"fleet_status", "List all agents: name, team, profile, driver (acp or tmux), status, running subagents, on_wall, age, spend so far, what it waits for, and where it runs (a where column, local or cluster:<context>, once an agent runs off this machine). Ends with the fleet-wide spend. Start here.", obj(nil, map[string]any{})},
+	{"fleet_status", "List all agents: name, team, profile, driver (acp or tmux), status, running subagents, on_wall, age, spend so far, what it waits for, and where it runs (a where column, local or cluster:<context>, once an agent runs off this machine). Ends with the fleet-wide spend. Start here. plan=NAME shows that plan's tasks instead (\"*\": every plan, ADR-203).", obj(nil, map[string]any{
+		"plan": str("a plan name to show its tasks, or \"*\" for every plan")})},
 	{"fleet_peek", "Show the last N lines (default 20, max 80) of one agent's screen, without box borders and blank runs (raw=true: as captured). last_message=true returns the agent's last reply from its session log instead. summary=true returns about 5 lines from a cheap model (what it is doing, what it waits for, any error) and costs a model call, so prefer it over long screens and don't poll it. Peek only for detail; fleet_info has the facts.", obj([]string{"name"}, map[string]any{
 		"name": str("agent name"), "lines": map[string]any{"type": "integer", "description": "lines to return (default 20, max 80)"},
 		"raw":          map[string]any{"type": "boolean", "description": "screen as captured, with borders"},
@@ -78,7 +79,7 @@ var baseToolDefs = []tool{
 		"expect": str("the question the user confirmed (or part of it, or of the option label); refused if the prompt on screen no longer matches"), "confirmed": confirmedProp})},
 	{"fleet_info", "Facts about one agent: profile, team, driver (acp with its ACP server, or tmux), where it runs (local or cluster:<context>), the fleet version that started it, status and age, last activity, dir, its task card (goal, done-check and its verdict, result file), git (worktree, branch, dirty files, merged into main, commits ahead), session id, context %, spend so far, mode, and the profile's effort prefix when it has one. Prefer it to peeking.", obj([]string{"name"}, map[string]any{
 		"name": str("agent name")})},
-	{"fleet_spawn", "Start a new agent with a tool profile in a directory, optionally with a first prompt. Never spawn in the home directory: pass the repo or project dir, not $HOME (fleet moves a home-directory spawn to a scratch dir of its own and says so). In a git repo the agent gets its own worktree, <repo>.wt/<name> on branch fleet/<name>, and works there; pass worktree=false to put it straight in dir (e.g. a read-only task, or work that must land in the user's checkout). goal, check and result make a task card: fleet runs check in the agent's dir when it reports done and tells you whether it passed, and the agent is told to write the result file. effort sizes the worker process the agent is given: pick it per task. interactive=true for an agent the user will talk to directly: it is never auto-closed and reports progress, not done, until the user ends the session. route=NAME fills dir, profile, effort and the rest from that route (fleet_route); explicit arguments win.", obj([]string{"name"}, map[string]any{
+	{"fleet_spawn", "Start a new agent with a tool profile in a directory, optionally with a first prompt. Never spawn in the home directory: pass the repo or project dir, not $HOME (fleet moves a home-directory spawn to a scratch dir of its own and says so). In a git repo the agent gets its own worktree, <repo>.wt/<name> on branch fleet/<name>, and works there; pass worktree=false to put it straight in dir (e.g. a read-only task, or work that must land in the user's checkout). goal, check and result make a task card: fleet runs check in the agent's dir when it reports done and tells you whether it passed, and the agent is told to write the result file. effort sizes the worker process the agent is given: pick it per task. interactive=true for an agent the user will talk to directly: it is never auto-closed and reports progress, not done, until the user ends the session. route=NAME fills dir, profile, effort and the rest from that route (fleet_route); explicit arguments win. plan=TOML starts or resumes a plan named name instead of one agent (ADR-203).", obj([]string{"name"}, map[string]any{
 		"name": str("short unique agent name"), "route": str("a request route from the brief (fleet_route): fills every argument you leave out and wraps prompt in the route's template"), "profile": str("tool profile, see fleet_profiles; default [defaults] profile in config.toml, else claude-copilot"), "dir": str("working directory (absolute); required unless the route has one"), "prompt": str("optional first prompt"),
 		"worktree":    map[string]any{"type": "boolean", "description": "give the agent its own git worktree (default: the user's config, normally true)"},
 		"goal":        str("task card: the goal in one line (shown on the tile and in fleet_info)"),
@@ -90,7 +91,8 @@ var baseToolDefs = []tool{
 		"leader":      map[string]any{"type": "boolean", "description": "make it a leader: it gets squad tools and may spawn a squad of its own, whose reports come to it instead of you. Use for a job you want planned, split and summarised by one agent."},
 		"driver":      map[string]any{"type": "string", "enum": []string{"tmux", "acp"}, "description": "how fleet runs the agent: tmux (the tool's own screen) or acp (the tool's ACP server under fleet acp-host: status, questions and sends over the protocol, no screen reading). Default: the user's config, else acp for every profile that runs copilot or agy (claude-copilot too) and tmux for the rest. Claude runs over acp only when asked (this field or the profile's config), never from [defaults]; vibe refuses acp."},
 		"effort":      map[string]any{"type": "string", "enum": []string{"light", "standard", "pro"}, "description": "how much process the agent is given. light: an errand or a quick read-only question (a few lines: stay in your dir, no secrets, report). standard: a contained change (plan, build and test, commit on its branch; no ADR, no review, no merge). pro: professional code work in this repo (the full playbook: worktree, failing test first, subagent review, pre-merge checklist, merge into local main). Default: pro with a worktree, light without one."},
-		"model":       map[string]any{"type": "string", "description": modelParamDesc("fleet_profiles")}})},
+		"model":       map[string]any{"type": "string", "description": modelParamDesc("fleet_profiles")},
+		"plan":        str(planParamDesc)})},
 	{"fleet_sessions", "Find copilot/claude sessions the user started outside fleet, newest first: id | age | profile | dir | title | flags. Use before fleet_adopt, with the user's words as the query; if more than one fits, ask which. Never guess an id.", obj(nil, map[string]any{
 		"query": str("optional words; every word must appear in title, dir, branch or id"), "limit": map[string]any{"type": "integer", "description": "max sessions (default 15)"}})},
 	{"fleet_adopt", "Resume an existing session the user started outside fleet as a fleet agent. Pass session_id (full id or unique 8+ char prefix) or query (words that match exactly one session), not both. Refuses if the session is missing or still open elsewhere.", obj(nil, map[string]any{
@@ -205,6 +207,8 @@ type args struct {
 	// changes (ADR-120).
 	Route  string
 	Fields map[string]any
+	// Plan is fleet_spawn's plan text and fleet_status's plan name (ADR-203).
+	Plan string
 	// interactiveSet: the call passed interactive, so a route's doesn't apply.
 	interactiveSet bool
 	// NeedsAction is agent fleet_msg_send's wake switch; nil is the default,
@@ -305,7 +309,10 @@ func need(v, field string) error {
 	return nil
 }
 
-func (s *Server) statusCall(args) (string, error) {
+func (s *Server) statusCall(a args) (string, error) {
+	if a.Plan != "" {
+		return s.F.PlanStatus(strings.TrimPrefix(a.Plan, "*"))
+	}
 	st, err := s.status()
 	if off, since := s.F.Offline(); off {
 		st = fleet.OfflineNote(since) + "\n" + st
@@ -325,6 +332,9 @@ func (s *Server) spawnCall(_ string, a args, raw json.RawMessage) (string, error
 	var set struct{ Interactive *bool }
 	_ = json.Unmarshal(raw, &set)
 	a.interactiveSet = set.Interactive != nil
+	if a.Plan != "" {
+		return s.planCall(a)
+	}
 	via, err := s.applyRoute(&a)
 	if err != nil {
 		return "", err

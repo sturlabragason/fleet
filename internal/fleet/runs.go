@@ -53,6 +53,9 @@ func (f *Fleet) recordRun(a board.Agent, box string, now time.Time) {
 	rec := runs.Record{Name: a.Name, Profile: a.Profile, Model: a.Model, Effort: a.Effort, Driver: a.DriverName(),
 		FleetVersion: a.FleetVersion, Interactive: a.Interactive, Leader: a.Leader, Created: a.Created, Closed: now,
 		Config: a.Config, Estimate: a.Estimate, Check: a.Card != nil && a.Card.Check != "", Exit: exitClass(a.Exit)}
+	if a.Card != nil {
+		rec.Stage = a.Card.Stage
+	}
 	repo := a.Dir
 	if wt := a.Worktree; wt != nil {
 		rec.Branch = wt.Branch

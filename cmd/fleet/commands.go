@@ -89,6 +89,14 @@ var usage = `usage:
                                             the overview TUI starts it when a slot frees
   fleet spawn --fake [--driver acp] <name> [dir]
                                             shorthand for profile "fake"
+  fleet run [--admiral NAME] <plan.toml>    start a plan: [task.<name>] sections with profile, dir, prompt,
+                                            check, after = [...] and review = { profile = "...", max_rounds = 2 };
+                                            fleet starts each task when its dependencies are done (reported
+                                            done, check passed), within max_working; a review runs a reviewer
+                                            of another tool family on the writer's branch and sends findings
+                                            back, up to max_rounds, then blocks the task. State is kept in
+                                            ~/.fleet/plans, so running it again resumes it (ADR-203)
+  fleet run --status [name]                 a plan's tasks and where each stands, or every plan's
   fleet adopt [--name N] [--dir D] [--force] [--driver tmux|acp] [profile] <id | words...>
                                             resume an existing session (started outside fleet) as an agent;
                                             by ID, unique ID prefix (8+ chars) or words from fleet sessions;
@@ -114,7 +122,7 @@ var usage = `usage:
                                             how often fleet's own policy acted on agents (stop blocks,
                                             wakes, refused sends, done-checks, hook/screen disagreements),
                                             counted from events.jsonl; --json: an object of counts
-  fleet stats --runs [--since D] [--by profile|model|effort|version|repo|week|playbook|agents_md|route] [--json]
+  fleet stats --runs [--since D] [--by profile|model|effort|version|repo|week|playbook|agents_md|route|stage] [--json]
                                             score closed runs from runs.jsonl: done rate with a 95%
                                             interval, done-check passes, rework, time to done, spend per
                                             done, compactions and interventions per run (ADR-170)
@@ -424,6 +432,7 @@ var statelessCmds = map[string]func(args []string) error{
 // fleetCmds run on an open fleet, keyed by commandName.
 var fleetCmds = map[string]func(f *fleet.Fleet, args []string) error{
 	"spawn":     cmdSpawn,
+	"run":       cmdRun,
 	"recall":    cmdRecall,
 	"day":       cmdDay,
 	"adopt":     cmdAdopt,

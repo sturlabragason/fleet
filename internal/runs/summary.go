@@ -26,6 +26,7 @@ var Keys = map[string]func(Record) string{
 	"playbook":  func(r Record) string { return cfg(r).Playbook },
 	"agents_md": func(r Record) string { return cfg(r).AgentsMD },
 	"route":     func(r Record) string { return cfg(r).Route },
+	"stage":     func(r Record) string { return r.Stage },
 }
 
 func cfg(r Record) board.RunConfig {

@@ -139,6 +139,7 @@ Each tool's description says when to use it. ✱ = ask the user one line first, 
 
 - One owner per area. Agents whose work overlaps must be able to message each other: if `fleet_access` says they can't, ask the user before putting them in one team or granting the pair (teams can be different clients). Name one coordinator in their prompts. Merge order comes from branch state (`fleet touching`), not from the coordinator's reply; a coordinator breaks ties only.
 - Each send to an agent idle over 5 minutes rewrites its whole prompt cache: put everything you have for it in one `fleet_send`, and let `fleet_wait` run at its default (270 s), under that cache.
+- Work with dependencies or a cross-vendor review: `fleet_spawn` with `plan` (TOML, ADR-203) starts each task when the ones it is `after` are done, reviews it on another vendor if asked, and wakes you only when a task blocks; `fleet_status plan=NAME` shows where it stands.
 - Small batches: one reviewable change per agent; finish and merge before spawning more (`max_working` queues the rest). Assign one ADR number per agent in the spawn prompt before the batch starts; otherwise they collide.
 - Keep a RAID log with `fleet_note`, one line each, starting `risk:`, `assumption:`, `issue:` or `decision:`. Record them from reports as they come.
 - Reports carry `blocked`, `decisions:` and `risks:`: tell the user those first. Scope creep an agent flags goes to the user, or becomes a new task; don't widen the running one.
