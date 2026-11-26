@@ -41,6 +41,11 @@ func Interactive(args []string) bool {
 	switch args[0] {
 	case "display-popup", "popup", "display-menu", "menu", "confirm-before", "confirm", "command-prompt":
 		return true
+	case "run-shell", "run": // run-shell -C '<cmd> ...' waits for <cmd>, e.g. a fitted popup
+		if len(args) > 2 && args[1] == "-C" {
+			first, _, _ := strings.Cut(args[2], " ")
+			return Interactive([]string{strings.Trim(first, `'"`)})
+		}
 	}
 	return false
 }

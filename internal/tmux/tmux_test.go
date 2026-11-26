@@ -258,3 +258,24 @@ func TestNoServer(t *testing.T) {
 		}
 	}
 }
+
+// TestInteractive: a command that waits on the user gets no timeout, also
+// when run-shell -C wraps it (a popup fitted to the client).
+func TestInteractive(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want bool
+	}{
+		{[]string{"display-popup", "-E", "x"}, true},
+		{[]string{"run-shell", "-C", "'display-popup' '-E' 'x'"}, true},
+		{[]string{"run-shell", "-C", "display-menu -T x"}, true},
+		{[]string{"run-shell", "-C", "'send-keys' 'x'"}, false},
+		{[]string{"run-shell", "echo display-popup"}, false},
+		{[]string{"list-panes"}, false},
+		{nil, false},
+	} {
+		if got := Interactive(tc.args); got != tc.want {
+			t.Errorf("Interactive(%q) = %v, want %v", tc.args, got, tc.want)
+		}
+	}
+}
