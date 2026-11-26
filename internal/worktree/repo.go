@@ -22,6 +22,9 @@ const DefaultMergeCheck = "make build && go vet ./..." // tests run in CI (ADR-1
 // RepoConfig is one repo's merge and ADR conventions.
 type RepoConfig struct {
 	MergeCheck string
+	// DoneCheck is the done-check a spawn in this repo gets when it names
+	// none (ADR-202): done_check, else an explicit merge_check, else "".
+	DoneCheck string
 	// AppendOnly maps each file every parallel agent appends to (a conflict
 	// there is mechanical: keep both sides) to whether the replayed commit's
 	// lines go above the base's (newest-first) or below (oldest-first).
@@ -77,6 +80,10 @@ func (c *RepoConfig) parse(text string) error {
 	}
 	if s := conf.Str(d[""], "merge_check"); s != "" {
 		c.MergeCheck = s
+		c.DoneCheck = s
+	}
+	if s := conf.Str(d[""], "done_check"); s != "" {
+		c.DoneCheck = s
 	}
 	if s := conf.Str(d["adr"], "file"); s != "" {
 		c.ADRFile = s

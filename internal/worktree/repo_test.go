@@ -16,7 +16,7 @@ func TestRepoConfig(t *testing.T) {
 		{name: "no file falls back", check: func(t *testing.T, c RepoConfig) {
 			t.Helper()
 			d := DefaultRepoConfig()
-			if c.Found || c.MergeCheck != DefaultMergeCheck || c.ADRFile != "DESIGN.md" ||
+			if c.Found || c.MergeCheck != DefaultMergeCheck || c.DoneCheck != "" || c.ADRFile != "DESIGN.md" ||
 				len(c.AppendOnly) != 2 || !c.AppendOnly["CHANGELOG.md"] || c.ADREntry.String() != d.ADREntry.String() {
 				t.Fatalf("defaults: %+v", c)
 			}
@@ -45,7 +45,19 @@ entry = '(?m)^## (\d+)\.'
 		}},
 		{name: "partial keeps defaults", toml: "merge_check = \"go test ./...\"\n", check: func(t *testing.T, c RepoConfig) {
 			t.Helper()
-			if c.MergeCheck != "go test ./..." || c.ADRFile != "DESIGN.md" || len(c.AppendOnly) != 2 {
+			if c.MergeCheck != "go test ./..." || c.DoneCheck != "go test ./..." || c.ADRFile != "DESIGN.md" || len(c.AppendOnly) != 2 {
+				t.Fatalf("config: %+v", c)
+			}
+		}},
+		{name: "done_check wins over merge_check", toml: "merge_check = \"make ci\"\ndone_check = \"make build\"\n", check: func(t *testing.T, c RepoConfig) {
+			t.Helper()
+			if c.MergeCheck != "make ci" || c.DoneCheck != "make build" {
+				t.Fatalf("config: %+v", c)
+			}
+		}},
+		{name: "no check keys no done check", toml: "[adr]\nfile = \"A.md\"\n", check: func(t *testing.T, c RepoConfig) {
+			t.Helper()
+			if c.DoneCheck != "" || c.MergeCheck != DefaultMergeCheck {
 				t.Fatalf("config: %+v", c)
 			}
 		}},

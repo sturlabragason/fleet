@@ -30,7 +30,7 @@ var squadToolDefs = []tool{
 		"name": str("short unique agent name"), "profile": str("tool profile, see fleet_squad_profiles; default [defaults] profile in config.toml, else claude-copilot"), "dir": str("working directory (absolute)"), "prompt": str("optional first prompt"),
 		"worktree":   map[string]any{"type": "boolean", "description": "give the agent its own git worktree (default: the user's config, normally true)"},
 		"goal":       str("task card: the goal in one line"),
-		"check":      str("task card: done-check shell command, run in the agent's dir when it reports done"),
+		"check":      str("task card: done-check shell command, run in the agent's dir when it reports done (default: done_check, else merge_check, in the repo's .fleet/repo.toml; \"none\" for no check)"),
 		"check_exit": map[string]any{"type": "integer", "description": "exit code the done-check must return to pass (default 0)"},
 		"result":     str("task card: result file the agent must write, relative to its dir (default result.md)"),
 		"may":        mayProp,

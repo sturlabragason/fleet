@@ -42,7 +42,8 @@ type Row struct {
 	Done          int     `json:"done"`
 	DoneLo        float64 `json:"done_lo"` // 95% Wilson interval of the done rate
 	DoneHi        float64 `json:"done_hi"`
-	Checked       int     `json:"checked"` // runs whose done-check ran
+	Reported      int     `json:"reported"` // runs that reported done at least once
+	Checked       int     `json:"checked"`  // runs whose done-check ran
 	Passed        int     `json:"passed"`
 	Rework        int     `json:"rework"`         // more than one done, or a done sent back
 	MedianMinutes float64 `json:"median_minutes"` // start to first done, done runs only
@@ -89,6 +90,9 @@ func summarize(k string, g []Record) Row {
 			if !r.FirstDone.IsZero() {
 				mins = append(mins, r.FirstDone.Sub(r.Created).Minutes())
 			}
+		}
+		if r.Reports["done"] > 0 {
+			row.Reported++
 		}
 		if r.CheckResult != "" {
 			row.Checked++
@@ -138,7 +142,8 @@ func median(xs []float64) float64 {
 	return (xs[m-1] + xs[m]) / 2
 }
 
-// Write prints rows as a table. Spend per done run is AIC where the tools
+// Write prints rows as a table. VERIFIED is the share of runs that reported
+// done whose done-check ran (ADR-202); CHECK is passed/run. Spend per done run is AIC where the tools
 // report credits, else tokens; the two units are never added.
 func Write(w io.Writer, rows []Row) error {
 	if len(rows) == 0 {
@@ -146,17 +151,26 @@ func Write(w io.Writer, rows []Row) error {
 		return err
 	}
 	tw := tabwriter.NewWriter(w, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(tw, "GROUP\tRUNS\tDONE\t95%\tCHECK\tREWORK\tTO DONE\tSPEND/DONE\tCOMPACT/RUN\tINTERV/RUN\t")
+	fmt.Fprintln(tw, "GROUP\tRUNS\tDONE\t95%\tVERIFIED\tCHECK\tREWORK\tTO DONE\tSPEND/DONE\tCOMPACT/RUN\tINTERV/RUN\t")
 	for _, r := range rows {
 		few := ""
 		if r.Few {
 			few = "few"
 		}
-		fmt.Fprintf(tw, "%s\t%d\t%s\t%.0f-%.0f%%\t%s\t%d\t%s\t%s\t%.2f\t%.2f\t%s\n",
-			r.Key, r.Runs, pct(r.Done, r.Runs), 100*r.DoneLo, 100*r.DoneHi, frac(r.Passed, r.Checked),
+		fmt.Fprintf(tw, "%s\t%d\t%s\t%.0f-%.0f%%\t%s\t%s\t%d\t%s\t%s\t%.2f\t%.2f\t%s\n",
+			r.Key, r.Runs, pct(r.Done, r.Runs), 100*r.DoneLo, 100*r.DoneHi, verified(r), frac(r.Passed, r.Checked),
 			r.Rework, mins(r.MedianMinutes), perDone(r), per(r.Compactions, r.Runs), per(r.Interventions, r.Runs), few)
 	}
 	return tw.Flush()
+}
+
+// verified is the share of runs that reported done whose check ran; "-"
+// when none reported done.
+func verified(r Row) string {
+	if r.Reported == 0 {
+		return "-"
+	}
+	return pct(r.Checked, max(r.Reported, r.Checked))
 }
 
 func pct(k, n int) string { return fmt.Sprintf("%.0f%%", 100*float64(k)/float64(max(n, 1))) }

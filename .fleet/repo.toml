@@ -3,6 +3,10 @@
 # Run on the rebased branch and again on main after the merge.
 merge_check = "make build && go vet ./..."
 
+# The done-check a spawn here gets when it names none (ADR-202); fleet runs
+# it when the agent reports done.
+done_check = "make build && go vet ./..."
+
 # Files every parallel agent appends to: a conflict there keeps both sides.
 [[append_only]]
 path = "CHANGELOG.md"

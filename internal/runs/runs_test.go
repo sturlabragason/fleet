@@ -44,11 +44,14 @@ func TestSummarize(t *testing.T) {
 		t.Fatalf("rows %+v", rows)
 	}
 	x := rows[0]
-	want := Row{Key: "x", Runs: 4, Done: 3, Checked: 1, Passed: 0, Rework: 1, MedianMinutes: 20,
+	want := Row{Key: "x", Runs: 4, Done: 3, Reported: 3, Checked: 1, Passed: 0, Rework: 1, MedianMinutes: 20,
 		AIC: 300, Compactions: 3, Interventions: 2, Few: true}
 	x.DoneLo, x.DoneHi = 0, 0
 	if x != want {
 		t.Fatalf("got %+v\nwant %+v", x, want)
+	}
+	if v := verified(x); v != "33%" {
+		t.Fatalf("verified = %q, want 33%%", v)
 	}
 	lo, hi := wilson(3, 4)
 	if lo < 0.29 || lo > 0.31 || hi < 0.95 || hi > 0.96 {

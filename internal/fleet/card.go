@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
+	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/sysx"
+	"github.com/sturlabragason/fleet/internal/worktree"
 )
 
 // Task cards (DESIGN §18 #5/#6, ADR-43). A spawn may attach a goal, a
@@ -79,6 +81,44 @@ func NormalizeCard(c *board.Card) *board.Card {
 	if n.Result == "" {
 		n.Result = DefaultResult
 	}
+	return &n
+}
+
+// NoCheck as a spawn's check opts out of the repo's default done-check
+// (ADR-202): the card then has no check, as before ADR-202.
+const NoCheck = "none"
+
+// RepoCheck gives a card the done-check of the repo holding dir when it names
+// none (ADR-202): done_check in .fleet/repo.toml, else its merge_check. An
+// explicit check wins, NoCheck clears the check, and a dir outside git or a
+// repo without either key leaves the card as it is. A spawn without a card
+// gets one holding only the check, so every spawn in such a repo is judged by
+// fleet, not by its own word. It returns a copy and never changes c.
+func RepoCheck(c *board.Card, dir string) *board.Card {
+	if c != nil && c.Check == NoCheck {
+		n := *c
+		n.Check = ""
+		if n.Result == DefaultResult {
+			n.Result = "" // NormalizeCard puts it back unless the card is now empty
+		}
+		return NormalizeCard(&n)
+	}
+	if c != nil && c.Check != "" {
+		return c
+	}
+	rc, err := worktree.LoadRepoConfig(dir)
+	if err != nil { // most often a dir outside git: no repo, no default
+		logx.For("fleet").Debug("no repo done-check", "dir", dir, "err", err)
+		return c
+	}
+	if rc.DoneCheck == "" || rc.DoneCheck == NoCheck {
+		return c
+	}
+	n := board.Card{Result: DefaultResult}
+	if c != nil {
+		n = *c
+	}
+	n.Check = rc.DoneCheck
 	return &n
 }
 

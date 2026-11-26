@@ -386,9 +386,10 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	if ex.Worktree == nil && card != nil && slices.Contains(card.May, ReviewOnly) {
 		return nil, fmt.Errorf("%s is review-only and needs its own git worktree in %s", name, dir)
 	}
-	// Only now is it known whether the agent shares its dir, which decides
-	// its default result file.
-	card = ResultFor(card, name, ex.Worktree != nil)
+	// The dir is final: the repo there may give the card its done-check
+	// (ADR-202). Only now is it known whether the agent shares its dir,
+	// which decides its default result file.
+	card = ResultFor(RepoCheck(card, dir), name, ex.Worktree != nil)
 	ex.Card = card
 	// The board records the level actually used, so wake can give the
 	// resumed process the same context args (ADR-60).

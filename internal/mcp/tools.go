@@ -82,7 +82,7 @@ var baseToolDefs = []tool{
 		"name": str("short unique agent name"), "route": str("a request route from the brief (fleet_route): fills every argument you leave out and wraps prompt in the route's template"), "profile": str("tool profile, see fleet_profiles; default [defaults] profile in config.toml, else claude-copilot"), "dir": str("working directory (absolute); required unless the route has one"), "prompt": str("optional first prompt"),
 		"worktree":    map[string]any{"type": "boolean", "description": "give the agent its own git worktree (default: the user's config, normally true)"},
 		"goal":        str("task card: the goal in one line (shown on the tile and in fleet_info)"),
-		"check":       str("task card: done-check shell command, run in the agent's dir when it reports done, keep it cheap: a build plus vet, e.g. \"go build ./... && go vet ./internal/x/...\", or a check that CI passed on the branch head (tests run in CI, ADR-69, ADR-149)"),
+		"check":       str("task card: done-check shell command, run in the agent's dir when it reports done, keep it cheap: a build plus vet, e.g. \"go build ./... && go vet ./internal/x/...\", or a check that CI passed on the branch head (tests run in CI, ADR-69, ADR-149) (default: done_check, else merge_check, in the repo's .fleet/repo.toml; \"none\" for no check)"),
 		"check_exit":  map[string]any{"type": "integer", "description": "exit code the done-check must return to pass (default 0)"},
 		"result":      str("task card: result file the agent must write, relative to its dir (default result.md)"),
 		"may":         mayProp,

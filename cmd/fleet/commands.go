@@ -586,7 +586,7 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 	wt := fs.Bool("worktree", false, "give the agent its own git worktree, whatever config.toml says")
 	noWT := fs.Bool("no-worktree", false, "spawn straight into dir, with no worktree of its own")
 	goal := fs.String("goal", "", "task card: the goal in one line")
-	check := fs.String("check", "", "task card: done-check command, run in the agent's dir when it reports done")
+	check := fs.String("check", "", "task card: done-check command, run in the agent's dir when it reports done (default: done_check, else merge_check, in the repo's .fleet/repo.toml; \"none\" for no check)")
 	checkExit := fs.Int("check-exit", 0, "task card: exit code the done-check must return")
 	result := fs.String("result", "", "task card: result file the agent writes, relative to its dir (default "+fleet.DefaultResult+", or result-<name>.md without a worktree of its own; result.md given explicitly is renamed the same way)")
 	leader := fs.Bool("leader", false, "make it a leader: it may spawn a squad of its own and its agents report to it")
