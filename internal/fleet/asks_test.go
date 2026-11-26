@@ -70,16 +70,31 @@ func TestAnswerFromReport(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(d, "ask.json"), rec, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	f.answerFromReport("someone-else", "done", "not an answer")
-	f.answerFromReport("ask-floor-a-aaaaaa", "progress", "reading")
-	f.answerFromReport("ask-floor-a-aaaaaa", "done", "because.\n")
-	f.answerFromReport("ask-floor-a-aaaaaa", "done", "twice")
+	for _, r := range [][2]string{{"someone-else", "done"}, {"ask-floor-a-aaaaaa", "progress"}, {"ask-floor-a-aaaaaa", "done"}, {"ask-floor-a-aaaaaa", "done"}} {
+		if err := f.answerFromReport(t.Context(), r[0], r[1], "because.\n"); err != nil {
+			t.Fatalf("%v: %v", r, err)
+		}
+	}
 	b, _ := os.ReadFile(filepath.Join(dir, "replies"))
 	if got := strings.TrimSpace(string(b)); got != "floor-a aaaaaaaaaaaa because." {
 		t.Errorf("replies = %q", got)
 	}
 	if _, err := os.Stat(d); !os.IsNotExist(err) {
 		t.Errorf("ask files left: %v", err)
+	}
+	// A failed post fails the report and keeps the record for the next one.
+	if err := os.MkdirAll(d, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(d, "ask.json"), rec, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FLEET_ARTIFACT", filepath.Join(dir, "missing"))
+	if err := f.answerFromReport(t.Context(), "ask-floor-a-aaaaaa", "done", "x"); err == nil {
+		t.Error("failed post: no error")
+	}
+	if _, err := os.Stat(filepath.Join(d, "ask.json")); err != nil {
+		t.Errorf("record not restored: %v", err)
 	}
 }
 

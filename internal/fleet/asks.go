@@ -129,47 +129,44 @@ func (f *Fleet) dropAsk(name string) {
 
 // answerFromReport posts an ask agent's done, blocked or question report
 // as the answer on its page, once: the record is gone after the first.
-// Not an ask agent, or a progress report: nothing.
-func (f *Fleet) answerFromReport(me, state, summary string) {
+// It posts before Report goes on, so auto-close can't kill the agent
+// mid-post; a failed post restores the record and fails the report, which
+// keeps the agent open to report again. Not an ask agent, or a progress
+// report: nothing.
+func (f *Fleet) answerFromReport(ctx context.Context, me, state, summary string) error {
 	if state == "progress" {
-		return
+		return nil
 	}
 	rec := filepath.Join(askFiles(f.Home, me), "ask.json")
 	b, err := os.ReadFile(rec)
 	if err != nil {
-		return
+		return nil // no record: not an ask agent, or already answered
 	}
 	var a pages.Ask
 	if err := json.Unmarshal(b, &a); err != nil {
 		logx.For("asks").Error("ask record unreadable", "agent", me, "err", err)
 		f.dropAsk(me)
-		return
+		return nil // a broken record can't be answered; the report goes on
 	}
 	if err := os.Remove(rec); err != nil {
-		return // another report of this agent is posting it
+		return nil // another report of this agent is posting it
 	}
 	text := strings.TrimSpace(summary)
 	if state != "done" {
 		text = state + ": " + text
 	}
-	post := func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
-		if err := pages.ReplyAsk(ctx, a.Page, a.ID, text); err != nil {
-			logx.For("asks").Error("Ask answer not posted", "agent", me, "page", a.Page, "id", a.ID, "err", err)
-			if werr := os.WriteFile(rec, b, 0o600); werr != nil { // a later report tries again
-				logx.For("asks").Warn("ask record not restored", "agent", me, "err", werr)
-			}
-			return
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	if err := pages.ReplyAsk(ctx, a.Page, a.ID, text); err != nil {
+		logx.For("asks").Error("Ask answer not posted", "agent", me, "page", a.Page, "id", a.ID, "err", err)
+		if werr := os.WriteFile(rec, b, 0o600); werr != nil {
+			logx.For("asks").Warn("ask record not restored", "agent", me, "err", werr)
 		}
-		f.dropAsk(me)
-		logx.For("asks").Info("Ask answered", "agent", me, "page", a.Page, "id", a.ID)
+		return fmt.Errorf("post the answer on %s (report again): %w", a.Page, err)
 	}
-	if f.Go != nil {
-		f.Go(post)
-		return
-	}
-	post()
+	f.dropAsk(me)
+	logx.For("asks").Info("Ask answered", "agent", me, "page", a.Page, "id", a.ID)
+	return nil
 }
 
 // askDir is the first dir of ctx in [integrations.task.contexts], else

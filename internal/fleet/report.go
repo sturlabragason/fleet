@@ -1,6 +1,7 @@
 package fleet
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -42,7 +43,9 @@ func (f *Fleet) Report(me, state, summary string) (note string, err error) {
 	if err := f.onBoard(me); err != nil {
 		return "", err
 	}
-	f.answerFromReport(me, state, summary) // an Ask box agent's answer (ADR-209)
+	if err := f.answerFromReport(context.Background(), me, state, summary); err != nil { // an Ask box agent's answer (ADR-209)
+		return "", err
+	}
 	reply := ""
 	var left []todo.Item
 	if state == "done" {
