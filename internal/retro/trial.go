@@ -69,10 +69,12 @@ func Start(home, source, layer string, share int, now time.Time) (Trial, error) 
 	if share < 1 || share > 99 {
 		return Trial{}, fmt.Errorf("share %d: want 1-99 percent", share)
 	}
-	id := runs.Hash([]byte(layer))
-	if id == "" {
+	if runs.Hash([]byte(layer)) == "" {
 		return Trial{}, fmt.Errorf("patch %s is empty", source)
 	}
+	// The start time is in the ID, so a restart of the same patch is a new
+	// trial: its split and its runs don't mix with the last one's.
+	id := runs.Hash([]byte(layer + "\n" + now.UTC().Format(time.RFC3339Nano)))
 	running, ok, err := Load(home)
 	if err != nil {
 		return Trial{}, err
@@ -147,13 +149,34 @@ func Promote(home string, t Trial, v Verdict) error {
 	if o := strings.TrimSpace(string(old)); o != "" && strings.TrimSpace(first) != playbook.ReplaceMarker {
 		next = o + "\n\n" + next
 	}
-	if len(old) > 0 {
-		if err := os.WriteFile(user+".bak", old, 0o600); err != nil {
-			return fmt.Errorf("back up user layer: %w", err)
-		}
+	if target, err := filepath.EvalSymlinks(user); err == nil {
+		user = target
 	}
-	if err := os.WriteFile(user, []byte(next+"\n"), 0o600); err != nil {
+	if err := backUp(user+".bak", old); err != nil {
+		return err
+	}
+	// Spawns read the user layer without a lock, so it is replaced whole.
+	tmp := user + ".tmp"
+	if err := os.WriteFile(tmp, []byte(next+"\n"), 0o600); err != nil {
+		return fmt.Errorf("write user layer: %w", err)
+	}
+	if err := os.Rename(tmp, user); err != nil {
 		return fmt.Errorf("write user layer: %w", err)
 	}
 	return Stop(home)
+}
+
+// backUp keeps the old user layer as bak, or removes an older bak when
+// there was none, so the bak is always what promote replaced.
+func backUp(bak string, old []byte) error {
+	if len(old) == 0 {
+		if err := os.Remove(bak); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("remove stale backup: %w", err)
+		}
+		return nil
+	}
+	if err := os.WriteFile(bak, old, 0o600); err != nil {
+		return fmt.Errorf("back up user layer: %w", err)
+	}
+	return nil
 }

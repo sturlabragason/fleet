@@ -156,6 +156,18 @@ func ResolveTrial(l Level, home, dir, trial string) (text string, sources []stri
 	return text, sources
 }
 
+// RepoReplaces is whether dir's repo layer starts with the replace marker,
+// which drops every layer before it, a trial's variant included.
+func RepoReplaces(dir string) bool {
+	p := repoFile(dir)
+	if p == "" {
+		return false
+	}
+	layer, ok := read(p)
+	first, _, _ := strings.Cut(layer, "\n")
+	return ok && strings.TrimSpace(first) == ReplaceMarker
+}
+
 // apply layers one file's text onto the playbook so far.
 func apply(text, layer string) string {
 	first, rest, _ := strings.Cut(layer, "\n")

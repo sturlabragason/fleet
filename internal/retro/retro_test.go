@@ -38,6 +38,10 @@ func TestTrialLifecycle(t *testing.T) {
 	if err := Stop(home); err == nil {
 		t.Fatal("Stop with no trial: want error")
 	}
+	again, err := Start(home, "p.md", "- new rule", 50, time.Now().Add(time.Second))
+	if err != nil || again.ID == tr.ID {
+		t.Fatalf("restart of the same patch: id %q (was %q), %v", again.ID, tr.ID, err)
+	}
 	for _, tc := range []struct {
 		share int
 		layer string
@@ -129,6 +133,9 @@ func TestPromote(t *testing.T) {
 				if err := os.WriteFile(user, []byte(tc.old), 0o600); err != nil {
 					t.Fatal(err)
 				}
+			}
+			if err := os.WriteFile(user+".bak", []byte("- stale"), 0o600); err != nil {
+				t.Fatal(err)
 			}
 			tr, err := Start(home, "p.md", tc.layer, 50, time.Now())
 			if err != nil {

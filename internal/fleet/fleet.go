@@ -436,7 +436,7 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	}
 	switch {
 	case pr.Playbook && prompt != "":
-		trial, arm = f.trialArm(name)
+		trial, arm = f.trialArm(name, dir)
 		text, src := playbook.ResolveTrial(lvl, f.Home, dir, trial)
 		if tl := ToolLayers(p, f.Profiles); tl != "" {
 			text = strings.TrimRight(text, "\n") + "\n\n" + tl

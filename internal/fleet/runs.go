@@ -51,11 +51,16 @@ func (f *Fleet) fingerprint(lvl playbook.Level, dir, pbText string, sources []st
 
 // trialArm is the running playbook trial's variant layer for agent name
 // ("" in the control arm) and the arm to record (ADR-204). A broken trial
-// file is logged and the spawn runs without a trial.
-func (f *Fleet) trialArm(name string) (layer, arm string) {
+// file is logged and the spawn runs without a trial. So does a spawn in a
+// repo whose layer replaces the playbook: neither arm's text reaches it, and
+// a recorded arm would count it as evidence.
+func (f *Fleet) trialArm(name, dir string) (layer, arm string) {
 	layer, arm, err := retro.Assign(f.Home, name)
 	if err != nil {
 		logx.For("fleet").Warn("playbook trial skipped", "agent", name, "err", err)
+		return "", ""
+	}
+	if arm != "" && playbook.RepoReplaces(dir) {
 		return "", ""
 	}
 	return layer, arm

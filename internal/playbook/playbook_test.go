@@ -99,6 +99,9 @@ func TestResolveRepoReplace(t *testing.T) {
 	if text != "ONLY THIS" {
 		t.Fatalf("replace: %q", text)
 	}
+	if !RepoReplaces(repo) || RepoReplaces(home) {
+		t.Fatalf("RepoReplaces: repo %v, home %v", RepoReplaces(repo), RepoReplaces(home))
+	}
 }
 
 func TestResolveRepoOptOut(t *testing.T) {
