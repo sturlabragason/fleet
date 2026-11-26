@@ -101,7 +101,7 @@ patterns = "fake"
 		}
 		waitFor(t, f, name, "argv=--model big-opus started")
 	}
-	if got := f.SpawnLabel(f.Store.Load().Agents["m0"]); got != "mdl, model big-opus" {
+	if got := f.SpawnLabel(f.Store.Load().Agents["m0"]); got != "mdl, model big-opus; estimate p50 1.0 min, p90 2.0 min (pinned table, too few past runs)" {
 		t.Errorf("label %q", got)
 	}
 	setState(t, f, "m0", "idle", time.Now())

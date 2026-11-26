@@ -42,10 +42,15 @@ func (f *Fleet) AgentModel(a *board.Agent) string {
 }
 
 // SpawnLabel is "<profile>, model <model>", or "<profile>, tool default
-// model" when nothing sets one.
+// model" when nothing sets one, then the agent's estimate when it has one
+// (ADR-208).
 func (f *Fleet) SpawnLabel(a *board.Agent) string {
+	l := a.Profile + ", tool default model"
 	if m := f.AgentModel(a); m != "" {
-		return a.Profile + ", model " + m
+		l = a.Profile + ", model " + m
 	}
-	return a.Profile + ", tool default model"
+	if a.Estimate != nil {
+		l += "; " + a.Estimate.String()
+	}
+	return l
 }

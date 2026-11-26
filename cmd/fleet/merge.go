@@ -10,8 +10,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/sturlabragason/fleet/internal/adr"
+	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/companion"
 	"github.com/sturlabragason/fleet/internal/graph"
 	"github.com/sturlabragason/fleet/internal/logx"
@@ -95,8 +97,17 @@ func cmdMerge(args []string) error {
 	}
 	fmt.Printf("merged %s into %s in %s\n", p.Branch, p.Base, p.BaseDir)
 	fmt.Println("worktree and branch left in place; nothing pushed")
+	recordMerge(p.Branch)
 	rebuildGraph(p.BaseDir)
 	return nil
+}
+
+// recordMerge writes the merge event the run ledger times the merge phase
+// from (ADR-208), for an agent's fleet/<name> branch.
+func recordMerge(branch string) {
+	if name, ok := strings.CutPrefix(branch, "fleet/"); ok {
+		board.NewStore(logx.Home()).AppendEvent(board.Event{Time: time.Now(), Agent: name, Kind: board.KindMerge})
+	}
 }
 
 // graphSteps are the dry run's code-graph lines (ADR-165): the other

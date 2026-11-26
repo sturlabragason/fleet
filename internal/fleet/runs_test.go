@@ -56,10 +56,12 @@ func TestTallyEvents(t *testing.T) {
 		{Time: at(36), Agent: "a", Kind: board.KindStuckWake},
 		{Time: at(40), Agent: "a", From: "waiting", To: "working"},
 		{Time: at(41), Agent: "a", Kind: board.KindDoneCheck, Detail: "pass"},
+		{Time: at(42), Agent: "a", Kind: board.KindMerge},
+		{Time: at(43), Agent: "a", Kind: board.KindMerge}, // a second merge keeps the first time
 	}
 	rec := runs.Record{Name: "a"}
 	tallyEvents(&rec, evs, at(100))
-	want := runs.Record{Name: "a", CheckResult: "pass", DoneBounces: 1,
+	want := runs.Record{Name: "a", CheckResult: "pass", DoneBounces: 1, Merged: at(42),
 		TimeS:         map[string]int{"working": 90, "waiting": 10},
 		Sends:         map[string]int{"steered": 1, "user_pane": 1, "takeover": 1},
 		DoneRefusals:  map[string]int{"unmerged": 1},
@@ -75,5 +77,21 @@ func TestTallyEventsEscalationIsNoBounce(t *testing.T) {
 	tallyEvents(&rec, []board.Event{{Agent: "a", Kind: board.KindDoneRefused, Detail: "no_merge_perm"}}, time.Now())
 	if rec.DoneBounces != 0 || rec.DoneRefusals["no_merge_perm"] != 1 {
 		t.Fatalf("record %+v", rec)
+	}
+}
+
+func TestOldestOwn(t *testing.T) {
+	tests := []struct{ name, log, want string }{
+		{"never rebased: every commit", "2026-11-26T10:05:00Z\t\n2026-11-26T10:02:00Z\t\n", "2026-11-26T10:02:00Z"},
+		{"rebased: only its own", "2026-11-26T10:09:00Z\ta\n2026-11-26T09:00:00Z\tb\n2026-11-26T10:07:00Z\ta\n", "2026-11-26T10:07:00Z"},
+		{"nothing", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := oldestOwn(tt.log, "a")
+			if (tt.want == "" && !got.IsZero()) || (tt.want != "" && got.Format(time.RFC3339) != tt.want) {
+				t.Fatalf("got %v, want %q", got, tt.want)
+			}
+		})
 	}
 }

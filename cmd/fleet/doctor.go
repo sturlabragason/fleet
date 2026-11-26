@@ -143,6 +143,9 @@ func doctor(env doctorEnv) []doctorCheck {
 	if c, ok := checkThemes(env, prefs.ThemeDir()); ok {
 		cs = append(cs, c)
 	}
+	if c, ok := checkEstimates(env.home); ok {
+		cs = append(cs, c)
+	}
 	if c, ok := checkRules(env.home); ok {
 		cs = append(cs, c)
 	}

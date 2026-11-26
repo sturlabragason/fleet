@@ -120,6 +120,9 @@ type Agent struct {
 	// idle is a boundary inside one turn). It is what the user's agents are
 	// judged by, since what the user types sets no PromptAt (ADR-68).
 	TurnAt time.Time `json:"turn_at"`
+	// Estimate is the wall-clock forecast made at its start (ADR-208); the
+	// run ledger keeps it next to the actual.
+	Estimate *Estimate `json:"estimate,omitempty"`
 	// Driver is "acp" for an agent run under `fleet acp-host` (DESIGN §7d,
 	// ADR-74); "" is the tmux driver, which every agent had before it.
 	Driver string `json:"driver,omitempty"`

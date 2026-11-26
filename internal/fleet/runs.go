@@ -52,7 +52,7 @@ func (f *Fleet) fingerprint(lvl playbook.Level, dir, pbText string, sources []st
 func (f *Fleet) recordRun(a board.Agent, box string, now time.Time) {
 	rec := runs.Record{Name: a.Name, Profile: a.Profile, Model: a.Model, Effort: a.Effort, Driver: a.DriverName(),
 		FleetVersion: a.FleetVersion, Interactive: a.Interactive, Leader: a.Leader, Created: a.Created, Closed: now,
-		Config: a.Config, Check: a.Card != nil && a.Card.Check != "", Exit: exitClass(a.Exit)}
+		Config: a.Config, Estimate: a.Estimate, Check: a.Card != nil && a.Card.Check != "", Exit: exitClass(a.Exit)}
 	repo := a.Dir
 	if wt := a.Worktree; wt != nil {
 		rec.Branch = wt.Branch
@@ -61,6 +61,7 @@ func (f *Fleet) recordRun(a board.Agent, box string, now time.Time) {
 		}
 	}
 	rec.Repo = filepath.Base(repo)
+	rec.FirstCommit = firstCommit(a)
 	if ms, err := f.Mail().InboxFrom(box, a.Name, true, math.MaxInt32); err == nil {
 		rec.Reports, rec.Last, rec.FirstDone, rec.HasRetro = tallyReports(ms, a.Created)
 	}
@@ -77,6 +78,60 @@ func (f *Fleet) recordRun(a board.Agent, box string, now time.Time) {
 	if err := runs.Append(f.Home, rec); err != nil {
 		logx.For("fleet").Warn("run ledger", "agent", a.Name, "err", err)
 	}
+}
+
+// firstCommit is the author time of the agent's oldest commit past its
+// baseline in its worktree (ADR-208); zero without a worktree, a baseline
+// or a commit. Author time, because a rebase or squash keeps it.
+func firstCommit(a board.Agent) time.Time {
+	if a.Worktree == nil || a.Baseline == nil || a.Baseline.Head == "" {
+		return time.Time{}
+	}
+	out, err := gitOut(a.Worktree.Path, "log", "--format=%aI%x09%(trailers:key=Fleet-Agent,valueonly,separator=%x2C)", a.Baseline.Head+"..HEAD")
+	if err != nil {
+		return time.Time{} // the worktree is gone or the baseline unknown: no first commit to time
+	}
+	return oldestOwn(out, a.Name)
+}
+
+// oldestOwn is the oldest time in git log lines "<author time>\t<Fleet-Agent
+// trailers>". Once fleet merge has rebased the branch onto main, the range
+// past the baseline holds other agents' commits too; the rebase stamped
+// every commit with its agent, so only name's count then. A branch with no
+// commit stamped name was never rebased and all its commits are the agent's.
+func oldestOwn(log, name string) time.Time {
+	var all, own time.Time
+	for l := range strings.Lines(log) {
+		ts, who, _ := strings.Cut(strings.TrimRight(l, "\n"), "\t")
+		t, err := time.Parse(time.RFC3339, ts)
+		if err != nil {
+			continue
+		}
+		if all.IsZero() || t.Before(all) {
+			all = t
+		}
+		if who == name && (own.IsZero() || t.Before(own)) {
+			own = t
+		}
+	}
+	if !own.IsZero() {
+		return own
+	}
+	return all
+}
+
+// estimate forecasts a new agent at effort from the run ledger (ADR-208);
+// nil when there is nothing to go on. A ledger that does not read is logged
+// and estimated from what was read.
+func (f *Fleet) estimate(effort string) *board.Estimate {
+	past, err := runs.Read(f.Home, time.Time{})
+	if err != nil {
+		logx.For("fleet").Warn("estimate: run ledger", "err", err)
+	}
+	if e, ok := runs.Estimate(past, effort); ok {
+		return &e
+	}
+	return nil
 }
 
 // exitClass is how the run ended: clean (its process exited 0), crash (any
@@ -151,6 +206,10 @@ func tallyEvents(rec *runs.Record, evs []board.Event, closed time.Time) {
 			inc(&rec.Sends, e.Detail)
 		case board.KindTakeover:
 			inc(&rec.Sends, board.KindTakeover)
+		case board.KindMerge:
+			if rec.Merged.IsZero() {
+				rec.Merged = e.Time
+			}
 		case board.KindCrash: // the board's Exit says it already (exitClass)
 		default:
 			inc(&rec.Interventions, e.Kind)

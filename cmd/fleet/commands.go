@@ -118,6 +118,11 @@ var usage = `usage:
                                             score closed runs from runs.jsonl: done rate with a 95%
                                             interval, done-check passes, rework, time to done, spend per
                                             done, compactions and interventions per run (ADR-170)
+  fleet estimate [--effort light|standard|pro] [--backtest [--last N]] [--json]
+                                            wall-clock estimate (p10/p50/p90 minutes, spawn to first
+                                            done) from past runs at that effort level, with median
+                                            phases; --backtest scores it and the pinned table on the
+                                            latest runs (ADR-208)
   fleet send [--force] [--resume] [--now|--queue] <name> ["text"]
                                             refused while the user is typing in that pane (keys
                                             there in the last 30 s, unsubmitted text in its box);
@@ -402,6 +407,7 @@ var statelessCmds = map[string]func(args []string) error{
 	"design":    cmdDesign,
 	"page":      cmdPage,
 	"stats":     cmdStats,
+	"estimate":  cmdEstimate,
 	"merge":     cmdMerge,
 	"graph":     cmdGraph,
 	"acp-host":  cmdACPHost,

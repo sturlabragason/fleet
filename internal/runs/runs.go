@@ -43,6 +43,9 @@ type Record struct {
 	Created       time.Time        `json:"created"`
 	Closed        time.Time        `json:"closed"`
 	FirstDone     time.Time        `json:"first_done,omitzero"`
+	FirstCommit   time.Time        `json:"first_commit,omitzero"` // author time of its first commit past the baseline (ADR-208)
+	Merged        time.Time        `json:"merged,omitzero"`       // first fleet merge of its branch (ADR-208)
+	Estimate      *board.Estimate  `json:"estimate,omitempty"`    // what fleet forecast at spawn (ADR-208)
 	Config        *board.RunConfig `json:"config,omitempty"`
 	Check         bool             `json:"check,omitempty"`         // the card had a done-check
 	CheckResult   string           `json:"check_result,omitempty"`  // last verdict: pass or fail

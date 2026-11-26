@@ -400,6 +400,7 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	// resumed process the same context args (ADR-60).
 	lvl := effortLevel(effort, code)
 	ex.Effort = string(lvl)
+	ex.Estimate = f.estimate(ex.Effort)
 	// The board records the model so wake starts the same one (ADR-100).
 	p, m, err := f.withModel(profile, p, model)
 	if err != nil {
@@ -616,7 +617,7 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 		PaneID: pane, Status: string(status.Unknown), Created: now, StatusSince: now, LastChange: now,
 		Baseline: ex.Base, Worktree: ex.Worktree, NoWorktree: ex.NoWorktree, Card: ex.Card, Effort: ex.Effort, Model: ex.Model,
 		Leader: ex.Role.Leader, LeadBy: ex.Role.LeadBy, Interactive: ex.Role.Interactive, Driver: ex.Driver,
-		FleetVersion: Version, Config: ex.Config}
+		FleetVersion: Version, Config: ex.Config, Estimate: ex.Estimate}
 	if a.ACP() {
 		a.ACPServer, a.Where = p.ACPLabel(), p.Where()
 	}
@@ -667,6 +668,7 @@ type startExtra struct {
 	Driver     string // board.Agent.Driver
 	Resume     bool   // a resume: the name must still be free (ADR-95)
 	Config     *board.RunConfig
+	Estimate   *board.Estimate
 }
 
 // layerFamily is the tool family whose built-in layer p's agents get: p's

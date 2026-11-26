@@ -44,6 +44,7 @@ const (
 	KindDoneRefused = "done_refused" // uncommitted, unmerged, open_queue, no_merge_perm, max_bounces
 	KindDeliver     = "deliver"      // sent, steered, interrupted, queued, held, user_pane
 	KindTakeover    = "takeover"     // to_tmux, to_acp
+	KindMerge       = "merge"        // fleet merge landed the agent's branch on main (ADR-208)
 	KindCrash       = "crash"        // exit=<N>, sig=<N>, acp_exit
 )
 

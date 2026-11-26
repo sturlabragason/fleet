@@ -57,6 +57,9 @@ func mergeQueue(ctx context.Context, dir string, branches []string, check string
 	res, err := worktree.Queue(opts)
 	if res != nil {
 		printQueueResult(res)
+		for _, b := range res.Merged {
+			recordMerge(b)
+		}
 	}
 	if err != nil {
 		return fail(err)
