@@ -47,6 +47,26 @@ func tmuxCmdString(args []string) string {
 	return strings.Join(q, " ")
 }
 
+// fitPopup is a rounded display-popup sized w×h, each a tmux size or a
+// fitW/fitH clamp. tmux refuses a fixed -w/-h larger than the client
+// ("width too large"), so the clamps are formats that run-shell -C expands
+// against the client at key-press time.
+func fitPopup(w, h string, args ...string) []string {
+	popup := []string{"display-popup", "-E", "-b", "rounded", "-w", w, "-h", h}
+	for _, a := range args {
+		popup = append(popup, strings.ReplaceAll(a, "#", "##")) // literal through run-shell -C's expansion
+	}
+	return []string{"run-shell", "-C", tmuxCmdString(popup)}
+}
+
+// fitW and fitH are n cells, or the client's width or height when smaller.
+func fitW(n int) string { return fitDim(n, "width") }
+func fitH(n int) string { return fitDim(n, "height") }
+
+func fitDim(n int, dim string) string {
+	return fmt.Sprintf("#{?#{e|<:#{client_%s},%d},#{client_%s},%d}", dim, n, dim, n)
+}
+
 // changesStatusClick binds a left click on the status line: on the
 // "changes" range it opens the popup, anywhere else it does what tmux does.
 func changesStatusClick(exe string) []string {

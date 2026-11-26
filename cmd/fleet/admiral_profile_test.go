@@ -233,7 +233,7 @@ func TestPickModel(t *testing.T) {
 		t.Errorf("pickable %v", got)
 	}
 	a := pickPopupArgs(&fleet.Fleet{Exe: "/opt/my fleet", Profiles: ps})
-	if strings.Join(a[:9], " ") != "display-popup -E -b rounded -w 44 -h 6 -T" || a[len(a)-1] != "'/opt/my fleet' admiral profile --pick" {
+	if want := tmuxCmdString([]string{"display-popup", "-E", "-b", "rounded", "-w", fitW(44), "-h", fitH(6), "-T", " admiral profile ", "'/opt/my fleet' admiral profile --pick"}); a[2] != want {
 		t.Errorf("popup %q", a)
 	}
 	if got := swapShell("/opt/my fleet", "x'y"); got != `'/opt/my fleet' admiral profile 'x'\''y' >/dev/null 2>&1` {

@@ -277,7 +277,7 @@ func TestTmuxBindingsMatchRegistry(t *testing.T) {
 	if !strings.Contains(statusRight[3], "Alt-? all keys") || strings.Contains(statusRight[3], "M-") {
 		t.Errorf("status-right %q", statusRight[3])
 	}
-	if got := popup[len(popup)-1]; got != "'/opt/my fleet/fleet' keys --popup" {
+	if got := popup[len(popup)-1]; popup[3] != "run-shell" || !strings.HasSuffix(got, `"'/opt/my fleet/fleet' keys --popup"`) {
 		t.Errorf("popup command %q", got)
 	}
 }

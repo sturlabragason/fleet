@@ -29,8 +29,8 @@ func replyPopupArgsOf(f *fleet.Fleet, adm string) []string {
 	if adm != supervisor.Main {
 		flag = " --name " + tools.Quote(adm)
 	}
-	return []string{"display-popup", "-E", "-b", "rounded", "-w", "80%", "-h", fmt.Sprint(replyRows + 6), // border 2 + filter, blank, rows, blank, footer
-		"-T", " reply to which " + admiralLabel(adm) + " message? ", tools.Quote(f.Exe) + " admiral reply" + flag}
+	return fitPopup("80%", fitH(replyRows+6), // border 2 + filter, blank, rows, blank, footer
+		"-T", " reply to which "+admiralLabel(adm)+" message? ", tools.Quote(f.Exe)+" admiral reply"+flag)
 }
 
 type replyModel struct {

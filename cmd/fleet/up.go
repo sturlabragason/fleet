@@ -582,9 +582,8 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		{"bind-key", "-n", "M-R", wallCmdAct(f.Exe, "reset")},
 		{"bind-key", "-n", "M-P", wallCmdAct(f.Exe, "pick")},
 		{"bind-key", "-n", "M-r", wallCmdAct(f.Exe, "reply")},
-		{"bind-key", "-n", keys.HelpTmuxKey, "display-popup", "-E", "-b", "rounded",
-			"-w", strconv.Itoa(keys.PopupWidth()), "-h", strconv.Itoa(keys.PopupHeight() + logo.HeadRows),
-			"-T", " fleet keys · any key closes ", exe + " keys --popup"},
+		append([]string{"bind-key", "-n", keys.HelpTmuxKey}, fitPopup(fitW(keys.PopupWidth()), fitH(keys.PopupHeight()+logo.HeadRows),
+			"-T", " fleet keys · any key closes ", exe+" keys --popup")...),
 		append([]string{"bind-key", "-n", keys.ChangesTmuxKey}, changesPopupArgs(exe)...),
 		changesStatusClick(exe),
 	}

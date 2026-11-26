@@ -45,9 +45,8 @@ func pickPopupArgsOf(f *fleet.Fleet, adm string) []string {
 	if adm != supervisor.Main {
 		name, flag = " "+adm+" profile ", " --name "+tools.Quote(adm)
 	}
-	return []string{"display-popup", "-E", "-b", "rounded",
-		"-w", strconv.Itoa(pickWidth), "-h", strconv.Itoa(max(len(pickable(f.Profiles)), 1) + 4),
-		"-T", name, tools.Quote(f.Exe) + " admiral profile" + flag + " --pick"}
+	return fitPopup(fitW(pickWidth), fitH(max(len(pickable(f.Profiles)), 1)+4),
+		"-T", name, tools.Quote(f.Exe)+" admiral profile"+flag+" --pick")
 }
 
 // swapShell is the run-shell command the picker schedules.

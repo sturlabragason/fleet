@@ -3,9 +3,11 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
@@ -274,5 +276,48 @@ func TestStatusClickKeepsTmuxDefault(t *testing.T) {
 	// The popup command string parses: running it fails only for want of a client.
 	if _, err := c.Run("if-shell", "-F", "1", changesStatusClick("'/opt/my fleet/fleet'")[6]); err != nil && (strings.Contains(err.Error(), "syntax") || strings.Contains(err.Error(), "unknown")) {
 		t.Errorf("popup command string: %v", err)
+	}
+}
+
+// TestFitPopupClampsToClient: on a 60x20 client a popup asking for more
+// opens at the client size instead of failing with "width too large", a
+// smaller one keeps its size, and a # in the title stays literal.
+func TestFitPopupClampsToClient(t *testing.T) {
+	sock := fmt.Sprintf("fleet-test-%d", rand.Int63())
+	in := &tmux.Client{Socket: sock + "-in", Config: "/dev/null"}
+	out := &tmux.Client{Socket: sock + "-out", Config: "/dev/null"}
+	t.Cleanup(func() { out.KillServer(); in.KillServer() })
+	if _, err := in.Run("new-session", "-d", "-s", "s", "-x", "60", "-y", "20"); err != nil {
+		t.Fatal(err)
+	}
+	attach := "env -u TMUX tmux -L " + in.Socket + " -f /dev/null attach -t s"
+	if _, err := out.Run("new-session", "-d", "-s", "o", "-x", "60", "-y", "20", attach); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { c, _ := in.Run("list-clients"); return c != "" })
+	for _, tc := range []struct {
+		w, h int
+		want string
+	}{{200, 50, "18 58"}, {30, 8, "6 28"}} {
+		f := filepath.Join(t.TempDir(), "size")
+		if _, err := in.Run(fitPopup(fitW(tc.w), fitH(tc.h), "-T", " t#1 ", "stty size > "+f)...); err != nil {
+			t.Fatalf("%dx%d: %v", tc.w, tc.h, err)
+		}
+		var got string
+		waitFor(t, func() bool { b, _ := os.ReadFile(f); got = strings.TrimSpace(string(b)); return got != "" })
+		if got != tc.want {
+			t.Errorf("%dx%d popup inner size %q, want %q", tc.w, tc.h, got, tc.want)
+		}
+	}
+}
+
+// waitFor polls cond until it holds or 10s pass.
+func waitFor(t *testing.T, cond func() bool) {
+	t.Helper()
+	for end := time.Now().Add(10 * time.Second); !cond(); {
+		if time.Now().After(end) {
+			t.Fatal("timed out")
+		}
+		time.Sleep(20 * time.Millisecond) //nolint:forbidigo // poll interval, bounded by the deadline
 	}
 }
