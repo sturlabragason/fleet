@@ -45,7 +45,7 @@ func TestSummarize(t *testing.T) {
 	}
 	x := rows[0]
 	want := Row{Key: "x", Runs: 4, Done: 3, Reported: 3, Checked: 1, Passed: 0, Rework: 1, MedianMinutes: 20,
-		AIC: 300, Compactions: 3, Interventions: 2, Few: true}
+		AIC: 300, Compactions: 3, Interventions: 2, Intervened: 1, Few: true}
 	x.DoneLo, x.DoneHi = 0, 0
 	if x != want {
 		t.Fatalf("got %+v\nwant %+v", x, want)
