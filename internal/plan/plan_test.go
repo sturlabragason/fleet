@@ -54,6 +54,9 @@ func TestParseReadsTasksDepsAndReview(t *testing.T) {
 	if r.Task("a").Review.MaxRounds != DefaultRounds {
 		t.Fatalf("default rounds %d", r.Task("a").Review.MaxRounds)
 	}
+	if e, _ := Parse("ship", "[task.a]\nprofile=\"x\"\ndir=\"/d\"\nprompt=\"p\"\nafter = []\n"); e.Task("a").After != nil {
+		t.Fatalf("after = [] kept as %#v; a resumed plan would not match", e.Task("a").After)
+	}
 }
 
 func TestParseRefusesBadPlans(t *testing.T) {
@@ -67,6 +70,7 @@ func TestParseRefusesBadPlans(t *testing.T) {
 		{"missing", "[task.a]\nprofile = \"x\"\n", "needs profile, dir and prompt"},
 		{"dep", task("a", "after = [\"nope\"]"), "not a task of the plan"},
 		{"cycle", task("a", "after = [\"b\"]") + task("b", "after = [\"a\"]"), "dependency cycle"},
+		{"after not a list", task("a", "after = \"b\"") + task("b", ""), "after is a list"},
 		{"rounds", task("a", "review = { profile = \"y\", max_rounds = 0 }"), "not a positive number"},
 		{"clash", task("a", "review = { profile = \"y\" }") + task("a-review", ""), "clashes"},
 		{"taskname", task("A", ""), "task name"},

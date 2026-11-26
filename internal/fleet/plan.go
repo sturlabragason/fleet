@@ -17,6 +17,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/mail"
 	"github.com/sturlabragason/fleet/internal/plan"
 	"github.com/sturlabragason/fleet/internal/tools"
+	"github.com/sturlabragason/fleet/internal/worktree"
 )
 
 // Plan stages recorded on a plan agent's card, and so on its run (ADR-203).
@@ -161,7 +162,7 @@ func (f *Fleet) advanceReview(s *plan.State, t plan.Task, ts *plan.TaskState, b 
 	if r == nil || !doneSince(r, ts.Since) {
 		return nil
 	}
-	text := f.lastReport(t.Reviewer(), r.Report.Summary)
+	text := f.lastReport(mail.BoxOf(s.Admiral), t.Reviewer(), ts.Since, r.Report.Summary)
 	closeRev := func() {
 		if err := f.closeLater(t.Reviewer()); err != nil {
 			logx.For("plan").Warn("reviewer not closed", "agent", t.Reviewer(), "err", err)
@@ -169,7 +170,10 @@ func (f *Fleet) advanceReview(s *plan.State, t plan.Task, ts *plan.TaskState, b 
 	}
 	switch {
 	case passVerdict(text) && b.Agents[t.Name] == nil:
-		// The writer closed after its stage, which AgentBlocker allows only with nothing left to merge.
+		if why := unmergedWriter(b, t.Name); why != "" {
+			block := f.planBlock(s, t, ts, why)
+			return func() { closeRev(); block() }
+		}
 		ts.Phase, ts.Since, ts.Note = plan.Done, now, "review passed"
 		return closeRev
 	case passVerdict(text):
@@ -228,14 +232,27 @@ func stagePassed(a *board.Agent, since time.Time) bool {
 
 // passVerdict is whether a reviewer's report says pass: its first word.
 func passVerdict(text string) bool {
-	w, _, _ := strings.Cut(strings.TrimSpace(strings.TrimPrefix(text, "done:")), " ")
-	return strings.EqualFold(strings.Trim(w, ".:!,`*"), "pass")
+	ws := strings.Fields(strings.TrimPrefix(strings.TrimSpace(text), "done:"))
+	return len(ws) > 0 && strings.EqualFold(strings.Trim(ws[0], ".:!,`*"), "pass")
 }
 
-// lastReport is the full text of name's newest report, else fallback.
-func (f *Fleet) lastReport(name, fallback string) string {
-	ms, err := f.Mail().InboxFrom(f.ReportBox(name), name, true, 1)
-	if err != nil || len(ms) == 0 {
+// unmergedWriter says why a passed review can't finish a task whose writer
+// has closed: its worktree branch is not in main (a manual close skips the
+// done gate). "" when there is nothing left to merge.
+func unmergedWriter(b *board.Board, name string) string {
+	c, ok := b.AnyClosed(name)
+	if !ok || c.Agent.Worktree == nil || worktree.Merged(c.Agent.Dir, "HEAD") {
+		return ""
+	}
+	return "review passed but writer " + name + " closed with its branch unmerged"
+}
+
+// lastReport is the full text of name's newest report in box after since,
+// else fallback. box is the plan admiral's, where the reviewer reports even
+// after it has left the board.
+func (f *Fleet) lastReport(box, name string, since time.Time, fallback string) string {
+	ms, err := f.Mail().InboxFrom(box, name, true, 1)
+	if err != nil || len(ms) == 0 || !ms[len(ms)-1].T.After(since) {
 		return fallback
 	}
 	return strings.TrimSpace(strings.TrimPrefix(ms[len(ms)-1].Text, "done:"))

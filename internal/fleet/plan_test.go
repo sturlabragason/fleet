@@ -211,7 +211,7 @@ func TestPlanReviewPassWithWriterGoneIsDone(t *testing.T) {
 }
 
 func TestPassVerdict(t *testing.T) {
-	for in, want := range map[string]bool{"pass": true, "PASS.": true, "done: pass, nothing": true, "`pass`": true,
+	for in, want := range map[string]bool{"pass": true, "PASS.": true, "done: pass, nothing": true, "`pass`": true, "pass\n\nNo issues.": true,
 		"findings: x": false, "passing grade?": false, "": false} {
 		if passVerdict(in) != want {
 			t.Errorf("passVerdict(%q) = %v", in, !want)

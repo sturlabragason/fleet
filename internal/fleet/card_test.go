@@ -405,3 +405,20 @@ func TestCardPromptReviewOnly(t *testing.T) {
 		t.Fatalf("review-only card prompt:\n%s", p)
 	}
 }
+
+func TestPlanStageRerunsItsFailedCheckOnTheNextDone(t *testing.T) {
+	f, pasted := mailFleet(t)
+	idle := true
+	fakeAdm(f, pasted, &idle)
+	setCard(t, f, "a", &board.Card{Check: "exit 1", Stage: "write"})
+	if _, err := f.Report("a", "done", "first try"); err != nil {
+		t.Fatal(err)
+	}
+	f.Store.Update(func(b *board.Board) error { b.Agents["a"].Card.Check = "exit 0"; return nil })
+	if _, err := f.Report("a", "done", "fixed"); err != nil {
+		t.Fatal(err)
+	}
+	if ch := f.Store.Load().Agents["a"]; ch == nil || ch.Card.Checked == nil || !ch.Card.Checked.Pass {
+		t.Fatalf("the stage's check did not run again: %+v", ch)
+	}
+}

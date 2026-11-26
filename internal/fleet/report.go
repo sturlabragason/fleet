@@ -12,6 +12,25 @@ import (
 	"github.com/sturlabragason/fleet/internal/tools"
 )
 
+// rearmFailedStage clears a plan stage's failed done-check verdict, so the
+// stage's next done runs its check again instead of waiting forever (ADR-203).
+func (f *Fleet) rearmFailedStage(me string) {
+	a := f.Store.Load().Agents[me]
+	if a == nil || a.Card == nil || a.Card.Stage == "" || a.Card.Checked == nil || a.Card.Checked.Pass {
+		return
+	}
+	f.planRearm(me, false)
+}
+
+// goPlanTick advances plans off the caller's goroutine where Go is set.
+func (f *Fleet) goPlanTick() {
+	if f.Go != nil {
+		f.Go(f.PlanTick)
+		return
+	}
+	f.PlanTick()
+}
+
 // Report records an agent's report to the admiral (DESIGN §6.7): a
 // "report" message in the admiral's mailbox and the latest report on the
 // board. done, blocked and question wake an idle admiral. On done with
@@ -50,13 +69,6 @@ func (f *Fleet) Report(me, state, summary string) (note string, err error) {
 	}
 	if state == "done" {
 		f.queueNext(me, summary)
-		if reply == "" { // a plan stage without a done-check passes here (ADR-203)
-			if f.Go != nil {
-				f.Go(f.PlanTick)
-			} else {
-				f.PlanTick()
-			}
-		}
 	}
 	if reply != "" {
 		f.tell(me, reply)
@@ -67,6 +79,7 @@ func (f *Fleet) Report(me, state, summary string) (note string, err error) {
 		// (ADR-43). Where Go is set the check runs off this goroutine, so
 		// the agent's fleet_report returns at once; otherwise (the one-shot
 		// `fleet report` CLI, and tests) it runs here and reports its note.
+		f.rearmFailedStage(me)
 		if job, ok := f.claimCheck(me); ok {
 			if f.Go != nil {
 				f.Go(func() { f.doneCheck(job, m.ID, sum) })
@@ -78,14 +91,13 @@ func (f *Fleet) Report(me, state, summary string) (note string, err error) {
 		// running or has run. A verdict that failed keeps the agent open
 		// however many times it reports done.
 		switch st := f.checkStanding(me); st {
-		case checkNone:
+		case checkNone, checkPassed:
+			f.goPlanTick() // a plan stage passes here; one with a check passes in doneCheck (ADR-203)
 			note = f.autoClose(me)
 		case checkRunning:
 			return "done-check running", nil
 		case checkFailed:
 			note = "not auto-closed: done-check failed"
-		case checkPassed:
-			note = f.autoClose(me)
 		}
 	}
 	if state == "done" || state == "blocked" || state == "question" {

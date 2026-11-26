@@ -130,6 +130,14 @@ func parseTask(name string, kv map[string]conf.Value) (Task, error) {
 	}
 	t := Task{Name: name, Profile: conf.Str(kv, "profile"), Dir: conf.Str(kv, "dir"),
 		Prompt: conf.Str(kv, "prompt"), Check: conf.Str(kv, "check"), After: conf.List(kv, "after")}
+	if v, ok := kv["after"]; ok {
+		if _, isList := v.([]string); !isList {
+			return Task{}, fmt.Errorf("task %s: after is a list: after = [\"other-task\"]", name)
+		}
+	}
+	if len(t.After) == 0 {
+		t.After = nil // after = [] and no after resume as the same plan
+	}
 	if t.Profile == "" || t.Dir == "" || t.Prompt == "" {
 		return Task{}, fmt.Errorf("task %s needs profile, dir and prompt", name)
 	}
