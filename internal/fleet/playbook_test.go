@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
+	"github.com/sturlabragason/fleet/internal/graph"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/playbook"
 	"github.com/sturlabragason/fleet/internal/tmux"
@@ -281,10 +282,13 @@ func TestQueuedAgentKeepsEffort(t *testing.T) {
 // (ADR-57).
 func TestSpawnDefaultsToProInARepo(t *testing.T) {
 	f, out := argvFleet(t, "")
-	if _, err := f.Spawn("pb10", "pa", repo(t), "fix the bug"); err != nil {
+	dir := repo(t)
+	// a code spawn ends on the code map note (ADR-207); here there is no graph
+	want := strings.TrimRight(playbook.Compose(playbook.Text(playbook.Pro), "fix the bug"), "\n") + "\n\n" + graph.MapNote(t.Context(), f.Home, dir)
+	if _, err := f.Spawn("pb10", "pa", dir, "fix the bug"); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := readArg(t, out), playbook.Compose(playbook.Text(playbook.Pro), "fix the bug"); got != want {
+	if got := readArg(t, out); got != want {
 		t.Fatalf("repo spawn prompt:\n%.120q\nwant\n%.120q", got, want)
 	}
 	if w := f.Store.Load().Agents["pb10"].Worktree; w == nil {
@@ -298,7 +302,7 @@ func TestSpawnDefaultsToProInARepo(t *testing.T) {
 	if _, err := f.Spawn("pb11", "pa", taken, "fix the bug"); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := readArg(t, out), playbook.Compose(playbook.Text(playbook.Pro), "fix the bug"); got != want {
+	if got := readArg(t, out); got != want {
 		t.Fatalf("worktree fallback prompt:\n%.120q\nwant\n%.120q", got, want)
 	}
 	if w := f.Store.Load().Agents["pb11"].Worktree; w != nil {
