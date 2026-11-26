@@ -24,8 +24,8 @@ import (
 var Spec = companion.Register(companion.Spec{
 	Name:    "artifact",
 	Env:     []string{"FLEET_ARTIFACT"},
-	Feature: "decision-page answers reach the admiral",
-	Hint:    "the artifact CLI of the artifact-publish skill; fleet only reads with it",
+	Feature: "decision-page answers reach the admiral; Ask box questions get an agent (ADR-209)",
+	Hint:    "the artifact CLI of the artifact-publish skill; fleet reads with it and posts Ask answers",
 })
 
 // Grace is how long an answer may sit untaken before it is handed on: an

@@ -112,6 +112,9 @@ type Fleet struct {
 	// pagesAt and pagesBusy pace the decision-page answer check (pages.go).
 	pagesAt   time.Time
 	pagesBusy atomic.Bool
+	// asksNext (unix nanos) and asksBusy pace the Ask box check (asks.go).
+	asksNext atomic.Int64
+	asksBusy atomic.Bool
 	// RotateEvents makes the retention pass rotate events.jsonl. Only the
 	// watcher sets it, so one process owns the rename (ADR-154).
 	RotateEvents bool

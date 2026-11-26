@@ -179,6 +179,7 @@ func (f *Fleet) Refresh() ([]*board.Agent, error) {
 			f.checkRecycle(out, now)
 			f.resurface(out, now)
 			f.watchPages(now)
+			f.watchAsks(now)
 		}
 		f.sweepChecks(out)
 		f.reapDead(out, deadPanes, now, off)

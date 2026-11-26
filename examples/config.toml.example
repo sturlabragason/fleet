@@ -233,6 +233,9 @@ mode_args = { autopilot = "--allow-all --autopilot", plan = "--plan" }
 # [integrations.graphify]   # code graph for agents (DESIGN §6.15, ADR-133)
 # path = "auto"            # auto (PATH) | off | /path/to/graphify
 # build = "merge"          # merge: rebuild after fleet merge | manual: fleet graph only
+# [integrations.artifact.ask]  # who answers a private page's Ask box (ADR-209), by the page's
+# work = "copilot"             # <meta name="artifact-ctx">; the agent starts in that context's
+# default = "claude"           # first context dir. Unset: the spawn default
 #
 # graphify's MCP server is not passed by fleet. To give agents its tools, add
 # it to your own MCP config (it reads $GRAPHIFY_OUT/graph.json, which fleet
