@@ -330,7 +330,9 @@ const usageBarFixture = `{"entries":[
 {"brand":"anthropic","error":null,"id":"anthropic@personal","metrics":[
  {"label":"Weekly (7d)","percent":90,"reset_at":"2026-11-29T10:00:00Z"},
  {"label":"Extra usage","percent":5}],"status":"ready"},
-{"brand":"anthropic","error":"token expired; run claude login","id":"anthropic@broken","metrics":[]}
+{"brand":"anthropic","error":"token expired; run claude login","id":"anthropic@broken","metrics":[]},
+{"brand":"openai","error":null,"id":"openai@team-a","metrics":[{"label":"Weekly (7d)","percent":99,"reset_at":"2026-11-27T00:00:00Z"}]},
+{"brand":"anthropic","error":"","id":"anthropic@odd","metrics":[{"label":"Weekly (7d)","percent":50,"reset_at":""}]}
 ],"primary":null,"schema_version":1}`
 
 func TestParseUsageBarJSON(t *testing.T) {
@@ -357,6 +359,17 @@ func TestParseUsageBarJSON(t *testing.T) {
 			account:     "personal",
 			wantOverage: true,
 			want:        []Window{{Group: "anthropic@personal", Kind: "weekly", Label: "Weekly (7d)", RemainingPct: 10, ResetAt: time.Date(2026, 11, 29, 10, 0, 0, 0, time.UTC)}},
+		},
+		{
+			name:    "empty error and bad reset keep the seat, reset unknown",
+			input:   usageBarFixture,
+			account: "odd",
+			want:    []Window{{Group: "anthropic@odd", Kind: "weekly", Label: "Weekly (7d)", RemainingPct: 50}},
+		},
+		{
+			name:  "other vendors are ignored",
+			input: `{"entries":[{"id":"openai@x","metrics":[{"label":"Weekly (7d)","percent":1}]},{"id":"anthropic","error":null,"metrics":[{"label":"Weekly (7d)","percent":40,"reset_at":"2026-11-29T10:00:00Z"}]}]}`,
+			want:  []Window{{Group: "anthropic", Kind: "weekly", Label: "Weekly (7d)", RemainingPct: 60, ResetAt: time.Date(2026, 11, 29, 10, 0, 0, 0, time.UTC)}},
 		},
 		{name: "entry error is reported", input: usageBarFixture, account: "broken", wantErr: true},
 		{name: "unknown account", input: usageBarFixture, account: "team", wantErr: true},

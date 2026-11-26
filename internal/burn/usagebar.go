@@ -69,10 +69,10 @@ type usageBarEntry struct {
 }
 
 type usageBarMetric struct {
-	Label     string    `json:"label"`
-	Percent   *float64  `json:"percent"` // used, 0..100
-	ResetAt   time.Time `json:"reset_at"`
-	ModelPool bool      `json:"model_pool"`
+	Label     string   `json:"label"`
+	Percent   *float64 `json:"percent"` // used, 0..100
+	ResetAt   string   `json:"reset_at"`
+	ModelPool bool     `json:"model_pool"`
 }
 
 // ParseUsageBarJSON parses `ai-usagebar usage --json` and returns the quota
@@ -89,7 +89,7 @@ func ParseUsageBarJSON(data []byte, account string) ([]Window, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	if e.Error != nil {
+	if e.Error != nil && e.Error != "" {
 		return nil, false, fmt.Errorf("ai-usagebar %s: %v", e.ID, e.Error)
 	}
 	var windows []Window
@@ -103,12 +103,14 @@ func ParseUsageBarJSON(data []byte, account string) ([]Window, bool, error) {
 		if m.Percent == nil || m.ModelPool {
 			continue
 		}
+		// An unreadable reset stays zero: the planner skips it as "reset time unknown".
+		resetAt, _ := time.Parse(time.RFC3339Nano, m.ResetAt)
 		windows = append(windows, Window{
 			Group:        e.ID,
 			Kind:         classifyWindowKind(m.Label),
 			Label:        m.Label,
 			RemainingPct: max(0, min(100, 100-*m.Percent)),
-			ResetAt:      m.ResetAt.UTC(),
+			ResetAt:      resetAt.UTC(),
 		})
 	}
 	if len(windows) == 0 {
@@ -117,12 +119,19 @@ func ParseUsageBarJSON(data []byte, account string) ([]Window, bool, error) {
 	return windows, overageOn, nil
 }
 
-func pickUsageBarEntry(entries []usageBarEntry, account string) (usageBarEntry, error) {
+func pickUsageBarEntry(all []usageBarEntry, account string) (usageBarEntry, error) {
+	// Only Claude entries: another vendor's quota must never stand in for a seat.
+	var entries []usageBarEntry
+	for _, e := range all {
+		if vendor, _, _ := strings.Cut(e.ID, "@"); vendor == "anthropic" {
+			entries = append(entries, e)
+		}
+	}
 	if account == "" {
 		if len(entries) == 1 {
 			return entries[0], nil
 		}
-		return usageBarEntry{}, fmt.Errorf("ai-usagebar returned %d entries; set [burn.<profile>] account to pick one", len(entries))
+		return usageBarEntry{}, fmt.Errorf("ai-usagebar returned %d Claude entries; set [burn.<profile>] account to pick one", len(entries))
 	}
 	for _, e := range entries {
 		_, label, _ := strings.Cut(e.ID, "@")
