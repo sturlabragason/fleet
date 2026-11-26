@@ -63,9 +63,28 @@ func (s *Server) isLeader() bool {
 	return s.F.IsLeader(me)
 }
 
+// readOnlyTools are all a read-only agent (an Ask box answerer, ADR-209)
+// sees and may call: no messages, access changes or squad tools.
+var readOnlyTools = map[string]bool{"fleet_report": true, "fleet_inbox": true, "fleet_instructions": true, "fleet_wait": true}
+
+// readOnly reports whether the agent this server acts for has a read-only card.
+func (s *Server) readOnly() bool {
+	me, err := s.F.Me(s.Agent)
+	return err == nil && s.F.ReadOnlyAgent(me)
+}
+
 // agentTools are the tools an agent sees: the peer tools, plus the squad
-// tools when it is a leader.
+// tools when it is a leader; a read-only agent only readOnlyTools.
 func (s *Server) agentTools() []tool {
+	if s.readOnly() {
+		var out []tool
+		for _, t := range agentToolDefs {
+			if readOnlyTools[t.Name] {
+				out = append(out, t)
+			}
+		}
+		return out
+	}
 	if !s.isLeader() {
 		return agentToolDefs
 	}

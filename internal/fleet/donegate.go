@@ -225,6 +225,12 @@ const ReadOnly = "read-only"
 // IsReadOnly is whether card c makes its agent read-only.
 func IsReadOnly(c *board.Card) bool { return c != nil && slices.Contains(c.May, ReadOnly) }
 
+// ReadOnlyAgent reports whether the agent name runs on a read-only card.
+func (f *Fleet) ReadOnlyAgent(name string) bool {
+	a, ok := f.Store.Load().Agents[name]
+	return ok && IsReadOnly(a.Card)
+}
+
 // readOnlyLaunch is the Launch.ReadOnly for card c on profile p, or an
 // error when p can't enforce it on that driver: a read-only agent never
 // starts without its restrictions.

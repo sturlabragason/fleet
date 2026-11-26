@@ -80,6 +80,30 @@ func TestSquadToolsAreLeaderOnly(t *testing.T) {
 	}
 }
 
+// A read-only agent (ADR-209) sees only report, inbox, instructions and
+// wait, and its other fleet tools are refused.
+func TestReadOnlyAgentTools(t *testing.T) {
+	f := squadHome(t)
+	f.Store.Update(func(b *board.Board) error {
+		b.Agents["ro"] = &board.Agent{Name: "ro", Profile: "fake", Dir: f.Home, Card: &board.Card{May: []string{fleet.ReadOnly}}}
+		return nil
+	})
+	r := startRPC(t, NewAgent(f, "ro"))
+	var got []string
+	for _, tl := range r.call("tools/list", nil)["result"].(map[string]any)["tools"].([]any) {
+		got = append(got, tl.(map[string]any)["name"].(string))
+	}
+	sort.Strings(got)
+	if g := strings.Join(got, " "); g != "fleet_inbox fleet_instructions fleet_report fleet_wait" {
+		t.Errorf("read-only tools = %s", g)
+	}
+	for _, name := range []string{"fleet_msg_send", "fleet_access_request", "fleet_agents", "fleet_squad_spawn"} {
+		if msg, isErr := r.tool(name, map[string]any{"to": "outsider", "text": "hi"}); !isErr || !strings.Contains(msg, "read-only") {
+			t.Errorf("%s: %q (isErr=%v)", name, msg, isErr)
+		}
+	}
+}
+
 // Every squad tool that names an agent refuses one outside the squad.
 func TestSquadToolsRefuseNonMembers(t *testing.T) {
 	f := squadHome(t)
