@@ -267,6 +267,8 @@ var usage = `usage:
                                             put them back, or whichever fits (Alt-X)
                                             (--keep-focus: show/add leave keyboard focus where it is;
                                             --notify: the result goes to a tmux message, not stdout)
+  fleet present [on|off]                    presenting: while on, or while a screen share or call is detected,
+                                            agents can't open the browser; blocked URLs are listed here after
   fleet keys [--markdown]                   list every hotkey (Alt-? in tmux, ? in the overview)
   fleet recall [--days N] [-n 10] [--refresh] [--json] <words...>
                                             what was I doing on X: agent reports and notes, and every
@@ -388,6 +390,9 @@ var statelessCmds = map[string]func(args []string) error{
 	"--version": cmdVersion,
 	"logo":      cmdLogo,
 	"doctor":    cmdDoctor,
+	"present":   cmdPresent,
+	// browser-guard is run by the browser shims on an agent's PATH (ADR-200).
+	"browser-guard": cmdBrowserGuard,
 }
 
 // fleetCmds run on an open fleet, keyed by commandName.

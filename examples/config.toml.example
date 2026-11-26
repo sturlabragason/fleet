@@ -191,6 +191,14 @@ mode_args = { autopilot = "--allow-all --autopilot", plan = "--plan" }
 # replaces that whole table, e.g. to also drop skills for light agents:
 # context_args = { light = "--excluded-tools sql session_store_sql task skill --disable-builtin-mcps" }
 
+# Browser guard (ADR-200): agents open pages in your default browser, except
+# while you present (`fleet present on`, or a screen share or call that
+# PipeWire shows) and for agents whose name, route or profile carries one of
+# these words. Blocked URLs are listed by `fleet present` afterwards.
+# never_open = [] turns the list off.
+#[browser]
+#never_open = ["personal", "legal", "tax", "health"]
+
 # The RAM guard (DESIGN §7, ADR-44). When free memory (MemAvailable) falls
 # under min_free, fleet parks the longest-idle agent -- never a pinned,
 # working, waiting or prompted one -- at most one per check_every, tells the

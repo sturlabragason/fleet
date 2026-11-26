@@ -62,6 +62,7 @@ var CLIParity = map[string]string{
 	"models":          "fleet_profiles",
 	"snap":            "user: captures status fixtures for fleet's own tests",
 	"wall":            "fleet_wall",
+	"present":         "fleet_wall",
 	"keys":            "user: the hotkeys",
 	"changes":         "fleet_changes",
 	"recall":          "fleet_recall",

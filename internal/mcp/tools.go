@@ -104,8 +104,8 @@ var baseToolDefs = []tool{
 	{"fleet_park", "Free RAM without losing work: park stops an idle agent's process but keeps it on the board with its session id; wake resumes that same session in the same directory. Only an idle agent can be parked - working, waiting, prompted and pinned agents, and one with unsubmitted text in its input box, are refused. The memory guard parks the longest-idle agent by itself when free RAM runs low and reports it here: wake those when there is room. A wake refused for memory: park another, force=true only if the user insists.", obj([]string{"name"}, map[string]any{
 		"name": str("agent name"), "action": map[string]any{"type": "string", "enum": []string{"park", "wake"}, "description": "park (default) or wake"},
 		"force": map[string]any{"type": "boolean", "description": "wake even while free memory is still under the guard's floor"}})},
-	{"fleet_wall", "Change the live wall: show or hide an agent pane, set the layout preset (1,2,4,6,9,m), hide_all to take every agent pane off the wall (agents keep running, the admiral stays), restore to put back the panes the last hide_all took off, or admiral_show/admiral_hide to put a non-main admiral's pane under main or take it out of the column (its process keeps running). \"wall full: …\" is a no-op: offer to hide a named pane, don't retry.", obj([]string{"action"}, map[string]any{
-		"action": map[string]any{"type": "string", "enum": []string{"show", "hide", "preset", "hide_all", "restore", "admiral_show", "admiral_hide"}}, "name": str("agent name for show/hide, admiral name for admiral_show/admiral_hide"), "preset": str("1, 2, 4, 6, 9 or m")})},
+	{"fleet_wall", "Change the live wall: show or hide an agent pane, set the layout preset (1,2,4,6,9,m), hide_all to take every agent pane off the wall (agents keep running, the admiral stays), restore to put back the panes the last hide_all took off, or admiral_show/admiral_hide to put a non-main admiral's pane under main or take it out of the column (its process keeps running). \"wall full: …\" is a no-op: offer to hide a named pane, don't retry. Presenting (ADR-200): present_on when the user says they are sharing their screen (no agent can open the browser), present_off when done, present for the state and, once not presenting, the blocked URLs to hand to the user.", obj([]string{"action"}, map[string]any{
+		"action": map[string]any{"type": "string", "enum": []string{"show", "hide", "preset", "hide_all", "restore", "admiral_show", "admiral_hide", "present", "present_on", "present_off"}}, "name": str("agent name for show/hide, admiral name for admiral_show/admiral_hide"), "preset": str("1, 2, 4, 6, 9 or m")})},
 	{"fleet_team", "Teams: named, coloured groups of agents (one team per agent). list; create (team, optional color); delete; add/remove (team, agents; add moves agents from another team and creates the team if missing); color (team, color); send (team, text) to every running member (members on a prompt are skipped unless confirmed=true); show/hide (team) on the wall; close (team) every member - ask the user first, confirmed=true only after an explicit yes.", obj([]string{"action"}, map[string]any{
 		"action": map[string]any{"type": "string", "enum": []string{"list", "create", "delete", "add", "remove", "color", "send", "show", "hide", "close"}},
 		"team":   str("team name"), "agents": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "agent names for add/remove"},
@@ -432,6 +432,8 @@ func (s *Server) wallCall(a args) (string, error) {
 		return wall.RestoredMsg(n), err
 	case "admiral_hide":
 		return wall.AdmiralMsg(a.Name, false), s.W.HideAdmiral(a.Name)
+	case "present", "present_on", "present_off":
+		return s.presentCall(a.Action)
 	case "admiral_show":
 		shown, err := s.W.ShowAdmiral(a.Name)
 		if err != nil {
@@ -442,7 +444,7 @@ func (s *Server) wallCall(a args) (string, error) {
 		}
 		return wall.AdmiralMsg(a.Name, true), nil
 	}
-	return "", fmt.Errorf("action must be show, hide, preset, hide_all, restore, admiral_show or admiral_hide")
+	return "", fmt.Errorf("action must be show, hide, preset, hide_all, restore, admiral_show, admiral_hide, present, present_on or present_off")
 }
 
 func (s *Server) noteCall(a args) (string, error) {

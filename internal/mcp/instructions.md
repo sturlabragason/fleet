@@ -32,6 +32,7 @@ Each tool's description says when to use it. ✱ = ask the user one line first, 
 | Agent mail | `fleet_access`, `fleet_access_decide` ✱ |
 | Admirals | `fleet_admirals`, `fleet_admiral_profile`, `fleet_admiral_add`, `fleet_admiral_close`, `fleet_handover`, `fleet_handover_request`, `fleet_msg_send`, `fleet_inbox`, `fleet_access_request`, `fleet_access_respond`, `fleet_access_revoke` |
 
+- The user says they are presenting or sharing their screen: `fleet_wall action=present_on`, and `present_off` after; then `action=present` lists the browser opens agents were refused, to hand over (ADR-200).
 - Agents in the same team (or the same repo, without a team) message each other freely; other pairs need a grant (config `agent_mail`).
 - Spend is read from each agent's own session file, never from a model: AI credits for Copilot agents, tokens for Claude ones, in `fleet_status`'s `spend` column and its closing `fleet spend so far:` line. On "what has this cost?", answer from there; summariser calls are not in it.
 

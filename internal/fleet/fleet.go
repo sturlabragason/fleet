@@ -19,6 +19,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/acp"
 	"github.com/sturlabragason/fleet/internal/board"
+	"github.com/sturlabragason/fleet/internal/browser"
 	"github.com/sturlabragason/fleet/internal/graph"
 	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/mail"
@@ -587,6 +588,11 @@ func (f *Fleet) start(name, profile string, p tools.Profile, dir, goal, secret, 
 	} else {
 		env = append(env, "GRAPHIFY_OUT=") // unset parent's graph when this repo has none
 	}
+	// Browser opens go through the guard (ADR-200); acp hosts pass the PATH on to their tool.
+	if err := browser.Install(f.Home, f.Exe); err != nil {
+		log.Warn("browser guard not installed", "agent", name, "err", err)
+	}
+	env = browser.Env(env, f.Home)
 	pane, err := f.T.SpawnKeep(Session, WindowPrefix+name, dir, env, tools.ShellCommand(argv))
 	if err != nil {
 		log.Error("spawn failed", "agent", name, "err", err)
