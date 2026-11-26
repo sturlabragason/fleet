@@ -26,7 +26,7 @@ func TestCallArgumentErrors(t *testing.T) {
 		{"fleet_adopt", `{}`, "pass exactly one of session_id or query"},
 		{"fleet_adopt", `{"session_id":"a","query":"b"}`, "pass exactly one of session_id or query"},
 		{"fleet_park", `{}`, "name is required"},
-		{"fleet_wall", `{"action":"spin"}`, "action must be show, hide, preset, hide_all, restore, admiral_show or admiral_hide"},
+		{"fleet_wall", `{"action":"spin"}`, "action must be show, hide, preset, hide_all, restore, admiral_show, admiral_hide, present, present_on or present_off"},
 		{"fleet_note", `{"text":"  "}`, "text is required"},
 		{"fleet_access_decide", `{"action":"maybe","a":"x","b":"y","confirmed":true}`, "action must be grant, deny or revoke"},
 		{"fleet_access_decide", `{"action":"grant","a":"x","b":"y"}`, "not confirmed: ask the user, then call again with confirmed=true"},
