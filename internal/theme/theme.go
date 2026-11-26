@@ -107,7 +107,8 @@ func OnChange(f func()) {
 // Active returns the palette in use.
 func Active() Palette { return active }
 
-// Names lists the palette names, the default first and the rest sorted.
+// Names lists the palette names: the default first, the other built-ins
+// sorted, then the user themes (file.go) sorted.
 func Names() []string {
 	out := []string{Default}
 	for n := range palettes {
@@ -116,13 +117,16 @@ func Names() []string {
 		}
 	}
 	sort.Strings(out[1:])
-	return out
+	return append(out, User()...)
 }
 
 // Get returns the named palette, for drawing one that is not active (the
 // overview's theme picker shows each theme's swatches).
 func Get(name string) (Palette, bool) {
-	p, ok := palettes[name]
+	if p, ok := palettes[name]; ok {
+		return p, true
+	}
+	p, ok := user[name]
 	return p, ok
 }
 
@@ -133,7 +137,7 @@ func Load(name string) error {
 	if name == "" {
 		name = Default
 	}
-	p, ok := palettes[name]
+	p, ok := Get(name)
 	if !ok {
 		return fmt.Errorf("unknown theme %q: pick one of %s", name, strings.Join(Names(), ", "))
 	}

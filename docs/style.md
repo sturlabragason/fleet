@@ -272,6 +272,26 @@ theme = "stealth"   # lane (default), catppuccin, stealth, neon-drive, phosphor,
                     # or a VS Code theme: shades-of-purple, dracula, github-light, ...
 ```
 
+To change a few colours, write your own theme: a file `~/.config/fleet/themes/<name>.toml` (beside
+`config.toml`) that starts from a built-in and replaces only the roles it names, then set
+`theme = "<name>"`. It also appears in the overview's `T` picker.
+
+```toml
+# ~/.config/fleet/themes/mine.toml
+base = "lane"           # the built-in to start from; lane when left out
+label = "Mine"          # optional, shown in the picker
+[overrides]
+waiting = "#ffd75f"     # any role, as #rrggbb
+```
+
+The roles are `base`, `mantle`, `crust`, `surface0`-`surface2`, `text`, `subtext0`,
+`overlay2`-`overlay0`, `working`, `working_dim`, `waiting`, `waiting_alt`, `error`, `stuck`,
+`idle`, `gone`, `select` and `supervisor`. A status such as `queued` is not a role: it draws with
+the role in `internal/theme/states.go` (`queued` with `gone`). `fleet doctor` lists each file's
+problems: an unknown role or key, a value that is not `#rrggbb` (the base's colour is kept), and a
+role below its contrast floor on the theme's base (drawn as written). A picked theme whose file does not parse draws the default until you fix it. Team colours come from the
+base and can't be overridden.
+
 The VS Code themes are `github-dark`, `github-light`, `one-dark-pro`, `dracula`, `atom-one-dark`,
 `ayu`, `winter-is-coming`, `night-owl`, `tokyo-night`, `one-monokai`, `palenight`, `synthwave-84`,
 `shades-of-purple`, `cobalt2`, `andromeda`, `atom-one-light`, `noctis`, `nord`, `gruvbox` and

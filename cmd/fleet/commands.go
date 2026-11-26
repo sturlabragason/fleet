@@ -15,6 +15,7 @@ import (
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/fake"
 	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/logx"
 	"github.com/sturlabragason/fleet/internal/prefs"
 	"github.com/sturlabragason/fleet/internal/sessions"
 	"github.com/sturlabragason/fleet/internal/status"
@@ -24,15 +25,28 @@ import (
 	"github.com/sturlabragason/fleet/internal/tools"
 )
 
-// loadTheme applies [defaults] theme from config.toml, once, before anything
-// renders (ADR-55). An unknown name stops fleet; a config file that does not
-// parse is left to the command that needs it to report.
+// loadTheme reads the user's theme files and applies [defaults] theme from
+// config.toml, once, before anything renders (ADR-55, ADR-201). An unknown
+// name stops fleet, a theme file that does not load falls back to the
+// default; a config file that does not parse is left to the command
+// that needs it to report, and a theme file's problems to fleet doctor.
 func loadTheme() error {
 	p, err := prefs.Load()
 	if err != nil {
 		return nil //nolint:nilerr // a config that does not parse is reported by the command that needs it
 	}
-	return theme.Load(p.Theme())
+	probs, err := theme.LoadDir(prefs.ThemeDir())
+	if err != nil {
+		logx.For("theme").Warn("user themes not read", "err", err)
+	}
+	name := strings.ToLower(strings.TrimSpace(p.Theme()))
+	if _, ok := theme.Get(name); !ok && probs[name] != nil {
+		// The file is there but does not load: draw the default so fleet
+		// doctor can still run and say why.
+		logx.For("theme").Warn("theme file does not load, using the default", "theme", name, "problems", probs[name])
+		name = ""
+	}
+	return theme.Load(name)
 }
 
 var usage = `usage:

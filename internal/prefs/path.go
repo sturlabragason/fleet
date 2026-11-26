@@ -18,3 +18,6 @@ func Path() string {
 	}
 	return filepath.Join(dir, "fleet", "config.toml")
 }
+
+// ThemeDir holds the user's theme files, beside config.toml (ADR-201).
+func ThemeDir() string { return filepath.Join(filepath.Dir(Path()), "themes") }

@@ -14,7 +14,8 @@
 # "github-light" (ADR-174, THEMES.md). An unknown name stops fleet rather
 # than falling back silently. Resolved at start-up: change it and run
 # `fleet up` again — the tmux chrome is re-set and the overview pane restarts,
-# agents keep running.
+# agents keep running. Your own theme, a built-in with some colours replaced,
+# is a file themes/<name>.toml beside this one (docs/style.md, ADR-201).
 # theme = "lane"
 # Motion (ADR-171, ADR-173, ADR-176): `fleet up` draws the fleet mark in with
 # a short animation (any key skips it), a light walks the header's "fleet"

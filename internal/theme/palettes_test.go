@@ -51,25 +51,13 @@ func TestPalettesAreComplete(t *testing.T) {
 	}
 }
 
-// Contrast on each theme's own pane background. The floors are the drafts'
-// measured numbers rounded down: a palette edit may not regress a role
-// (docs/style.md §4).
+// Contrast on each theme's own pane background: every role keeps its floor
+// (file.go floors, docs/style.md §4).
 func TestPaletteContrast(t *testing.T) {
-	min := map[string]float64{
-		"Text": 11, "Subtext0": 6, "Overlay2": 4.5,
-		"Working": 4.5, "Waiting": 7, "Error": 5, "Stuck": 4.5,
-		"Select": 5, "Supervisor": 4.5, "WaitingAlt": 5,
-		// Idle and Gone recede on purpose and are never body text.
-		"Idle": 3.5, "Gone": 1.6,
-	}
 	for _, name := range Names() {
 		p := palettes[name]
-		v := reflect.ValueOf(p)
-		for role, want := range min {
-			got := Contrast(v.FieldByName(role).String(), p.Base)
-			if got < want {
-				t.Errorf("%s: %s is %.1f:1 on the base, want >= %.1f:1", name, role, got, want)
-			}
+		for _, prob := range contrastProblems(p) {
+			t.Errorf("%s: %s", name, prob)
 		}
 		// Gone must stay below Idle, and Idle below Text: lightness carries
 		// the hierarchy, so it survives any colour vision.
