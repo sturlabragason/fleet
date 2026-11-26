@@ -25,6 +25,8 @@ Any other conflict aborts the rebase and exits 1 naming the files and the other 
 your `blocked` report. Use `--check ''` to skip the checks (don't) or `--check '<cmd>'` in a repo
 that gates differently.
 
+Landing several green branches at once (a coordinator, or the batch's last agent): `fleet merge --queue --dry-run`, then `fleet merge --queue`; it checks the batch once, bisects a red one to the branch that broke it, merges the rest and reports that branch (ADR-206).
+
 Read sections 1 and 2 anyway: the command does not pick your merge *order* or your ADR number.
 Section 3 stays as the explanation of what it resolves, and as the manual fallback.
 

@@ -32,6 +32,7 @@ func cmdMerge(args []string) error {
 	check := fs.String("check", "", "shell command to run on the branch and on main (default: merge_check in "+
 		worktree.RepoConfigFile+", else "+worktree.DefaultMergeCheck+"; empty skips)")
 	retries := fs.Int("retries", 3, "attempts when main moves during the run")
+	queue := fs.Bool("queue", false, "land several branches in one checked batch, bisecting a red one (ADR-206)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -41,6 +42,9 @@ func cmdMerge(args []string) error {
 	}
 	if !flagSet(fs, "check") {
 		*check = cfg.MergeCheck
+	}
+	if *queue {
+		return mergeQueue(context.Background(), *dir, fs.Args(), *check, *dry, *asJSON, cfg)
 	}
 	if *dry {
 		p, err := worktree.NewPlan(*dir, resultFiles()...)
@@ -80,13 +84,8 @@ func cmdMerge(args []string) error {
 		fmt.Fprintln(os.Stderr, "fleet merge:", s)
 	}}
 	if strings.TrimSpace(*check) != "" {
-		// The default is fleet's own gate. In a repo without a Makefile it
-		// would fail before anything is merged, so say what to pass instead
-		// of merging untested work.
-		if *check == worktree.DefaultMergeCheck && !hasMakefile(*dir) {
-			return fail(fmt.Errorf("no Makefile here, so the default check (%s) can't run:\n"+
-				"  set merge_check in %s, pass --check 'go build ./... && go vet ./...', or --check '' to skip it",
-				worktree.DefaultMergeCheck, worktree.RepoConfigFile))
+		if err := checkRunnable(*dir, *check); err != nil {
+			return fail(err)
 		}
 		opts.Check = func(d string) error { return shellCheck(d, *check) }
 	}
@@ -201,6 +200,18 @@ func adrFix(taken []adr.Collision) string {
 	}
 	return strings.Join(parts, "; ") + ": run `fleet adr claim` and renumber your ADR to the number it prints " +
 		"(the §14 entry, the CHANGELOG bracket and the commit), then fleet merge again"
+}
+
+// checkRunnable refuses fleet's own default check in a repo without a
+// Makefile: it would fail before anything is merged, so say what to pass
+// instead of merging untested work.
+func checkRunnable(dir, check string) error {
+	if check == worktree.DefaultMergeCheck && !hasMakefile(dir) {
+		return fmt.Errorf("no Makefile here, so the default check (%s) can't run:\n"+
+			"  set merge_check in %s, pass --check 'go build ./... && go vet ./...', or --check '' to skip it",
+			worktree.DefaultMergeCheck, worktree.RepoConfigFile)
+	}
+	return nil
 }
 
 func hasMakefile(dir string) bool {

@@ -262,6 +262,12 @@ var usage = `usage:
                                             make build && go vet, CHANGELOG.md and DESIGN.md.
                                             --dry-run prints the order it would take. Never pushes,
                                             never removes the worktree
+  fleet merge --queue [--dry-run [--json]] [--check CMD] [branch...]
+                                            land the named or all ready branches (pushed, CI green
+                                            on the head) in one batch: rebase them onto main in a
+                                            scratch worktree, check once, fast-forward local main;
+                                            a red batch is bisected to the failing branch, which is
+                                            reported with its output while the rest land (ADR-206)
   fleet profiles                            list tool profiles (~/.fleet/tools.toml)
   fleet kagent acp [--context CTX] [--agent NS/NAME] [--url URL]
                                             ACP adapter of the kagent profile: an agent in a Kubernetes
