@@ -145,7 +145,7 @@ func CardPrompt(c *board.Card) string {
 	if c.Check != "" {
 		fmt.Fprintf(&b, "\nDone-check: `%s`, run in your dir, must exit %d. fleet runs it itself when you report done and tells the admiral whether it passed, so run it yourself first.\n", c.Check, c.Want)
 	}
-	may := slices.DeleteFunc(slices.Clone(c.May), func(m string) bool { return m == ReviewOnly })
+	may := slices.DeleteFunc(slices.Clone(c.May), func(m string) bool { return m == ReviewOnly || m == ReadOnly })
 	if len(may) > 0 {
 		gate := ""
 		// ADR-129: CI and the pre-merge checks are the gate, not the user.
@@ -156,6 +156,10 @@ func CardPrompt(c *board.Card) string {
 	}
 	if slices.Contains(c.May, ReviewOnly) {
 		b.WriteString("\nReview-only: commit your work on your own branch and report done with it unmerged. Do not merge or release, and push nothing but your own fleet/ branch; the user reviews it first.\n")
+	}
+	if IsReadOnly(c) {
+		b.WriteString("\nRead-only: your tool refuses shell commands and file writes. Read, then put your answer in your report; write no result file.\n")
+		return strings.TrimRight(b.String(), "\n")
 	}
 	fmt.Fprintf(&b, "\nResult file: write `%s` in your dir before you report done: what you changed, the branch and commit, what is left and any open questions.\n", c.Result)
 	return strings.TrimRight(b.String(), "\n")

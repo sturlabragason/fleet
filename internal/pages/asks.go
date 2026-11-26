@@ -22,17 +22,23 @@ type Ask struct {
 	Taken    *float64 `json:"taken"`
 }
 
-// askCmd runs `artifact ask <args>`.
-func askCmd(ctx context.Context, args ...string) ([]byte, error) {
+// artifactCmd runs `artifact <args>`.
+func artifactCmd(ctx context.Context, args ...string) ([]byte, error) {
 	t, err := companion.Find(Spec)
 	if err != nil {
 		return nil, fmt.Errorf("find artifact: %w", err)
 	}
-	out, err := t.Run(ctx, companion.Opts{}, append([]string{"ask"}, args...)...)
-	if err != nil {
-		return out, fmt.Errorf("artifact ask %s: %w", args[0], err)
-	}
-	return out, nil
+	return t.Run(ctx, companion.Opts{}, args...)
+}
+
+// askCmd runs `artifact ask <args>`.
+func askCmd(ctx context.Context, args ...string) ([]byte, error) {
+	return artifactCmd(ctx, append([]string{"ask"}, args...)...)
+}
+
+// PageHTML is the published index.html of page: `artifact cat <page>`.
+func PageHTML(ctx context.Context, page string) ([]byte, error) {
+	return artifactCmd(ctx, "cat", page)
 }
 
 // OpenAsks is every question no agent took yet: `artifact ask list`, one

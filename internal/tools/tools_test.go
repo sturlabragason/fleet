@@ -546,6 +546,51 @@ func TestContextArgs(t *testing.T) {
 	}
 }
 
+// A read-only agent's tool refuses shell and writes itself (ADR-209); a
+// profile whose args can't reach the tool can't run one.
+func TestReadOnlyArgs(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "tools.toml"), []byte("[copilot-work]\ncommand = \"copilot\"\n"), 0o644)
+	ps, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		prof  string
+		acp   bool
+		want  []string
+		canRO bool
+	}{
+		{"copilot", false, []string{"--deny-tool=shell", "--deny-tool=write"}, true},
+		{"copilot", true, []string{"--deny-tool=shell", "--deny-tool=write"}, true},
+		{"claude-copilot", true, []string{"--deny-tool=shell", "--deny-tool=write"}, true},
+		{"copilot-work", false, []string{"--deny-tool=shell", "--deny-tool=write"}, true},
+		{"claude", false, []string{"--disallowedTools=Bash,Edit,Write,NotebookEdit"}, true},
+		{"claude", true, nil, false},
+		{"fake", false, nil, false},
+	} {
+		p := ps[c.prof]
+		if got := p.CanReadOnly(c.acp); got != c.canRO {
+			t.Errorf("%s acp=%v: CanReadOnly = %v, want %v", c.prof, c.acp, got, c.canRO)
+		}
+		if !c.canRO {
+			continue
+		}
+		var on, off []string
+		if c.acp {
+			on, off = p.ACPArgv(Vars{}, Launch{Context: "light", ReadOnly: true}), p.ACPArgv(Vars{}, Launch{Context: "light"})
+		} else {
+			on, _ = p.Argv(Vars{}, Launch{Context: "light", ReadOnly: true, Prompt: "hi"})
+			off, _ = p.Argv(Vars{}, Launch{Context: "light", Prompt: "hi"})
+		}
+		for _, w := range c.want {
+			if !slices.Contains(on, w) || slices.Contains(off, w) {
+				t.Errorf("%s acp=%v: %q only when read-only: on %v off %v", c.prof, c.acp, w, on, off)
+			}
+		}
+	}
+}
+
 func TestModelArg(t *testing.T) {
 	for _, c := range []struct {
 		lists [][]string

@@ -42,6 +42,7 @@ func (f *Fleet) Report(me, state, summary string) (note string, err error) {
 	if err := f.onBoard(me); err != nil {
 		return "", err
 	}
+	f.answerFromReport(me, state, summary) // an Ask box agent's answer (ADR-209)
 	reply := ""
 	var left []todo.Item
 	if state == "done" {

@@ -295,6 +295,9 @@ func (f *Fleet) SpawnWith(o SpawnOpts, name, profile, dir, prompt string) (*boar
 		}
 	}
 	card := NormalizeCard(o.Card)
+	if _, err := readOnlyLaunch(name, f.Profiles[profile], card, driver == prefs.DriverACP); err != nil {
+		return nil, err
+	}
 	if err := f.checkRole(name, o.Role); err != nil {
 		return nil, err
 	}
@@ -411,6 +414,10 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 	}
 	ex.Model = m
 	acp := driver == prefs.DriverACP
+	ro, err := readOnlyLaunch(name, p, card, acp)
+	if err != nil {
+		return nil, err
+	}
 	// The dir is final here (worktree or not), so this is the last moment
 	// before the tool reads it: pre-answer its trust dialog (ADR-47). An
 	// ACP server shows no dialog.
@@ -478,7 +485,7 @@ func (f *Fleet) launch(name, profile, dir, prompt string, claimed, wantWT bool, 
 		return f.launchACP(name, profile, p, dir, prompt, full, claimed, lvl, ex)
 	}
 	argv, embedded := launchArgv(name, p, f.launchVars(name, id, p, pr, fenceDir(ex.Worktree, pr.FenceWrites), false),
-		tools.Launch{Mode: pr.Mode, Context: contextKey(p, lvl, role.Leader), Extra: pr.ExtraArgs,
+		tools.Launch{Mode: pr.Mode, Context: contextKey(p, lvl, role.Leader), ReadOnly: ro, Extra: pr.ExtraArgs,
 			Prompt: full, NoPromptArgs: !pr.AutoSubmit})
 	ex.Base = Baseline(dir) // before the agent can touch anything
 	f.markSent(name, full)

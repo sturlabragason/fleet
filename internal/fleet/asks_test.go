@@ -1,11 +1,13 @@
 package fleet
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/pages"
 	"github.com/sturlabragason/fleet/internal/prefs"
 	"github.com/sturlabragason/fleet/internal/tools"
@@ -42,7 +44,65 @@ func TestAskRouting(t *testing.T) {
 	if n := askName(a); n != "ask-team-floorplan-c4-lo-012345" || !validName(n) {
 		t.Errorf("askName = %q (valid %v)", n, validName(n))
 	}
-	if pr := AskPrompt(a, "work"); !strings.Contains(pr, "artifact ask reply team-floorplan-c4-long-name 0123456789ab") || !strings.Contains(pr, "what is S3?") {
-		t.Errorf("prompt lacks the reply command or the question:\n%s", pr)
+	if pr := AskPrompt(a, "work", "/x/page.html"); !strings.Contains(pr, "/x/page.html") || !strings.Contains(pr, "what is S3?") || strings.Contains(pr, "artifact ask reply") {
+		t.Errorf("prompt lacks the page or the question, or asks for a shell command:\n%s", pr)
+	}
+}
+
+// An ask agent's first done, blocked or question report is posted as the
+// answer, once; progress is not, and nor is any other agent's report.
+func TestAnswerFromReport(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "artifact")
+	script := "#!/bin/sh\n[ \"$1 $2\" = \"ask reply\" ] || exit 1\necho \"$3 $4 $5\" >> " + filepath.Join(dir, "replies") + "\n"
+	if err := os.WriteFile(bin, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FLEET_ARTIFACT", bin)
+	t.Setenv("FLEET_CONFIG", filepath.Join(dir, "none.toml"))
+	f := &Fleet{Home: t.TempDir()}
+	a := pages.Ask{Page: "floor-a", ID: "aaaaaaaaaaaa", Question: "why?"}
+	d := askFiles(f.Home, "ask-floor-a-aaaaaa")
+	if err := os.MkdirAll(d, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := json.Marshal(a)
+	if err := os.WriteFile(filepath.Join(d, "ask.json"), rec, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.answerFromReport("someone-else", "done", "not an answer")
+	f.answerFromReport("ask-floor-a-aaaaaa", "progress", "reading")
+	f.answerFromReport("ask-floor-a-aaaaaa", "done", "because.\n")
+	f.answerFromReport("ask-floor-a-aaaaaa", "done", "twice")
+	b, _ := os.ReadFile(filepath.Join(dir, "replies"))
+	if got := strings.TrimSpace(string(b)); got != "floor-a aaaaaaaaaaaa because." {
+		t.Errorf("replies = %q", got)
+	}
+	if _, err := os.Stat(d); !os.IsNotExist(err) {
+		t.Errorf("ask files left: %v", err)
+	}
+}
+
+func TestReadOnlyLaunch(t *testing.T) {
+	ro := &board.Card{May: []string{ReadOnly}}
+	can := tools.Profile{ReadOnlyArgs: []string{"--deny"}}
+	adapter := tools.Profile{ReadOnlyArgs: []string{"--deny"}, ACPCommand: []string{"npx"}}
+	for _, c := range []struct {
+		p       tools.Profile
+		card    *board.Card
+		acp     bool
+		want    bool
+		wantErr bool
+	}{
+		{can, ro, false, true, false},
+		{can, nil, false, false, false},
+		{tools.Profile{}, ro, false, false, true},
+		{adapter, ro, true, false, true},
+		{adapter, ro, false, true, false},
+	} {
+		got, err := readOnlyLaunch("a", c.p, c.card, c.acp)
+		if got != c.want || (err != nil) != c.wantErr {
+			t.Errorf("readOnlyLaunch(%+v, acp=%v) = %v, %v", c.p, c.acp, got, err)
+		}
 	}
 }

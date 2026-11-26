@@ -292,8 +292,13 @@ func (f *Fleet) Wake(name string, force bool) (*board.Agent, error) {
 		// host before it is up; the transcript and session id stay.
 		f.forgetHook(name)
 	} else {
+		ro, err := readOnlyLaunch(name, p, old.Card, false)
+		if err != nil {
+			f.unclaimWake(name, old)
+			return nil, err
+		}
 		argv, _ = p.Argv(f.launchVars(name, old.SessionID, p, wpr, fenceDir(old.Worktree, wpr.FenceWrites), false),
-			tools.Launch{Resume: true, Mode: f.modeFor(name, old.Profile, p, wpr.Mode), Extra: modelExtra(p, model, wpr.ExtraArgs), Context: ctx})
+			tools.Launch{Resume: true, Mode: f.modeFor(name, old.Profile, p, wpr.Mode), Extra: modelExtra(p, model, wpr.ExtraArgs), Context: ctx, ReadOnly: ro})
 	}
 	a, err := f.start(name, old.Profile, p, old.Dir, old.Goal, "", old.SessionID, argv, true,
 		startExtra{Base: old.Baseline, Worktree: old.Worktree, NoWorktree: old.NoWorktree, Card: old.Card, Effort: old.Effort, Model: model, Role: role, Driver: old.Driver, Config: old.Config})

@@ -50,6 +50,9 @@ func (f *Fleet) doneGate(me, summary string, left []todo.Item) gateVerdict {
 	if a == nil {
 		return gateVerdict{}
 	}
+	if IsReadOnly(a.Card) {
+		return gateVerdict{} // it could not have left work behind
+	}
 	merge := mayMerge(a)
 	reason, reply, code := f.workLeft(b, a, summary), "", "unmerged"
 	uncommitted := strings.Contains(reason, "uncommitted changes")
@@ -212,6 +215,27 @@ const ReviewOnly = "review-only"
 
 func reviewOnly(a *board.Agent) bool {
 	return a.Card != nil && slices.Contains(a.Card.May, ReviewOnly)
+}
+
+// ReadOnly is the `may` entry for an agent the tool itself keeps from
+// running shell commands and writing files (ADR-209): it starts with the
+// profile's readonly_args on every launch, wake and adopt, or not at all.
+const ReadOnly = "read-only"
+
+// IsReadOnly is whether card c makes its agent read-only.
+func IsReadOnly(c *board.Card) bool { return c != nil && slices.Contains(c.May, ReadOnly) }
+
+// readOnlyLaunch is the Launch.ReadOnly for card c on profile p, or an
+// error when p can't enforce it on that driver: a read-only agent never
+// starts without its restrictions.
+func readOnlyLaunch(name string, p tools.Profile, c *board.Card, acp bool) (bool, error) {
+	if !IsReadOnly(c) {
+		return false, nil
+	}
+	if !p.CanReadOnly(acp) {
+		return false, fmt.Errorf("%s is read-only, but its profile has no readonly_args that reach the tool on this driver", name)
+	}
+	return true, nil
 }
 
 // grantsMerge is whether one `may` entry lets the agent merge into local

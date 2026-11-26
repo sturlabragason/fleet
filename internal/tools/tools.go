@@ -45,6 +45,11 @@ type Profile struct {
 	// not need (ADR-60). Keys are the effort levels (light, standard, pro)
 	// plus "leader", which a squad leader uses at any effort when set.
 	ContextArgs map[string][]string
+	// ReadOnlyArgs make the tool itself refuse shell commands and file
+	// writes, whatever its mode (ADR-209): a read-only agent gets them
+	// after its context args. Empty = the profile can't run one, and a
+	// read-only spawn of it is refused.
+	ReadOnlyArgs []string
 	// ModeKeys maps a starting-mode name to tmux key names sent once the pane
 	// is ready, for tools that only offer a keystroke.
 	ModeKeys map[string][]string
@@ -336,6 +341,7 @@ acp = ["--acp"]
 acp_mode_args = { auto = "--allow-all", autopilot = "--allow-all" }
 driver = "acp"
 prompt_note = "` + copilotNote + `"
+readonly_args = ["--deny-tool=shell", "--deny-tool=write"]
 ` + copilotContext + `
 ` + copilotModels + `
 
@@ -358,6 +364,7 @@ user_mcp_off = ["--disable-mcp-server", "{server}"]
 acp = ["--acp"]
 acp_mode_args = { auto = "--allow-all", autopilot = "--allow-all" }
 prompt_note = "` + copilotNote + `"
+readonly_args = ["--deny-tool=shell", "--deny-tool=write"]
 ` + copilotContext + `
 ` + copilotModels + `
 
@@ -383,6 +390,7 @@ acp_env = { CLAUDE_CODE_EXECUTABLE = "{command_path}", ANTHROPIC_MODEL = "` + Cl
 acp_mcp = "session"
 acp_meta = "claude"
 acp_unset_env = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"]
+readonly_args = ["--disallowedTools=Bash,Edit,Write,NotebookEdit"]
 ` + claudeContext + `
 ` + claudeModels + `
 
@@ -531,6 +539,9 @@ func LoadWith(home string, local conf.Doc) (map[string]Profile, error) {
 		if p.ContextArgs == nil { // effort, skills and compaction per level (ADR-195); {} opts out
 			p.ContextArgs = b.ContextArgs
 		}
+		if p.ReadOnlyArgs == nil {
+			p.ReadOnlyArgs = b.ReadOnlyArgs
+		}
 		if p.UserMCPConfig == "" {
 			p.UserMCPConfig = b.UserMCPConfig
 		}
@@ -631,6 +642,12 @@ func apply(p *Profile, sec map[string]conf.Value) {
 	}
 	if v := conf.Map(sec, "context_args"); v != nil {
 		p.ContextArgs = splitModes(v)
+	}
+	if v, ok := sec["readonly_args"]; ok {
+		p.ReadOnlyArgs, _ = v.([]string)
+		if p.ReadOnlyArgs == nil {
+			p.ReadOnlyArgs = []string{}
+		}
 	}
 	if v := conf.Map(sec, "mode_keys"); v != nil {
 		p.ModeKeys = splitModes(v)
@@ -853,8 +870,11 @@ type Launch struct {
 	// Context is a ContextArgs key (an effort level or "leader"); a key the
 	// profile lacks adds nothing.
 	Context string
-	Extra   []string // extra args from local preferences
-	Prompt  string   // initial prompt, delivered via PromptArgs when the profile has them
+	// ReadOnly adds the profile's ReadOnlyArgs (ADR-209); check
+	// CanReadOnly first, Argv does not refuse.
+	ReadOnly bool
+	Extra    []string // extra args from local preferences
+	Prompt   string   // initial prompt, delivered via PromptArgs when the profile has them
 	// NoPromptArgs forbids carrying the prompt in argv even when the profile
 	// has PromptArgs. Set when auto_submit is off: `copilot -i <prompt>`
 	// submits the prompt itself, so honouring "paste but don't press Enter"
@@ -896,6 +916,9 @@ func (p Profile) Argv(v Vars, l Launch) (argv []string, embedded bool) {
 	}
 	for _, a := range p.ContextArgs[l.Context] {
 		argv = append(argv, v.expand(a))
+	}
+	if l.ReadOnly {
+		argv = append(argv, p.ReadOnlyArgs...)
 	}
 	switch {
 	case l.Resume:
@@ -951,7 +974,17 @@ func (p Profile) ACPArgv(v Vars, l Launch) []string {
 	add(p.ACP)
 	add(p.ACPModeArgs[l.Mode])
 	add(p.ContextArgs[l.Context])
+	if l.ReadOnly {
+		argv = append(argv, p.ReadOnlyArgs...)
+	}
 	return append(argv, l.Extra...)
+}
+
+// CanReadOnly reports whether the profile can start a read-only agent on
+// the acp driver (acp) or tmux: it has readonly_args, and they reach the
+// tool, which an acp_command adapter's argv does not (ADR-209).
+func (p Profile) CanReadOnly(acp bool) bool {
+	return len(p.ReadOnlyArgs) > 0 && (!acp || len(p.ACPCommand) == 0)
 }
 
 // HasACPMode reports whether the profile knows the named mode under the acp

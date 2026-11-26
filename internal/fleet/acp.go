@@ -231,8 +231,12 @@ func (f *Fleet) launchACP(name, profile string, p tools.Profile, dir, goal, full
 	pr := f.Prefs.For(profile)
 	mode := acpMode(name, profile, p, pr.Mode)
 	v := f.launchVars(name, "", p, pr, fenceDir(ex.Worktree, pr.FenceWrites), true)
+	ro, err := readOnlyLaunch(name, p, ex.Card, true)
+	if err != nil {
+		return nil, err
+	}
 	tool := p.ACPArgv(v, tools.Launch{
-		Mode: mode, Context: contextKey(p, lvl, ex.Role.Leader), Extra: modelExtra(p, ex.Model, pr.ExtraArgs)})
+		Mode: mode, Context: contextKey(p, lvl, ex.Role.Leader), ReadOnly: ro, Extra: modelExtra(p, ex.Model, pr.ExtraArgs)})
 	p, o, err := f.acpSetup(name, profile, p, mode, v)
 	if err != nil {
 		return nil, err
@@ -264,8 +268,12 @@ func (f *Fleet) wakeACPArgv(old *board.Agent, p tools.Profile, ctx string) ([]st
 	pr := f.Prefs.For(old.Profile)
 	mode := acpMode(old.Name, old.Profile, p, pr.Mode)
 	v := f.launchVars(old.Name, "", p, pr, fenceDir(old.Worktree, pr.FenceWrites), true)
+	ro, err := readOnlyLaunch(old.Name, p, old.Card, true)
+	if err != nil {
+		return nil, p, err
+	}
 	tool := p.ACPArgv(v, tools.Launch{
-		Mode: mode, Context: ctx, Extra: modelExtra(p, old.Model, pr.ExtraArgs)})
+		Mode: mode, Context: ctx, ReadOnly: ro, Extra: modelExtra(p, old.Model, pr.ExtraArgs)})
 	p, o, err := f.acpSetup(old.Name, old.Profile, p, mode, v)
 	if err != nil {
 		return nil, p, err

@@ -125,14 +125,18 @@ func (f *Fleet) adopt(o AdoptOpts, rec *board.Agent, claimed bool, prompt string
 				return nil, err
 			}
 		}
-		argv, p, err = f.wakeACPArgv(&board.Agent{Name: name, Profile: o.Profile, Dir: dir, SessionID: id, Model: model}, p, ctx)
+		argv, p, err = f.wakeACPArgv(&board.Agent{Name: name, Profile: o.Profile, Dir: dir, SessionID: id, Model: model, Card: ex.Card}, p, ctx)
 		if err != nil {
 			return nil, err
 		}
 		ex.Driver = board.DriverACP
 	} else {
+		ro, err := readOnlyLaunch(name, p, ex.Card, false)
+		if err != nil {
+			return nil, err
+		}
 		argv, _ = p.Argv(f.launchVars(name, id, p, apr, fence, false),
-			tools.Launch{Resume: true, Mode: f.modeFor(name, o.Profile, p, apr.Mode), Extra: modelExtra(p, model, apr.ExtraArgs), Context: ctx})
+			tools.Launch{Resume: true, Mode: f.modeFor(name, o.Profile, p, apr.Mode), Extra: modelExtra(p, model, apr.ExtraArgs), Context: ctx, ReadOnly: ro})
 	}
 	// Adopt resumes a session that already has a dir, so it never makes a
 	// worktree; when that dir is one, the board records it so close and
