@@ -357,7 +357,7 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 	if a.Name == m.sel {
 		st1 = st1.Foreground(cursorColor(col))
 	}
-	l1 := st1.Render(glyph(shown)+" "+ansi.Truncate(a.Name, inner-4-tw2, "…")) + tgt + st1.Render(wall)
+	l1 := st1.Render(theme.Glyph(shown)+" "+ansi.Truncate(a.Name, inner-4-tw2, "…")) + tgt + st1.Render(wall)
 	st := shown
 	if a.Asking() {
 		st += " · question"
@@ -369,7 +369,7 @@ func (m *Model) tile(a *board.Agent, tw int) string {
 	l2 := lipgloss.NewStyle().Foreground(colIdle).Render(metaLineMark(a.Profile, driverMark(a), state, inner))
 	if ti, ok := m.teams[a.Name]; ok && ti.Team != "" {
 		ts := lipgloss.NewStyle().Foreground(lipgloss.Color(ti.Color))
-		l1 = st1.Render(glyph(shown)+" "+ansi.Truncate(a.Name, inner-4-2-tw2, "…")) + tgt + " " + ts.Render(teamMark)
+		l1 = st1.Render(theme.Glyph(shown)+" "+ansi.Truncate(a.Name, inner-4-2-tw2, "…")) + tgt + " " + ts.Render(teamMark)
 		if wall != "" {
 			l1 += st1.Render(wall)
 		}
@@ -410,7 +410,7 @@ func (m *Model) chips(rest []*board.Agent, all bool) string {
 			sc = cursorColor(sc)
 		}
 		st := cursorStyle(lipgloss.NewStyle().Foreground(sc), cur)
-		c := m.ownerChip(a) + st.Render(glyph(a.Shown())+" "+a.Name+m.queueMark(a.Name))
+		c := m.ownerChip(a) + st.Render(theme.Glyph(a.Shown())+" "+a.Name+m.queueMark(a.Name))
 		if m.pinned[a.Name] {
 			c += pinStyle.Render(" " + pinMark)
 		}

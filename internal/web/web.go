@@ -12,11 +12,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -171,13 +173,17 @@ func (s *Server) index(w http.ResponseWriter) {
 		"fg": p.Text, "sub": p.Subtext0, "dim": p.Overlay0, "select": p.Select,
 		"working": p.Working, "waiting": p.Waiting, "error": p.Error, "stuck": p.Stuck, "idle": p.Idle, "gone": p.Gone,
 	}
-	var b strings.Builder
+	var b, st strings.Builder
 	for k, v := range css {
 		b.WriteString("--" + k + ":" + v + ";")
 	}
+	// One border rule per status from the shared state table (ADR-201).
+	for _, name := range slices.Sorted(maps.Keys(theme.States())) {
+		st.WriteString(".st-" + name + "{border-left-color:var(--" + theme.StateOf(name).Role + ")}\n")
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'")
-	if err := page.Execute(w, template.CSS(b.String())); err != nil {
+	if err := page.Execute(w, struct{ Vars, States template.CSS }{template.CSS(b.String()), template.CSS(st.String())}); err != nil {
 		logx.For("web").Error("render", "err", err)
 	}
 }

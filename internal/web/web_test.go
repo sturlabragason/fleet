@@ -238,3 +238,15 @@ func TestANSIToHTMLGolden(t *testing.T) {
 		t.Errorf("ANSIToHTML differs from testdata/capture.html (go test -update rewrites it):\n%s", got)
 	}
 }
+
+// The board draws every status from the shared state table (ADR-201): a
+// queued tile gets the gone border, not the idle default.
+func TestIndexStateRules(t *testing.T) {
+	rec := httptest.NewRecorder()
+	(&Server{}).index(rec)
+	for _, want := range []string{".st-queued{border-left-color:var(--gone)}", ".st-starting{border-left-color:var(--working)}", ".st-waiting{border-left-color:var(--waiting)}"} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("index lacks %s", want)
+		}
+	}
+}

@@ -25,7 +25,7 @@ const Default = "lane"
 type Swatch struct{ Name, Hex string }
 
 // Palette is one theme: every role, filled. A role is a meaning, not a shade;
-// give a new status its own glyph in internal/ui before giving it its own
+// give a new status its own glyph in states.go before giving it its own
 // colour.
 type Palette struct {
 	Name  string // config.toml value, e.g. "neon-drive"
@@ -159,22 +159,8 @@ func apply(p Palette) {
 	}
 }
 
-// Status returns the colour for an agent status; unknown statuses get Idle.
-func (p Palette) Status(st string) string {
-	switch st {
-	case "working":
-		return p.Working
-	case "waiting":
-		return p.Waiting
-	case "error":
-		return p.Error
-	case "stuck":
-		return p.Stuck
-	case "gone":
-		return p.Gone
-	}
-	return p.Idle
-}
+// Status returns the colour for an agent status (states.go).
+func (p Palette) Status(st string) string { return p.Role(StateOf(st).Role) }
 
 // Status returns the active palette's colour for an agent status.
 func Status(st string) string { return active.Status(st) }

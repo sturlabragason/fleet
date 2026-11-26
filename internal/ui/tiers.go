@@ -13,6 +13,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/layout"
+	"github.com/sturlabragason/fleet/internal/theme"
 )
 
 // Overview past one screen of cards (DESIGN.md §5e, ADR-32): agents that
@@ -59,7 +60,7 @@ func tierOf(a *board.Agent, onWall bool, now time.Time) int {
 // attention is the order for agents new to a tier: by status rank, the
 // longest wait first, then by name.
 func attention(a, b *board.Agent) bool {
-	ra, rb := rank(a.Shown()), rank(b.Shown())
+	ra, rb := theme.Rank(a.Shown()), theme.Rank(b.Shown())
 	if ra != rb {
 		return ra < rb
 	}
@@ -420,7 +421,7 @@ func (m *Model) rowCell(tv tierView, name string, w int) string {
 	}
 	age = fmt.Sprintf("%4s", age)
 	mw := 2 * m.markCount(a)
-	head := " " + glyph(a.Shown()) + " " + ansi.Truncate(a.Name, max(w-3-mw-ansi.StringWidth(age)-1, 1), "…")
+	head := " " + theme.Glyph(a.Shown()) + " " + ansi.Truncate(a.Name, max(w-3-mw-ansi.StringWidth(age)-1, 1), "…")
 	row = cursorStyle(lipgloss.NewStyle().Foreground(col), cur).Render(head)
 	if m.pinned[a.Name] {
 		mark(pinStyle, pinMark)

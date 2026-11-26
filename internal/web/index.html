@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>fleet</title>
 <style>
-:root{ {{.}} }
+:root{ {{.Vars}} }
 *{box-sizing:border-box}
 body{margin:0;background:var(--crust);color:var(--fg);font:14px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace}
 header{display:flex;gap:12px;align-items:baseline;padding:10px 16px;background:var(--mantle)}
@@ -20,8 +20,7 @@ header h1 .lane{color:var(--select)}
 .tile.remote{border-style:dashed;border-left-style:solid}
 .tile .w{background:var(--sub);color:var(--crust);padding:0 4px;margin-left:6px;border-radius:3px}
 .tile .s,.tile .l,.tile .r{color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.st-working{border-left-color:var(--working)} .st-waiting{border-left-color:var(--waiting)}
-.st-error{border-left-color:var(--error)} .st-stuck{border-left-color:var(--stuck)} .st-gone{border-left-color:var(--gone)}
+{{.States}}
 #drawer{display:none;position:fixed;inset:0 0 0 auto;width:min(900px,100%);background:var(--mantle);border-left:1px solid var(--surface);flex-direction:column}
 #drawer.open{display:flex}
 #dhead{display:flex;justify-content:space-between;align-items:center;padding:8px 16px}

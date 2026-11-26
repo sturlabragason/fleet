@@ -44,84 +44,14 @@ func applyTheme() {
 	noReportStyle = lipgloss.NewStyle().Foreground(colWaitA)
 }
 
-func statusColor(st string) lipgloss.Color {
-	switch st {
-	case "working":
-		return colWorking
-	case "waiting":
-		return colWaitA
-	case "error":
-		return colError
-	case "stuck":
-		return colStuck
-	case "gone", "queued", "parked":
-		return colGone
-	case "starting":
-		return colWorking
-	}
-	return colIdle
-}
-
-// glyph is one static mark per status, like Copilot CLI's own "○ Working":
-// the colour tells working (○) from idle (○), never motion (ADR-81).
-func glyph(st string) string {
-	switch st {
-	case "working":
-		return "○"
-	case "waiting":
-		return "●"
-	case "error":
-		return "✖"
-	case "stuck":
-		return "⧗"
-	case "idle":
-		return "○"
-	case "gone":
-		return "·"
-	case "queued":
-		return "‖"
-	case "parked":
-		return "z"
-	case "starting":
-		return "▸"
-	}
-	return "?"
-}
+// statusColor is an agent status's colour from the one state table
+// (theme/states.go, ADR-201).
+func statusColor(st string) lipgloss.Color { return lipgloss.Color(theme.Status(st)) }
 
 // reportStyle is the glyph and colour of a report state on a tile.
 func reportStyle(state string) (string, lipgloss.Color) {
-	switch state {
-	case "done":
-		return "✓", colWorking
-	case "blocked":
-		return "✗", colError
-	case "question":
-		return "?", colWaitA
-	}
-	return "…", colIdle
-}
-
-// attention rank: lower sorts first.
-func rank(st string) int {
-	switch st {
-	case "waiting":
-		return 0
-	case "error":
-		return 1
-	case "stuck":
-		return 2
-	case "working", "starting":
-		return 3
-	case "idle":
-		return 4
-	case "unknown":
-		return 5
-	case "queued":
-		return 7
-	case "parked":
-		return 8
-	}
-	return 6
+	g, hex := theme.Report(state)
+	return g, lipgloss.Color(hex)
 }
 
 // cursorStyle marks the overview cursor (ADR-37): an underline, in whatever

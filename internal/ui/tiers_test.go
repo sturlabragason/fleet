@@ -340,7 +340,7 @@ func TestAskingAgentReadsAsWaiting(t *testing.T) {
 	}
 	m.setAgents(m.agents)
 	v := ansi.Strip(m.View())
-	if !strings.Contains(v, "+5 idle") || !strings.Contains(v, glyph("waiting")+" i0") {
+	if !strings.Contains(v, "+5 idle") || !strings.Contains(v, theme.Glyph("waiting")+" i0") {
 		t.Fatalf("i0 should be a waiting row, the other 5 folded:\n%s", v)
 	}
 	if got := tierOf(m.agents[slices.IndexFunc(m.agents, func(a *board.Agent) bool { return a.Name == "i0" })], false, m.now()); got != tierWaiting {

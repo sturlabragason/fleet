@@ -380,8 +380,6 @@ func (f *Fleet) tagNoReport(pane, tag string) {
 	f.T.UnsetPaneOption(pane, "@fleet_noreport")
 }
 
-var paneGlyphs = map[string]string{"working": "○", "waiting": "●", "error": "✖", "stuck": "⧗", "idle": "○", "offline": "⊘"}
-
 // tagPane stores the status on the pane so tmux border formats can show it and
 // the wall can evict and emphasise by status. since is the time the agent
 // entered this status (now on a transition, the board's StatusSince on a re-sync).
@@ -389,15 +387,10 @@ func (f *Fleet) tagPane(pane, st string, since time.Time) {
 	if pane == "" {
 		return
 	}
-	c := theme.Status(st)
-	g, ok := paneGlyphs[st]
-	if !ok {
-		g = "?"
-	}
 	f.T.SetPaneOption(pane, "@fleet_status", st)
 	f.T.SetPaneOption(pane, "@fleet_status_since", strconv.FormatInt(since.UnixNano(), 10))
-	f.T.SetPaneOption(pane, "@fleet_color", c)
-	f.T.SetPaneOption(pane, "@fleet_glyph", g)
+	f.T.SetPaneOption(pane, "@fleet_color", theme.Status(st))
+	f.T.SetPaneOption(pane, "@fleet_glyph", theme.Glyph(st))
 }
 
 // stuckCause is the stuck rule that fired, for the event log: the reason
