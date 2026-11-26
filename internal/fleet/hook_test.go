@@ -110,7 +110,8 @@ func TestHookPrecedence(t *testing.T) {
 		want                status.Status
 	}{
 		{"event beats screen: stop under a spinner", "working.txt", "stop", before, status.Idle},
-		{"event beats screen: tool call at a quiet prompt", "idle.txt", "pretooluse", before, status.Working},
+		{"event beats screen: tool call at a quiet prompt", "idle.txt", "pretooluse", after, status.Working},
+		{"working hook yields to a newer idle pane (Esc, /clear)", "idle.txt", "sessionstart", before, status.Idle},
 		{"event beats screen: newer hook", "working.txt", "stop", after, status.Idle},
 		{"menu beats event: trust dialog", "waiting-trust.txt", "pretooluse", after, status.Waiting},
 		{"menu beats event: approval", "waiting-approval.txt", "stop", after, status.Waiting},

@@ -87,8 +87,10 @@ func (f *Fleet) resolveGlob(agent, g string) string {
 //
 //   - the screen shows a menu, prompt, modal or error (Waiting or Error):
 //     a folder-trust dialog or an API error fires no hook;
-//   - the hook says waiting and the pane changed since: a waiting hook
-//     does not say when the question was answered, the screen does;
+//   - the hook says waiting, or working over an idle screen, and the pane
+//     changed after it: no hook fires when a question is answered in the
+//     pane, nor on Esc, /clear or /compact, the screen shows it. A screen
+//     that matched nothing never clears a hook;
 //   - the hook says working and is older than HookWorkingMax: a tool killed
 //     mid-tool-call leaves its last PreToolUse behind (ADR-49).
 func (f *Fleet) hookState(a *board.Agent, screen status.Status) (status.State, bool) {
@@ -96,7 +98,8 @@ func (f *Fleet) hookState(a *board.Agent, screen status.Status) (status.State, b
 	if !ok || screen == status.Waiting || screen == status.Error {
 		return status.State{}, false
 	}
-	if s.Status == status.Waiting && screen != "" && !s.At.After(a.LastChange) {
+	yields := s.Status == status.Waiting && screen != "" || s.Status == status.Working && screen == status.Idle
+	if yields && !s.At.After(a.LastChange) {
 		return status.State{}, false
 	}
 	if s.Status == status.Working && time.Since(s.At) > HookWorkingMax {
