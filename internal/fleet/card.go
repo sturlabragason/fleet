@@ -110,7 +110,7 @@ func RepoCheck(c *board.Card, dir string) *board.Card {
 	// The check runs in dir, so it is the repo's only at the repo's top: a
 	// subfolder (or a dir outside git) keeps the card as it is.
 	top, err := worktree.TopLevel(dir)
-	if real, rerr := filepath.EvalSymlinks(dir); err != nil || rerr != nil || real != top {
+	if abs, rerr := filepath.EvalSymlinks(dir); err != nil || rerr != nil || abs != top {
 		return c
 	}
 	rc, err := worktree.LoadRepoConfig(dir)
