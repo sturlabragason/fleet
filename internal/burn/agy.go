@@ -72,7 +72,7 @@ func (r AgyReader) Read(ctx context.Context, profile string, _ prefs.BurnProfile
 
 var (
 	agyPctRe        = regexp.MustCompile(`(\d+(?:\.\d+)?)%`)
-	agyMultiSpaceRe = regexp.MustCompile(`\s{2,}`)
+	agyMultiSpaceRe = regexp.MustCompile(`\t|\s{2,}`) // agy separates columns with tabs
 )
 
 var agyFixedZones = map[string]*time.Location{
@@ -151,6 +151,10 @@ func parseAgyResetTime(s string, now time.Time) (time.Time, error) {
 		return time.Time{}, nil
 	}
 	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		// agy prints the Unix epoch for a window with no reset scheduled.
+		if t.Unix() <= 0 {
+			return time.Time{}, nil
+		}
 		return t.UTC(), nil
 	}
 

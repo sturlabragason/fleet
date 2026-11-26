@@ -11,7 +11,7 @@ On each tick (`fleet burn --tick`), for every profile listed in `[burn] profiles
 1. **Read quota** using the profile's reader:
    - `agy`: runs `agy -p /quota` (no model call) and parses every weekly and 5-hour window.
    - `nanogpt` (for `pi`): calls the NanoGPT subscription usage API (`https://nano-gpt.com/api/subscription/v1/usage`, or a management endpoint via `usage_url` + `token_env`).
-   - `ai-usagebar` (for `claude` profiles): runs `ai-usagebar --json` through the companion contract.
+   - `ai-usagebar` (for `claude` profiles): runs `ai-usagebar usage --json` through the companion contract and reads the entry `anthropic@<account>`. Each Claude seat is one `[[anthropic.accounts]]` entry in `~/.config/ai-usagebar/config.toml` whose `label` is the `account` set in `[burn.<profile>]`; an `Extra usage` metric counts as overage.
 2. **Safety gates**:
    - Skips profiles whose reader reports paid overage or extra usage enabled (unless `allow_overage = true`).
    - Skips profiles outside the burn window (`time_to_reset > window`).
@@ -48,7 +48,7 @@ token_env = "NANOGPT_MANAGEMENT_TOKEN" # optional scoped read-only token
 
 [burn.claude]
 reader = "ai-usagebar"
-account = "default"
+account = "work"          # the [[anthropic.accounts]] label in ai-usagebar's config
 projects = ["my-project"] # optional: keep scoped/customer seats restricted to approved projects
 max_per_tick = 1          # optional: tighter cap per tick
 ```
@@ -69,8 +69,7 @@ fleet burn --review             # write morning Accept/Reject HTML review page f
 ```
 
 ## Systemd user timer
-Unit files are shipped in `examples/systemd/` and are not installed automatically. Edit `WorkingDirectory` in the service to the repo that `+burn` tasks without a `dir` field run in, then enable the 30-minute timer:
-Unit files are shipped in `examples/systemd/` and are not installed automatically. To enable the 30-minute timer:
+Unit files are shipped in `examples/systemd/` and are not installed automatically. Edit `WorkingDirectory` in the service to the repo that `+burn` tasks without a `dir` field run in, and make sure its `PATH` reaches `task`, `agy` and `ai-usagebar`. Then enable the 30-minute timer:
 
 ```sh
 mkdir -p ~/.config/systemd/user
@@ -80,3 +79,10 @@ systemctl --user enable --now fleet-burn.timer
 ```
 
 Check logs with `journalctl --user -u fleet-burn.service -n 50` or `~/.fleet/logs/burn.jsonl`.
+
+## How to tell it ran
+
+- `systemctl --user list-timers fleet-burn.timer` shows the last and the next run.
+- Every tick appends one JSON line to `~/.fleet/logs/burn.jsonl`: `tail -n1 ~/.fleet/logs/burn.jsonl | jq '.profiles[] | {profile, skip_reason, planned_spawns}'`.
+- `journalctl --user -u fleet-burn.service -n 20` prints the same plan as `fleet burn`.
+- A live tick that spawns shows `burn-<id8>` agents on the board and `fleet/burn-<id8>` branches; `fleet burn --review` lists them.

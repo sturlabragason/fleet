@@ -18,7 +18,7 @@ Type=oneshot
 # a dir that is not a git repo makes those spawns fail (burn needs a branch).
 WorkingDirectory=%h/src/your-repo
 # User units get a minimal PATH; task, agy and ai-usagebar usually live here.
-Environment=PATH=%h/.local/bin:%h/go/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=%h/.local/bin:%h/go/bin:%h/.nix-profile/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=%h/.local/bin/fleet burn --tick
 Nice=10
 IOSchedulingClass=idle

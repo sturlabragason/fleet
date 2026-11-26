@@ -23,6 +23,11 @@ Claude and GPT models  Five Hour Limit Remaining    100%  2026-11-23 01:52 CET
 Gemini 4 Argon         Gemini 4 Argon Weekly Limit  100%  2026-11-29 20:52 CET
 `
 
+const agyRealFixture = "Gemini Models\tWeekly Limit Remaining\t100%\t2026-12-03T18:00:11Z\n" +
+	"Gemini Models\tFive Hour Limit Remaining\t100%\t2026-11-26T23:00:11Z\n" +
+	"Claude and GPT models\tWeekly Limit Remaining\t100%\t1970-01-01T00:00:00Z\n" +
+	"Claude and GPT models\tFive Hour Limit Remaining\t100%\t1970-01-01T00:00:00Z\n"
+
 func TestParseAgyQuota(t *testing.T) {
 	t.Helper()
 	now := time.Date(2026, 11, 22, 20, 0, 0, 0, time.UTC)
@@ -50,6 +55,17 @@ func TestParseAgyQuota(t *testing.T) {
 			want: []Window{
 				{Group: "Model A", Kind: "daily", Label: "Daily Limit Remaining", RemainingPct: 42.5, ResetAt: time.Date(2026, 11, 23, 15, 0, 0, 0, time.UTC)},
 				{Group: "Model B", Kind: "other", Label: "Monthly Limit", RemainingPct: 80, ResetAt: time.Date(2026, 11, 30, 22, 0, 0, 0, time.UTC)},
+			},
+		},
+		{
+			// Captured from agy 2026-11-26: tab-separated, RFC3339, epoch for "no reset".
+			name:  "real tab-separated output",
+			input: agyRealFixture,
+			want: []Window{
+				{Group: "Gemini Models", Kind: "weekly", Label: "Weekly Limit Remaining", RemainingPct: 100, ResetAt: time.Date(2026, 12, 3, 18, 0, 11, 0, time.UTC)},
+				{Group: "Gemini Models", Kind: "5h", Label: "Five Hour Limit Remaining", RemainingPct: 100, ResetAt: time.Date(2026, 11, 26, 23, 0, 11, 0, time.UTC)},
+				{Group: "Claude and GPT models", Kind: "weekly", Label: "Weekly Limit Remaining", RemainingPct: 100},
+				{Group: "Claude and GPT models", Kind: "5h", Label: "Five Hour Limit Remaining", RemainingPct: 100},
 			},
 		},
 		{name: "empty output", input: "", wantErr: true},
@@ -304,9 +320,20 @@ func TestNanoGPTReaderRead(t *testing.T) {
 	}
 }
 
-func TestParseUsageBarJSON(t *testing.T) {
-	t.Helper()
+// usageBarFixture is `ai-usagebar usage --json` (v1.52.3) captured 2026-11-26,
+// with a second account and an extra-usage metric added.
+const usageBarFixture = `{"entries":[
+{"brand":"anthropic","display_name":"Claude · team-a","error":null,"id":"anthropic@team-a","metrics":[
+ {"detail":"Resets in 4h 50m","headline":"percent","label":"Session (5h)","percent":8,"reset_at":"2026-11-26T22:50:00.101936Z","severity":"low","value":"8%","window_secs":18000},
+ {"detail":"Resets in 3d 23h","headline":"percent","label":"Weekly (7d)","percent":23,"reset_at":"2026-11-30T17:00:00.101960Z","severity":"low","value":"23%","window_secs":604800}],
+ "name":"anthropic · team-a","plan":"Claude Team","status":"ready"},
+{"brand":"anthropic","error":null,"id":"anthropic@personal","metrics":[
+ {"label":"Weekly (7d)","percent":90,"reset_at":"2026-11-29T10:00:00Z"},
+ {"label":"Extra usage","percent":5}],"status":"ready"},
+{"brand":"anthropic","error":"token expired; run claude login","id":"anthropic@broken","metrics":[]}
+],"primary":null,"schema_version":1}`
 
+func TestParseUsageBarJSON(t *testing.T) {
 	tests := []struct {
 		name        string
 		input       string
@@ -316,36 +343,25 @@ func TestParseUsageBarJSON(t *testing.T) {
 		want        []Window
 	}{
 		{
-			name: "top-level array with remaining_pct and used_pct",
-			input: `[{"name":"claude","extra_usage":true,"windows":[
-				{"kind":"5h","label":"Five Hour","remaining_pct":88.5,"resets_at":"2026-11-23T02:00:00Z"},
-				{"name":"Weekly Limit","used_pct":25.0,"reset_at":1795996800000}
-			]}]`,
+			name:    "account picks its own entry",
+			input:   usageBarFixture,
+			account: "team-a",
+			want: []Window{
+				{Group: "anthropic@team-a", Kind: "5h", Label: "Session (5h)", RemainingPct: 92, ResetAt: time.Date(2026, 11, 26, 22, 50, 0, 101936000, time.UTC)},
+				{Group: "anthropic@team-a", Kind: "weekly", Label: "Weekly (7d)", RemainingPct: 77, ResetAt: time.Date(2026, 11, 30, 17, 0, 0, 101960000, time.UTC)},
+			},
+		},
+		{
+			name:        "extra usage metric flags overage",
+			input:       usageBarFixture,
+			account:     "personal",
 			wantOverage: true,
-			want: []Window{
-				{Group: "claude", Kind: "5h", Label: "Five Hour", RemainingPct: 88.5, ResetAt: time.Date(2026, 11, 23, 2, 0, 0, 0, time.UTC)},
-				{Group: "claude", Kind: "weekly", Label: "Weekly Limit", RemainingPct: 75.0, ResetAt: time.UnixMilli(1795996800000).UTC()},
-			},
+			want:        []Window{{Group: "anthropic@personal", Kind: "weekly", Label: "Weekly (7d)", RemainingPct: 10, ResetAt: time.Date(2026, 11, 29, 10, 0, 0, 0, time.UTC)}},
 		},
-		{
-			name: "vendors wrapper with account filtering",
-			input: `{"vendors":[
-				{"vendor":"claude","account":"claude-team-a","extra_usage":false,"windows":[{"kind":"weekly","remaining":64,"resets_at":1795996800}]},
-				{"vendor":"claude","account":"claude-personal","extra_usage":true,"windows":[{"kind":"weekly","remaining":10,"resets_at":1795996800}]}
-			]}`,
-			account:     "claude-team-a",
-			wantOverage: false,
-			want: []Window{
-				{Group: "claude-team-a", Kind: "weekly", Label: "weekly", RemainingPct: 64, ResetAt: time.Unix(1795996800, 0).UTC()},
-			},
-		},
-		{
-			name:    "unknown account fails when multiple entries exist",
-			input:   `{"accounts":[{"account":"claude-a","windows":[{"kind":"weekly","remaining_pct":50}]},{"account":"claude-b","windows":[{"kind":"weekly","remaining_pct":60}]}]}`,
-			account: "claude-c",
-			wantErr: true,
-		},
-		{name: "empty payload", input: `{}`, wantErr: true},
+		{name: "entry error is reported", input: usageBarFixture, account: "broken", wantErr: true},
+		{name: "unknown account", input: usageBarFixture, account: "team", wantErr: true},
+		{name: "no account with several entries", input: usageBarFixture, wantErr: true},
+		{name: "waybar json is not a report", input: `{"text":"8%","tooltip":"x","class":"low"}`, wantErr: true},
 	}
 
 	for _, tc := range tests {
@@ -443,10 +459,10 @@ func TestCompanionReadersWithMockRunner(t *testing.T) {
 		case "agy":
 			return []byte(agyFixture), nil
 		case "ai-usagebar":
-			if len(o.Env) == 0 || o.Env[0] != "CLAUDE_CONFIG_DIR=/tmp/claude-a" {
-				t.Fatalf("expected CLAUDE_CONFIG_DIR in env, got %v", o.Env)
+			if strings.Join(args, " ") != "usage --json" {
+				t.Fatalf("ai-usagebar args = %v, want usage --json", args)
 			}
-			return []byte(`[{"name":"claude","windows":[{"kind":"weekly","remaining_pct":70,"resets_at":"2026-11-29T12:00:00Z"}]}]`), nil
+			return []byte(usageBarFixture), nil
 		case "task":
 			return []byte(`[{"uuid":"11111111-0000-0000-0000-000000000000","description":"Burn task","urgency":5.0}]`), nil
 		default:
@@ -458,7 +474,7 @@ func TestCompanionReadersWithMockRunner(t *testing.T) {
 	if q := (AgyReader{}).Read(t.Context(), "agy", prefs.BurnProfile{}, nil); !q.Available || len(q.Windows) != 5 {
 		t.Fatalf("AgyReader.Read = %+v", q)
 	}
-	if q := (UsageBarReader{}).Read(t.Context(), "claude-team-a", prefs.BurnProfile{}, map[string]string{"CLAUDE_CONFIG_DIR": "/tmp/claude-a"}); !q.Available || len(q.Windows) != 1 {
+	if q := (UsageBarReader{}).Read(t.Context(), "claude-team-a", prefs.BurnProfile{Account: "team-a"}, nil); !q.Available || len(q.Windows) != 2 {
 		t.Fatalf("UsageBarReader.Read = %+v", q)
 	}
 	if tasks, err := ReadTasks(t.Context(), "burn"); err != nil || len(tasks) != 1 || tasks[0].NormalizedEffort() != "standard" {

@@ -308,6 +308,6 @@ mode_args = { autopilot = "--allow-all --autopilot", plan = "--plan" }
 #
 # [burn.claude]
 # reader = "ai-usagebar"
-# account = "default"
+# account = "work"          # its [[anthropic.accounts]] label in ai-usagebar
 # projects = ["my-project"] # optional: restrict this profile to specific task projects
 # max_per_tick = 1          # optional: tighter cap for scoped seats
