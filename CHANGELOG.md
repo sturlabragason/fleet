@@ -6,6 +6,9 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
+## 2026-11-26
+- An agent that finished no longer ends up "blocked: done refused 2 times" because of its own refusals: fleet's reply to a refused done is not counted as a new queued tweak, a tweak held until the turn ended counts as had once the agent got it, and the refusal tells the agent to end its turn instead of reporting done again (ADR-164)
+
 ## 2026-11-25
 - Decision pages from `fleet page publish` say at the top whether Submit still works (open, updated by the agent, signed out, deleted, answered), keep what you type across reloads and republishes, and offer Check again, Copy answers and Download whenever Submit can't go through; `--replace` warns the agent when you have the page open unanswered (ADR-199)
 

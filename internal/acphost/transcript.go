@@ -162,3 +162,22 @@ func LastAgentText(path string) string {
 	})
 	return text
 }
+
+// SentSince is whether the host sent text as a prompt at or after since:
+// a prompt entry (KindUser) holding the first line of text. A held prompt
+// goes out joined with the others held, so the entry may hold more.
+func SentSince(path string, since time.Time, text string) bool {
+	line, _, _ := strings.Cut(strings.TrimSpace(text), "\n")
+	if line == "" {
+		return false
+	}
+	sent := false
+	_ = eachFromEnd(path, func(e Entry) bool {
+		if e.At.Before(since) {
+			return false
+		}
+		sent = e.Kind == KindUser && strings.Contains(e.Text, line)
+		return !sent
+	})
+	return sent
+}

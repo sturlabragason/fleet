@@ -101,10 +101,12 @@ func (f *Fleet) sessionEnd(name, outcome string) {
 
 // Tweak records text sent to the agent as a queue item of kind (todo.Steer,
 // todo.Queued or todo.Prompt) under its session, opening the session first
-// for an agent spawned before the store had one.
+// for an agent spawned before the store had one. Fleet's own reply to a
+// refused done is no tweak: `fleet report` sends it back through `fleet send
+// --queue`, and recording it grew the queue with every refusal.
 func (f *Fleet) Tweak(name, kind, text string) {
 	a, ok := f.Store.Load().Agents[name]
-	if !ok || strings.TrimSpace(text) == "" {
+	if !ok || strings.TrimSpace(text) == "" || Refused(text) {
 		return
 	}
 	f.sessionOpen(a)
@@ -157,7 +159,9 @@ func tweakKind(d string) string {
 // tweaks the agent has had by now and returns those it has not had yet.
 // A steer or a prompt reached it when sent; a queued tweak reaches it when
 // its turn ends, so it has had those added before its previous report or
-// the start of this turn, whichever is later. A refused done is no report
+// the start of this turn, whichever is later, and those its ACP host's
+// transcript shows sent (a held prompt starts the next turn at once, so
+// the board may never see the turn change). A refused done is no report
 // here: the agent is still in the turn the gate sent it back to.
 func (f *Fleet) queueClose(name string) (left []todo.Item) {
 	a, ok := f.Store.Load().Agents[name]
@@ -173,6 +177,7 @@ func (f *Fleet) queueClose(name string) (left []todo.Item) {
 	}
 	now := time.Now()
 	by := f.sessions(name)
+	tx := acphost.TranscriptPath(f.Home, name)
 	todoDo("queue done", name, func(ctx context.Context, s todo.Store) error {
 		is, err := s.Queue(ctx, name)
 		if err != nil {
@@ -185,6 +190,9 @@ func (f *Fleet) queueClose(name string) (left []todo.Item) {
 			cut := now
 			if i.Kind == todo.Queued {
 				cut = since
+				if acphost.SentSince(tx, i.Entry, i.Description) {
+					cut = now
+				}
 			}
 			if !i.Entry.Before(cut) {
 				left = append(left, i)

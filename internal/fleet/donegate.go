@@ -133,7 +133,8 @@ func queueException(summary string) bool {
 // queueText is fleet's reply to a done refused for open tweaks.
 func queueText(left []todo.Item) string {
 	var b strings.Builder
-	b.WriteString(DoneRefused + "your queue still has tweaks you have not had yet; they reach you when this turn ends:")
+	b.WriteString(DoneRefused + "your queue still has tweaks you have not had yet; they reach you when this turn ends," +
+		" so end this turn now instead of reporting done again:")
 	for _, i := range left {
 		b.WriteString("\n- " + i.Line())
 	}

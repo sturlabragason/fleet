@@ -1,11 +1,15 @@
 package fleet
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/acphost"
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/supervisor"
 	"github.com/sturlabragason/fleet/internal/todo"
@@ -68,6 +72,49 @@ func TestQueueGateAndSession(t *testing.T) {
 	}
 	if is, _ := memTodo.Admiral(t.Context(), board.Main); len(is) != 1 || is[0].Description != "also add docs" || is[0].Kind != todo.Followup {
 		t.Fatalf("hand-over: %+v", is)
+	}
+}
+
+// A finished agent's done goes through once its held tweak reached it
+// (fleet 2026-11-26): fleet's refusal, sent back the way `fleet send
+// --queue` does, is no new tweak, so repeated dones in one turn list the
+// same one item; and the held prompt the ACP host sent at turn end counts
+// as had though the board never saw the agent go idle.
+func TestRefusedDoneDoesNotGrowQueue(t *testing.T) {
+	memTodo = todotest.New()
+	t.Cleanup(func() { memTodo = nil })
+	f, _, _, _ := gateFleet(t, "pro")
+	f.Tell = func(n, text string) error { f.Tweak(n, todo.Queued, text); return nil }
+	if err := f.Store.Update(func(b *board.Board) error {
+		b.Agents["w"].Status, b.Agents["w"].StatusSince = "working", time.Now()
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	const fyi = "FYI: write the result file"
+	f.Tweak("w", todo.Queued, fyi)
+	for i := range MaxDoneBounces {
+		note, err := f.Report("w", "done", "finished")
+		if err != nil || !Refused(note) || strings.Count(note, "\n- ") != 1 || !strings.Contains(note, fyi) {
+			t.Fatalf("done %d: err %v note %q", i+1, err, note)
+		}
+		if is, _ := memTodo.Queue(t.Context(), "w"); len(is) != 1 || is[0].Description != fyi {
+			t.Fatalf("done %d: queue grew: %+v", i+1, is)
+		}
+	}
+	tx := acphost.TranscriptPath(f.Home, "w")
+	if err := os.MkdirAll(filepath.Dir(tx), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	line, _ := json.Marshal(acphost.Entry{At: time.Now(), Kind: acphost.KindUser, Text: fyi + "\n\n[fleet] Your done report was not accepted: ..."})
+	if err := os.WriteFile(tx, append(line, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Report("w", "done", "finished"); err != nil || !strings.HasPrefix(lastReport(t, f), "done: ") {
+		t.Fatalf("after delivery: err %v report %q", err, lastReport(t, f))
+	}
+	if is, _ := memTodo.Queue(t.Context(), "w"); len(is) != 0 {
+		t.Fatalf("queue after accepted done: %+v", is)
 	}
 }
 
