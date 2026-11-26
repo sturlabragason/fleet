@@ -157,3 +157,14 @@ func TestKeysAttachImages(t *testing.T) {
 		return len(c) > 0 && c[len(c)-1] == "prompt x"+dropped
 	}, "stripped prompt")
 }
+
+// The user's prompt goes to the todo store with attachments shown, never
+// the raw marks (a raw \x1e there made the store's export unreadable).
+func TestUserPromptShowsAttachments(t *testing.T) {
+	got := make(chan string, 1)
+	h := &host{cfg: Config{OnUserPrompt: func(text string, _ bool) { got <- text }}}
+	h.userPrompt("see "+attachToken("/tmp/a.png")+" now", false)
+	if s := <-got; s != "see [image: /tmp/a.png] now" {
+		t.Errorf("prompt: %q", s)
+	}
+}

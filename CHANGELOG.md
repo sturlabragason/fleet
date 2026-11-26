@@ -7,6 +7,7 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
 ## 2026-11-26
+- A prompt with an image typed into an ACP pane goes on the agent's queue as `[image: path]`; before, its raw attachment marks made the todo list, the brief's open asks and `fleet_note done=` fail with "invalid character"
 - Edit your theme file or the `theme =` line while fleet runs: the overview, pane borders and web board (on its next page load) pick up the saved colours within about two seconds, and an edit that does not parse keeps the last good colours and says why (ADR-201)
 - Alt-? opens the keys popup in a small terminal again instead of failing with "width too large"; it and the Alt-P and Alt-r pickers shrink to fit the terminal
 - `fleet merge --queue` lands every ready branch (pushed, CI green) in one checked batch on local main; when the check fails it bisects to the branch that broke it, merges the rest and shows that branch with the failing output. `--dry-run` shows the order and why other branches wait (ADR-206)

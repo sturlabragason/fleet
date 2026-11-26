@@ -421,10 +421,11 @@ func (h *host) paneSendNow() {
 	h.userPrompt(text, false)
 }
 
-// userPrompt tells OnUserPrompt of a prompt the user typed.
+// userPrompt tells OnUserPrompt of a prompt the user typed, attachments as
+// "[image: path]": the text goes to the todo store, never the raw marks.
 func (h *host) userPrompt(text string, held bool) {
 	if h.cfg.OnUserPrompt != nil && text != "" {
-		go h.cfg.OnUserPrompt(text, held)
+		go h.cfg.OnUserPrompt(shown(text), held)
 	}
 }
 
