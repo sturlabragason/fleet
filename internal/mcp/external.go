@@ -37,7 +37,9 @@ func (s *Server) connectClient(ctx context.Context, a args) (string, error) {
 	if a.Client != "claude-desktop" {
 		return "", fmt.Errorf("client must be claude-desktop")
 	}
-	if err := s.confirm(gate{tool: "fleet_admiral_add", why: "this writes Claude Desktop's config; "}, a); err != nil {
+	g := gate{tool: "fleet_admiral_add", why: "this writes Claude Desktop's config; ",
+		ask: "Add admiral " + a.Name + " for Claude Desktop? This writes Claude Desktop's config (backed up first)."}
+	if err := s.confirm(g, a); err != nil {
 		return "", err
 	}
 	return cliResult(s.runFleet(ctx, "", "connect", "claude-desktop", "--name", a.Name))

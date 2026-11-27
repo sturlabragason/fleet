@@ -80,6 +80,12 @@ func (s *Server) team(a args) (string, error) {
 		if a.Text == "" {
 			return "", fmt.Errorf("text is required")
 		}
+		if a.Confirmed && s.elicits() {
+			g := gate{tool: "fleet_team", ask: "Send to every agent in team " + a.Team + ", also those waiting on a prompt? This answers their prompts."}
+			if err := s.confirm(g, a); err != nil {
+				return "", err
+			}
+		}
 		rs, err := s.F.TeamSend(a.Team, a.Text, a.Confirmed)
 		return results("sent", rs, err)
 	case "show":
@@ -89,7 +95,7 @@ func (s *Server) team(a args) (string, error) {
 		rs, err := s.F.TeamHide(s.W, a.Team)
 		return results("off wall", rs, err)
 	case "close":
-		if err := s.confirm(gate{tool: "fleet_team"}, a); err != nil {
+		if err := s.confirm(gate{tool: "fleet_team", ask: "Close every agent in team " + a.Team + "?"}, a); err != nil {
 			return "", err
 		}
 		rs, err := s.F.TeamClose(a.Team)

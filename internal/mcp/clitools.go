@@ -149,7 +149,11 @@ func (s *Server) cliCall(name string, a args) (string, error) {
 		}
 		argv := []string{strings.TrimPrefix(name, "fleet_"), "--repo", a.Dir}
 		if a.Prune {
-			if err := s.confirm(gate{tool: name, why: "prune removes them; list first without prune, then "}, a); err != nil {
+			ask := "Remove the merged agent worktrees of " + a.Dir + "?"
+			if name == "fleet_branches" {
+				ask = "Delete the merged fleet/ branches of " + a.Dir + " from origin?"
+			}
+			if err := s.confirm(gate{tool: name, why: "prune removes them; list first without prune, then ", ask: ask}, a); err != nil {
 				return "", err
 			}
 			argv = append(argv, "--prune")

@@ -117,6 +117,10 @@ type Server struct {
 	cancelled map[string]bool // ids of cancel lines the reader saw for no running call
 	callID    json.RawMessage // id of the tools/call being served
 	drop      bool            // the client cancelled it: send no response
+	// replies routes responses to fleet's own requests (elicit.go) by id;
+	// guarded by wmu. dialogWait replaces dialogWait in tests.
+	replies    map[string]chan []byte
+	dialogWait time.Duration
 }
 
 // New returns a server.
@@ -238,6 +242,12 @@ func (s *Server) serveLine(line []byte, enc *json.Encoder) error {
 	if err := json.Unmarshal(line, &req); err != nil {
 		logx.For("mcp").Warn("bad json", "err", err)
 		return enc.Encode(response{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &rpcError{-32700, "parse error"}})
+	}
+	if req.Method == "" {
+		if _, ok := responseID(line); ok { // late or stray: a response is never answered
+			logx.For("mcp").Info("response nobody waits for", "id", string(req.ID))
+			return nil
+		}
 	}
 	s.out = enc
 	s.drop = false

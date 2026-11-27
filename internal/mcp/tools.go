@@ -496,7 +496,8 @@ func (s *Server) accessDecideCall(a args) (string, error) {
 	if a.Action != "grant" && a.Action != "deny" && a.Action != "revoke" {
 		return "", fmt.Errorf("action must be grant, deny or revoke")
 	}
-	if err := s.confirm(gate{tool: "fleet_access_decide"}, a); err != nil {
+	g := gate{tool: "fleet_access_decide", ask: fmt.Sprintf("%s access between %s and %s?", strings.ToUpper(a.Action[:1])+a.Action[1:], a.A, a.B)}
+	if err := s.confirm(g, a); err != nil {
 		return "", err
 	}
 	if err := s.scope(a.A, a.B); err != nil {

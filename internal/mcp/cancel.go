@@ -46,6 +46,14 @@ type watch struct {
 // anyLine: the client may send calls in parallel. stop must be called when
 // the call returns, on the serving goroutine.
 func (s *Server) callCtx(anyLine bool) (ctx context.Context, stop func()) {
+	s.wmu.Lock()
+	if w := s.watching; w != nil && idKey(w.id) == idKey(s.callID) {
+		// Nested in the same call (a CLI tool's confirmation dialog): its
+		// watch already reads; the outer stop ends it.
+		s.wmu.Unlock()
+		return w.ctx, func() {}
+	}
+	s.wmu.Unlock()
 	ctx, cancel := context.WithCancelCause(context.Background())
 	if s.in == nil {
 		return ctx, func() { cancel(nil) }
@@ -97,6 +105,9 @@ func (s *Server) readAhead(prev, done chan struct{}) {
 	defer close(done)
 	for {
 		raw, err := readLine(s.in)
+		if err == nil && s.deliver(raw) {
+			continue
+		}
 		s.wmu.Lock()
 		w := s.watching
 		id, isCancel := cancelID(raw)
@@ -185,4 +196,58 @@ func (s *Server) took() (stopped bool) {
 // s.ahead, so a reload may hand the input over.
 func (s *Server) aheadIdle() bool {
 	return s.aheadDone == nil && len(s.ahead) == 0
+}
+
+// Responses to the server's own requests (elicitation/create). The reader
+// routes a response to the waiter of its id instead of the serve loop;
+// await registers before the request is sent, unawait drops it.
+
+// await registers a waiter for the response to id.
+func (s *Server) await(id json.RawMessage) <-chan []byte {
+	ch := make(chan []byte, 1)
+	s.wmu.Lock()
+	if s.replies == nil {
+		s.replies = map[string]chan []byte{}
+	}
+	s.replies[idKey(id)] = ch
+	s.wmu.Unlock()
+	return ch
+}
+
+func (s *Server) unawait(id json.RawMessage) {
+	s.wmu.Lock()
+	delete(s.replies, idKey(id))
+	s.wmu.Unlock()
+}
+
+// deliver hands a response line to its waiter; false when it is not a
+// response or nobody waits for it.
+func (s *Server) deliver(raw []byte) bool {
+	id, ok := responseID(raw)
+	if !ok {
+		return false
+	}
+	s.wmu.Lock()
+	ch, ok := s.replies[idKey(id)]
+	delete(s.replies, idKey(id))
+	s.wmu.Unlock()
+	if ok {
+		ch <- raw
+	}
+	return ok
+}
+
+// responseID is the id of a JSON-RPC response line (no method, a result or
+// an error).
+func responseID(raw []byte) (json.RawMessage, bool) {
+	var m struct {
+		ID     json.RawMessage `json:"id"`
+		Method string          `json:"method"`
+		Result json.RawMessage `json:"result"`
+		Error  json.RawMessage `json:"error"`
+	}
+	if json.Unmarshal(raw, &m) != nil || m.Method != "" || len(m.ID) == 0 || (m.Result == nil && m.Error == nil) {
+		return nil, false
+	}
+	return m.ID, true
 }

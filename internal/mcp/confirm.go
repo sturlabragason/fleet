@@ -81,8 +81,10 @@ func (s *Server) takeReloadedClient() {
 // a person for a tool marked requiresUserInteraction: Claude Code from
 // claudeCodeMin, which prompts even under bypass and allow rules and denies
 // the call when no person can answer.
+// A client that elicits gets fleet's dialog instead, so one action is one
+// prompt, warnings included.
 func (s *Server) nativePrompt() bool {
-	return s.client.Name == "claude-code" && versionAtLeast(s.client.Version, claudeCodeMin)
+	return s.client.Name == "claude-code" && versionAtLeast(s.client.Version, claudeCodeMin) && !s.elicits()
 }
 
 // versionAtLeast compares dotted numeric versions; anything unparsable is false.
@@ -115,19 +117,8 @@ type gate struct {
 	// work, a squad left running): it ends the refusal, and while there is
 	// one the client's own prompt does not stand in for confirmed=true.
 	warn string
-	err  error // replaces the default refusal text
-}
-
-// confirmed reports whether the user's yes is in: the client's own
-// permission prompt already asked (nativeGated tools for a nativePrompt
-// client, unless there is a warning to show first) or confirmed=true.
-// Elicitation (mcp-elicit-confirm) plugs in here: ask the client, return
-// its answer.
-func (s *Server) confirmed(g gate, a args) bool {
-	if g.warn == "" && nativeGated[g.tool] && s.nativePrompt() {
-		return true
-	}
-	return a.Confirmed
+	err  error  // replaces the default refusal text
+	ask  string // the dialog's question for an eliciting client (elicit.go)
 }
 
 // refuse records a refused confirmation and returns the error the model gets.
@@ -141,9 +132,18 @@ func (s *Server) refuse(g gate) error {
 	return fmt.Errorf("not confirmed: %sask the user, then call again with confirmed=true%s", g.why, g.warn)
 }
 
-// confirm is confirmed, else refuse.
+// confirm is nil once the user's yes is in, else the refusal. A client
+// that declared elicitation asks the user in its dialog, and confirmed is
+// ignored; otherwise the client's own permission prompt already asked
+// (nativeGated tools for a nativePrompt client, unless there is a warning
+// to show first), or confirmed=true.
 func (s *Server) confirm(g gate, a args) error {
-	if s.confirmed(g, a) {
+	switch {
+	case s.elicits():
+		if g.err = s.elicit(g); g.err == nil {
+			return nil
+		}
+	case g.warn == "" && nativeGated[g.tool] && s.nativePrompt(), a.Confirmed:
 		return nil
 	}
 	return s.refuse(g)
@@ -178,6 +178,9 @@ func (n nativeTool) MarshalJSON() ([]byte, error) {
 // nativeGated tools carry requiresUserInteraction, say so, and don't
 // require confirmed.
 func (s *Server) listTools() any {
+	if s.elicits() {
+		return dialogTools()
+	}
 	if !s.nativePrompt() {
 		return toolDefs
 	}
@@ -193,6 +196,41 @@ func (s *Server) listTools() any {
 			t.InputSchema["required"] = slices.DeleteFunc(slices.Clone(req), func(r string) bool { return r == "confirmed" })
 		}
 		out[i] = nativeTool{t}
+	}
+	return out
+}
+
+// dialogNotes rewrite every ask-in-chat sentence for a client that gets
+// fleet's dialog, so the admiral stops asking in chat first.
+var dialogNotes = strings.NewReplacer(
+	askInChat, "fleet asks the user in a dialog itself, so call it without asking in chat and without confirmed",
+	"ask the user first, confirmed=true only after an explicit yes", "fleet asks the user in a dialog itself, so don't ask in chat first",
+	"so it needs confirmed=true", "so fleet asks the user in a dialog first",
+	"need confirmed=true (Enter would answer it)", "need confirmed=true, and fleet then asks the user in a dialog (Enter would answer it)",
+	"skipped unless confirmed=true", "skipped unless confirmed=true, and then fleet asks the user in a dialog",
+)
+
+// dialogConfirmed is the confirmed property for such a client.
+var dialogConfirmed = map[string]any{"type": "boolean", "description": "not a yes: fleet asks the user in a dialog"}
+
+// dialogTools is toolDefs for a client that elicits: no description asks in
+// chat and confirmed is never required.
+func dialogTools() []tool {
+	out := slices.Clone(toolDefs)
+	for i, t := range out {
+		props, ok := t.InputSchema["properties"].(map[string]any)
+		if _, has := props["confirmed"]; !ok || !has {
+			continue
+		}
+		t.Description = dialogNotes.Replace(t.Description)
+		t.InputSchema = maps.Clone(t.InputSchema)
+		props = maps.Clone(props)
+		props["confirmed"] = dialogConfirmed
+		t.InputSchema["properties"] = props
+		if req, ok := t.InputSchema["required"].([]string); ok {
+			t.InputSchema["required"] = slices.DeleteFunc(slices.Clone(req), func(r string) bool { return r == "confirmed" })
+		}
+		out[i] = t
 	}
 	return out
 }

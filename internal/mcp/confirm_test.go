@@ -13,13 +13,18 @@ import (
 
 // gateServer is an admiral server over mailHome (agents a and b, no git dir,
 // so no close warning) whose CLI-backed tools are stubbed, with the client
-// set as initialize would.
+// set as initialize would; it declares no elicitation (elicit_test.go).
 func gateServer(t *testing.T, client, version string) *Server {
+	t.Helper()
+	return capsServer(t, client, version, `{"roots":{}}`)
+}
+
+func capsServer(t *testing.T, client, version, caps string) *Server {
 	t.Helper()
 	s := New(mailHome(t), nil)
 	s.RunCLI = func(context.Context, string, ...string) (string, int, error) { return "ok", 0, nil }
 	if client != "" {
-		s.takeClient(json.RawMessage(fmt.Sprintf(`{"clientInfo":{"name":%q,"version":%q},"capabilities":{"elicitation":{}}}`, client, version)))
+		s.takeClient(json.RawMessage(fmt.Sprintf(`{"clientInfo":{"name":%q,"version":%q},"capabilities":%s}`, client, version, caps)))
 	}
 	return s
 }
@@ -81,7 +86,7 @@ func TestNativeGate(t *testing.T) {
 		{gate{tool: "fleet_send", agent: "a"}, false},
 		{gate{tool: "fleet_team"}, false},
 	} {
-		if got := s.confirmed(c.g, args{}); got != c.want {
+		if got := s.confirm(c.g, args{}) == nil; got != c.want {
 			t.Errorf("%+v: confirmed %v, want %v", c.g, got, c.want)
 		}
 	}
@@ -166,7 +171,7 @@ func TestClientSurvivesReload(t *testing.T) {
 	s.Probe = func(string) error { return nil }
 	s.Exec = func(_ string, _, env []string) error { execs <- env; return nil }
 	c, done := startServe(t, s)
-	c.send(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"claude-code","version":"2.1.327"},"capabilities":{"elicitation":{}}}}` + "\n")
+	c.send(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"claude-code","version":"2.1.327"},"capabilities":{"roots":{}}}}` + "\n")
 	c.next()
 	replaceExe(t, exe, "v2")
 	c.send(ping(2))
@@ -188,7 +193,7 @@ func TestClientSurvivesReload(t *testing.T) {
 	c2.next() // tools/list_changed
 	c2.send(`{"jsonrpc":"2.0","id":3,"method":"tools/list"}` + "\n")
 	c2.next()
-	if !s2.nativePrompt() || string(s2.client.Capabilities) != `{"elicitation":{}}` {
+	if !s2.nativePrompt() || string(s2.client.Capabilities) != `{"roots":{}}` {
 		t.Fatalf("client after reload: %+v", s2.client)
 	}
 	if _, ok := listedTools(t, s2)["fleet_close"]["_meta"]; !ok {

@@ -151,14 +151,17 @@ func (s *Server) sendOne(a args, name string) (string, error) {
 			return "", fleet.UserError(r)
 		}
 	}
-	if g := (gate{tool: "fleet_send", agent: name, what: "send"}); !s.confirmed(g, a) {
+	if !a.Confirmed || s.elicits() {
 		w, err := s.F.Prompting(name)
 		if err != nil {
 			return "", err
 		}
 		if w != "" {
-			g.err = fleet.WaitingError(w)
-			return "", s.refuse(g)
+			g := gate{tool: "fleet_send", agent: name, what: "send", err: fleet.WaitingError(w),
+				ask: fmt.Sprintf("Send to %s? It is waiting on a prompt, so this answers it.", name)}
+			if err := s.confirm(g, a); err != nil {
+				return "", err
+			}
 		}
 	}
 	if len(a.Keys) > 0 {
@@ -215,7 +218,7 @@ func (s *Server) answer(a args) (string, error) {
 	if a.Option != 0 && (a.Option < 1 || a.Option > 9) {
 		return "", fmt.Errorf("option must be 1-9")
 	}
-	if err := s.confirm(gate{tool: "fleet_answer", agent: a.Name, what: "answer"}, a); err != nil {
+	if err := s.confirm(gate{tool: "fleet_answer", agent: a.Name, what: "answer", ask: answerAsk(a)}, a); err != nil {
 		return "", err
 	}
 	var c fleet.Choice
@@ -331,11 +334,15 @@ func (s *Server) close(a args) (string, error) {
 	// the warning comes before the confirmation (ADR-53).
 	if sq := fleet.SquadNote(a.Name, s.F.Squad(a.Name)); sq != "" && !a.Squad {
 		note += ". " + sq
-		if !a.Confirmed {
+		if !a.Confirmed && !s.elicits() {
 			note += ", or close again with squad=true"
 		}
 	}
-	if err := s.confirm(gate{tool: "fleet_close", agent: a.Name, what: "close", warn: note}, a); err != nil {
+	ask := "Close agent " + a.Name + "?"
+	if a.Squad {
+		ask = "Close agent " + a.Name + " and its squad?"
+	}
+	if err := s.confirm(gate{tool: "fleet_close", agent: a.Name, what: "close", warn: note, ask: ask}, a); err != nil {
 		return "", err
 	}
 	closed := ""
@@ -359,4 +366,20 @@ func (s *Server) info(a args) (string, error) {
 		return "", err
 	}
 	return s.F.Info(a.Name)
+}
+
+// answerAsk is fleet_answer's dialog question.
+func answerAsk(a args) string {
+	what := a.Answer
+	switch {
+	case a.Option != 0:
+		what = fmt.Sprintf("option %d", a.Option)
+	case a.Label != "":
+		what = fmt.Sprintf("%q", a.Label)
+	}
+	ask := fmt.Sprintf("Answer %s's prompt with %s?", a.Name, what)
+	if a.Expect != "" {
+		ask += fmt.Sprintf(" The prompt: %q.", a.Expect)
+	}
+	return ask
 }

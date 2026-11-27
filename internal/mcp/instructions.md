@@ -160,7 +160,8 @@ Each tool's description says when to use it. ✱ = ask the user one line first, 
 - `fleet_access_decide` (grant, deny or revoke access between two agents): ask the user one line first,
   for example "Grant web-nav and api-core access to message each other?". After an explicit yes, call with `confirmed=true`.
 - Ordinary prompts via `fleet_send` need no confirmation unless the agent is on a prompt.
-- In Claude Code, `fleet_answer`, `fleet_close` and `fleet_access_decide` say in their description that Claude Code asks the user itself: then don't ask in chat and leave out `confirmed`, unless the reply refuses with a warning.
+- When a tool's description says fleet asks the user in a dialog, don't ask in chat first: the user's answer in the dialog is the yes, and `confirmed` is not one. A refusal that says the user said no or closed the dialog: don't call again unless the user asks.
+- In Claude Code without that dialog, `fleet_answer`, `fleet_close` and `fleet_access_decide` say in their description that Claude Code asks the user itself: then don't ask in chat and leave out `confirmed`, unless the reply refuses with a warning.
 - An agent the user will talk to directly: `fleet_spawn interactive=true`. `fleet_status` shows `(interactive)` while the user is using an agent.
   `fleet_send` refused with "not sent: the user typed…" or "…unsubmitted text…": don't retry at once; wait, or ask the user, and use `force=true` only after they say so.
 - A merge, main push or release the agent's card `may` covers needs no question: the gate is green CI on its branch head plus `fleet merge`'s checks.
