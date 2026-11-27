@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"time"
 
@@ -37,8 +38,8 @@ const (
 	reloadedNote = "\n\n[fleet updated: tools reloaded]"
 )
 
-// listChanged tells the client to refetch tools/list.
-const listChanged = `{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}` + "\n"
+// listChanged tells a legacy client to refetch tools/list.
+var listChanged = map[string]any{"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}
 
 // ProbeCheck is what `fleet mcp --probe` verifies: the binary starts and has
 // tool definitions.
@@ -186,8 +187,10 @@ func (s *Server) maybeReload(fi os.FileInfo, line []byte, br *bufio.Reader, w io
 	if s.served != "" {
 		env = append(env, envServed+"="+s.served)
 	}
-	if c := s.clientEnv(); c != "" {
-		env = append(env, c)
+	for _, e := range []string{s.clientEnv(), s.listenEnv()} {
+		if e != "" {
+			env = append(env, e)
+		}
 	}
 	log.Info("reloading", "exe", s.ExePath, "old_build", buildID(), "new_mtime", fi.ModTime(), "pid", os.Getpid())
 	if err := s.Exec(s.ExePath, os.Args, env); err != nil {
@@ -233,11 +236,14 @@ func (s *Server) writePending(line []byte, br *bufio.Reader) (string, error) {
 	return f.Name(), nil
 }
 
+// reloadVars is the state a reload hands over in the environment.
+var reloadVars = []string{envPending, envReloaded, envServed, envClient, envListen}
+
 // reloadEnv drops stale reload vars from env.
 func reloadEnv(env []string) []string {
 	out := make([]string, 0, len(env)+3)
 	for _, e := range env {
-		if strings.HasPrefix(e, envPending+"=") || strings.HasPrefix(e, envReloaded+"=") || strings.HasPrefix(e, envServed+"=") || strings.HasPrefix(e, envClient+"=") {
+		if slices.ContainsFunc(reloadVars, func(v string) bool { return strings.HasPrefix(e, v+"=") }) {
 			continue
 		}
 		out = append(out, e)

@@ -86,7 +86,8 @@ func (s *Server) takeReloadedClient() {
 // A client that elicits gets fleet's dialog instead, so one action is one
 // prompt, warnings included.
 func (s *Server) nativePrompt() bool {
-	return s.client.Name == "claude-code" && versionAtLeast(s.client.Version, claudeCodeMin) && !s.elicits()
+	p := s.peer()
+	return p.Name == "claude-code" && versionAtLeast(p.Version, claudeCodeMin) && !s.elicits()
 }
 
 // versionAtLeast compares dotted numeric versions; anything unparsable is false.

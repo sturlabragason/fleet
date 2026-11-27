@@ -39,6 +39,9 @@ type call struct {
 	// from the context's cause: a wait interrupted first keeps that cause,
 	// and a later cancel must still win (no reply).
 	byClient atomic.Bool
+	// peer is the client a modern request describes in its _meta (modern.go);
+	// nil for a legacy request.
+	peer *clientInfo
 	// progress sends notifications/progress for the call's progressToken;
 	// nil without one. Set and used on the call's goroutine.
 	progress func(n int, msg string)
@@ -101,6 +104,9 @@ func (s *Server) arrived(line []byte) {
 		c.byClient.Store(true)
 		c.cancel(errCancelled)
 	}
+	if isCancel && s.calls[idKey(id)] == nil {
+		s.dropSub(id) // closed with no further message, as the spec requires
+	}
 	for _, c := range s.calls {
 		if c.wait {
 			c.cancel(errInterrupted)
@@ -114,17 +120,25 @@ func (s *Server) dispatch(line []byte) {
 	var req request
 	if err := json.Unmarshal(line, &req); err != nil {
 		logx.For("mcp").Warn("bad json", "err", err)
-		_ = s.write(response{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &rpcError{-32700, "parse error"}}) // a failed write ends Serve via writeErr
+		_ = s.write(response{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &rpcError{Code: -32700, Message: "parse error"}}) // a failed write ends Serve via writeErr
 		return
 	}
 	if req.Method == "notifications/cancelled" {
 		return
 	}
+	peer := modernOf(req.Params)
+	if peer != nil {
+		s.modern = true
+		if req.Method == "subscriptions/listen" && len(req.ID) > 0 && modernCheck(req.Method, peer.Protocol) == nil {
+			s.listen(req.ID, req.Params) // never ends, so it stays out of the lane
+			return
+		}
+	}
 	var p struct {
 		Name string `json:"name"`
 	}
 	ctx, cancel := context.WithCancelCause(s.base)
-	c := &call{ctx: ctx, cancel: cancel, id: req.ID,
+	c := &call{ctx: ctx, cancel: cancel, id: req.ID, peer: peer,
 		wait: req.Method == "tools/call" && json.Unmarshal(req.Params, &p) == nil && p.Name == "fleet_wait"}
 	s.wmu.Lock()
 	s.flight++
@@ -169,7 +183,10 @@ func (s *Server) run(c *call, req request, prev, done chan struct{}) {
 		return
 	}
 	resp := response{JSONRPC: "2.0", ID: req.ID, Result: res, Error: rerr}
-	if rerr == nil && res == nil {
+	switch {
+	case rerr == nil && c.peer != nil:
+		resp.Result = modernResult(req.Method, res)
+	case rerr == nil && res == nil:
 		resp.Result = struct{}{}
 	}
 	if err := s.write(resp); err != nil {

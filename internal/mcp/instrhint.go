@@ -43,6 +43,15 @@ func (s *Server) rulesText() string {
 	return s.instructions()
 }
 
+// serveInstructions is the instructions text initialize and server/discover
+// send; the client now holds it, so it becomes the served one (ADR-102).
+func (s *Server) serveInstructions() string {
+	s.served = instructionsHash(s.rulesText())
+	s.had = s.served
+	s.keepInstructions(s.rulesText())
+	return s.instructions()
+}
+
 // takeServedHash adopts the hash a reloaded process inherited and clears it
 // from the environment so children don't inherit it.
 func (s *Server) takeServedHash() {

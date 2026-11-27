@@ -6,7 +6,6 @@ package mcp
 import (
 	"bufio"
 	"bytes"
-	"cmp"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -36,7 +35,7 @@ var Instructions string
 
 // ProtocolVersion is the latest MCP revision we speak; legacyVersions are
 // all the ones initialize accepts. Fleet is tools-only, and nothing it sends
-// differs between them (DESIGN §6.2a), so only the answered version changes.
+// differs between them (DESIGN §6.9), so only the answered version changes.
 const ProtocolVersion = "2025-11-25"
 
 var legacyVersions = []string{ProtocolVersion, "2025-06-18"}
@@ -118,18 +117,23 @@ type Server struct {
 	// flight drops or a waiter registers. tail (the lane's last call) belongs
 	// to the reader; cur, the running call, to the lane: only the call whose
 	// turn it is touches it.
-	base       context.Context // parent of every call's context; stop ends them all
-	stop       context.CancelCauseFunc
-	out        *json.Encoder
-	omu        sync.Mutex
-	werr       error
-	wmu        sync.Mutex
-	idle       sync.Cond
-	calls      map[string]*call
-	flight     int
-	replies    map[string]chan []byte
-	tail       chan struct{}
-	cur        *call
+	base    context.Context // parent of every call's context; stop ends them all
+	stop    context.CancelCauseFunc
+	out     *json.Encoder
+	omu     sync.Mutex
+	werr    error
+	wmu     sync.Mutex
+	idle    sync.Cond
+	calls   map[string]*call
+	flight  int
+	replies map[string]chan []byte
+	tail    chan struct{}
+	cur     *call
+	// modern (a modern request arrived) and subs (the open
+	// subscriptions/listen requests, modern.go) belong to the reader and
+	// cross a reload in envListen.
+	modern     bool
+	subs       []listenSub
 	dialogWait time.Duration // replaces dialogWait in tests
 }
 
@@ -196,6 +200,7 @@ var errUnknownTool = errors.New("unknown tool")
 type rpcError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
 }
 
 type response struct {
@@ -218,13 +223,14 @@ func (s *Server) Serve(r io.Reader, w io.Writer) error {
 	}
 	s.takeServedHash()
 	s.takeReloadedClient()
+	s.takeListen()
+	br := bufio.NewReader(r)
+	s.out = json.NewEncoder(w)
 	if s.Reloaded {
-		if _, err := io.WriteString(w, listChanged); err != nil {
+		if err := s.announceReload(); err != nil {
 			return err
 		}
 	}
-	br := bufio.NewReader(r)
-	s.out = json.NewEncoder(w)
 	s.idle.L = &s.wmu
 	s.base, s.stop = context.WithCancelCause(context.Background())
 	defer s.finish()
@@ -258,21 +264,25 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Error("panic", "method", req.Method, "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
-			rerr = &rpcError{-32603, fmt.Sprint(r)}
+			rerr = &rpcError{Code: -32603, Message: fmt.Sprint(r)}
 		}
 	}()
+	if s.cur != nil && s.cur.peer != nil {
+		if rerr := modernCheck(req.Method, s.cur.peer.Protocol); rerr != nil {
+			return nil, rerr
+		}
+	}
 	switch req.Method {
 	case "initialize":
 		s.takeClient(req.Params)
-		s.served = instructionsHash(s.rulesText())
-		s.had = s.served
-		s.keepInstructions(s.rulesText())
 		return map[string]any{
 			"protocolVersion": s.client.Protocol,
-			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": true}},
-			"serverInfo":      map[string]any{"name": "fleet", "title": "Fleet", "version": cmp.Or(fleet.Version, "dev")},
-			"instructions":    s.instructions(),
+			"capabilities":    serverCaps(),
+			"serverInfo":      serverInfo(),
+			"instructions":    s.serveInstructions(),
 		}, nil
+	case "server/discover":
+		return s.discover(), nil
 	case "notifications/initialized":
 		return nil, nil
 	case "ping":
@@ -291,7 +301,7 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 			} `json:"_meta"`
 		}
 		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return nil, &rpcError{-32602, "invalid params"}
+			return nil, &rpcError{Code: -32602, Message: "invalid params"}
 		}
 		if s.Agent == "" && s.F != nil {
 			extOnCall(s)
@@ -307,7 +317,7 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		}
 		if errors.Is(err, errUnknownTool) {
 			// No suffixes: pending reload and instructions notes wait for the next real result.
-			return nil, &rpcError{-32602, "Unknown tool: " + p.Name}
+			return nil, &rpcError{Code: -32602, Message: "Unknown tool: " + p.Name}
 		}
 		isErr := err != nil
 		if isErr {
@@ -331,7 +341,7 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		text += s.instructionsNote(p.Name)
 		return toolResult(text, isErr), nil
 	}
-	return nil, &rpcError{-32601, "method not found: " + req.Method}
+	return nil, &rpcError{Code: -32601, Message: "method not found: " + req.Method}
 }
 
 // callTool runs one tool under s.mu; the unlock is deferred so a recovered

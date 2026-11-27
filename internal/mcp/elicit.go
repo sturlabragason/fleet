@@ -27,10 +27,14 @@ const dialogWait = 10 * time.Minute
 // 2025-06-18 `elicitation: {}`; 2025-11-25 `elicitation.form`, with an
 // empty object still meaning form and `{url}` alone meaning no form.
 func (s *Server) elicits() bool {
+	p := s.peer()
+	if p.modern() {
+		return false // 2026-07-28 stdio: a server MUST NOT send requests; MRTR is mcp-mrtr-confirm's
+	}
 	var c struct {
 		Elicitation *map[string]json.RawMessage `json:"elicitation"`
 	}
-	if json.Unmarshal(s.client.Capabilities, &c) != nil || c.Elicitation == nil {
+	if json.Unmarshal(p.Capabilities, &c) != nil || c.Elicitation == nil {
 		return false
 	}
 	form, ok := (*c.Elicitation)["form"]
