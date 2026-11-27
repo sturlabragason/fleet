@@ -89,6 +89,11 @@ var usage = `usage:
                                             the overview TUI starts it when a slot frees
   fleet spawn --fake [--driver acp] <name> [dir]
                                             shorthand for profile "fake"
+  fleet spawn --route ROUTE [flags] <name> ["task"]
+                                            spawn through a route in ~/.fleet/routes.toml, as
+                                            fleet_spawn route= does: it fills dir, profile, effort,
+                                            model, check, worktree, may and the prompt template;
+                                            flags win (for systemd timers, ADR-210)
   fleet run [--admiral NAME] <plan.toml>    start a plan: [task.<name>] sections with profile, dir, prompt,
                                             check, after = [...] and review = { profile = "...", max_rounds = 2 };
                                             fleet starts each task when its dependencies are done (reported
@@ -628,6 +633,7 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 	driver := fs.String("driver", "", "tmux or acp: how fleet runs the agent (default: driver in config.toml, else tmux)")
 	model := fs.String("model", "", "model the agent runs: any id the profile's tool offers (fleet models <profile>; default: the profile's)")
 	owner := fs.String("admiral", "", "admiral that owns the agent and gets its reports (default main)")
+	route := fs.String("route", "", "fill dir, profile, effort, model, check, worktree, may, interactive and the prompt template from this route in routes.toml (flags win); args are then <name> [\"task\"]")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -641,6 +647,7 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 	o.Model = *model
 	o.Card = fleet.NormalizeCard(&board.Card{Goal: *goal, Check: *check, Want: *checkExit, Result: *result})
 	var set []string
+	var interactiveSet *bool
 	// Read which flag was passed, not just its value, so --worktree=false and
 	// --no-worktree=false mean what they say.
 	fs.Visit(func(fl *flag.Flag) {
@@ -650,6 +657,8 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 		case "no-worktree":
 			v := !*noWT
 			set, o.Worktree = append(set, fl.Name), &v
+		case "interactive":
+			interactiveSet = interactive
 		}
 	})
 	if len(set) > 1 {
@@ -657,7 +666,15 @@ func cmdSpawn(f *fleet.Fleet, args []string) error {
 	}
 	a := fs.Args()
 	var name, profile, dir, prompt string
-	if *isFake {
+	if *route != "" {
+		if *isFake {
+			return fmt.Errorf("--route and --fake don't mix: the route names the profile")
+		}
+		var err error
+		if name, profile, dir, prompt, err = spawnRoute(f, *route, a, &o, interactiveSet); err != nil {
+			return err
+		}
+	} else if *isFake {
 		if len(a) < 1 {
 			return fmt.Errorf("usage: fleet spawn --fake <name> [dir]")
 		}

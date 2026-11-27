@@ -7,6 +7,7 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
 ## 2026-11-27
+- `fleet spawn --route NAME <name> ["task"]` starts an agent through a saved route from the shell, so a systemd timer can run a recurring pass (the weekly dream) the same way the admiral would (ADR-210)
 - The overview no longer flickers or leaves stray backdrop marks behind its tiles: each full redraw reaches the terminal in one piece, and a redraw after the animated backdrop moved repaints every backdrop row (ADR-180)
 - Agents check that an artifact page is published with `artifact cat <name>`, not an HTTP request, which the private site answers with 401 even for a missing page
 

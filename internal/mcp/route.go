@@ -128,27 +128,17 @@ func (s *Server) applyRoute(a *args) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	fill := func(p *string, v string) {
-		if *p == "" {
-			*p = v
-		}
+	sp := routes.Spawn{Dir: a.Dir, Profile: a.Profile, Effort: a.Effort, Model: a.Model, Check: a.Check,
+		Worktree: a.Worktree, May: a.May, Prompt: a.Prompt}
+	if a.interactiveSet {
+		sp.Interactive = &a.Interactive
 	}
-	fill(&a.Dir, routes.ExpandDir(r.Dir))
-	fill(&a.Profile, r.Profile)
-	fill(&a.Effort, r.Effort)
-	fill(&a.Model, r.Model)
-	fill(&a.Check, r.Check)
-	if a.Worktree == nil && r.Worktree != "" {
-		w := r.Worktree == "true"
-		a.Worktree = &w
+	r.Fill(&sp)
+	a.Dir, a.Profile, a.Effort, a.Model, a.Check = sp.Dir, sp.Profile, sp.Effort, sp.Model, sp.Check
+	a.Worktree, a.May, a.Prompt = sp.Worktree, sp.May, sp.Prompt
+	if sp.Interactive != nil {
+		a.Interactive = *sp.Interactive
 	}
-	if a.May == nil {
-		a.May = r.May
-	}
-	if !a.interactiveSet && r.Interactive != "" {
-		a.Interactive = r.Interactive == "true"
-	}
-	a.Prompt = r.PromptFor(a.Prompt)
 	return " — route " + r.Name, nil
 }
 

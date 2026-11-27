@@ -157,3 +157,29 @@ func TestCLISpawnLeaderFromAMemberIsRefused(t *testing.T) {
 		t.Fatal("l2 is on the board")
 	}
 }
+
+// fleet spawn --route fills the spawn from routes.toml the way fleet_spawn
+// route= does, so a systemd timer can start a recurring pass (ADR-210).
+func TestCLISpawnRoute(t *testing.T) {
+	f := spawnFleet(t)
+	t.Setenv("TMUX_PANE", "")
+	t.Setenv("TMUX", "")
+	dir := t.TempDir()
+	toml := "[route.pass]\ndir = \"" + dir + "\"\nprofile = \"cat\"\nmay = [\"merge-local\"]\nprompt = \"Rules.\\n\\n{task}\"\n"
+	if err := os.WriteFile(filepath.Join(f.Home, "routes.toml"), []byte(toml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdSpawn(f, []string{"--route", "pass", "p1", "weekly", "run"}); err != nil {
+		t.Fatal(err)
+	}
+	a := f.Store.Load().Agents["p1"]
+	if a == nil || a.Profile != "cat" || a.Dir != dir {
+		t.Fatalf("agent %+v", a)
+	}
+	if c := a.Card; c == nil || c.Route != "pass" || len(c.May) != 1 || c.May[0] != "merge-local" {
+		t.Errorf("card %+v", a.Card)
+	}
+	if err := cmdSpawn(f, []string{"--route", "nope", "p2"}); err == nil {
+		t.Error("unknown route: no error")
+	}
+}
