@@ -469,7 +469,7 @@ func TestCmdHookStopBackground(t *testing.T) {
 		t.Fatal(err)
 	}
 	tx := filepath.Join(t.TempDir(), "session.jsonl")
-	launch := strings.SplitN(string(fx), "\n", 2)[0] // stamped now: an old launch is not counted
+	launch, _, _ := strings.Cut(string(fx), "\n") // stamped now: an old launch is not counted
 	launch = strings.Replace(launch, `"timestamp":"2026-11-27T14:34:08.346Z"`, `"timestamp":"`+time.Now().UTC().Format(time.RFC3339Nano)+`"`, 1)
 	os.WriteFile(tx, []byte(launch+"\n"), 0o644)
 	payload := `{"transcript_path":` + fmt.Sprintf("%q", tx) + `}`
