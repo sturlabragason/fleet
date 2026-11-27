@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 )
 
 // Background jobs (ADR-217). A Claude Code agent can end its turn while a
@@ -23,9 +24,16 @@ var (
 	bgTaskID = regexp.MustCompile(`<task-id>([^<]+)</task-id>`)
 )
 
+// BackgroundMax bounds a wait on background jobs (ADR-217): a launch older
+// than this when the turn ends is not counted, nor is a subagent started
+// before it, and an agent waits at most this long after its turn ended. A
+// forgotten server or a lost end must not hide a missing report for good.
+const BackgroundMax = 30 * time.Minute
+
 // bgLine is the part of a transcript line ScanBackground reads.
 type bgLine struct {
 	Type      string          `json:"type"`
+	Timestamp time.Time       `json:"timestamp"`
 	Operation string          `json:"operation"`
 	Content   string          `json:"content"`
 	Result    json.RawMessage `json:"toolUseResult"`
@@ -36,8 +44,9 @@ type bgLine struct {
 // a queued task-notification or a TaskStop result removes it. Only the tool's
 // own records count (a launch in a "user" tool-result line, a notification in
 // an "enqueue" queue-operation), so the same words quoted in a command's
-// output or an API request copy change nothing.
-func ScanBackground(data []byte, running []string) []string {
+// output or an API request copy change nothing. A launch stamped before since
+// is ignored.
+func ScanBackground(data []byte, running []string, since time.Time) []string {
 	for len(data) > 0 {
 		line := data
 		if i := bytes.IndexByte(data, '\n'); i >= 0 {
@@ -58,15 +67,15 @@ func ScanBackground(data []byte, running []string) []string {
 				running = slices.DeleteFunc(running, func(id string) bool { return id == m[1] })
 			}
 		case e.Type == "user":
-			running = bgResult(e.Result, running)
+			running = bgResult(e.Result, running, e.Timestamp.Before(since))
 		}
 	}
 	return running
 }
 
 // bgResult applies one tool result: a background shell's or a backgrounded
-// MCP call's launch, or a TaskStop.
-func bgResult(raw json.RawMessage, running []string) []string {
+// MCP call's launch, unless old, or a TaskStop.
+func bgResult(raw json.RawMessage, running []string, old bool) []string {
 	var obj struct {
 		BackgroundTaskID string `json:"backgroundTaskId"`
 		TaskID           string `json:"task_id"`
@@ -76,7 +85,7 @@ func bgResult(raw json.RawMessage, running []string) []string {
 		switch {
 		case obj.TaskType != "" && obj.TaskID != "":
 			return slices.DeleteFunc(running, func(id string) bool { return id == obj.TaskID })
-		case obj.BackgroundTaskID != "":
+		case obj.BackgroundTaskID != "" && !old:
 			return addID(running, obj.BackgroundTaskID)
 		}
 		return running
@@ -84,7 +93,7 @@ func bgResult(raw json.RawMessage, running []string) []string {
 	var blocks []struct {
 		Text string `json:"text"`
 	}
-	if json.Unmarshal(raw, &blocks) != nil || len(blocks) == 0 || !strings.HasPrefix(blocks[0].Text, `MCP tool "`) {
+	if old || json.Unmarshal(raw, &blocks) != nil || len(blocks) == 0 || !strings.HasPrefix(blocks[0].Text, `MCP tool "`) {
 		return running
 	}
 	if m := bgMCPID.FindStringSubmatch(blocks[0].Text); m != nil {
@@ -101,9 +110,10 @@ func addID(ids []string, id string) []string {
 }
 
 // BackgroundAt reads the whole transcript at path and returns the background
-// jobs still running and the file's size, the offset StillBackground reads on
-// from. Anything unreadable is no jobs.
-func BackgroundAt(path string) ([]string, int64) {
+// jobs launched within BackgroundMax of now and still running, and the offset
+// StillBackground reads on from: the end of the last complete line, so a line
+// Claude is still writing is read again later. Anything unreadable is no jobs.
+func BackgroundAt(path string, now time.Time) ([]string, int64) {
 	if path == "" {
 		return nil, 0
 	}
@@ -111,7 +121,8 @@ func BackgroundAt(path string) ([]string, int64) {
 	if err != nil {
 		return nil, 0
 	}
-	return ScanBackground(b, nil), int64(len(b))
+	b = b[:bytes.LastIndexByte(b, '\n')+1]
+	return ScanBackground(b, nil, now.Add(-BackgroundMax)), int64(len(b))
 }
 
 // StillBackground returns which of s's background jobs are still running:
@@ -129,5 +140,17 @@ func StillBackground(s State) []string {
 	if err != nil {
 		return nil
 	}
-	return ScanBackground(b, slices.Clone(s.Background))
+	return ScanBackground(b, slices.Clone(s.Background), time.Time{})
+}
+
+// RecentRunning counts the running subagents started within BackgroundMax of
+// now: one whose stop was missed must not hold its agent working for good.
+func RecentRunning(list []Subagent, now time.Time) int {
+	n := 0
+	for _, s := range list {
+		if s.State == SubRunning && now.Sub(s.Started) < BackgroundMax {
+			n++
+		}
+	}
+	return n
 }

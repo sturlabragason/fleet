@@ -469,7 +469,9 @@ func TestCmdHookStopBackground(t *testing.T) {
 		t.Fatal(err)
 	}
 	tx := filepath.Join(t.TempDir(), "session.jsonl")
-	os.WriteFile(tx, []byte(strings.SplitN(string(fx), "\n", 2)[0]+"\n"), 0o644)
+	launch := strings.SplitN(string(fx), "\n", 2)[0] // stamped now: an old launch is not counted
+	launch = strings.Replace(launch, `"timestamp":"2026-11-27T14:34:08.346Z"`, `"timestamp":"`+time.Now().UTC().Format(time.RFC3339Nano)+`"`, 1)
+	os.WriteFile(tx, []byte(launch+"\n"), 0o644)
 	payload := `{"transcript_path":` + fmt.Sprintf("%q", tx) + `}`
 	dir := status.StateDir(f.Home)
 
@@ -488,5 +490,14 @@ func TestCmdHookStopBackground(t *testing.T) {
 	cmdHook(f, []string{"pretooluse", "--agent", "c1"})
 	if s, _ := status.ReadState(dir, "c1"); len(s.Background) != 0 {
 		t.Errorf("the next turn kept the background jobs: %+v", s)
+	}
+	// A running subagent is waited on too; with none left the stop is blocked.
+	withStdin(t, `{"agent_id":"s1","agent_type":"ci"}`, func() { cmdHook(f, []string{"SubagentStart", "--agent", "c1"}) })
+	if withStdin(t, `{}`, func() { cmdHook(f, []string{"Stop", "--agent", "c1"}) }); out.String() != "" {
+		t.Errorf("stop with a running subagent blocked: %q", out.String())
+	}
+	withStdin(t, `{"agent_id":"s1"}`, func() { cmdHook(f, []string{"SubagentStop", "--agent", "c1"}) })
+	if withStdin(t, `{}`, func() { cmdHook(f, []string{"Stop", "--agent", "c1"}) }); out.String() == "" {
+		t.Error("stop with nothing left running not blocked")
 	}
 }

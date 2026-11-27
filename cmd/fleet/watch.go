@@ -295,8 +295,8 @@ func cmdHook(f *fleet.Fleet, args []string) error {
 	if err := status.RecordSubs(f.Home, *agent, ev, p, now); err != nil {
 		logx.For("status").Warn("hook subagents", "agent", *agent, "err", err)
 	}
-	bg := stopBackground(f, *agent, ev, p)
-	if status.StopEvent(ev) && p.AgentID == "" && len(bg.Background) == 0 && hookBlockStop(f, *agent, p, now) {
+	bg := stopBackground(f, *agent, ev, p, now)
+	if status.StopEvent(ev) && p.AgentID == "" && !waitsOnBackground(f, *agent, bg, now) && hookBlockStop(f, *agent, p, now) {
 		_, _ = hookOut.Write(status.StopBlockJSON(board.StopReason))
 		return nil // the turn goes on: no idle to record
 	}
@@ -325,12 +325,12 @@ func cmdHook(f *fleet.Fleet, args []string) error {
 // (ADR-217): read from the transcript on the agent's own Stop, and kept from
 // the last state on Claude's idle_prompt notice, which comes a minute later
 // while the jobs may still run. Any other event starts afresh.
-func stopBackground(f *fleet.Fleet, agent, ev string, p status.Payload) status.State {
+func stopBackground(f *fleet.Fleet, agent, ev string, p status.Payload, now time.Time) status.State {
 	var bg status.State
 	switch {
 	case p.AgentID != "":
 	case status.StopEvent(ev):
-		if ids, off := status.BackgroundAt(p.TranscriptPath); len(ids) > 0 {
+		if ids, off := status.BackgroundAt(p.TranscriptPath, now); len(ids) > 0 {
 			bg = status.State{Background: ids, Transcript: p.TranscriptPath, TranscriptOff: off}
 		}
 	case p.IdleNotice():
@@ -339,6 +339,17 @@ func stopBackground(f *fleet.Fleet, agent, ev string, p status.Payload) status.S
 		}
 	}
 	return bg
+}
+
+// waitsOnBackground reports whether a stopping agent leaves background jobs
+// or subagents running: Claude wakes it when they end, so fleet's stop block
+// waits for that turn (ADR-217).
+func waitsOnBackground(f *fleet.Fleet, agent string, bg status.State, now time.Time) bool {
+	if len(bg.Background) > 0 {
+		return true
+	}
+	subs, _ := status.ReadHookSubs(f.Home, agent, now)
+	return status.RecentRunning(subs, now) > 0
 }
 
 // hookOut is where a hook's decision goes: the tool reads its stdout.

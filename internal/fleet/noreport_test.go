@@ -315,8 +315,8 @@ func TestRefreshBackgroundShellIsNotNoReport(t *testing.T) {
 	}
 	lines := strings.Split(strings.TrimSpace(string(fx)), "\n")
 	tx := filepath.Join(t.TempDir(), "session.jsonl")
-	os.WriteFile(tx, []byte(lines[0]+"\n"), 0o644) // the shell's launch
-	ids, off := status.BackgroundAt(tx)            // what the Stop hook records
+	os.WriteFile(tx, []byte(lines[0]+"\n"), 0o644)                                       // the shell's launch
+	ids, off := status.BackgroundAt(tx, time.Date(2026, 11, 27, 14, 40, 0, 0, time.UTC)) // what the Stop hook records
 	if err := status.WriteState(status.StateDir(f.Home), "h1", status.State{
 		Status: status.Idle, Event: "stop", At: time.Now(), Background: ids, Transcript: tx, TranscriptOff: off,
 	}); err != nil {
