@@ -81,8 +81,14 @@ func (s *Server) team(a args) (string, error) {
 		if a.Text == "" {
 			return "", fmt.Errorf("text is required")
 		}
-		if err := s.teamSendDialog(a); err != nil {
-			return "", err
+		if a.Confirmed && s.elicits() {
+			ms, err := s.F.Teams.Members(a.Team)
+			if err != nil {
+				return "", err
+			}
+			if _, err := s.sendDialog(a, "fleet_team", "team "+a.Team, ms); err != nil {
+				return "", err
+			}
 		}
 		rs, err := s.F.TeamSend(a.Team, a.Text, a.Confirmed)
 		for i := range rs {
@@ -105,25 +111,25 @@ func (s *Server) team(a args) (string, error) {
 	return "", fmt.Errorf("action must be one of list, create, delete, add, remove, color, send, show, hide, close")
 }
 
-// teamSendDialog is team send's gate for a client with fleet's dialog:
-// confirmed=true asks to answer the members' prompts, so the user is asked
-// once, and only when the team exists and a member is on a prompt.
-func (s *Server) teamSendDialog(a args) error {
+// sendDialog is a multi-target send's gate for a client with fleet's
+// dialog: confirmed=true asks to answer the targets' prompts, so the user is
+// asked once, naming every target on a prompt, before anything is delivered
+// (an MRTR retry must meet the same question and deliver nothing twice). It
+// returns the targets the yes covers.
+func (s *Server) sendDialog(a args, tool, to string, names []string) (map[string]bool, error) {
 	if !a.Confirmed || !s.elicits() {
-		return nil
-	}
-	ms, err := s.F.Teams.Members(a.Team)
-	if err != nil {
-		return err
+		return nil, nil
 	}
 	var on []string
-	for _, m := range ms {
+	asked := map[string]bool{}
+	for _, m := range names {
 		if w, err := s.F.Prompting(m); err == nil && w != "" {
 			on = append(on, m+" ("+status.Cut(w, 60)+")")
+			asked[m] = true
 		}
 	}
 	if len(on) == 0 {
-		return nil
+		return nil, nil
 	}
-	return s.confirm(gate{tool: "fleet_team", ask: "Send to team " + a.Team + "? This answers the prompts of " + strings.Join(on, ", ") + "."}, a)
+	return asked, s.confirm(gate{tool: tool, ask: "Send to " + to + "? This answers the prompts of " + strings.Join(on, ", ") + "."}, a)
 }

@@ -238,7 +238,7 @@ func (s *Server) squadSend(me string, a args) (string, error) {
 			r.OK, r.Note = false, "not in your squad"
 		} else if m.Status == string(status.Waiting) {
 			r.OK, r.Note = false, "on a prompt; report it to the admiral, you may not answer prompts"
-		} else if d, err := s.sendOne(args{Name: n, Text: a.Text, Force: a.Force, Queue: a.Queue}, n); err != nil {
+		} else if d, err := s.sendOne(args{Name: n, Text: a.Text, Force: a.Force, Queue: a.Queue}, n, false); err != nil {
 			r.OK, r.Note = false, err.Error()
 		} else if len(names) == 1 {
 			return fleet.DeliveryNote(n, d), nil

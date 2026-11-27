@@ -1,9 +1,17 @@
 package mcp
 
 import (
+	"fmt"
 	"maps"
+	"math/rand"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/tmux"
 )
 
 // modernClose is a 2026-07-28 fleet_close of agent a; extra holds the
@@ -11,7 +19,12 @@ import (
 func modernClose(id int, caps map[string]any, args, extra map[string]any) map[string]any {
 	a := map[string]any{"name": "a"}
 	maps.Copy(a, args)
-	p := map[string]any{"name": "fleet_close", "arguments": a, "_meta": map[string]any{
+	return modernCall(id, caps, "fleet_close", a, extra)
+}
+
+// modernCall is a 2026-07-28 tools/call; extra holds the retry's MRTR fields.
+func modernCall(id int, caps map[string]any, tool string, a, extra map[string]any) map[string]any {
+	p := map[string]any{"name": tool, "arguments": a, "_meta": map[string]any{
 		metaVersion:                                  ModernVersion,
 		"io.modelcontextprotocol/clientInfo":         map[string]any{"name": "copilot-cli", "version": "1.0.116"},
 		"io.modelcontextprotocol/clientCapabilities": caps,
@@ -60,7 +73,7 @@ func TestMRTRConfirm(t *testing.T) {
 			return nil, map[string]any{"requestState": st, "inputResponses": map[string]any{confirmKey: answer("decline", false)}}
 		}, "the user said no"},
 		{"tampered state", func(st string) (map[string]any, map[string]any) {
-			return nil, map[string]any{"requestState": st[:len(st)-2] + "AA", "inputResponses": map[string]any{confirmKey: answer("accept", true)}}
+			return nil, map[string]any{"requestState": st + "A", "inputResponses": map[string]any{confirmKey: answer("accept", true)}}
 		}, "did not come with fleet's state"},
 		{"state of another call", func(st string) (map[string]any, map[string]any) {
 			return map[string]any{"name": "b"}, map[string]any{"requestState": st, "inputResponses": map[string]any{confirmKey: answer("accept", true)}}
@@ -121,5 +134,53 @@ func TestMRTRFallback(t *testing.T) {
 	r.send(modernClose(2, caps, map[string]any{"confirmed": true}, nil))
 	if text, isErr := toolReply(t, r.msg()); isErr || !strings.Contains(text, "closed a") {
 		t.Fatalf("confirmed close: %q", text)
+	}
+}
+
+// A multi-target send asks once, naming every target on a prompt, before it
+// delivers to anyone: the retry then delivers to each target once.
+func TestMRTRMultiSend(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FLEET_CONFIG", filepath.Join(home, "no-config.toml"))
+	tc := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
+	t.Cleanup(func() { tc.KillServer() })
+	os.WriteFile(filepath.Join(home, "tools.toml"), []byte("[yn]\ncommand = \"sh\"\nargs = [\"-c\", \"printf 'Approve? [y/n] '; cat\"]\npatterns = \"fake\"\n"), 0o644)
+	f, err := fleet.New(tc, home, "/nonexistent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"p1", "p2"} {
+		if _, err := f.Spawn(n, "yn", home, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for end := time.Now().Add(10 * time.Second); ; time.Sleep(50 * time.Millisecond) {
+		w1, _ := f.Prompting("p1")
+		w2, _ := f.Prompting("p2")
+		if w1 != "" && w2 != "" {
+			break
+		}
+		if time.Now().After(end) {
+			t.Fatal("fake agents never showed their prompt")
+		}
+	}
+	s := New(f, nil)
+	s.Fill = func() (int, int, bool) { return 0, 0, false }
+	r := startRPC(t, s)
+	args := map[string]any{"names": []string{"p1", "p2"}, "text": "y", "confirmed": true}
+	r.send(modernCall(1, formCaps, "fleet_send", args, nil))
+	res, _ := r.msg()["result"].(map[string]any)
+	req, _ := res["inputRequests"].(map[string]any)[confirmKey].(map[string]any)
+	msg, _ := req["params"].(map[string]any)["message"].(string)
+	if res["resultType"] != "input_required" || !strings.Contains(msg, "p1 (") || !strings.Contains(msg, "p2 (") {
+		t.Fatalf("want one dialog naming both prompts, got %v", res)
+	}
+	if w, _ := f.Prompting("p1"); w == "" {
+		t.Fatal("p1 answered before the user said yes")
+	}
+	yes := map[string]any{"requestState": res["requestState"], "inputResponses": map[string]any{confirmKey: answer("accept", true)}}
+	r.send(modernCall(2, formCaps, "fleet_send", args, yes))
+	if text, isErr := toolReply(t, r.msg()); isErr || text != "p1: sent\np2: sent" {
+		t.Fatalf("retry: %q isError=%v", text, isErr)
 	}
 }

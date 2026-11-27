@@ -88,7 +88,7 @@ func (s *Server) send(a args) (string, error) {
 		return s.resume(a)
 	}
 	if a.Name != "" {
-		d, err := s.sendOne(a, a.Name)
+		d, err := s.sendOne(a, a.Name, false)
 		if err != nil {
 			return "", err
 		}
@@ -109,9 +109,13 @@ func (s *Server) send(a args) (string, error) {
 		}
 		names = ms
 	}
+	asked, err := s.sendDialog(a, "fleet_send", strings.Join(names, ", "), names)
+	if err != nil {
+		return "", err
+	}
 	var b strings.Builder
 	for _, name := range names {
-		d, err := s.sendOne(a, name)
+		d, err := s.sendOne(a, name, asked[name])
 		if errors.Is(err, errCancelled) { // the client cancelled the call in a dialog: ask nobody else
 			return "", err
 		}
@@ -130,8 +134,9 @@ func (s *Server) send(a args) (string, error) {
 // pane the user is typing in need force=true (ADR-61). Text alone to a
 // queued agent is held for its start (fleet#33); to a working agent it
 // steers the running turn unless queue=true (ADR-158). Text goes on the
-// agent's queue (ADR-164).
-func (s *Server) sendOne(a args, name string) (string, error) {
+// agent's queue (ADR-164). asked: the user already said yes to answering
+// its prompt in a multi-target send's dialog (sendDialog).
+func (s *Server) sendOne(a args, name string, asked bool) (string, error) {
 	if err := s.scope(name); err != nil {
 		return "", err
 	}
@@ -155,7 +160,7 @@ func (s *Server) sendOne(a args, name string) (string, error) {
 			return "", fleet.UserError(r)
 		}
 	}
-	if !a.Confirmed || s.elicits() {
+	if !asked && (!a.Confirmed || s.elicits()) {
 		w, err := s.F.Prompting(name)
 		if err != nil {
 			return "", err
