@@ -85,6 +85,9 @@ type Server struct {
 	// served is the hash of the instructions the client last got, inherited
 	// across a reload (ADR-102).
 	served string
+	// client is who connected (initialize's clientInfo and capabilities),
+	// inherited across a reload; it decides the confirmation gate (ADR-213).
+	client clientInfo
 	// suffixSeen holds the unread reports whose headline reportsSuffix
 	// already named (ADR-195); guarded by mu.
 	suffixSeen map[string]bool
@@ -198,6 +201,7 @@ func (s *Server) Serve(r io.Reader, w io.Writer) error {
 		s.pending = ri
 	}
 	s.takeServedHash()
+	s.takeReloadedClient()
 	if s.Reloaded {
 		if _, err := io.WriteString(w, listChanged); err != nil {
 			return err
@@ -262,6 +266,7 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 	}()
 	switch req.Method {
 	case "initialize":
+		s.takeClient(req.Params)
 		s.served = instructionsHash(s.rulesText())
 		s.had = s.served
 		s.keepInstructions(s.rulesText())
@@ -287,7 +292,7 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		if s.Agent != "" {
 			return map[string]any{"tools": s.agentTools()}, nil
 		}
-		return map[string]any{"tools": toolDefs}, nil
+		return map[string]any{"tools": s.listTools()}, nil
 	case "tools/call":
 		var p struct {
 			Name      string          `json:"name"`

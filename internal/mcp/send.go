@@ -151,14 +151,14 @@ func (s *Server) sendOne(a args, name string) (string, error) {
 			return "", fleet.UserError(r)
 		}
 	}
-	if !a.Confirmed {
+	if g := (gate{tool: "fleet_send", agent: name, what: "send"}); !s.confirmed(g, a) {
 		w, err := s.F.Prompting(name)
 		if err != nil {
 			return "", err
 		}
 		if w != "" {
-			s.F.Intervene(name, board.KindConfirmRefused, "send")
-			return "", fleet.WaitingError(w)
+			g.err = fleet.WaitingError(w)
+			return "", s.refuse(g)
 		}
 	}
 	if len(a.Keys) > 0 {
@@ -215,9 +215,8 @@ func (s *Server) answer(a args) (string, error) {
 	if a.Option != 0 && (a.Option < 1 || a.Option > 9) {
 		return "", fmt.Errorf("option must be 1-9")
 	}
-	if !a.Confirmed {
-		s.F.Intervene(a.Name, board.KindConfirmRefused, "answer")
-		return "", fmt.Errorf("not confirmed: ask the user, then call again with confirmed=true")
+	if err := s.confirm(gate{tool: "fleet_answer", agent: a.Name, what: "answer"}, a); err != nil {
+		return "", err
 	}
 	var c fleet.Choice
 	var err error
@@ -336,9 +335,8 @@ func (s *Server) close(a args) (string, error) {
 			note += ", or close again with squad=true"
 		}
 	}
-	if !a.Confirmed {
-		s.F.Intervene(a.Name, board.KindConfirmRefused, "close")
-		return "", fmt.Errorf("not confirmed: ask the user, then call again with confirmed=true%s", note)
+	if err := s.confirm(gate{tool: "fleet_close", agent: a.Name, what: "close", warn: note}, a); err != nil {
+		return "", err
 	}
 	closed := ""
 	if a.Squad {

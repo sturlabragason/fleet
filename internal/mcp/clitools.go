@@ -149,8 +149,8 @@ func (s *Server) cliCall(name string, a args) (string, error) {
 		}
 		argv := []string{strings.TrimPrefix(name, "fleet_"), "--repo", a.Dir}
 		if a.Prune {
-			if !a.Confirmed {
-				return "", fmt.Errorf("prune needs confirmed=true after the user said yes; list first without prune and ask")
+			if err := s.confirm(gate{tool: name, why: "prune removes them; list first without prune, then "}, a); err != nil {
+				return "", err
 			}
 			argv = append(argv, "--prune")
 		}

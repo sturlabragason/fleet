@@ -168,6 +168,9 @@ func (s *Server) maybeReload(line []byte, br *bufio.Reader, w io.Writer) bool {
 	if s.served != "" {
 		env = append(env, envServed+"="+s.served)
 	}
+	if c := s.clientEnv(); c != "" {
+		env = append(env, c)
+	}
 	log.Info("reloading", "exe", s.ExePath, "old_build", buildID(), "new_mtime", fi.ModTime(), "pid", os.Getpid())
 	if err := s.Exec(s.ExePath, os.Args, env); err != nil {
 		log.Error("reload exec failed; keeping the old code", "exe", s.ExePath, "err", err)
@@ -216,7 +219,7 @@ func (s *Server) writePending(line []byte, br *bufio.Reader) (string, error) {
 func reloadEnv(env []string) []string {
 	out := make([]string, 0, len(env)+3)
 	for _, e := range env {
-		if strings.HasPrefix(e, envPending+"=") || strings.HasPrefix(e, envReloaded+"=") || strings.HasPrefix(e, envServed+"=") {
+		if strings.HasPrefix(e, envPending+"=") || strings.HasPrefix(e, envReloaded+"=") || strings.HasPrefix(e, envServed+"=") || strings.HasPrefix(e, envClient+"=") {
 			continue
 		}
 		out = append(out, e)

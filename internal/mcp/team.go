@@ -89,8 +89,8 @@ func (s *Server) team(a args) (string, error) {
 		rs, err := s.F.TeamHide(s.W, a.Team)
 		return results("off wall", rs, err)
 	case "close":
-		if !a.Confirmed {
-			return "", fmt.Errorf("not confirmed: ask the user, then call again with confirmed=true")
+		if err := s.confirm(gate{tool: "fleet_team"}, a); err != nil {
+			return "", err
 		}
 		rs, err := s.F.TeamClose(a.Team)
 		return results("closed", rs, err)

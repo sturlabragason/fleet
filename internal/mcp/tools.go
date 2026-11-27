@@ -496,8 +496,8 @@ func (s *Server) accessDecideCall(a args) (string, error) {
 	if a.Action != "grant" && a.Action != "deny" && a.Action != "revoke" {
 		return "", fmt.Errorf("action must be grant, deny or revoke")
 	}
-	if !a.Confirmed {
-		return "", fmt.Errorf("not confirmed: ask the user, then call again with confirmed=true")
+	if err := s.confirm(gate{tool: "fleet_access_decide"}, a); err != nil {
+		return "", err
 	}
 	if err := s.scope(a.A, a.B); err != nil {
 		return "", err
