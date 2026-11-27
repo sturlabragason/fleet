@@ -172,3 +172,28 @@ func TestSetEscapes(t *testing.T) {
 		t.Fatalf("%q %q %v", r.Dir, r.Triggers, err)
 	}
 }
+
+func TestScheduleOnlyThroughSetSchedule(t *testing.T) {
+	home := t.TempDir()
+	if _, _, err := Set(home, "dream", map[string]conf.Value{"dir": "/a"}, "", day); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Set(home, "dream", map[string]conf.Value{"schedule": "Mon 08:00"}, "", day); err == nil {
+		t.Fatal("Set took a schedule, which would leave it without a timer")
+	}
+	if err := SetSchedule(home, "dream", "Mon 08:00", day); err != nil {
+		t.Fatal(err)
+	}
+	if r, err := Get(home, "dream"); err != nil || r.Schedule != "Mon 08:00" || r.Dir != "/a" {
+		t.Fatalf("after SetSchedule: %+v %v", r, err)
+	}
+	if err := SetSchedule(home, "dream", "", day); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(Path(home)); strings.Contains(string(b), "schedule") {
+		t.Fatalf("cleared schedule still in the file:\n%s", b)
+	}
+	if SetSchedule(home, "nope", "Mon 08:00", day) == nil {
+		t.Fatal("SetSchedule on a missing route succeeded")
+	}
+}

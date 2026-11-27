@@ -39,6 +39,9 @@ type Route struct {
 	May         []string
 	Interactive string // "", "true" or "false"
 	Check       string
+	// Schedule is the systemd calendar the route runs on (ADR-211). Only
+	// fleet schedule add/rm set it, since it must match a timer unit.
+	Schedule string
 	// Prompt is the template for the first prompt: {task} is replaced by the
 	// spawn's prompt; without {task} the template goes before it.
 	Prompt      string
@@ -51,6 +54,9 @@ type Route struct {
 
 // Fields are the keys fleet_route set accepts, in file order.
 var Fields = []string{"description", "triggers", "dir", "profile", "effort", "model", "worktree", "skill", "may", "interactive", "check", "prompt", "learned_from"}
+
+// keyOrder is every field fleet writes, in file order.
+var keyOrder = append(append([]string{}, Fields...), "schedule", "updated")
 
 var listFields = map[string]bool{"triggers": true, "may": true}
 
@@ -184,6 +190,9 @@ func Set(home, n string, fields map[string]conf.Value, why string, now time.Time
 			if k == "updated" {
 				return fmt.Errorf("updated is set by fleet")
 			}
+			if k == "schedule" {
+				return fmt.Errorf("schedule is set by fleet schedule add, which also writes its timer")
+			}
 			old := r.show(k)
 			if err := r.set(k, fields[k]); err != nil {
 				return err
@@ -206,6 +215,19 @@ func Set(home, n string, fields map[string]conf.Value, why string, now time.Time
 		return Route{}, nil, err
 	}
 	return out, ch, nil
+}
+
+// SetSchedule sets or, with "", clears route n's schedule.
+func SetSchedule(home, n, spec string, now time.Time) error {
+	return update(home, func(f *file) error {
+		for i := range f.routes {
+			if r := &f.routes[i]; r.Name == n {
+				r.Schedule, r.Updated = spec, now.Format("2006-01-02")
+				return nil
+			}
+		}
+		return fmt.Errorf("no route %q (%s)", n, names(f.routes))
+	})
 }
 
 // Remove deletes route n and saves the file.
@@ -273,6 +295,8 @@ func (r *Route) set(k string, v conf.Value) error {
 		r.Skill = s
 	case "check":
 		r.Check = s
+	case "schedule":
+		r.Schedule = s
 	case "prompt":
 		r.Prompt = s
 	case "learned_from":
@@ -321,6 +345,8 @@ func (r *Route) value(k string) conf.Value {
 		return r.Interactive
 	case "check":
 		return r.Check
+	case "schedule":
+		return r.Schedule
 	case "prompt":
 		return r.Prompt
 	case "updated":
@@ -335,7 +361,7 @@ func (r *Route) value(k string) conf.Value {
 func (r Route) Show() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "route %s\n", r.Name)
-	for _, k := range append(append([]string{}, Fields...), "updated") {
+	for _, k := range keyOrder {
 		if v := r.show(k); v != "" {
 			fmt.Fprintf(&b, "  %s: %s\n", k, strings.ReplaceAll(v, "\n", "\n    "))
 		}
@@ -421,7 +447,7 @@ func save(home string, f file) error {
 	}
 	for _, r := range f.routes {
 		fmt.Fprintf(&b, "\n[route.%s]\n", r.Name)
-		for _, k := range append(append([]string{}, Fields...), "updated") {
+		for _, k := range keyOrder {
 			writeKV(&b, k, r.value(k))
 		}
 		for _, k := range sortedKeys(r.Extra) {

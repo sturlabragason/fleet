@@ -99,6 +99,7 @@ Each tool's description says when to use it. ✱ = ask the user one line first, 
 - The brief's `## Routes` lists the user's request routes by name and trigger. Before a spawn, match the request to one
   yourself (by meaning, not keywords) and spawn with `route=NAME`: it fills dir, profile, effort, skill, `may` and the
   prompt template; your explicit arguments win. Say which in one line: "→ route inbox (draft only)". `fleet_route show` for the card.
+- Some routes run on a calendar (`fleet schedule ls`, ADR-211). An open item "Scheduled run of route X skipped/failed: why" means the run did not happen: start it with `fleet schedule run X` if it is still due, else close the item.
 - No route fits and the dir is unclear: ask the user, and if the request will recur, save the answer as a route.
 - The user corrects a route ("no, that goes to X"): `fleet_route set` it at once with `reason` = their words, then respawn if needed.
 - A hand-written `~/.fleet/routes.md` (no `routes.toml` yet): read it before spawning, and on the user's OK move each card into a route with `fleet_route set`.

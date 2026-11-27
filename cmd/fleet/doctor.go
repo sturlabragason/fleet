@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -57,6 +58,7 @@ type doctorEnv struct {
 	look                func(cmd string) error         // nil: as spawn looks (fleet.CheckCommand)
 	orphans             func() ([]fleet.Orphan, error) // nil: not checked
 	companions          func() []companion.Status      // nil: not checked
+	schedules           bool                           // check scheduled routes' timers (ADR-211)
 }
 
 func cmdDoctor(args []string) error {
@@ -82,6 +84,7 @@ func cmdDoctor(args []string) error {
 		}
 		return out
 	}
+	env.schedules = true
 	return writeDoctor(os.Stdout, doctor(env), *asJSON)
 }
 
@@ -148,6 +151,11 @@ func doctor(env doctorEnv) []doctorCheck {
 	}
 	if c, ok := checkRules(env.home); ok {
 		cs = append(cs, c)
+	}
+	if env.schedules {
+		if c, ok := checkSchedules(context.Background(), env.home); ok {
+			cs = append(cs, c)
+		}
 	}
 	look := env.look
 	if look == nil {

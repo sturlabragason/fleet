@@ -123,6 +123,15 @@ var usage = `usage:
                                             spawn worktree-only +burn agents before reset (dry-run by
                                             default; --tick logs to logs/burn.jsonl; --review writes
                                             the morning Accept/Reject HTML page; ADR-190)
+  fleet schedule ls [--json] | add <route> "<calendar>" | rm <route> | run [--timer] [--force] <route>
+                                            recurring routes (ADR-211): add stores a systemd calendar
+                                            ("Mon 08:00") on the route and starts a fleet-sched-<route>
+                                            user timer (Persistent=true) that runs schedule run --timer;
+                                            a run skips on overlap and, from the timer, in quiet hours
+                                            22-07, after a catch-up later than half the interval, at 2
+                                            open scheduled agents or on low burn quota; every firing goes
+                                            to schedule.jsonl and a skip or failure becomes an admiral
+                                            open item; ls shows next and last run and its result
   fleet stats [--since D] [--by kind|profile|model] [--json]
                                             how often fleet's own policy acted on agents (stop blocks,
                                             wakes, refused sends, done-checks, hook/screen disagreements),
@@ -457,6 +466,7 @@ var fleetCmds = map[string]func(f *fleet.Fleet, args []string) error{
 	"ls":        cmdLs,
 	"spend":     cmdSpend,
 	"burn":      cmdBurn,
+	"schedule":  cmdSchedule,
 	"worktrees": cmdWorktrees,
 	"branches":  cmdBranches,
 	"info":      cmdInfo,
