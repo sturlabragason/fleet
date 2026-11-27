@@ -64,10 +64,10 @@ func TestMenuArgs(t *testing.T) {
 	}
 	all := strings.Join(menuArgs("'/usr/bin/fleet'", "bravo", 1, 1, menuState{onWall: true, hasTarget: true}), "\n")
 	for _, want := range []string{
-		`'run-shell' '-b' "'/usr/bin/fleet' wall show --keep-focus --notify bravo >/dev/null 2>&1"`,
-		`'run-shell' '-b' "'/usr/bin/fleet' wall add --keep-focus --notify bravo >/dev/null 2>&1"`,
-		`'run-shell' '-b' "'/usr/bin/fleet' wall pin --notify bravo >/dev/null 2>&1"`,
-		`'run-shell' '-b' "'/usr/bin/fleet' wall hide --notify bravo >/dev/null 2>&1"`,
+		`'run-shell' '-b' "'/usr/bin/fleet' wall show --keep-focus --notify bravo >/dev/null 2>&1 || true"`,
+		`'run-shell' '-b' "'/usr/bin/fleet' wall add --keep-focus --notify bravo >/dev/null 2>&1 || true"`,
+		`'run-shell' '-b' "'/usr/bin/fleet' wall pin --notify bravo >/dev/null 2>&1 || true"`,
+		`'run-shell' '-b' "'/usr/bin/fleet' wall hide --notify bravo >/dev/null 2>&1 || true"`,
 		`'display-popup' '-E'`,
 		`"'/usr/bin/fleet' peek --live bravo"`,
 	} {

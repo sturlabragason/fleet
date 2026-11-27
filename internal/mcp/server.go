@@ -164,7 +164,7 @@ func NewAdmiral(f *fleet.Fleet, w *wall.Wall, admiral string) *Server {
 	}
 	s.SwapProfile = func(name string) error {
 		// Like Reset: tmux runs the swap, which replaces this server's pane.
-		_, err := f.T.Run("run-shell", "-b", "sleep 2; "+tools.Quote(f.Exe)+" admiral profile"+nameFlag(admiral)+" "+tools.Quote(name)+" >/dev/null 2>&1")
+		_, err := f.T.Run("run-shell", "-b", tools.Silent("sleep 2; "+tools.Quote(f.Exe)+" admiral profile"+nameFlag(admiral)+" "+tools.Quote(name)))
 		return err
 	}
 	return s

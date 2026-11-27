@@ -30,7 +30,7 @@ func confirmResetArgsOf(exe, adm string) []string {
 	// the result reaches the user via display-message.
 	// tmux parses the run-shell argument again: double-quote it for tmux and
 	// shell-quote the exe for sh.
-	sh := strings.NewReplacer(`\`, `\\`, `"`, `\"`, `$`, `\$`).Replace(tools.Quote(exe) + " admiral reset" + flag + " >/dev/null 2>&1")
+	sh := strings.NewReplacer(`\`, `\\`, `"`, `\"`, `$`, `\$`).Replace(tools.Silent(tools.Quote(exe) + " admiral reset" + flag))
 	return []string{"confirm-before", "-p", "reset " + label + "? (y/n)", `run-shell -b "` + sh + `"`}
 }
 

@@ -330,8 +330,30 @@ func (f *Fleet) acpStop(name string) {
 }
 
 // acpClosingFor is how long a close's mark keeps the reaper off an acp
-// agent; a close that died midway stops shielding it after this.
+// agent and other closes off any agent; a close that died midway stops
+// shielding it after this.
 const acpClosingFor = time.Minute
+
+// claimClosing sets the board's closing mark and reports whether this close
+// owns it: not while another close's mark is fresh, so two closes of one
+// agent (the plan runner and auto-close both close a reviewer) don't race
+// for its pane.
+func (f *Fleet) claimClosing(name string, now time.Time) bool {
+	own := true
+	if err := f.Store.Update(func(b *board.Board) error {
+		if a, ok := b.Agents[name]; ok {
+			if !a.Closing.IsZero() && now.Sub(a.Closing) < acpClosingFor {
+				own = false
+				return nil
+			}
+			a.Closing = now
+		}
+		return nil
+	}); err != nil {
+		logx.For("fleet").Warn("closing mark not saved", "agent", name, "err", err)
+	}
+	return own
+}
 
 // markClosing sets or clears (zero at) the board's closing mark.
 func (f *Fleet) markClosing(name string, at time.Time) {

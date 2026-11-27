@@ -266,7 +266,7 @@ func effortOf(a *board.Agent) playbook.Level {
 // the pane is not typed into while the agent's command still runs.
 func (f *Fleet) tell(name, text string) {
 	if f.Tell == nil && f.Go == nil {
-		cmd := "sleep 2; " + tools.Quote(f.Exe) + " send --queue " + tools.Quote(name) + " " + tools.Quote(text) + " >/dev/null 2>&1"
+		cmd := tools.Silent("sleep 2; " + tools.Quote(f.Exe) + " send --queue " + tools.Quote(name) + " " + tools.Quote(text))
 		if _, err := f.T.Run("run-shell", "-b", cmd); err != nil {
 			logx.For("fleet").Warn("reply not delivered", "agent", name, "err", err)
 		}

@@ -361,7 +361,7 @@ func ownerMenu(f *fleet.Fleet, agent string) error {
 		if s := supervisor.CurrentOf(f.Home, f.T, mainTarget(), ad); s.Profile != "" {
 			prof = s.Profile
 		}
-		cmd := tmuxCmdString([]string{"run-shell", "-b", tools.Quote(f.Exe) + " admiral give " + tools.Quote(agent) + " --to " + tools.Quote(ad) + " >/dev/null 2>&1"})
+		cmd := tmuxCmdString([]string{"run-shell", "-b", tools.Silent(tools.Quote(f.Exe) + " admiral give " + tools.Quote(agent) + " --to " + tools.Quote(ad))})
 		a = append(a, "● "+ad+" · "+prof, fmt.Sprint(n), cmd)
 	}
 	if n == 0 {

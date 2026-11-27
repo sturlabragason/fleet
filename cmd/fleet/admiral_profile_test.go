@@ -236,7 +236,7 @@ func TestPickModel(t *testing.T) {
 	if want := tmuxCmdString([]string{"display-popup", "-E", "-b", "rounded", "-w", fitW(44), "-h", fitH(6), "-T", " admiral profile ", "'/opt/my fleet' admiral profile --pick"}); a[2] != want {
 		t.Errorf("popup %q", a)
 	}
-	if got := swapShell("/opt/my fleet", "x'y"); got != `'/opt/my fleet' admiral profile 'x'\''y' >/dev/null 2>&1` {
+	if got := swapShell("/opt/my fleet", "x'y"); got != `'/opt/my fleet' admiral profile 'x'\''y' >/dev/null 2>&1 || true` {
 		t.Errorf("swapShell %q", got)
 	}
 }

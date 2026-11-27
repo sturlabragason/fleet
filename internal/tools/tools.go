@@ -1065,6 +1065,11 @@ func Quote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
+// Silent makes sh a quiet tmux run-shell -b command: no output and exit 0.
+// tmux shows a failing command's exit status in view mode over a pane (the
+// wall), even when its output goes to /dev/null.
+func Silent(sh string) string { return sh + " >/dev/null 2>&1 || true" }
+
 // NewUUID returns a random v4 UUID.
 func NewUUID() string {
 	var b [16]byte

@@ -861,16 +861,16 @@ func (f *Fleet) PeekColor(name string, n int) (string, error) {
 // leaves its members running and hands them back to the admiral (ADR-53).
 func (f *Fleet) Close(name string) error {
 	if p := f.paneOf(name); p != "" {
-		acp := f.isACP(name)
-		if acp {
-			// Its host exits cleanly on the stop: not a death to report.
-			f.markClosing(name, time.Now())
+		// The mark also tells the reaper an acp host's exit is not a death.
+		if !f.claimClosing(name, time.Now()) {
+			logx.For("fleet").Info("already closing", "agent", name)
+			return nil
+		}
+		if f.isACP(name) {
 			f.acpStop(name)
 		}
 		if err := f.KillPane(p); err != nil {
-			if acp {
-				f.markClosing(name, time.Time{})
-			}
+			f.markClosing(name, time.Time{})
 			return err
 		}
 	}

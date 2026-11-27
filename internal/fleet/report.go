@@ -339,7 +339,7 @@ func (f *Fleet) closeLater(name string) error {
 	if f.CloseLater != nil {
 		return f.CloseLater(name)
 	}
-	_, err := f.T.Run("run-shell", "-b", "sleep 2; "+tools.Quote(f.Exe)+" close "+tools.Quote(name)+" >/dev/null 2>&1")
+	_, err := f.T.Run("run-shell", "-b", tools.Silent("sleep 2; "+tools.Quote(f.Exe)+" close "+tools.Quote(name)))
 	return err
 }
 

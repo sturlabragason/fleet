@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/prefs"
@@ -251,5 +252,22 @@ func TestMailFYIQueuedNotWoken(t *testing.T) {
 	}
 	if len(*pasted) != 2 {
 		t.Fatalf("a broadcast that needs action must wake: %q", *pasted)
+	}
+}
+
+// A second close while another one is under way (the plan runner and
+// auto-close both close a reviewer) leaves the pane to the first and
+// succeeds, instead of racing it and failing on a pane already gone.
+func TestCloseWhileAnotherCloseRunsIsANoOp(t *testing.T) {
+	f, _ := mailFleet(t)
+	f.Store.Update(func(b *board.Board) error { b.Agents["a"].Closing = time.Now(); return nil })
+	if err := f.Close("a"); err != nil {
+		t.Fatalf("second close: %v", err)
+	}
+	if f.paneOf("a") == "" {
+		t.Fatal("second close killed the pane the first one owns")
+	}
+	if _, ok := f.Store.Load().Agents["a"]; !ok {
+		t.Fatal("second close dropped the agent the first one owns")
 	}
 }

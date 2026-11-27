@@ -46,7 +46,7 @@ func menuArgs(exe, name string, x, y int, st menuState) []string {
 	// --notify: the result line comes back as a tmux message (focus stays,
 	// run-shell output never opens view mode).
 	run := func(verb string) string {
-		return tmuxCmdString([]string{"run-shell", "-b", exe + " wall " + verb + " --notify " + tools.Quote(name) + " >/dev/null 2>&1"})
+		return tmuxCmdString([]string{"run-shell", "-b", tools.Silent(exe + " wall " + verb + " --notify " + tools.Quote(name))})
 	}
 	// A pinned ▶ pane is never replaced, so the card goes onto the wall.
 	put := "Put in ▶ pane"
@@ -68,7 +68,7 @@ func menuArgs(exe, name string, x, y int, st menuState) []string {
 		items = append(items, [3]string{"Take off the wall", "x", run("hide")})
 	}
 	if st.multi {
-		items = append(items, [3]string{"Hand to ▸", "o", tmuxCmdString([]string{"run-shell", "-b", exe + " admiral give " + tools.Quote(name) + " >/dev/null 2>&1"})})
+		items = append(items, [3]string{"Hand to ▸", "o", tmuxCmdString([]string{"run-shell", "-b", tools.Silent(exe + " admiral give " + tools.Quote(name))})})
 	}
 	// -M: the menu takes the mouse although it is not opened from a tmux
 	// mouse event, else clicking an item does nothing (MENU_NOMOUSE).

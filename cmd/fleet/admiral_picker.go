@@ -55,7 +55,7 @@ func swapShell(exe, name string, adm ...string) string {
 	if len(adm) > 0 && adm[0] != supervisor.Main {
 		flag = " --name " + tools.Quote(adm[0])
 	}
-	return tools.Quote(exe) + " admiral profile" + flag + " " + tools.Quote(name) + " >/dev/null 2>&1"
+	return tools.Silent(tools.Quote(exe) + " admiral profile" + flag + " " + tools.Quote(name))
 }
 
 type pickModel struct {

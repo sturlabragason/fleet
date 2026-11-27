@@ -518,7 +518,9 @@ func relinkClients(f *fleet.Fleet) int {
 // check the key bindings against the keys registry without tmux.
 func tmuxCommands(f *fleet.Fleet) [][]string {
 	exe := tools.Quote(f.Exe)
-	wallCmd := func(a string) string { return "run-shell -b '" + f.Exe + " wall " + a + "'" }
+	// --notify and Silent: a result or error is a tmux message, never view
+	// mode over the wall (these run on every focus change and resize).
+	wallCmd := func(a string) string { return "run-shell -b '" + tools.Silent(f.Exe+" wall "+a+" --notify") + "'" }
 	set := [][]string{
 		{"set-option", "-g", "mouse", "on"},
 		{"set-option", "-s", "escape-time", "10"},
@@ -576,10 +578,10 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		{"bind-key", "-n", "M-Right", "select-pane", "-R"},
 		{"bind-key", "-n", "M-Up", "select-pane", "-U"},
 		{"bind-key", "-n", "M-Down", "select-pane", "-D"},
-		{"bind-key", "-n", "M-n", wallCmd("--notify next")},
+		{"bind-key", "-n", "M-n", wallCmd("next")},
 		{"bind-key", "-n", "M-z", "resize-pane", "-Z"},
 		{"bind-key", "-n", "M-x", wallCmd("hide-focused")},
-		{"bind-key", "-n", "M-X", wallCmd("--notify toggle-all")},
+		{"bind-key", "-n", "M-X", wallCmd("toggle-all")},
 		{"bind-key", "-n", "M-s", wallCmd("sup")},
 		{"bind-key", "-n", "M-S", wallCmd("side")},
 		{"bind-key", "-n", "M-c", wallCmd("chips")},
