@@ -18,12 +18,14 @@ var (
 
 // takeBack deletes n characters from the end of box's input box, paced, and
 // then checks the box holds just keep (the user's own text before fleet's
-// line; usually ""). Characters that are still there after GuardWait were
-// dropped, so it deletes those too, up to three rounds in all. It never
-// deletes into keep: only whitespace-free characters past it are counted.
-func (f *Fleet) takeBack(box, pane string, n int, keep string) {
+// line; usually ""). What is left past keep after GuardWait is deleted too,
+// up to three rounds in all, but only while it is the start of ours (the
+// text being removed): those are dropped backspaces. Anything else is the
+// user typing, and stays. Only whitespace-free characters are counted, so
+// it never deletes into keep.
+func (f *Fleet) takeBack(box, pane string, n int, keep, ours string) {
 	log := logx.For("mail")
-	want := squash(keep)
+	want, ours := squash(keep), squash(ours)
 	for range 3 {
 		for n > 0 {
 			k := min(n, TakeBackBatch)
@@ -39,7 +41,7 @@ func (f *Fleet) takeBack(box, pane string, n int, keep string) {
 			return
 		}
 		left, found := strings.CutPrefix(got, want)
-		if !found || left == "" {
+		if !found || left == "" || !strings.HasPrefix(ours, left) {
 			break // the box changed under fleet (the user typed): leave it
 		}
 		n = len([]rune(left))
