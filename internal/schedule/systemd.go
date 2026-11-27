@@ -40,16 +40,19 @@ func Elapses(ctx context.Context, spec string, base time.Time, n int) ([]time.Ti
 	return parseElapses(string(out)), nil
 }
 
-// parseElapses reads the "(in UTC): Mon 2026-11-30 07:00:00 UTC" lines of
-// systemd-analyze calendar.
+// parseElapses reads the UTC times of systemd-analyze calendar: the
+// "(in UTC): ..." lines, or on a host whose zone is UTC (no such lines) the
+// "Next elapse: ..." and "Iteration #N: ..." lines themselves. Local-zone
+// values are skipped.
 func parseElapses(out string) []time.Time {
 	var ts []time.Time
 	for l := range strings.Lines(out) {
-		_, v, ok := strings.Cut(l, "(in UTC): ")
-		if !ok {
+		_, v, ok := strings.Cut(l, ": ")
+		v = strings.TrimSpace(v)
+		if !ok || !strings.HasSuffix(v, " UTC") {
 			continue
 		}
-		if t, err := time.Parse("Mon 2006-01-02 15:04:05 MST", strings.TrimSpace(v)); err == nil {
+		if t, err := time.Parse("Mon 2006-01-02 15:04:05 MST", v); err == nil {
 			ts = append(ts, t)
 		}
 	}

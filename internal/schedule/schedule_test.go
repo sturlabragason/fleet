@@ -49,11 +49,22 @@ Normalized form: Mon *-*-* 08:00:00
        From now: 1 week 2 days left
 `
 
+// The same on a host whose zone is UTC: no "(in UTC)" lines.
+const calendarOutUTC = `  Original form: Mon 07:00
+Normalized form: Mon *-*-* 07:00:00
+    Next elapse: Mon 2026-11-30 07:00:00 UTC
+       From now: 2 days left
+   Iteration #2: Mon 2026-12-07 07:00:00 UTC
+       From now: 1 week 2 days left
+`
+
 func TestParseElapses(t *testing.T) {
-	got := parseElapses(calendarOut)
 	want := []time.Time{time.Date(2026, 11, 30, 7, 0, 0, 0, time.UTC), time.Date(2026, 12, 7, 7, 0, 0, 0, time.UTC)}
-	if len(got) != 2 || !got[0].Equal(want[0]) || !got[1].Equal(want[1]) {
-		t.Fatalf("parseElapses = %v, want %v", got, want)
+	for name, out := range map[string]string{"local zone": calendarOut, "UTC host": calendarOutUTC} {
+		got := parseElapses(out)
+		if len(got) != 2 || !got[0].Equal(want[0]) || !got[1].Equal(want[1]) {
+			t.Errorf("%s: parseElapses = %v, want %v", name, got, want)
+		}
 	}
 }
 
