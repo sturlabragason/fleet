@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/sturlabragason/fleet/internal/fleet"
+	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/team"
 )
 
@@ -80,13 +81,13 @@ func (s *Server) team(a args) (string, error) {
 		if a.Text == "" {
 			return "", fmt.Errorf("text is required")
 		}
-		if a.Confirmed && s.elicits() {
-			g := gate{tool: "fleet_team", ask: "Send to every agent in team " + a.Team + ", also those waiting on a prompt? This answers their prompts."}
-			if err := s.confirm(g, a); err != nil {
-				return "", err
-			}
+		if err := s.teamSendDialog(a); err != nil {
+			return "", err
 		}
 		rs, err := s.F.TeamSend(a.Team, a.Text, a.Confirmed)
+		for i := range rs {
+			rs[i].Note = s.dialogHint(rs[i].Note)
+		}
 		return results("sent", rs, err)
 	case "show":
 		rs, err := s.F.TeamShow(s.W, a.Team)
@@ -102,4 +103,27 @@ func (s *Server) team(a args) (string, error) {
 		return results("closed", rs, err)
 	}
 	return "", fmt.Errorf("action must be one of list, create, delete, add, remove, color, send, show, hide, close")
+}
+
+// teamSendDialog is team send's gate for a client with fleet's dialog:
+// confirmed=true asks to answer the members' prompts, so the user is asked
+// once, and only when the team exists and a member is on a prompt.
+func (s *Server) teamSendDialog(a args) error {
+	if !a.Confirmed || !s.elicits() {
+		return nil
+	}
+	ms, err := s.F.Teams.Members(a.Team)
+	if err != nil {
+		return err
+	}
+	var on []string
+	for _, m := range ms {
+		if w, err := s.F.Prompting(m); err == nil && w != "" {
+			on = append(on, m+" ("+status.Cut(w, 60)+")")
+		}
+	}
+	if len(on) == 0 {
+		return nil
+	}
+	return s.confirm(gate{tool: "fleet_team", ask: "Send to team " + a.Team + "? This answers the prompts of " + strings.Join(on, ", ") + "."}, a)
 }

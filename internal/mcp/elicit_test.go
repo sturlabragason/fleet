@@ -1,11 +1,14 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
 	"maps"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sturlabragason/fleet/internal/fleet"
 )
 
 // msg reads the next message the server wrote.
@@ -172,13 +175,15 @@ func TestElicitFallback(t *testing.T) {
 
 func TestElicits(t *testing.T) {
 	for caps, want := range map[string]bool{
-		``:                                     false,
-		`{}`:                                   false,
-		`{"elicitation":null}`:                 false,
-		`{"elicitation":{}}`:                   true, // 2025-06-18
-		`{"elicitation":{"form":{}}}`:          true,
-		`{"elicitation":{"form":{},"url":{}}}`: true,
-		`{"elicitation":{"url":{}}}`:           false,
+		``:                                       false,
+		`{}`:                                     false,
+		`{"elicitation":null}`:                   false,
+		`{"elicitation":{}}`:                     true, // 2025-06-18
+		`{"elicitation":{"form":{}}}`:            true,
+		`{"elicitation":{"form":{},"url":{}}}`:   true,
+		`{"elicitation":{"url":{}}}`:             false,
+		`{"elicitation":{"form":null,"url":{}}}`: false,
+		`{"elicitation":{"other":{}}}`:           false,
 	} {
 		s := &Server{client: clientInfo{Capabilities: json.RawMessage(caps)}}
 		if got := s.elicits(); got != want {
@@ -209,5 +214,75 @@ func TestDialogToolsList(t *testing.T) {
 		if p, ok := sch["properties"].(map[string]any)["confirmed"]; ok && !strings.Contains(p.(map[string]any)["description"].(string), "dialog") {
 			t.Errorf("%s: confirmed described as %v", name, p)
 		}
+	}
+}
+
+// A tools/call cancelled while it was queued behind a slow call opens no
+// dialog and gets no reply.
+func TestElicitQueuedCancel(t *testing.T) {
+	s := elicitServer(t)
+	started, release := make(chan struct{}), make(chan struct{})
+	s.RunCLI = func(context.Context, string, ...string) (string, int, error) {
+		close(started)
+		<-release
+		return "listed", 0, nil
+	}
+	r := startRPC(t, s)
+	r.send(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": map[string]any{
+		"name": "fleet_worktrees", "arguments": map[string]any{"dir": "/r"}}})
+	<-started
+	r.send(closeCall(2, nil))
+	r.send(cancelMsg(2))
+	go func() {
+		r.send(pingMsg(3)) // returns once the queued lines were checked
+		close(release)
+	}()
+	if ids, _ := r.replies("3"); strings.Join(ids, " ") != "1 3" {
+		t.Fatalf("messages with ids %v, want 1 3 (no dialog)", ids)
+	}
+	if !onBoard(s, "a") {
+		t.Fatal("closed after a cancel")
+	}
+}
+
+// Every response is the router's: a stray one never reaches the loop,
+// where it would end a fleet_wait.
+func TestDeliverTakesResponses(t *testing.T) {
+	s := &Server{}
+	for line, want := range map[string]bool{
+		`{"jsonrpc":"2.0","id":"x","result":{}}`:                    true,
+		`{"jsonrpc":"2.0","id":7,"error":{"code":1,"message":"m"}}`: true,
+		`{"jsonrpc":"2.0","id":7,"method":"ping"}`:                  false,
+		`{"jsonrpc":"2.0","method":"notifications/cancelled"}`:      false,
+		`not json`: false,
+	} {
+		if got := s.deliver([]byte(line)); got != want {
+			t.Errorf("deliver(%s) = %v, want %v", line, got, want)
+		}
+	}
+}
+
+// Team send asks in a dialog only when the team exists and a member is on a
+// prompt; a refusal never tells a dialog client to ask in chat.
+func TestElicitTeamSend(t *testing.T) {
+	s := elicitServer(t)
+	r := startRPC(t, s)
+	send := func(id int, team string) map[string]any {
+		return map[string]any{"jsonrpc": "2.0", "id": id, "method": "tools/call", "params": map[string]any{
+			"name": "fleet_team", "arguments": map[string]any{"action": "send", "team": team, "text": "hi", "confirmed": true}}}
+	}
+	r.send(send(1, "nope"))
+	if _, isErr := toolReply(t, r.msg()); !isErr {
+		t.Fatal("send to a missing team not refused")
+	}
+	r.send(map[string]any{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": map[string]any{
+		"name": "fleet_team", "arguments": map[string]any{"action": "add", "team": "t", "agents": []string{"a"}}}})
+	toolReply(t, r.msg())
+	r.send(send(3, "t"))
+	if text, _ := toolReply(t, r.msg()); !strings.Contains(text, "a") {
+		t.Fatalf("team send: %q", text)
+	}
+	if got := s.dialogHint(fleet.WaitingError("Allow?").Error()); strings.Contains(got, fleet.AskThenConfirm) || !strings.Contains(got, "dialog") {
+		t.Fatalf("hint for a dialog client: %q", got)
 	}
 }

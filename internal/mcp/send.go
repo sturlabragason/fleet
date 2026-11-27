@@ -161,8 +161,13 @@ func (s *Server) sendOne(a args, name string) (string, error) {
 			return "", err
 		}
 		if w != "" {
-			g := gate{tool: "fleet_send", agent: name, what: "send", err: fleet.WaitingError(w),
-				ask: fmt.Sprintf("Send to %s? It is waiting on a prompt, so this answers it.", name)}
+			// confirmed=true asks to answer the prompt; for a client with
+			// fleet's dialog the dialog is then the yes (ADR-213).
+			g := gate{tool: "fleet_send", agent: name, what: "send", err: errors.New(s.dialogHint(fleet.WaitingError(w).Error())),
+				ask: fmt.Sprintf("Send to %s? It is waiting on a prompt and this answers it. Prompt: %s", name, status.Cut(w, 120))}
+			if !a.Confirmed {
+				return "", s.refuse(g)
+			}
 			if err := s.confirm(g, a); err != nil {
 				return "", err
 			}

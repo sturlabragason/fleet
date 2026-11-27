@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+
+	"github.com/sturlabragason/fleet/internal/logx"
 )
 
 // Cancellation of slow calls. The serve loop is serial, so while a slow
@@ -223,8 +225,9 @@ func (s *Server) unawait(id json.RawMessage) {
 	s.wmu.Unlock()
 }
 
-// deliver hands a response line to its waiter; false when it is not a
-// response or nobody waits for it.
+// deliver takes every response line: to its waiter, or to the log when
+// nobody waits (late, after a timeout), so it never reaches the loop or
+// ends a fleet_wait. False when the line is not a response.
 func (s *Server) deliver(raw []byte) bool {
 	id, ok := responseID(raw)
 	if !ok {
@@ -236,8 +239,10 @@ func (s *Server) deliver(raw []byte) bool {
 	s.wmu.Unlock()
 	if ok {
 		ch <- raw
+	} else {
+		logx.For("mcp").Info("response nobody waits for", "id", string(id))
 	}
-	return ok
+	return true
 }
 
 // responseID is the id of a JSON-RPC response line (no method, a result or

@@ -64,8 +64,12 @@ func (f *Fleet) Prompting(name string) (string, error) {
 // WaitingError is the refusal for sending to an agent on a prompt without
 // confirmation.
 func WaitingError(prompt string) error {
-	return fmt.Errorf("agent is waiting on a prompt: text or keys can answer it; ask the user, then call again with confirmed=true (or use fleet_answer). Prompt: %s", status.Cut(prompt, 120))
+	return fmt.Errorf("agent is waiting on a prompt: text or keys can answer it; %s (or use fleet_answer). Prompt: %s", AskThenConfirm, status.Cut(prompt, 120))
 }
+
+// AskThenConfirm is how a refusal tells the model to get the user's yes; an
+// MCP client with fleet's own dialog gets it rewritten (internal/mcp).
+const AskThenConfirm = "ask the user, then call again with confirmed=true"
 
 func waitingNote(prompt string, err error) string {
 	if err != nil {

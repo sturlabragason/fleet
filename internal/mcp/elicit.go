@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sturlabragason/fleet/internal/fleet"
 	"github.com/sturlabragason/fleet/internal/logx"
 )
 
@@ -33,9 +34,18 @@ func (s *Server) elicits() bool {
 	if json.Unmarshal(s.client.Capabilities, &c) != nil || c.Elicitation == nil {
 		return false
 	}
-	_, form := (*c.Elicitation)["form"]
-	_, url := (*c.Elicitation)["url"]
-	return form || !url
+	form, ok := (*c.Elicitation)["form"]
+	return len(*c.Elicitation) == 0 || ok && strings.HasPrefix(strings.TrimSpace(string(form)), "{")
+}
+
+// dialogHint rewrites a refusal's "ask the user, then call again with
+// confirmed=true" for a client with fleet's dialog, so the model does not
+// ask in chat before the dialog asks again.
+func (s *Server) dialogHint(text string) string {
+	if !s.elicits() {
+		return text
+	}
+	return strings.Replace(text, fleet.AskThenConfirm, "call again with confirmed=true only if the user wants it answered; fleet then asks the user in a dialog", 1)
 }
 
 // dialogText is what the dialog asks: the action, then any warning.
@@ -60,6 +70,9 @@ func (s *Server) elicit(g gate) error {
 	}
 	ctx, stop := s.callCtx(false)
 	defer stop()
+	if errors.Is(context.Cause(ctx), errCancelled) { // cancelled while it was queued: ask nobody
+		return errCancelled
+	}
 	id := json.RawMessage(strconv.Quote("fleet-elicit-" + strconv.FormatInt(time.Now().UnixNano(), 36)))
 	reply := s.await(id)
 	defer s.unawait(id)
