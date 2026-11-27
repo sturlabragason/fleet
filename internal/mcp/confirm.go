@@ -5,6 +5,7 @@ package mcp
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -136,12 +137,17 @@ func (s *Server) refuse(g gate) error {
 }
 
 // confirm is nil once the user's yes is in, else the refusal. A client
-// that declared elicitation asks the user in its dialog, and confirmed is
+// that declared elicitation asks the user in its dialog (a modern one
+// through MRTR: errInputRequired, then the retry), and confirmed is
 // ignored; otherwise the client's own permission prompt already asked
 // (nativeGated tools for a nativePrompt client, unless there is a warning
 // to show first), or confirmed=true.
 func (s *Server) confirm(g gate, a args) error {
 	switch {
+	case s.elicits() && s.peer().modern():
+		if g.err = s.mrtrConfirm(g); g.err == nil || errors.Is(g.err, errInputRequired) {
+			return g.err
+		}
 	case s.elicits():
 		if g.err = s.elicit(g); g.err == nil {
 			return nil

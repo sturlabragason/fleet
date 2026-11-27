@@ -42,6 +42,8 @@ type call struct {
 	// peer is the client a modern request describes in its _meta (modern.go);
 	// nil for a legacy request.
 	peer *clientInfo
+	// mrtr is a modern tools/call's MRTR fields (mrtr.go); nil otherwise.
+	mrtr *mrtrIn
 	// progress sends notifications/progress for the call's progressToken;
 	// nil without one. Set and used on the call's goroutine.
 	progress func(n int, msg string)

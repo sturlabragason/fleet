@@ -135,6 +135,9 @@ type Server struct {
 	modern     bool
 	subs       []listenSub
 	dialogWait time.Duration // replaces dialogWait in tests
+	// spent holds the nonces of MRTR answers already used, with their
+	// expiry (mrtr.go); guarded by mu.
+	spent map[string]int64
 }
 
 // New returns a server.
@@ -299,6 +302,8 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 			Meta      struct {
 				ProgressToken json.RawMessage `json:"progressToken"`
 			} `json:"_meta"`
+			InputResponses map[string]json.RawMessage `json:"inputResponses"`
+			RequestState   string                     `json:"requestState"`
 		}
 		if err := json.Unmarshal(req.Params, &p); err != nil {
 			return nil, &rpcError{Code: -32602, Message: "invalid params"}
@@ -308,12 +313,18 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		}
 		if s.cur != nil {
 			s.cur.progress = s.progressFor(p.Meta.ProgressToken)
+			if s.cur.peer != nil {
+				s.cur.mrtr = &mrtrIn{tool: p.Name, args: p.Arguments, responses: p.InputResponses, state: p.RequestState}
+			}
 		}
 		text, err := s.callTool(p.Name, p.Arguments)
 		log.Info("call", "tool", p.Name, "agent", s.Agent, "err", err)
 		if s.cur.cancelled() {
 			// No reply goes out, so no one-time note (reports, reload, upgrade) may be spent on it.
 			return nil, nil
+		}
+		if errors.Is(err, errInputRequired) && s.cur.mrtr != nil && s.cur.mrtr.result != nil {
+			return s.cur.mrtr.result, nil // no suffixes: one-time notes wait for the real result
 		}
 		if errors.Is(err, errUnknownTool) {
 			// No suffixes: pending reload and instructions notes wait for the next real result.

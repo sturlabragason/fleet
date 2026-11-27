@@ -141,11 +141,11 @@ func TestDualEra(t *testing.T) {
 		}},
 		// Capabilities come from each modern request, not from initialize:
 		// the eliciting legacy client gets the dialog tools, the modern
-		// claude-code request in the same process gets the native mark and
-		// never fleet's dialog (stdio servers send no requests in 2026-07-28).
+		// claude-code request without elicitation in the same process gets
+		// the native mark.
 		{"per-request capabilities", true, []string{
 			`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"other","version":"1"},"capabilities":{"elicitation":{}}}}` + "\n",
-			modernLine(2, ModernVersion, "tools/list", "", `{"elicitation":{}}`),
+			modernLine(2, ModernVersion, "tools/list", "", `{}`),
 		}, func(t *testing.T, s *Server, r map[string]any) {
 			t.Helper()
 			for _, tl := range r["result"].(map[string]any)["tools"].([]any) {

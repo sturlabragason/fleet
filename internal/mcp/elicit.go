@@ -23,14 +23,12 @@ import (
 // the call is refused and the dialog withdrawn.
 const dialogWait = 10 * time.Minute
 
-// elicits reports whether the client declared form-mode elicitation:
+// elicits reports whether the client declared form-mode elicitation (a
+// modern client gets the dialog through MRTR, mrtr.go):
 // 2025-06-18 `elicitation: {}`; 2025-11-25 `elicitation.form`, with an
 // empty object still meaning form and `{url}` alone meaning no form.
 func (s *Server) elicits() bool {
 	p := s.peer()
-	if p.modern() {
-		return false // 2026-07-28 stdio: a server MUST NOT send requests; MRTR is mcp-mrtr-confirm's
-	}
 	var c struct {
 		Elicitation *map[string]json.RawMessage `json:"elicitation"`
 	}
@@ -79,16 +77,11 @@ func (s *Server) elicit(g gate) error {
 	reply := s.await(id)
 	defer s.unawait(id)
 	if err := s.write(map[string]any{"jsonrpc": "2.0", "id": id, "method": "elicitation/create", "params": map[string]any{
-		"message": g.dialogText(),
-		"requestedSchema": map[string]any{"type": "object", "required": []string{"confirm"}, "properties": map[string]any{
-			"confirm": map[string]any{"type": "boolean", "title": "Yes, go ahead", "default": false}}},
+		"message": g.dialogText(), "requestedSchema": confirmSchema,
 	}}); err != nil {
 		return fmt.Errorf("not confirmed: fleet's dialog could not be sent: %w", err)
 	}
-	wait := s.dialogWait
-	if wait == 0 {
-		wait = dialogWait
-	}
+	wait := s.dialogTTL()
 	t := time.NewTimer(wait)
 	defer t.Stop()
 	// Progress keeps a client's tool-call timeout (Copilot's 180 s, wait.go)
@@ -116,26 +109,48 @@ func (s *Server) elicit(g gate) error {
 	}
 }
 
+// confirmSchema is the dialog's form: one yes/no.
+var confirmSchema = map[string]any{"type": "object", "required": []string{"confirm"}, "properties": map[string]any{
+	"confirm": map[string]any{"type": "boolean", "title": "Yes, go ahead", "default": false}}}
+
+// dialogTTL is how long a dialog stays open (legacy) or its answer valid (MRTR).
+func (s *Server) dialogTTL() time.Duration {
+	if s.dialogWait != 0 {
+		return s.dialogWait
+	}
+	return dialogWait
+}
+
 // dialogAnswer reads the client's elicitation/create response.
 func dialogAnswer(raw []byte) error {
 	var r struct {
-		Result struct {
-			Action  string `json:"action"`
-			Content struct {
-				Confirm bool `json:"confirm"`
-			} `json:"content"`
-		} `json:"result"`
-		Error *rpcError `json:"error"`
+		Result json.RawMessage `json:"result"`
+		Error  *rpcError       `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &r); err != nil {
+		return fmt.Errorf("not confirmed: unreadable answer to fleet's dialog: %w", err)
+	}
+	if r.Error != nil {
+		return fmt.Errorf("not confirmed: the client could not show fleet's dialog: %s", r.Error.Message)
+	}
+	return elicitAnswer(r.Result)
+}
+
+// elicitAnswer reads an ElicitResult: nil only on an accepted yes.
+func elicitAnswer(raw json.RawMessage) error {
+	var r struct {
+		Action  string `json:"action"`
+		Content struct {
+			Confirm bool `json:"confirm"`
+		} `json:"content"`
 	}
 	if err := json.Unmarshal(raw, &r); err != nil {
 		return fmt.Errorf("not confirmed: unreadable answer to fleet's dialog: %w", err)
 	}
 	switch {
-	case r.Error != nil:
-		return fmt.Errorf("not confirmed: the client could not show fleet's dialog: %s", r.Error.Message)
-	case r.Result.Action == "accept" && r.Result.Content.Confirm:
+	case r.Action == "accept" && r.Content.Confirm:
 		return nil
-	case r.Result.Action == "accept", r.Result.Action == "decline":
+	case r.Action == "accept", r.Action == "decline":
 		return errors.New("not confirmed: the user said no in fleet's dialog; don't call again unless the user asks for it")
 	}
 	return errors.New("not confirmed: the user closed fleet's dialog without answering; call again only if the user asks for it")
