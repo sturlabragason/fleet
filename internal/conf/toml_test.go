@@ -36,6 +36,32 @@ waiting = ['\[y/n\]', "Do you # want", '\[Paste #\d+'] # comment
 	}
 }
 
+// TestParseErrors: what real TOML refuses is a parse error, not a value, so
+// a caller keeps its last good state instead of loading a broken value.
+func TestParseErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name, in string
+		bad      bool
+	}{
+		{"unterminated basic string", "a = \"#00ff00\n", true},
+		{"unterminated literal string", "a = '#00ff00\n", true},
+		{"lone quote", "a = \"\n", true},
+		{"escaped closing quote", `a = "x\"` + "\n", true},
+		{"duplicate key", "a = \"1\"\na = \"2\"\n", true},
+		{"duplicate key in a reopened section", "[s]\na = \"1\"\n[t]\n[s]\na = \"2\"\n", true},
+		{"same key in two sections", "a = \"1\"\n[s]\na = \"2\"\n", false},
+		{"escaped backslash closes", `a = "C:\\"` + "\n", false},
+		{"empty string", "a = \"\"\nb = ''\n", false},
+		{"bare value", "a = 3\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := Parse(tc.in); (err != nil) != tc.bad {
+				t.Errorf("Parse(%q) err = %v, want error %v", tc.in, err, tc.bad)
+			}
+		})
+	}
+}
+
 func TestBoolAndDur(t *testing.T) {
 	d, err := Parse("yes = true\nno = False\nnum = 3\nt = \"5s\"\nbad = \"fortnight\"\n")
 	if err != nil {

@@ -60,7 +60,11 @@ func Parse(s string) (Doc, error) {
 		if err != nil {
 			return nil, fmt.Errorf("line %d: %w", start+1, err)
 		}
-		d[sec][strings.Trim(strings.TrimSpace(k), `"`)] = val
+		k = strings.Trim(strings.TrimSpace(k), `"`)
+		if _, dup := d[sec][k]; dup {
+			return nil, fmt.Errorf("line %d: duplicate key %q", start+1, k)
+		}
+		d[sec][k] = val
 	}
 	return d, nil
 }
@@ -143,6 +147,12 @@ func parseValue(v string) (Value, error) {
 			m[strings.Trim(strings.TrimSpace(k), `"`)] = unquote(strings.TrimSpace(val))
 		}
 		return m, nil
+	}
+	if q := v[:min(len(v), 1)]; q == `"` || q == "'" {
+		closed := len(v) >= 2 && strings.HasSuffix(v, q) && (q == "'" || !escaped(v, len(v)-1))
+		if !closed {
+			return nil, fmt.Errorf("unterminated string")
+		}
 	}
 	return unquote(v), nil
 }

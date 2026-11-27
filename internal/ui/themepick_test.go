@@ -113,3 +113,27 @@ func TestThemePickerDrawsAboveTiles(t *testing.T) {
 		t.Fatalf("picker view:\n%s", v)
 	}
 }
+
+// TestThemePickerBackdropIsGlass: the picker is a reading panel (ADR-183), so
+// the backdrop below the header is blurred glass with a margin, never crisp
+// strands drawn against its labels.
+func TestThemePickerBackdropIsGlass(t *testing.T) {
+	m := pickerModel(t, &themeBE{})
+	m.key("T")
+	if m.tp == nil {
+		t.Fatal("picker did not open")
+	}
+	_ = m.View()
+	spans := 0
+	for r, l := range m.bg.base[1:] {
+		for _, sp := range l.Spans {
+			spans++
+			if !sp.Glass {
+				t.Errorf("row %d: crisp backdrop span %+v with the picker open", r+1, sp)
+			}
+		}
+	}
+	if spans == 0 {
+		t.Fatal("no backdrop spans parsed")
+	}
+}

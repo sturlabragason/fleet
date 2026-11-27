@@ -109,6 +109,22 @@ func TestDoctorBrokenConfigFiles(t *testing.T) {
 	}
 }
 
+// A key above the first [section] is read by nothing, so a theme = there
+// would be ignored without a word; the config line warns and names it.
+func TestDoctorStrayConfigKey(t *testing.T) {
+	env := doctorTestEnv(t, "copilot")
+	write(t, os.Getenv("FLEET_CONFIG"), "theme = \"dracula\"\n[defaults]\nanimation = true\n")
+	var c doctorCheck
+	for _, d := range doctor(env) {
+		if d.Name == "config.toml" {
+			c = d
+		}
+	}
+	if c.Level != levelWarn || !strings.Contains(c.Detail, "theme outside any [section]") {
+		t.Errorf("config.toml = %+v, want a warn naming theme", c)
+	}
+}
+
 func TestDoctorEnvironmentWarnings(t *testing.T) {
 	env := doctorTestEnv(t, "copilot")
 	env.getenv = func(k string) string {

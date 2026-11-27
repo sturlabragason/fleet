@@ -17,9 +17,10 @@ import (
 type Reloader struct {
 	Config string // config.toml, for theme = "..."
 	Dir    string // the themes directory
-	// Name reads the configured theme name; an error keeps the current
-	// theme and is the warning.
-	Name func() (string, error)
+	// Name reads the configured theme name and a config problem to show
+	// that does not stop the reload; an error keeps the current theme and
+	// is the warning.
+	Name func() (name, warn string, err error)
 
 	started       bool
 	seen, applied string
@@ -46,7 +47,7 @@ func (r *Reloader) Check() (changed bool, warn string) {
 }
 
 func (r *Reloader) reload() (bool, string) {
-	name, err := r.Name()
+	name, cfgWarn, err := r.Name()
 	if err != nil {
 		return false, fmt.Sprintf("theme not reloaded, kept %s: %v", active.Name, err)
 	}
@@ -68,9 +69,9 @@ func (r *Reloader) reload() (bool, string) {
 		}
 		return false, fmt.Sprintf("theme %s not loaded (%s), kept %s", name, why, prev.Name)
 	}
-	warn := ""
+	warn := cfgWarn
 	if len(probs[name]) > 0 {
-		warn = "theme " + name + ".toml: " + strings.Join(probs[name], "; ")
+		warn = strings.TrimPrefix(warn+"; theme "+name+".toml: "+strings.Join(probs[name], "; "), "; ")
 	}
 	if reflect.DeepEqual(p, prev) {
 		return false, warn

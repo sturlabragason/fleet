@@ -336,12 +336,13 @@ func (m *Model) bgRow(b *strings.Builder, cells []logo.FlowCell) {
 
 // bgShown reports whether the backdrop belongs on screen now, how bright open
 // areas are, and whether the whole pane below the header is a reading panel
-// that uses blurred glass across the full width (ADR-183).
+// that uses blurred glass across the full width (ADR-183). The theme picker
+// is such a panel: without it crisp strands ran into its labels.
 func (m *Model) bgShown() (dim float64, fullGlass, ok bool) {
 	if m.bg.off {
 		return 0, false, false
 	}
-	if m.ans != nil || m.wv != nil || m.help || extView(m) != nil {
+	if m.ans != nil || m.wv != nil || m.help || m.tp != nil || extView(m) != nil {
 		return bgDim, true, true
 	}
 	if len(m.agents) == 0 {

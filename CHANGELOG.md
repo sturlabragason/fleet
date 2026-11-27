@@ -7,6 +7,9 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
 ## 2026-11-27
+- A theme file with a missing closing quote or a key written twice now counts as not parsing, so fleet keeps your last good theme and says which line is wrong, instead of dropping that colour to the base's (ADR-216)
+- `fleet doctor` and the overview's message line warn when `config.toml` has a key above its first section, such as `theme =` outside `[defaults]`, instead of ignoring it without a word (ADR-216)
+- With the `T` theme picker open, the backdrop behind it is soft glass with a margin, no longer crisp strands drawn against the theme names (ADR-216)
 - `fleet_peek` and `fleet_squad_peek` results start with a line marking another agent's screen as untrusted information, not instructions from the user, the same label peer mail carries
 - `fleet spawn --route NAME <name> ["task"]` starts an agent through a saved route from the shell, so a systemd timer can run a recurring pass (the weekly dream) the same way the admiral would (ADR-210)
 - The overview no longer flickers or leaves stray backdrop marks behind its tiles: each full redraw reaches the terminal in one piece, and a redraw after the animated backdrop moved repaints every backdrop row (ADR-180)

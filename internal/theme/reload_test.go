@@ -20,8 +20,8 @@ func TestReloader(t *testing.T) {
 	if err := Load("mine"); err != nil {
 		t.Fatal(err)
 	}
-	name, nameErr := "mine", error(nil)
-	r := &Reloader{Dir: dir, Config: filepath.Join(dir, "missing.toml"), Name: func() (string, error) { return name, nameErr }}
+	name, cfgWarn, nameErr := "mine", "", error(nil)
+	r := &Reloader{Dir: dir, Config: filepath.Join(dir, "missing.toml"), Name: func() (string, string, error) { return name, cfgWarn, nameErr }}
 	if ch, w := r.Check(); ch || w != "" {
 		t.Fatalf("first check: changed=%v warn=%q, want nothing", ch, w)
 	}
@@ -43,10 +43,13 @@ func TestReloader(t *testing.T) {
 		{"edit the active file", write("[overrides]\nwaiting = \"#ffff22\"\n"), true, "", "mine", "#ffff22"},
 		{"a parse error keeps the last good theme", write("[overrides\n"), false, "kept mine", "mine", "#ffff22"},
 		{"fixed again", write("[overrides]\nwaiting = \"#ffff33\"\n"), true, "", "mine", "#ffff33"},
+		{"an unterminated quote keeps the last good theme", write("[overrides]\nwaiting = \"#00ff00\n"), false, "kept mine", "mine", "#ffff33"},
+		{"a duplicate key keeps the last good theme", write("[overrides]\nwaiting = \"#ffff44\"\nwaiting = \"#ffff55\"\n"), false, "duplicate key", "mine", "#ffff33"},
 		{"a bad value loads and warns", write("[overrides]\nwaiting = \"red\"\n"), true, "not a #rrggbb", "mine", lane.Waiting},
 		{"config names a built-in", func() { name = "catppuccin"; write("")() }, true, "", "catppuccin", palettes["catppuccin"].Waiting},
 		{"config does not parse", func() { nameErr = errors.New("line 2: bad"); write("# touch")() }, false, "line 2: bad", "catppuccin", palettes["catppuccin"].Waiting},
 		{"config names an unknown theme", func() { name, nameErr = "nope", nil; write("")() }, false, "unknown theme", "catppuccin", palettes["catppuccin"].Waiting},
+		{"a stray config key warns", func() { name, cfgWarn = "catppuccin", "theme outside any [section]"; write("# touch")() }, false, "outside any [section]", "catppuccin", palettes["catppuccin"].Waiting},
 	}
 	for i, s := range steps {
 		s.do()
@@ -77,7 +80,7 @@ func TestReloaderKeepsBrokenActiveListed(t *testing.T) {
 	if err := Load("mine"); err != nil {
 		t.Fatal(err)
 	}
-	r := &Reloader{Dir: dir, Name: func() (string, error) { return "mine", nil }}
+	r := &Reloader{Dir: dir, Name: func() (string, string, error) { return "mine", "", nil }}
 	r.Check()
 	if err := os.WriteFile(filepath.Join(dir, "mine.toml"), []byte("[overrides\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -115,7 +118,7 @@ func TestReloaderUnreadableDir(t *testing.T) {
 	if err := Load("mine"); err != nil {
 		t.Fatal(err)
 	}
-	r := &Reloader{Dir: dir, Name: func() (string, error) { return "mine", nil }}
+	r := &Reloader{Dir: dir, Name: func() (string, string, error) { return "mine", "", nil }}
 	r.Check()
 	r.Dir = filepath.Join(dir, "mine.toml") // a file: ReadDir fails
 	r.Check()

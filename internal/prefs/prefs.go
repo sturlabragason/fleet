@@ -7,6 +7,7 @@ package prefs
 import (
 	"fmt"
 	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -138,6 +139,7 @@ type Prefs struct {
 	resurface    time.Duration
 	usage        map[string]conf.Value
 	burn         Burn
+	stray        []string // keys above the first [section]: nothing reads them
 }
 
 // AdmiralProfile is [admiral] profile: the admiral's tool profile when no
@@ -173,6 +175,15 @@ func (p *Prefs) MaxWorking() int {
 	return p.maxWorking
 }
 
+// Stray says which keys sit above the first [section], where fleet reads
+// none (a top-level theme = is the usual slip), "" when there are none.
+func (p *Prefs) Stray() string {
+	if p == nil || len(p.stray) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("config.toml: %s outside any [section] is ignored; theme and the spawn defaults go under [defaults]", strings.Join(p.stray, ", "))
+}
+
 // Theme is [defaults] theme: the TUI palette name (ADR-55). "" = the default
 // palette; the name is validated by theme.Load at start-up.
 func (p *Prefs) Theme() string {
@@ -204,6 +215,7 @@ func Load() (*Prefs, error) {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	p := &Prefs{Path: path, defaults: Neutral(), profiles: map[string]map[string]conf.Value{}, maxWorking: DefaultMaxWorking, summary: DefaultSummary(), memory: DefaultMemory(), squad: DefaultSquad(), recycle: DefaultRecycle(), resurface: DefaultResurface, burn: DefaultBurn()}
+	p.stray = slices.Sorted(maps.Keys(d[""]))
 	if sec, ok := d["defaults"]; ok {
 		p.defaults = applySpawn(p.defaults, sec)
 		if v := conf.Str(sec, "max_working"); v != "" {

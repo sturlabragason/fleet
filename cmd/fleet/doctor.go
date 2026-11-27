@@ -378,6 +378,9 @@ func checkConfig(env doctorEnv) (*prefs.Prefs, doctorCheck) {
 		return nil, c
 	}
 	c.Level, c.Detail = levelOK, tildePath(env, path)+" parses"
+	if w := pr.Stray(); w != "" {
+		c.Level, c.Detail, c.Fix = levelWarn, w, "move it under its section; see examples/config.toml.example"
+	}
 	return pr, c
 }
 

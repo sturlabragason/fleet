@@ -63,12 +63,12 @@ func (b *backend) SaveTheme(name string) func() error {
 // themeReloader watches config.toml and the theme files for a live reload
 // (ADR-201).
 func themeReloader() *theme.Reloader {
-	return &theme.Reloader{Config: prefs.Path(), Dir: prefs.ThemeDir(), Name: func() (string, error) {
+	return &theme.Reloader{Config: prefs.Path(), Dir: prefs.ThemeDir(), Name: func() (string, string, error) {
 		p, err := prefs.Load()
 		if err != nil {
-			return "", fmt.Errorf("read config: %w", err)
+			return "", "", fmt.Errorf("read config: %w", err)
 		}
-		return p.Theme(), nil
+		return p.Theme(), p.Stray(), nil
 	}}
 }
 
