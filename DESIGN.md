@@ -1108,6 +1108,7 @@ No admiral harness has a "reply to this message" feature, and the admirals run i
 - Typed text filters by words. Text of 4+ characters that starts an open item's id (todo store, read-only `Store.Admiral`) or a report id in the admiral's mailbox adds that item at the top.
 - ⏎ pastes (bracketed, no Enter) a header `[re #N, HH:MM]` (`[re todo ID]`, `[re report ID from AGENT]`), at most 8 `> ` lines of the original with `> …` when cut, and an empty line, into the admiral's input box, and focuses that pane. `Esc` cancels.
 - Several admirals: the focused admiral pane, else `main` when it is the only one, else a menu asks which (as `Alt-R`, `Alt-P`).
+- In a pane scrolled back into copy mode, tmux's own copy-mode `M-r` (middle-line) would win over the root binding, so fleet up also binds `M-r` in the `copy-mode` table: it leaves copy mode and opens the picker.
 
 ## 7. Memory (RAM): parking (ADR-44, built)
 

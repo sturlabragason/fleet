@@ -7,6 +7,7 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
 ## 2026-11-27
+- `Alt-r` opens the reply picker even when the admiral pane is scrolled back (tmux copy mode), where it used to jump the cursor to the middle line instead
 - fleet's MCP tools now carry a title and read-only, destructive and open-world hints, so clients can run reads in parallel and flag risky calls; `/mcp` shows fleet's real version instead of 0.1.0 (ADR-212)
 - A theme file with a missing closing quote or a key written twice now counts as not parsing, so fleet keeps your last good theme and says which line is wrong, instead of dropping that colour to the base's (ADR-216)
 - `fleet doctor` and the overview's message line warn when `config.toml` has a key above its first section, such as `theme =` outside `[defaults]`, instead of ignoring it without a word (ADR-216)

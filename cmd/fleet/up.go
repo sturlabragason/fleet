@@ -588,6 +588,8 @@ func tmuxCommands(f *fleet.Fleet) [][]string {
 		{"bind-key", "-n", "M-R", wallCmdAct(f.Exe, "reset")},
 		{"bind-key", "-n", "M-P", wallCmdAct(f.Exe, "pick")},
 		{"bind-key", "-n", "M-r", wallCmdAct(f.Exe, "reply")},
+		// A pane scrolled back is in copy mode, whose own M-r (middle-line) wins over root.
+		{"bind-key", "-T", "copy-mode", "M-r", "send-keys -X cancel ; " + wallCmdAct(f.Exe, "reply")},
 		append([]string{"bind-key", "-n", keys.HelpTmuxKey}, fitPopup(fitW(keys.PopupWidth()), fitH(keys.PopupHeight()+logo.HeadRows),
 			"-T", " fleet keys · any key closes ", exe+" keys --popup")...),
 		append([]string{"bind-key", "-n", keys.ChangesTmuxKey}, changesPopupArgs(exe)...),

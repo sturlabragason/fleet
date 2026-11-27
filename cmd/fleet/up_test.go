@@ -528,3 +528,32 @@ func TestWallCmdActQuotesExe(t *testing.T) {
 		t.Errorf("binding lost the exe: %s", out)
 	}
 }
+
+// Alt-r opens the quote picker even in a pane scrolled back into copy mode,
+// where tmux's default copy-mode M-r (middle-line) used to win over root.
+func TestAltRWorksInCopyMode(t *testing.T) {
+	c := &tmux.Client{Socket: fmt.Sprintf("fleet-test-%d", rand.Int63()), Config: "/dev/null"}
+	t.Cleanup(func() { c.KillServer() })
+	if _, err := c.Run("new-session", "-d", "-s", "f", "cat"); err != nil {
+		t.Skip("tmux unavailable")
+	}
+	for _, cmd := range tmuxCommands(&fleet.Fleet{Exe: "/opt/my fleet/fleet"}) {
+		if len(cmd) > 3 && cmd[0] == "bind-key" && (cmd[2] == "M-r" || cmd[3] == "M-r") {
+			if _, err := c.Run(cmd...); err != nil {
+				t.Fatalf("tmux rejected %q: %v", cmd, err)
+			}
+		}
+	}
+	for _, table := range []string{"root", "copy-mode"} {
+		out, err := c.Run("list-keys", "-T", table, "M-r")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out, "admiral act reply") {
+			t.Errorf("Alt-r in %s runs %q, not the quote picker", table, out)
+		}
+	}
+	if out, _ := c.Run("list-keys", "-T", "copy-mode", "M-r"); !strings.Contains(out, "cancel") {
+		t.Errorf("Alt-r in copy mode must leave copy mode first: %q", out)
+	}
+}
