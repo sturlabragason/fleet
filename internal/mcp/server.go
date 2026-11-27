@@ -6,6 +6,7 @@ package mcp
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -282,7 +283,7 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		return map[string]any{
 			"protocolVersion": ProtocolVersion,
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": true}},
-			"serverInfo":      map[string]any{"name": "fleet", "version": "0.1.0"},
+			"serverInfo":      map[string]any{"name": "fleet", "title": "Fleet", "version": cmp.Or(fleet.Version, "dev")},
 			"instructions":    s.instructions(),
 		}, nil
 	case "notifications/initialized", "notifications/cancelled":
