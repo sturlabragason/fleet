@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -171,7 +172,7 @@ func TestClientSurvivesReload(t *testing.T) {
 	s.Probe = func(string) error { return nil }
 	s.Exec = func(_ string, _, env []string) error { execs <- env; return nil }
 	c, done := startServe(t, s)
-	c.send(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"claude-code","version":"2.1.327"},"capabilities":{"roots":{}}}}` + "\n")
+	c.send(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","clientInfo":{"name":"claude-code","version":"2.1.327"},"capabilities":{"roots":{}}}}` + "\n")
 	c.next()
 	replaceExe(t, exe, "v2")
 	c.send(ping(2))
@@ -193,7 +194,7 @@ func TestClientSurvivesReload(t *testing.T) {
 	c2.next() // tools/list_changed
 	c2.send(`{"jsonrpc":"2.0","id":3,"method":"tools/list"}` + "\n")
 	c2.next()
-	if !s2.nativePrompt() || string(s2.client.Capabilities) != `{"roots":{}}` {
+	if !s2.nativePrompt() || string(s2.client.Capabilities) != `{"roots":{}}` || s2.client.Protocol != "2025-06-18" {
 		t.Fatalf("client after reload: %+v", s2.client)
 	}
 	if _, ok := listedTools(t, s2)["fleet_close"]["_meta"]; !ok {
@@ -201,5 +202,25 @@ func TestClientSurvivesReload(t *testing.T) {
 	}
 	if os.Getenv(envClient) != "" {
 		t.Fatal("client identity left in the environment")
+	}
+}
+
+func TestNegotiateVersion(t *testing.T) {
+	for _, tc := range []struct{ asked, want string }{
+		{"2025-11-25", "2025-11-25"},
+		{"2025-06-18", "2025-06-18"},
+		{"2099-01-01", ProtocolVersion}, // unknown future: our latest
+		{"", ProtocolVersion},
+	} {
+		t.Run(cmp.Or(tc.asked, "empty"), func(t *testing.T) {
+			s := New(mailHome(t), nil)
+			res, rerr := s.handle(request{Method: "initialize", Params: json.RawMessage(fmt.Sprintf(`{"protocolVersion":%q}`, tc.asked))})
+			if rerr != nil {
+				t.Fatal(rerr)
+			}
+			if got := res.(map[string]any)["protocolVersion"]; got != tc.want {
+				t.Fatalf("asked %q: answered %v, want %s", tc.asked, got, tc.want)
+			}
+		})
 	}
 }

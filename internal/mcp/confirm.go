@@ -25,6 +25,8 @@ type clientInfo struct {
 	Name         string          `json:"name,omitempty"`
 	Version      string          `json:"version,omitempty"`
 	Capabilities json.RawMessage `json:"capabilities,omitempty"`
+	// Protocol is the negotiated MCP version.
+	Protocol string `json:"protocol,omitempty"`
 }
 
 // nativeGated are the tools that always need the user's yes. For a client
@@ -43,20 +45,20 @@ const claudeCodeMin = "2.1.246"
 // takeClient reads initialize's params.
 func (s *Server) takeClient(params json.RawMessage) {
 	var p struct {
-		ClientInfo   clientInfo      `json:"clientInfo"`
-		Capabilities json.RawMessage `json:"capabilities"`
+		ProtocolVersion string          `json:"protocolVersion"`
+		ClientInfo      clientInfo      `json:"clientInfo"`
+		Capabilities    json.RawMessage `json:"capabilities"`
 	}
 	if err := json.Unmarshal(params, &p); err != nil {
 		logx.For("mcp").Debug("initialize params", "err", err)
-		return
 	}
-	s.client = clientInfo{Name: p.ClientInfo.Name, Version: p.ClientInfo.Version, Capabilities: p.Capabilities}
-	logx.For("mcp").Info("client", "name", s.client.Name, "version", s.client.Version)
+	s.client = clientInfo{Name: p.ClientInfo.Name, Version: p.ClientInfo.Version, Capabilities: p.Capabilities, Protocol: negotiate(p.ProtocolVersion)}
+	logx.For("mcp").Info("client", "name", s.client.Name, "version", s.client.Version, "protocol", s.client.Protocol)
 }
 
 // clientEnv is the reload env entry for the client identity; "" before initialize.
 func (s *Server) clientEnv() string {
-	if s.client.Name == "" {
+	if s.client.Name == "" && s.client.Protocol == "" {
 		return ""
 	}
 	b, err := json.Marshal(s.client)
@@ -69,7 +71,7 @@ func (s *Server) clientEnv() string {
 // takeReloadedClient adopts the identity a reloaded process inherited and
 // clears it so children don't inherit it.
 func (s *Server) takeReloadedClient() {
-	if v := os.Getenv(envClient); v != "" && s.Reloaded && s.client.Name == "" {
+	if v := os.Getenv(envClient); v != "" && s.Reloaded && s.client.Name == "" && s.client.Protocol == "" {
 		if err := json.Unmarshal([]byte(v), &s.client); err != nil {
 			logx.For("mcp").Warn("reloaded client identity", "err", err)
 		}

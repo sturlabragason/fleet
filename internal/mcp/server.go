@@ -15,6 +15,7 @@ import (
 	"io"
 	"os"
 	"runtime/debug"
+	"slices"
 	"sync"
 	"time"
 
@@ -33,8 +34,21 @@ import (
 //go:embed instructions.md
 var Instructions string
 
-// ProtocolVersion is the MCP revision we speak.
-const ProtocolVersion = "2025-06-18"
+// ProtocolVersion is the latest MCP revision we speak; legacyVersions are
+// all the ones initialize accepts. Fleet is tools-only, and nothing it sends
+// differs between them (DESIGN §6.2a), so only the answered version changes.
+const ProtocolVersion = "2025-11-25"
+
+var legacyVersions = []string{ProtocolVersion, "2025-06-18"}
+
+// negotiate is the spec's version negotiation: the client's version when we
+// support it, else our latest.
+func negotiate(asked string) string {
+	if slices.Contains(legacyVersions, asked) {
+		return asked
+	}
+	return ProtocolVersion
+}
 
 // Server serves fleet tools.
 type Server struct {
@@ -281,7 +295,7 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		s.had = s.served
 		s.keepInstructions(s.rulesText())
 		return map[string]any{
-			"protocolVersion": ProtocolVersion,
+			"protocolVersion": s.client.Protocol,
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": true}},
 			"serverInfo":      map[string]any{"name": "fleet", "title": "Fleet", "version": cmp.Or(fleet.Version, "dev")},
 			"instructions":    s.instructions(),
