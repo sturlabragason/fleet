@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -111,6 +112,9 @@ func (s *Server) send(a args) (string, error) {
 	var b strings.Builder
 	for _, name := range names {
 		d, err := s.sendOne(a, name)
+		if errors.Is(err, errCancelled) { // the client cancelled the call in a dialog: ask nobody else
+			return "", err
+		}
 		if err != nil {
 			fmt.Fprintf(&b, "%s: skipped (%v)\n", name, err)
 			continue

@@ -24,6 +24,9 @@ var (
 
 // aheadMax is how many lines the reader buffers while a call runs; past it
 // the reader waits for the loop and sees no further cancel until then.
+// shortcut: that also holds back a dialog's answer (elicit.go) until its
+// timeout; upgrade with the concurrent serve loop if a client is seen
+// sending 64 lines while a dialog is open.
 const aheadMax = 64
 
 type lineRead struct {
