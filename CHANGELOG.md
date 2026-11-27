@@ -6,6 +6,10 @@ To add an entry: one line under today's `## YYYY-MM-DD` heading (add the heading
 
 The release notes are built from these lines (`scripts/release-notes.sh`), grouped by the commit type: `feat` is New, `fix` is Fixed, `test`/`ci`/`chore` is Internal. One change per line. Start the line with `**Changed default:**` when an existing setup behaves differently after the upgrade, and say how to keep the old behaviour; start it with `Contributors:` when only people working on fleet itself notice. Name only built-in profiles (`claude`, `copilot`, ...), never your own, and explain units and measurements a reader cannot check.
 
+## 2026-11-27
+- The overview no longer flickers or leaves stray backdrop marks behind its tiles: each full redraw reaches the terminal in one piece, and a redraw after the animated backdrop moved repaints every backdrop row (ADR-180)
+- Agents check that an artifact page is published with `artifact cat <name>`, not an HTTP request, which the private site answers with 401 even for a missing page
+
 ## 2026-11-26
 - An Ask box agent can't message, spawn or change access for other agents: its fleet tools are only report, inbox, instructions and wait (ADR-209)
 - Ask a question on any private artifact page: its Ask button sends the question to fleet, an agent in the page's context (`<meta name="artifact-ctx">`, profile from `[integrations.artifact.ask]`) answers it, and the answer appears on the page. The agent is read-only by its tool's own rules (new profile key `readonly_args`: no shell, no file writes), not just by its prompt (ADR-209)

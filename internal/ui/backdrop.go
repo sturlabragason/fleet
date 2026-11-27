@@ -52,14 +52,27 @@ func (s *SyncOut) Read(p []byte) (int, error) { return s.f.Read(p) }
 // Close closes the wrapped file.
 func (s *SyncOut) Close() error { return s.f.Close() }
 
-// Write writes a Bubble Tea frame and records that a full flush happened.
+// Write writes a Bubble Tea frame as one synchronized update, so tmux never
+// shows half of a full repaint, and records that a full flush happened.
 func (s *SyncOut) Write(p []byte) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if _, err := io.WriteString(s.w, syncOn); err != nil {
+		return 0, err
+	}
 	n, err := s.w.Write(p)
+	if err == nil {
+		_, err = io.WriteString(s.w, syncOff)
+	}
 	s.seq.Add(1)
 	return n, err
 }
+
+// syncOn and syncOff bracket a synchronized update (DEC mode 2026).
+const (
+	syncOn  = "\x1b[?2026h"
+	syncOff = "\x1b[?2026l"
+)
 
 // WriteString serializes Bubble Tea's control writes (standardRenderer.execute)
 // under mu without bumping seq, since they are not full frame flushes.
@@ -109,6 +122,12 @@ type backdrop struct {
 	fullSeq  uint64   // out.seq when lastView was handed to bubbletea
 	patcher  logo.BackdropPatcher
 	patchBuf []byte
+	// patched: cells were patched since the last full frame, so the screen
+	// no longer matches the lines Bubble Tea remembers. mark flips on the
+	// next full frame and adds a no-op reset to every backdrop row, so no row
+	// equals its painted line and Bubble Tea rewrites them all.
+	patched bool
+	mark    bool
 }
 
 // SetBackdrop turns the backdrop off for NO_COLOR and TERM=dumb, where its
@@ -227,6 +246,9 @@ func (m *Model) frame(draw func() string) string {
 		}
 		return m.bg.lastView
 	}
+	if m.bg.patched {
+		m.bg.mark, m.bg.patched = !m.bg.mark, false
+	}
 	var b strings.Builder
 	for r, l := range m.bg.base {
 		if r > 0 {
@@ -239,6 +261,9 @@ func (m *Model) frame(draw func() string) string {
 		rowOff := (r - 1) * m.w
 		for si, sp := range l.Spans {
 			b.WriteString(l.Segs[si])
+			if si == 0 && m.bg.mark {
+				b.WriteString("\x1b[0m") // a second reset before the span's own: invisible
+			}
 			logo.WriteBackdropSpan(&b, cells[rowOff+sp.C0:rowOff+sp.C1], m.bg.drawn[rowOff+sp.C0:rowOff+sp.C1], m.bg.esc, sp.Glass, sp.Restore)
 		}
 		b.WriteString(l.Segs[len(l.Spans)])
@@ -258,13 +283,14 @@ func (m *Model) bgPatch(cells []logo.FlowCell) {
 	if len(inner) == 0 {
 		return
 	}
-	buf := append(m.bg.patchBuf[:0], "\x1b[?2026h"...)
+	buf := append(m.bg.patchBuf[:0], syncOn...)
 	buf = append(buf, inner...)
 	buf = append(buf, "\x1b["...)
 	buf = strconv.AppendInt(buf, int64(m.h), 10)
-	buf = append(buf, ";1H\x1b[?2026l"...)
+	buf = append(buf, ";1H"+syncOff...)
 	m.bg.patchBuf = buf
 	m.bg.out.patch(buf)
+	m.bg.patched = true
 }
 
 // bgCells is this frame's backdrop, w×(h-1) cells, nil when none is shown,

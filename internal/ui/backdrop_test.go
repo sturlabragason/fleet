@@ -225,3 +225,57 @@ func TestBackdropShown(t *testing.T) {
 		t.Error("backdrop shown after SetBackdrop(false)")
 	}
 }
+
+// TestFullFrameAfterPatch: Bubble Tea skips a line equal to the one it painted
+// last, so after cell patches a full frame whose backdrop cells happen to match
+// the previous full frame must still differ on every backdrop row; otherwise
+// the patched cells stay on screen while drawn claims they were replaced.
+func TestFullFrameAfterPatch(t *testing.T) {
+	var buf bytes.Buffer
+	m := New(&fakeBE{}, "")
+	m.w, m.h = 20, 6
+	m.bg.out = &SyncOut{w: &buf}
+	esc := make([]string, logo.BackdropCols)
+	for i := range esc {
+		esc[i] = "<c>"
+	}
+	head := "head"
+	draw := func() string { return head + "\n\n\n\n\n" }
+	_ = m.frame(draw)
+	m.bg.esc = esc
+	m.bg.frameT = -1
+	v1 := m.frame(draw)
+	_, _ = m.bg.out.Write([]byte(v1)) // Bubble Tea paints v1
+	buf.Reset()
+	m.bg.t = 2
+	m.Update(bgMsg{gen: -1})
+	if m.frame(draw); buf.Len() == 0 {
+		t.Fatal("tick wrote no patch")
+	}
+	// The overview changes and the backdrop is back where v1 drew it.
+	head, m.bg.t = "head2", 0
+	m.Update(animMsg{})
+	v2 := m.frame(draw)
+	if v2 == v1 {
+		t.Fatal("a changed overview gave no full frame")
+	}
+	l1, l2 := strings.Split(v1, "\n"), strings.Split(v2, "\n")
+	for r := 1; r < len(l1); r++ {
+		if l1[r] == l2[r] {
+			t.Errorf("row %d equals the painted frame, so Bubble Tea would skip it and leave the patch on screen", r)
+		}
+	}
+}
+
+// TestSyncOutFrame: a Bubble Tea frame reaches the terminal as one synchronized
+// update, like the backdrop patches, so tmux never shows half of it.
+func TestSyncOutFrame(t *testing.T) {
+	var buf bytes.Buffer
+	s := &SyncOut{w: &buf}
+	if n, err := s.Write([]byte("frame")); err != nil || n != 5 {
+		t.Fatalf("Write = %d, %v; want 5, nil", n, err)
+	}
+	if got, want := buf.String(), "\x1b[?2026hframe\x1b[?2026l"; got != want {
+		t.Errorf("Write wrote %q, want %q", got, want)
+	}
+}
