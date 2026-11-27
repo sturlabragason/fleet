@@ -105,6 +105,12 @@ func UnitDir() string {
 // from hand-made ones.
 func Unit(route string) string { return "fleet-sched-" + route }
 
+// TimerUnit is route's timer unit name.
+func TimerUnit(route string) string { return Unit(route) + ".timer" }
+
+// TimeFmt is how ls, doctor and a run's task line show a schedule time.
+const TimeFmt = "Mon 02 Jan 15:04"
+
 // serviceText is the oneshot the timer starts. KillMode=process keeps the
 // tmux server a run may start (fleet up) alive after the unit exits.
 // A login shell gives the run, and a fleet it starts, the user's PATH and
@@ -173,10 +179,10 @@ func Install(ctx context.Context, route, spec, exe, fleetHome string) error {
 		return err
 	}
 	// restart, not start: a changed calendar takes effect at once.
-	if err := systemctl(ctx, "enable", Unit(route)+".timer"); err != nil {
+	if err := systemctl(ctx, "enable", TimerUnit(route)); err != nil {
 		return err
 	}
-	return systemctl(ctx, "restart", Unit(route)+".timer")
+	return systemctl(ctx, "restart", TimerUnit(route))
 }
 
 // Uninstall stops route's timer and removes its units. Units already gone
@@ -184,7 +190,7 @@ func Install(ctx context.Context, route, spec, exe, fleetHome string) error {
 func Uninstall(ctx context.Context, route string) error {
 	u := filepath.Join(UnitDir(), Unit(route))
 	if _, err := os.Stat(u + ".timer"); err == nil {
-		if err := systemctl(ctx, "disable", "--now", Unit(route)+".timer"); err != nil {
+		if err := systemctl(ctx, "disable", "--now", TimerUnit(route)); err != nil {
 			return err
 		}
 	}
@@ -199,11 +205,11 @@ func Uninstall(ctx context.Context, route string) error {
 // TimerState is "active", "inactive" or "missing" (no unit file), with the
 // unit file's mtime as when the schedule was set.
 func TimerState(ctx context.Context, route string) (string, time.Time) {
-	fi, err := os.Stat(filepath.Join(UnitDir(), Unit(route)+".timer"))
+	fi, err := os.Stat(filepath.Join(UnitDir(), TimerUnit(route)))
 	if err != nil {
 		return "missing", time.Time{}
 	}
-	if systemctl(ctx, "is-active", "--quiet", Unit(route)+".timer") != nil {
+	if systemctl(ctx, "is-active", "--quiet", TimerUnit(route)) != nil {
 		return "inactive", fi.ModTime()
 	}
 	return "active", fi.ModTime()

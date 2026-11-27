@@ -76,7 +76,7 @@ func scheduleAdd(ctx context.Context, f *fleet.Fleet, args []string) error {
 	if err := schedule.Install(ctx, name, spec, exe, os.Getenv("FLEET_HOME")); err != nil {
 		return fmt.Errorf("route %s scheduled, but its timer is not running: %w", name, err)
 	}
-	fmt.Printf("route %s runs on %q; next run %s (timer %s.timer)\n", name, spec, e[0].Local().Format("Mon 02 Jan 15:04"), schedule.Unit(name))
+	fmt.Printf("route %s runs on %q; next run %s (timer %s)\n", name, spec, e[0].Local().Format(schedule.TimeFmt), schedule.TimerUnit(name))
 	return nil
 }
 
@@ -131,11 +131,11 @@ func scheduleLs(ctx context.Context, f *fleet.Fleet, args []string) error {
 	for _, s := range ss {
 		next := "-"
 		if !s.Next.IsZero() {
-			next = s.Next.Local().Format("Mon 02 Jan 15:04")
+			next = s.Next.Local().Format(schedule.TimeFmt)
 		}
 		last, result := "-", "-"
 		if s.Last != nil {
-			last, result = s.Last.At.Local().Format("Mon 02 Jan 15:04"), runResult(*s.Last, st, ledger)
+			last, result = s.Last.At.Local().Format(schedule.TimeFmt), runResult(*s.Last, st, ledger)
 		}
 		if p := s.Problem(now); p != "" {
 			result += " · " + p
@@ -230,7 +230,7 @@ func scheduleSpawn(ctx context.Context, f *fleet.Fleet, r routes.Route, e schedu
 	}
 	due := "now, by hand"
 	if !e.Due.IsZero() {
-		due = e.Due.Local().Format("Mon 02 Jan 15:04")
+		due = e.Due.Local().Format(schedule.TimeFmt)
 	}
 	task := fmt.Sprintf("Scheduled run of route %s (due %s, fleet schedule, ADR-211). Nobody is watching: work unattended, then report done, or blocked/question if you need a decision.", r.Name, due)
 	o := fleet.SpawnOpts{Card: &board.Card{Goal: "scheduled " + r.Name + " run (" + due + ")"}}

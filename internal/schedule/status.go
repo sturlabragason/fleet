@@ -60,7 +60,7 @@ func (s Status) Problem(now time.Time) string {
 		return ""
 	}
 	if s.Last == nil || s.Last.At.Before(p.Add(-10*time.Minute)) {
-		return "missed the run due " + p.Local().Format("Mon 02 Jan 15:04") + ": no log line"
+		return "missed the run due " + p.Local().Format(TimeFmt) + ": no log line"
 	}
 	return ""
 }
