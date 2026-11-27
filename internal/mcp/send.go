@@ -274,9 +274,7 @@ func (s *Server) peekBody(a args) (string, error) {
 		return s.F.LastMessage(a.Name)
 	}
 	if a.Summary.Flag {
-		ctx, stop := s.callCtx(false)
-		defer stop()
-		return s.peekSummary(ctx, a.Name)
+		return s.peekSummary(s.callCtx(), a.Name)
 	}
 	n := a.Lines
 	if n <= 0 {

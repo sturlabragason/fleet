@@ -1,10 +1,11 @@
 package mcp
 
-// Hot reload (DESIGN §6.9, ADR-25): before each request the server checks
-// whether its executable changed on disk. If so, and the new binary passes
-// `fleet mcp --probe`, it hands the unread input to the new binary through a
-// pending file and execs it in place: same pid, same stdio pipes, so the MCP
-// client never sees a disconnect.
+// Hot reload (DESIGN §6.9, ADR-25, ADR-214): before each line it reads the
+// server checks whether its executable changed on disk. If so, it waits for
+// the calls in flight, and if the new binary passes `fleet mcp --probe`, it
+// hands the unread input to the new binary through a pending file and execs
+// it in place: same pid, same stdio pipes, so the MCP client never sees a
+// disconnect.
 
 import (
 	"bufio"
@@ -127,22 +128,39 @@ func sameFile(a, b os.FileInfo) bool {
 	return a != nil && b != nil && os.SameFile(a, b) && a.ModTime().Equal(b.ModTime()) && a.Size() == b.Size()
 }
 
-// maybeReload execs the new binary when the executable changed and the new
-// one passes the probe. line is the raw request just read (with its newline)
-// and br holds any read-ahead bytes. It returns true only when a (stubbed)
-// Exec returned without error; a real exec never returns on success. On any
-// failure the caller handles the request with the current code.
-func (s *Server) maybeReload(line []byte, br *bufio.Reader, w io.Writer) bool {
+// reloadNow reloads before line is dispatched when the executable changed:
+// it stops reading, lets every call in flight finish (the line already
+// ended a running fleet_wait, which answers), then hands line and the
+// unread input to the new binary (maybeReload). A call waiting for its
+// dialog's answer needs the reader, so then the line is served by the
+// current code and a later line reloads. Only the reader calls it.
+func (s *Server) reloadNow(line []byte, br *bufio.Reader, w io.Writer) bool {
+	fi, due := s.reloadDue()
+	return due && s.drain() && s.maybeReload(fi, line, br, w)
+}
+
+// reloadDue is the changed executable's identity when a reload should be
+// tried: it differs from the running one and did not just fail.
+func (s *Server) reloadDue() (os.FileInfo, bool) {
 	if s.exeInfo == nil {
-		return false
+		return nil, false
 	}
 	fi, err := os.Stat(s.ExePath)
 	if err != nil || sameFile(fi, s.exeInfo) {
-		return false
+		return nil, false
 	}
 	if sameFile(fi, s.failInfo) && s.Now().Sub(s.failAt) < probeRetry {
-		return false
+		return nil, false
 	}
+	return fi, true
+}
+
+// maybeReload execs the new binary fi when it passes the probe. line is the
+// raw line just read (with its newline) and br holds any read-ahead bytes;
+// nothing else is in flight. It returns true only when a (stubbed) Exec
+// returned without error; a real exec never returns on success. On any
+// failure the caller serves the line with the current code.
+func (s *Server) maybeReload(fi os.FileInfo, line []byte, br *bufio.Reader, w io.Writer) bool {
 	log := logx.For("mcp")
 	if err := s.Probe(s.ExePath); err != nil {
 		log.Warn("reload probe failed; keeping the old code", "exe", s.ExePath, "err", err)

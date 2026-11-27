@@ -193,7 +193,7 @@ func (s *Server) wait(box, readWith string, a args, prompts func() []string) (st
 		return "", err
 	}
 	o := WaitOpts{Box: box, From: a.Agents, Timeout: d, Prompts: prompts}
-	if p := s.progress; p != nil {
+	if p := s.progress(); p != nil {
 		n := 0
 		o.Progress = func(waited time.Duration) {
 			n++
@@ -206,8 +206,7 @@ func (s *Server) wait(box, readWith string, a args, prompts func() []string) (st
 		o.Timeout = WaitExternal
 	}
 	start := time.Now()
-	ctx, stop := s.callCtx(true)
-	defer stop()
+	ctx := s.callCtx() // the client's next line ends it (ADR-72)
 	ms := Wait(ctx, s.F.Mail(), o)
 	if ms.Empty() && ctx.Err() != nil {
 		return fmt.Sprintf("interrupted after %s by the client, nothing new", time.Since(start).Round(time.Second)), nil

@@ -8,7 +8,6 @@ package mcp
 // keeps confirmed=true.
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -61,22 +60,21 @@ func (g gate) dialogText() string {
 }
 
 // elicit asks the user in the client's dialog and returns nil only on an
-// accepted yes. It runs on the serving goroutine inside a tools/call: the
-// reader goroutine (cancel.go) routes the client's response here, holds any
-// other request for after this call, and a cancel of the call ends the wait.
+// accepted yes. It runs on the call's goroutine inside a tools/call: the
+// reader (cancel.go) routes the client's response here, other requests wait
+// their turn in the lane, and a cancel of the call ends the wait.
 func (s *Server) elicit(g gate) error {
-	if s.out == nil || s.in == nil {
+	if s.cur == nil {
 		return errors.New("not confirmed: fleet could not show its dialog here")
 	}
-	ctx, stop := s.callCtx(false)
-	defer stop()
-	if errors.Is(context.Cause(ctx), errCancelled) { // cancelled while it was queued: ask nobody
+	ctx := s.callCtx()
+	if s.cur.cancelled() {
 		return errCancelled
 	}
 	id := json.RawMessage(strconv.Quote("fleet-elicit-" + strconv.FormatInt(time.Now().UnixNano(), 36)))
 	reply := s.await(id)
 	defer s.unawait(id)
-	if err := s.out.Encode(map[string]any{"jsonrpc": "2.0", "id": id, "method": "elicitation/create", "params": map[string]any{
+	if err := s.write(map[string]any{"jsonrpc": "2.0", "id": id, "method": "elicitation/create", "params": map[string]any{
 		"message": g.dialogText(),
 		"requestedSchema": map[string]any{"type": "object", "required": []string{"confirm"}, "properties": map[string]any{
 			"confirm": map[string]any{"type": "boolean", "title": "Yes, go ahead", "default": false}}},
@@ -99,7 +97,7 @@ func (s *Server) elicit(g gate) error {
 			return dialogAnswer(raw)
 		case <-ctx.Done():
 			s.withdraw(id, "the tool call ended")
-			if errors.Is(context.Cause(ctx), errCancelled) {
+			if s.cur.cancelled() {
 				return errCancelled // no reply goes out
 			}
 			return errors.New("not confirmed: the client went away before the user answered fleet's dialog")
@@ -107,8 +105,8 @@ func (s *Server) elicit(g gate) error {
 			s.withdraw(id, "no answer in time")
 			return fmt.Errorf("not confirmed: nobody answered fleet's dialog within %s; call again when the user is back", wait)
 		case <-tick.C:
-			if s.progress != nil {
-				s.progress(n, "waiting for the user's answer in fleet's dialog")
+			if p := s.progress(); p != nil {
+				p(n, "waiting for the user's answer in fleet's dialog")
 			}
 		}
 	}
@@ -142,7 +140,7 @@ func dialogAnswer(raw []byte) error {
 // withdraw tells the client fleet no longer waits for its request id, so
 // it can close the dialog.
 func (s *Server) withdraw(id json.RawMessage, reason string) {
-	if err := s.out.Encode(map[string]any{"jsonrpc": "2.0", "method": "notifications/cancelled",
+	if err := s.write(map[string]any{"jsonrpc": "2.0", "method": "notifications/cancelled",
 		"params": map[string]any{"requestId": id, "reason": reason}}); err != nil {
 		logx.For("mcp").Debug("dialog not withdrawn", "err", err)
 	}

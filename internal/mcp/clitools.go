@@ -103,8 +103,7 @@ func absDir(dir string) error {
 // cliCall runs the tools of cliToolDefs; a cancel from the client stops
 // the command.
 func (s *Server) cliCall(name string, a args) (string, error) {
-	ctx, stop := s.callCtx(false)
-	defer stop()
+	ctx := s.callCtx()
 	switch name {
 	case "fleet_takeover":
 		if a.Name == "" {

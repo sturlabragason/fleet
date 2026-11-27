@@ -110,31 +110,27 @@ type Server struct {
 	had string
 	mu  sync.Mutex
 
-	// out writes protocol messages; progress, while a tools/call that
-	// carries a progressToken runs, sends it a notifications/progress
-	// (fleet_wait, ADR-72). Both are used only on the serving goroutine.
-	out      *json.Encoder
-	progress func(n int, msg string)
-
-	// Read-ahead for cancellable calls (cancel.go): in is Serve's input;
-	// ahead holds lines a reader goroutine read while a call ran, aheadDone
-	// is closed when that reader has pushed its last line. watching,
-	// reading, queued and cancelled are guarded by wmu; callID and drop
-	// belong to the serving goroutine.
-	in        *bufio.Reader
-	ahead     chan lineRead
-	aheadDone chan struct{}
-	wmu       sync.Mutex
-	watching  *watch
-	reading   bool
-	queued    int             // lines the reader checked, not yet taken by next
-	cancelled map[string]bool // ids of cancel lines the reader saw for no running call
-	callID    json.RawMessage // id of the tools/call being served
-	drop      bool            // the client cancelled it: send no response
-	// replies routes responses to fleet's own requests (elicit.go) by id;
-	// guarded by wmu. dialogWait replaces dialogWait in tests.
+	// The concurrent serve loop (cancel.go, ADR-214). out writes protocol
+	// messages, guarded by omu, which also guards werr (the first failed
+	// write). calls (requests in flight by id), flight (lines in the lane,
+	// with or without an id) and replies (waiters for responses to fleet's
+	// own requests, elicit.go) are guarded by wmu; idle is signalled when
+	// flight drops or a waiter registers. tail (the lane's last call) belongs
+	// to the reader; cur, the running call, to the lane: only the call whose
+	// turn it is touches it.
+	base       context.Context // parent of every call's context; stop ends them all
+	stop       context.CancelCauseFunc
+	out        *json.Encoder
+	omu        sync.Mutex
+	werr       error
+	wmu        sync.Mutex
+	idle       sync.Cond
+	calls      map[string]*call
+	flight     int
 	replies    map[string]chan []byte
-	dialogWait time.Duration
+	tail       chan struct{}
+	cur        *call
+	dialogWait time.Duration // replaces dialogWait in tests
 }
 
 // New returns a server.
@@ -209,8 +205,10 @@ type response struct {
 	Error   *rpcError       `json:"error,omitempty"`
 }
 
-// Serve reads requests from r and writes responses to w until EOF. Before each
-// request it reloads the binary in place if it changed on disk (DESIGN §6.9).
+// Serve reads requests from r and writes responses to w until EOF. It reads
+// every line as it arrives and serves each request on its own goroutine, in
+// arrival order (cancel.go, ADR-214). Before each line it reloads the binary
+// in place if it changed on disk (DESIGN §6.9).
 func (s *Server) Serve(r io.Reader, w io.Writer) error {
 	log := logx.For("mcp")
 	log.Info("start", "reloaded", s.Reloaded)
@@ -226,58 +224,33 @@ func (s *Server) Serve(r io.Reader, w io.Writer) error {
 		}
 	}
 	br := bufio.NewReader(r)
-	s.in = br
-	enc := json.NewEncoder(w)
+	s.out = json.NewEncoder(w)
+	s.idle.L = &s.wmu
+	s.base, s.stop = context.WithCancelCause(context.Background())
+	defer s.finish()
 	for {
-		raw, rerr := s.next()
+		raw, rerr := readLine(br)
 		if rerr != nil && !errors.Is(rerr, io.EOF) {
 			log.Info("stdin closed", "err", rerr)
 			return rerr
 		}
-		line := bytes.TrimRight(raw, "\r\n")
-		if len(line) > 0 {
-			// A reload hands br over, so only when no reader holds it.
-			if s.aheadIdle() && s.maybeReload(raw, br, w) {
+		if err := s.writeErr(); err != nil { // before a reload, which would exec onto it
+			log.Info("stdout closed", "err", err)
+			return err
+		}
+		if line := bytes.TrimRight(raw, "\r\n"); len(line) > 0 && !s.deliver(line) {
+			s.arrived(line)
+			if s.reloadNow(raw, br, w) {
 				return nil // a stubbed Exec "replaced" the process
 			}
-			if err := s.serveLine(line, enc); err != nil {
-				return err
-			}
+			s.dispatch(line)
 		}
 		if errors.Is(rerr, io.EOF) {
 			log.Info("stdin closed")
-			return nil
+			s.finish()
+			return s.writeErr() // a call answered while finishing may have failed to write
 		}
 	}
-}
-
-func (s *Server) serveLine(line []byte, enc *json.Encoder) error {
-	var req request
-	if err := json.Unmarshal(line, &req); err != nil {
-		logx.For("mcp").Warn("bad json", "err", err)
-		return enc.Encode(response{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &rpcError{-32700, "parse error"}})
-	}
-	if req.Method == "" {
-		if _, ok := responseID(line); ok { // late or stray: a response is never answered
-			logx.For("mcp").Info("response nobody waits for", "id", string(req.ID))
-			return nil
-		}
-	}
-	s.out = enc
-	s.drop = false
-	res, rerr := s.handle(req)
-	if len(req.ID) == 0 { // notification
-		return nil
-	}
-	if s.drop { // the spec: no response to a request the client cancelled
-		logx.For("mcp").Info("cancelled by the client", "id", string(req.ID))
-		return nil
-	}
-	resp := response{JSONRPC: "2.0", ID: req.ID, Result: res, Error: rerr}
-	if rerr == nil && res == nil {
-		resp.Result = struct{}{}
-	}
-	return enc.Encode(resp)
 }
 
 func (s *Server) handle(req request) (res any, rerr *rpcError) {
@@ -302,14 +275,6 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		}, nil
 	case "notifications/initialized":
 		return nil, nil
-	case "notifications/cancelled":
-		var p struct {
-			RequestID json.RawMessage `json:"requestId"`
-		}
-		if json.Unmarshal(req.Params, &p) == nil {
-			s.forgetCancel(p.RequestID)
-		}
-		return nil, nil
 	case "ping":
 		return map[string]any{}, nil
 	case "tools/list":
@@ -331,23 +296,12 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		if s.Agent == "" && s.F != nil {
 			extOnCall(s)
 		}
-		s.mu.Lock()
-		s.progress = s.progressFor(p.Meta.ProgressToken)
-		s.callID = req.ID
-		var text string
-		var err error
-		switch {
-		case p.Name == "fleet_instructions":
-			text = s.currentInstructions(p.Arguments)
-		case s.Agent != "":
-			text, err = s.agentCall(p.Name, p.Arguments)
-		default:
-			text, err = s.call(p.Name, p.Arguments)
+		if s.cur != nil {
+			s.cur.progress = s.progressFor(p.Meta.ProgressToken)
 		}
-		s.progress = nil
-		s.mu.Unlock()
+		text, err := s.callTool(p.Name, p.Arguments)
 		log.Info("call", "tool", p.Name, "agent", s.Agent, "err", err)
-		if s.drop {
+		if s.cur.cancelled() {
 			// No reply goes out, so no one-time note (reports, reload, upgrade) may be spent on it.
 			return nil, nil
 		}
@@ -380,15 +334,28 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 	return nil, &rpcError{-32601, "method not found: " + req.Method}
 }
 
+// callTool runs one tool under s.mu; the unlock is deferred so a recovered
+// panic (handle) does not leave it locked.
+func (s *Server) callTool(name string, raw json.RawMessage) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	switch {
+	case name == "fleet_instructions":
+		return s.currentInstructions(raw), nil
+	case s.Agent != "":
+		return s.agentCall(name, raw)
+	}
+	return s.call(name, raw)
+}
+
 // progressFor sends progress notifications for one request's token; nil
 // when the client sent none.
 func (s *Server) progressFor(tok json.RawMessage) func(int, string) {
-	if len(tok) == 0 || string(tok) == "null" || s.out == nil {
+	if len(tok) == 0 || string(tok) == "null" {
 		return nil
 	}
-	enc := s.out
 	return func(n int, msg string) {
-		if err := enc.Encode(map[string]any{"jsonrpc": "2.0", "method": "notifications/progress",
+		if err := s.write(map[string]any{"jsonrpc": "2.0", "method": "notifications/progress",
 			"params": map[string]any{"progressToken": tok, "progress": n, "message": msg}}); err != nil {
 			logx.For("mcp").Debug("progress not sent", "err", err)
 		}
