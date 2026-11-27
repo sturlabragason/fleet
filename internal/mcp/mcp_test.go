@@ -254,12 +254,12 @@ patterns = "copilot"
 	if out, _ := call("fleet_peek", map[string]any{"name": "m", "raw": true}); !strings.Contains(out, "╰──") {
 		t.Errorf("raw peek: %q", out)
 	}
-	if out, isErr := call("fleet_peek", map[string]any{"name": "m", "last_message": true}); isErr || !strings.HasPrefix(out, "(from the screen)\n") || !strings.Contains(out, "❯ 1. Yes") {
+	if out, isErr := call("fleet_peek", map[string]any{"name": "m", "last_message": true}); isErr || !strings.Contains(out, "]\n(from the screen)\n") || !strings.Contains(out, "❯ 1. Yes") {
 		t.Errorf("last_message menu, from the screen: %q", out)
 	}
 	f.Store.Update(func(b *board.Board) error { b.Agents["a2"].SessionID = "s1"; return nil })
 	os.WriteFile(filepath.Join(home, "s1.jsonl"), []byte(`{"type":"assistant.message","data":{"content":"all done"}}`+"\n"+`{"type":"assistant.message","data":{"content":"sub","agentId":"x"}}`+"\n"), 0o644)
-	if out, isErr := call("fleet_peek", map[string]any{"name": "a2", "last_message": true}); isErr || !strings.HasPrefix(out, "all done") {
+	if out, isErr := call("fleet_peek", map[string]any{"name": "a2", "last_message": true}); isErr || !strings.HasSuffix(out, "]\nall done") {
 		t.Errorf("last_message: %q", out)
 	}
 	out, isErr := call("fleet_info", map[string]any{"name": "a1"})

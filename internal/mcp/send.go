@@ -243,12 +243,22 @@ func (s *Server) answer(a args) (string, error) {
 	return out, nil
 }
 
-// peek runs fleet_peek: cleaned screen by default, raw on request, or the
-// last assistant message from the session log.
+// peek runs fleet_peek (and fleet_squad_peek): another agent's output,
+// headed by PeekHeader because that text is untrusted. Errors stay bare.
 func (s *Server) peek(a args) (string, error) {
 	if a.Name == "" {
 		return "", fmt.Errorf("name is required")
 	}
+	out, err := s.peekBody(a)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(PeekHeader, a.Name) + "\n" + out, nil
+}
+
+// peekBody is the cleaned screen by default, raw on request, a summary, or
+// the last assistant message from the session log.
+func (s *Server) peekBody(a args) (string, error) {
 	if a.LastMessage {
 		return s.F.LastMessage(a.Name)
 	}

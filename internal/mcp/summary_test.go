@@ -110,3 +110,29 @@ func TestSummaryArgumentTakesTextAndBool(t *testing.T) {
 		t.Fatalf("string true: %+v err %v", a.Summary, err)
 	}
 }
+
+// Every fleet_peek mode heads its output with PeekHeader: another agent's
+// screen is untrusted. Errors carry no header.
+func TestPeekHeader(t *testing.T) {
+	s, _ := summaryServer(t)
+	head := fmt.Sprintf(PeekHeader, "a1") + "\n"
+	for _, tc := range []struct {
+		name string
+		args map[string]any
+	}{
+		{"screen", map[string]any{"name": "a1"}},
+		{"raw", map[string]any{"name": "a1", "raw": true}},
+		{"summary", map[string]any{"name": "a1", "summary": true}},
+		{"last_message", map[string]any{"name": "a1", "last_message": true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out, isErr := callText(t, s, "fleet_peek", tc.args)
+			if isErr || !strings.HasPrefix(out, head) {
+				t.Errorf("want header first: %q (isErr %v)", out, isErr)
+			}
+		})
+	}
+	if out, isErr := callText(t, s, "fleet_peek", map[string]any{"name": "nobody"}); !isErr || strings.Contains(out, "untrusted") {
+		t.Errorf("error got a header: %q", out)
+	}
+}
