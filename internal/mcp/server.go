@@ -197,6 +197,10 @@ type request struct {
 	Params  json.RawMessage `json:"params,omitempty"`
 }
 
+// errUnknownTool marks a tools/call for a name this server does not serve;
+// handle answers it with a -32602 protocol error, not an isError result.
+var errUnknownTool = errors.New("unknown tool")
+
 type rpcError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
@@ -324,6 +328,10 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		s.progress = nil
 		s.mu.Unlock()
 		log.Info("call", "tool", p.Name, "agent", s.Agent, "err", err)
+		if errors.Is(err, errUnknownTool) {
+			// No suffixes: pending reload and instructions notes wait for the next real result.
+			return nil, &rpcError{-32602, "Unknown tool: " + p.Name}
+		}
 		isErr := err != nil
 		if isErr {
 			text = err.Error()

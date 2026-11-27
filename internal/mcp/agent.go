@@ -79,7 +79,7 @@ func (s *Server) agentCall(name string, raw json.RawMessage) (string, error) {
 		isAgentTool = isAgentTool || t.Name == name
 	}
 	if !isAgentTool && !isSquadTool(name) {
-		return "", fmt.Errorf("unknown tool %q", name)
+		return "", fmt.Errorf("%w %q", errUnknownTool, name)
 	}
 	if !readOnlyTools[name] && s.readOnly() {
 		return "", fmt.Errorf("%s is not available to a read-only agent: report your answer with fleet_report", name)

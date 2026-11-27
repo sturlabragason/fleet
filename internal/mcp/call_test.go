@@ -3,6 +3,7 @@ package mcp
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/sturlabragason/fleet/internal/fleet"
@@ -59,5 +60,25 @@ func TestEveryAdmiralToolHasHandler(t *testing.T) {
 		if toolHandlers[d.Name] == nil {
 			t.Errorf("%s is listed but has no handler", d.Name)
 		}
+	}
+}
+
+// An unknown tool name is a JSON-RPC -32602 error, not an isError result,
+// and it does not use up a pending reload note.
+func TestUnknownToolIsProtocolError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FLEET_CONFIG", filepath.Join(home, "no-config.toml"))
+	f, err := fleet.New(&tmux.Client{Socket: "fleet-test-unused", Config: "/dev/null"}, home, "/nonexistent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := New(f, nil)
+	s.Reloaded = true
+	res, rerr := s.handle(request{Method: "tools/call", Params: json.RawMessage(`{"name":"invalid_tool_name","arguments":{}}`)})
+	if res != nil || rerr == nil || rerr.Code != -32602 || rerr.Message != "Unknown tool: invalid_tool_name" {
+		t.Fatalf("unknown tool: %v %+v", res, rerr)
+	}
+	if out, isErr := callText(t, s, "fleet_access", nil); isErr || !strings.Contains(out, reloadedNote) {
+		t.Errorf("real tool after unknown: isError=%v, reload note kept=%v", isErr, strings.Contains(out, reloadedNote))
 	}
 }

@@ -87,8 +87,8 @@ func TestAgentMode(t *testing.T) {
 	if got := strings.Join(names, " "); got != "fleet_access_request fleet_access_respond fleet_access_revoke fleet_agents fleet_inbox fleet_instructions fleet_msg_send fleet_report fleet_wait" {
 		t.Fatalf("agent tools: %s", got)
 	}
-	if msg, isErr := ra.tool("fleet_status", nil); !isErr || !strings.Contains(msg, "unknown tool") {
-		t.Fatalf("admiral tool in agent mode: %v %q", isErr, msg)
+	if e, _ := ra.call("tools/call", map[string]any{"name": "fleet_status"})["error"].(map[string]any); e["code"] != float64(-32602) || e["message"] != "Unknown tool: fleet_status" {
+		t.Fatalf("admiral tool in agent mode: %v", e)
 	}
 	if msg, isErr := ra.tool("fleet_msg_send", map[string]any{"to": "b", "text": "hi"}); !isErr || !strings.HasPrefix(msg, "no access to b: request it with fleet_access_request") {
 		t.Fatalf("send without access: %q", msg)

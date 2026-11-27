@@ -254,7 +254,7 @@ func (s *Server) call(name string, raw json.RawMessage) (string, error) {
 	if h := toolHandlers[name]; h != nil {
 		return h(s, name, a, raw)
 	}
-	return "", fmt.Errorf("unknown tool %q", name)
+	return "", fmt.Errorf("%w %q", errUnknownTool, name)
 }
 
 // toolHandler answers one tool call; name and raw are there for the few
