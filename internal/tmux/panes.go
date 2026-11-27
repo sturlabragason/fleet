@@ -100,7 +100,7 @@ func (c *Client) Paste(pane, text string, enter bool) error {
 	if _, err := c.RunInput(text, "load-buffer", "-b", buf, "-"); err != nil {
 		return err
 	}
-	if _, err := c.Run("paste-buffer", "-p", "-d", "-b", buf, "-t", pane); err != nil {
+	if _, err := c.Run(leaveMode(pane, "paste-buffer", "-p", "-d", "-b", buf, "-t", pane)...); err != nil {
 		return err
 	}
 	if enter {
@@ -109,13 +109,21 @@ func (c *Client) Paste(pane, text string, enter bool) error {
 	return nil
 }
 
-// SendKeys sends tmux key names to a pane.
+// leaveMode prefixes a tmux command with `copy-mode -q`, which leaves copy,
+// view or any other mode the pane is in (a no-op otherwise). A pane the user
+// scrolled back is in copy mode, whose key table takes typed keys and Enter
+// instead of the program: a wake line stayed in the admiral's box.
+func leaveMode(pane string, cmd ...string) []string {
+	return append([]string{"copy-mode", "-q", "-t", pane, ";"}, cmd...)
+}
+
+// SendKeys sends tmux key names to a pane, leaving any mode first.
 // tmux 3.8 refuses send-keys while the client it picks for the command (the
 // most recently active one) is attached read-only, e.g. `attach -r`; then
 // the keys are written as raw bytes with paste-buffer, which has no such
 // check. Keys without a byte form keep the error.
 func (c *Client) SendKeys(pane string, keys ...string) error {
-	_, err := c.Run(append([]string{"send-keys", "-t", pane}, keys...)...)
+	_, err := c.Run(leaveMode(pane, append([]string{"send-keys", "-t", pane}, keys...)...)...)
 	if err == nil || !strings.Contains(err.Error(), "client is read-only") {
 		return err
 	}
@@ -127,7 +135,7 @@ func (c *Client) SendKeys(pane string, keys ...string) error {
 	if _, err := c.RunInput(raw, "load-buffer", "-b", buf, "-"); err != nil {
 		return err
 	}
-	_, err = c.Run("paste-buffer", "-d", "-r", "-b", buf, "-t", pane)
+	_, err = c.Run(leaveMode(pane, "paste-buffer", "-d", "-r", "-b", buf, "-t", pane)...)
 	return err
 }
 

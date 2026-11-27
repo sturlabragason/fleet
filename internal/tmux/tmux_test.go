@@ -279,3 +279,45 @@ func TestInteractive(t *testing.T) {
 		}
 	}
 }
+
+// A pane scrolled back is in copy mode, whose key table would swallow typed
+// keys and Enter; SendKeys and Paste leave the mode first, so the text
+// reaches the program.
+func TestTypingLeavesCopyMode(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		typ  func(c *Client, p string) error
+	}{
+		{"send-keys", func(c *Client, p string) error { return c.SendKeys(p, "-l", "--", "abc") }},
+		{"paste", func(c *Client, p string) error { return c.Paste(p, "abc", false) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := testClient(t)
+			p, err := c.Spawn("s", "w", "", nil, "cat")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := c.Run("copy-mode", "-t", p); err != nil {
+				t.Fatal(err)
+			}
+			if err := tc.typ(c, p); err != nil {
+				t.Fatal(err)
+			}
+			if err := c.SendKeys(p, "Enter"); err != nil {
+				t.Fatal(err)
+			}
+			deadline := time.Now().Add(3 * time.Second)
+			for {
+				out, _ := c.Capture(p, 0)
+				if strings.Count(out, "abc") >= 2 {
+					break
+				}
+				if time.Now().After(deadline) {
+					mode, _ := c.Run("display-message", "-p", "-t", p, "#{pane_in_mode}")
+					t.Fatalf("typed text lost; pane_in_mode=%s capture: %q", mode, out)
+				}
+				time.Sleep(50 * time.Millisecond)
+			}
+		})
+	}
+}

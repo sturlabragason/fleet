@@ -518,9 +518,7 @@ func (f *Fleet) guardEnter(box, pane, line string) bool {
 			if !f.submitWake(box, pane, want) {
 				// The line is in the box: take it back, or the box never
 				// reads empty again and every retry waits on it.
-				if err := f.pressKeys(pane, backspaces(len([]rune(line)))...); err != nil {
-					log.Warn("wake: could not take the line back", "box", box, "err", err)
-				}
+				f.takeBack(box, pane, len([]rune(line)), "")
 				log.Warn("wake not submitted: Enter did not take; line removed", "box", box)
 				return false
 			}
@@ -537,17 +535,16 @@ func (f *Fleet) guardEnter(box, pane, line string) bool {
 	switch {
 	case strings.HasPrefix(got, want):
 		tail := after(raw, want)
-		if err := f.pressKeys(pane, backspaces(n+len([]rune(tail)))...); err != nil {
-			log.Warn("wake: could not take the line back", "box", box, "err", err)
-		}
+		f.takeBack(box, pane, n+len([]rune(tail)), "")
 		if err := f.pressKeys(pane, "-l", "--", tail); err != nil {
 			log.Warn("wake: could not retype user text", "box", box, "err", err)
 		}
 		how = "removed, user text after it kept"
-	case strings.HasSuffix(got, want), got != "" && strings.HasPrefix(want, got):
-		if err := f.pressKeys(pane, backspaces(n)...); err != nil {
-			log.Warn("wake: could not take the line back", "box", box, "err", err)
-		}
+	case strings.HasSuffix(got, want):
+		f.takeBack(box, pane, n, strings.TrimSuffix(got, want)) // the user's text before the line stays
+		how = "removed"
+	case got != "" && strings.HasPrefix(want, got):
+		f.takeBack(box, pane, n, "")
 		how = "removed"
 	}
 	log.Warn("wake not submitted: input box did not hold exactly the wake line", "box", box, "wake", how)
@@ -569,14 +566,6 @@ func after(raw, want string) string {
 		i++
 	}
 	return ""
-}
-
-func backspaces(n int) []string {
-	keys := make([]string, n)
-	for i := range keys {
-		keys[i] = "BSpace"
-	}
-	return keys
 }
 
 // squash drops all whitespace, so a line the input box wraps still matches.
@@ -768,9 +757,7 @@ func (f *Fleet) resubmitTyped(box string) {
 	}
 	// Enter would not take, or only the start of the line is left (the
 	// process died while taking it back): remove it and requeue the reports.
-	if err := f.pressKeys(v.Pane, backspaces(len([]rune(line)))...); err != nil {
-		log.Warn("wake: could not take the line back", "box", box, "err", err)
-	}
+	f.takeBack(box, v.Pane, len([]rune(line)), "")
 	es := parseWake([]byte(p[2]), f.Mail().Peek(box))
 	tries := f.readTries(box)
 	for i := range es {
