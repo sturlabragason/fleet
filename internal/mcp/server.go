@@ -48,7 +48,7 @@ type Server struct {
 	SwapProfile func(name string) error
 	// RunCLI runs a fleet subcommand for the CLI-backed tools (ADR-86):
 	// output, exit code (tests stub it; default: the fleet binary).
-	RunCLI func(dir string, args ...string) (string, int, error)
+	RunCLI func(ctx context.Context, dir string, args ...string) (string, int, error)
 	// RulesInPrompt: the client got the admiral rules as a system prompt
 	// file, so initialize sends a pointer instead (ADR-86; Claude Code cuts
 	// MCP server instructions at about 4 KB).
@@ -99,46 +99,21 @@ type Server struct {
 	out      *json.Encoder
 	progress func(n int, msg string)
 
-	// in is Serve's input; ahead, while set, holds the one line a blocking
-	// call read ahead of the loop (see interruptible).
-	in    *bufio.Reader
-	ahead chan lineRead
-}
-
-type lineRead struct {
-	raw []byte
-	err error
-}
-
-// interruptible is the context of a call that blocks (fleet_wait): it ends
-// as soon as the client sends anything else, a notifications/cancelled or
-// the next request, so a call the client gave up on does not hold every
-// later one behind it. It reads that one line on the server's behalf; the
-// serve loop takes it next.
-func (s *Server) interruptible() (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithCancel(context.Background())
-	if s.in == nil || s.ahead != nil {
-		return ctx, cancel
-	}
-	ch := make(chan lineRead, 1)
-	s.ahead = ch
-	in := s.in
-	go func() {
-		raw, err := readLine(in)
-		ch <- lineRead{raw, err}
-		cancel()
-	}()
-	return ctx, cancel
-}
-
-// next is the next input line: the one read ahead, if any, else a fresh read.
-func (s *Server) next() ([]byte, error) {
-	if ch := s.ahead; ch != nil {
-		s.ahead = nil
-		r := <-ch
-		return r.raw, r.err
-	}
-	return readLine(s.in)
+	// Read-ahead for cancellable calls (cancel.go): in is Serve's input;
+	// ahead holds lines a reader goroutine read while a call ran, aheadDone
+	// is closed when that reader has pushed its last line. watching,
+	// reading, queued and cancelled are guarded by wmu; callID and drop
+	// belong to the serving goroutine.
+	in        *bufio.Reader
+	ahead     chan lineRead
+	aheadDone chan struct{}
+	wmu       sync.Mutex
+	watching  *watch
+	reading   bool
+	queued    int             // lines the reader checked, not yet taken by next
+	cancelled map[string]bool // ids of cancel lines the reader saw for no running call
+	callID    json.RawMessage // id of the tools/call being served
+	drop      bool            // the client cancelled it: send no response
 }
 
 // New returns a server.
@@ -239,7 +214,8 @@ func (s *Server) Serve(r io.Reader, w io.Writer) error {
 		}
 		line := bytes.TrimRight(raw, "\r\n")
 		if len(line) > 0 {
-			if s.maybeReload(raw, br, w) {
+			// A reload hands br over, so only when no reader holds it.
+			if s.aheadIdle() && s.maybeReload(raw, br, w) {
 				return nil // a stubbed Exec "replaced" the process
 			}
 			if err := s.serveLine(line, enc); err != nil {
@@ -260,8 +236,13 @@ func (s *Server) serveLine(line []byte, enc *json.Encoder) error {
 		return enc.Encode(response{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &rpcError{-32700, "parse error"}})
 	}
 	s.out = enc
+	s.drop = false
 	res, rerr := s.handle(req)
 	if len(req.ID) == 0 { // notification
+		return nil
+	}
+	if s.drop { // the spec: no response to a request the client cancelled
+		logx.For("mcp").Info("cancelled by the client", "id", string(req.ID))
 		return nil
 	}
 	resp := response{JSONRPC: "2.0", ID: req.ID, Result: res, Error: rerr}
@@ -290,7 +271,15 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 			"serverInfo":      map[string]any{"name": "fleet", "title": "Fleet", "version": cmp.Or(fleet.Version, "dev")},
 			"instructions":    s.instructions(),
 		}, nil
-	case "notifications/initialized", "notifications/cancelled":
+	case "notifications/initialized":
+		return nil, nil
+	case "notifications/cancelled":
+		var p struct {
+			RequestID json.RawMessage `json:"requestId"`
+		}
+		if json.Unmarshal(req.Params, &p) == nil {
+			s.forgetCancel(p.RequestID)
+		}
 		return nil, nil
 	case "ping":
 		return map[string]any{}, nil
@@ -315,6 +304,7 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		}
 		s.mu.Lock()
 		s.progress = s.progressFor(p.Meta.ProgressToken)
+		s.callID = req.ID
 		var text string
 		var err error
 		switch {
@@ -328,6 +318,10 @@ func (s *Server) handle(req request) (res any, rerr *rpcError) {
 		s.progress = nil
 		s.mu.Unlock()
 		log.Info("call", "tool", p.Name, "agent", s.Agent, "err", err)
+		if s.drop {
+			// No reply goes out, so no one-time note (reports, reload, upgrade) may be spent on it.
+			return nil, nil
+		}
 		if errors.Is(err, errUnknownTool) {
 			// No suffixes: pending reload and instructions notes wait for the next real result.
 			return nil, &rpcError{-32602, "Unknown tool: " + p.Name}

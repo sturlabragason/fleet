@@ -54,11 +54,11 @@ const cliTimeout = 2 * time.Minute
 
 // runFleet runs `<fleet binary> args...` in dir and returns its combined
 // output and exit code; err is set only when it could not run or timed out.
-func (s *Server) runFleet(dir string, args ...string) (string, int, error) {
+func (s *Server) runFleet(ctx context.Context, dir string, args ...string) (string, int, error) {
 	if s.RunCLI != nil {
-		return s.RunCLI(dir, args...)
+		return s.RunCLI(ctx, dir, args...)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), cliTimeout)
+	ctx, cancel := context.WithTimeout(ctx, cliTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, s.F.Exe, args...)
 	cmd.Dir = dir
@@ -100,8 +100,11 @@ func absDir(dir string) error {
 	return nil
 }
 
-// cliCall runs the tools of cliToolDefs.
+// cliCall runs the tools of cliToolDefs; a cancel from the client stops
+// the command.
 func (s *Server) cliCall(name string, a args) (string, error) {
+	ctx, stop := s.callCtx(false)
+	defer stop()
 	switch name {
 	case "fleet_takeover":
 		if a.Name == "" {
@@ -114,12 +117,12 @@ func (s *Server) cliCall(name string, a args) (string, error) {
 		if a.ACP {
 			argv = append(argv, "--acp")
 		}
-		return cliResult(s.runFleet("", argv...))
+		return cliResult(s.runFleet(ctx, "", argv...))
 	case "fleet_touching":
 		if err := absDir(a.Dir); err != nil {
 			return "", err
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), cliTimeout)
+		ctx, cancel := context.WithTimeout(ctx, cliTimeout)
 		defer cancel()
 		use, note := graph.Auto(ctx, s.F.Home, a.Dir, a.Files, a.Graph)
 		if use {
@@ -151,19 +154,19 @@ func (s *Server) cliCall(name string, a args) (string, error) {
 			}
 			argv = append(argv, "--prune")
 		}
-		return cliResult(s.runFleet(a.Dir, argv...))
+		return cliResult(s.runFleet(ctx, a.Dir, argv...))
 	case "fleet_admiral_add":
 		if strings.TrimSpace(a.Name) == "" {
 			return "", fmt.Errorf("name is required")
 		}
 		if a.Client != "" {
-			return s.connectClient(a)
+			return s.connectClient(ctx, a)
 		}
 		argv := []string{"admiral", "add", a.Name}
 		if a.Profile != "" {
 			argv = append(argv, "--profile", a.Profile)
 		}
-		return cliResult(s.runFleet("", argv...))
+		return cliResult(s.runFleet(ctx, "", argv...))
 	case "fleet_admiral_close":
 		if strings.TrimSpace(a.Name) == "" {
 			return "", fmt.Errorf("name is required")
@@ -171,9 +174,9 @@ func (s *Server) cliCall(name string, a args) (string, error) {
 		if s.Me() != board.Main {
 			return "", fmt.Errorf("only main closes an admiral; ask main or the user")
 		}
-		return cliResult(s.runFleet("", "admiral", "close", a.Name))
+		return cliResult(s.runFleet(ctx, "", "admiral", "close", a.Name))
 	case "fleet_recall":
-		return s.recall(a)
+		return s.recall(ctx, a)
 	}
 	// fleet_changes
 	es := whatsnew.List(aifleet.Changelog, whatsnew.Repo())

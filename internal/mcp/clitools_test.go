@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,7 +26,7 @@ func cliServer(t *testing.T, out string, code int) (*Server, *[]cliRun) {
 	f := admiralHome(t)
 	s := NewAdmiral(f, wall.New(f.T, fleet.Session), "")
 	runs := &[]cliRun{}
-	s.RunCLI = func(dir string, args ...string) (string, int, error) {
+	s.RunCLI = func(_ context.Context, dir string, args ...string) (string, int, error) {
 		*runs = append(*runs, cliRun{dir, args})
 		return out, code, nil
 	}

@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -32,12 +33,12 @@ var errExternalReplace = errors.New("this admiral is external (an MCP client out
 // connectClient is fleet_admiral_add client=claude-desktop: `fleet connect
 // claude-desktop --name NAME`, which registers the external admiral and
 // writes the client's config.
-func (s *Server) connectClient(a args) (string, error) {
+func (s *Server) connectClient(ctx context.Context, a args) (string, error) {
 	if a.Client != "claude-desktop" {
 		return "", fmt.Errorf("client must be claude-desktop")
 	}
 	if !a.Confirmed {
 		return "", fmt.Errorf("not confirmed: this writes Claude Desktop's config; ask the user, then call again with confirmed=true")
 	}
-	return cliResult(s.runFleet("", "connect", "claude-desktop", "--name", a.Name))
+	return cliResult(s.runFleet(ctx, "", "connect", "claude-desktop", "--name", a.Name))
 }

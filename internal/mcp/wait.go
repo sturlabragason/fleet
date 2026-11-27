@@ -206,8 +206,8 @@ func (s *Server) wait(box, readWith string, a args, prompts func() []string) (st
 		o.Timeout = WaitExternal
 	}
 	start := time.Now()
-	ctx, cancel := s.interruptible()
-	defer cancel()
+	ctx, stop := s.callCtx(true)
+	defer stop()
 	ms := Wait(ctx, s.F.Mail(), o)
 	if ms.Empty() && ctx.Err() != nil {
 		return fmt.Sprintf("interrupted after %s by the client, nothing new", time.Since(start).Round(time.Second)), nil

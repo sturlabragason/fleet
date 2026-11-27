@@ -263,7 +263,9 @@ func (s *Server) peekBody(a args) (string, error) {
 		return s.F.LastMessage(a.Name)
 	}
 	if a.Summary.Flag {
-		return s.peekSummary(a.Name)
+		ctx, stop := s.callCtx(false)
+		defer stop()
+		return s.peekSummary(ctx, a.Name)
 	}
 	n := a.Lines
 	if n <= 0 {
@@ -287,10 +289,10 @@ func (s *Server) peekBody(a args) (string, error) {
 }
 
 // peekSummary is fleet_peek summary=true: a few lines from the cheap model
-// (DESIGN §6.2, ADR-40). It fails open — when no summary can be made the
+// (DESIGN §6.2, ADR-40); a cancel from the client ends it. It fails open — when no summary can be made the
 // admiral is told to peek at the screen instead.
-func (s *Server) peekSummary(name string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), summaryWait)
+func (s *Server) peekSummary(ctx context.Context, name string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, summaryWait)
 	defer cancel()
 	r, err := s.F.PeekSummary(ctx, name)
 	if err != nil {

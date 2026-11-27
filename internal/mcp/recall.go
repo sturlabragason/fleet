@@ -11,8 +11,8 @@ import (
 
 // recall is fleet_recall (ADR-119): a search with a query, the day
 // digest without one. Neither calls a model.
-func (s *Server) recall(a args) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), cliTimeout)
+func (s *Server) recall(ctx context.Context, a args) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, cliTimeout)
 	defer cancel()
 	b := s.F.Store.Load()
 	if strings.TrimSpace(a.Query) == "" {
