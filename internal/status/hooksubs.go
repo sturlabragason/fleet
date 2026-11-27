@@ -37,6 +37,8 @@ type Payload struct {
 	// Prompt is the text of a UserPromptSubmit/userPromptSubmitted (both
 	// tools call it prompt).
 	Prompt string
+	// TranscriptPath is Claude's session transcript (transcript_path).
+	TranscriptPath string
 }
 
 // ParsePayload reads a hook's JSON; anything it can't read is empty.
@@ -55,6 +57,7 @@ func ParsePayload(b []byte) Payload {
 		ActiveS   bool   `json:"stop_hook_active"`
 		ActiveC   bool   `json:"stopHookActive"`
 		Prompt    string `json:"prompt"`
+		TxPath    string `json:"transcript_path"`
 	}
 	if json.Unmarshal(b, &r) != nil {
 		return Payload{}
@@ -73,6 +76,7 @@ func ParsePayload(b []byte) Payload {
 		AgentType:        or(r.AgentTyS, or(r.AgentTyC, r.AgentName)),
 		StopHookActive:   r.ActiveS || r.ActiveC,
 		Prompt:           strings.TrimSpace(r.Prompt),
+		TranscriptPath:   r.TxPath,
 	}
 }
 

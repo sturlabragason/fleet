@@ -11,6 +11,7 @@ import (
 
 	"github.com/sturlabragason/fleet/internal/board"
 	"github.com/sturlabragason/fleet/internal/mail"
+	"github.com/sturlabragason/fleet/internal/status"
 	"github.com/sturlabragason/fleet/internal/tmux"
 )
 
@@ -292,5 +293,70 @@ patterns = "fake"
 		if strings.Contains(m.Text, "no report:") {
 			t.Fatalf("owner told: %q", m.Text)
 		}
+	}
+}
+
+// An agent whose turn ended while a background shell it started still runs
+// is waiting on it, not stopped without a report: it reads working and its
+// owner is not told. Once the shell's end is in the transcript and no report
+// came, it is flagged and the owner is told, as before (ADR-217).
+func TestRefreshBackgroundShellIsNotNoReport(t *testing.T) {
+	old := board.NoReportAfter
+	board.NoReportAfter = 0
+	t.Cleanup(func() { board.NoReportAfter = old })
+	f, _ := hookFleet(t)
+	f.DrainQueue, f.Housekeeping = true, true
+	f.SupPane = func() AdmiralView { return AdmiralView{} }
+	f.notePrompt("h1")
+
+	fx, err := os.ReadFile("../status/testdata/claude-background.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(fx)), "\n")
+	tx := filepath.Join(t.TempDir(), "session.jsonl")
+	os.WriteFile(tx, []byte(lines[0]+"\n"), 0o644) // the shell's launch
+	ids, off := status.BackgroundAt(tx)            // what the Stop hook records
+	if err := status.WriteState(status.StateDir(f.Home), "h1", status.State{
+		Status: status.Idle, Event: "stop", At: time.Now(), Background: ids, Transcript: tx, TranscriptOff: off,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	told := func() bool {
+		time.Sleep(100 * time.Millisecond) // the note is sent off the Refresh goroutine
+		for _, m := range f.Mail().Peek(mail.Admiral) {
+			if strings.Contains(m.Text, "no report:") {
+				return true
+			}
+		}
+		return false
+	}
+	for range 5 {
+		f.Refresh()
+		a := f.Store.Load().Agents["h1"]
+		if a.Status != string(status.Working) || a.NoReport(time.Now()) || !strings.Contains(a.LastLine, "background") {
+			t.Fatalf("waiting on a background shell read as %q %q, no report %v", a.Status, a.LastLine, a.NoReport(time.Now()))
+		}
+	}
+	if told() {
+		t.Fatal("owner told while the shell runs")
+	}
+
+	fh, _ := os.OpenFile(tx, os.O_APPEND|os.O_WRONLY, 0)
+	fh.WriteString(lines[3] + "\n") // its task-notification
+	fh.Close()
+	for range 50 {
+		f.Refresh()
+		if f.Store.Load().Agents["h1"].NoReport(time.Now()) {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if a := f.Store.Load().Agents["h1"]; a.Status != string(status.Idle) || !a.NoReport(time.Now()) {
+		t.Fatalf("after the shell ended: %q, no report %v", a.Status, a.NoReport(time.Now()))
+	}
+	f.Refresh()
+	if !told() {
+		t.Fatal("owner not told once the shell ended with no report")
 	}
 }

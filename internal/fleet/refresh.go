@@ -338,6 +338,10 @@ func (f *Fleet) classify(a *board.Agent, alive, dead bool, pane, ck string, now 
 	if hok {
 		st = applyHook(a, hs)
 	}
+	if hok && st == status.Idle && waitsOnBackground(a, hs, now) {
+		a.Stuck = nil // a still screen is the wait itself, not grinding
+		return string(status.Working)
+	}
 	st, a.Stuck = status.NextStuck(a.Stuck, status.StuckIn{
 		Status:  st,
 		Line:    errLine,

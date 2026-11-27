@@ -449,3 +449,44 @@ func TestCmdHookStopBlock(t *testing.T) {
 		t.Errorf("unreadable marker blocked: %q", got)
 	}
 }
+
+// A Stop while a background shell runs records it from the transcript and is
+// not blocked: the agent waits on it, and its stop after the shell's
+// notification can still be blocked once. Claude's idle_prompt a minute later
+// keeps the jobs; any other event drops them (ADR-217).
+func TestCmdHookStopBackground(t *testing.T) {
+	f := hookTestFleet(t)
+	var out strings.Builder
+	old := hookOut
+	hookOut = &out
+	t.Cleanup(func() { hookOut = old })
+	f.Store.Update(func(b *board.Board) error {
+		b.Agents["c1"] = &board.Agent{Name: "c1", PromptAt: time.Now().Add(-time.Minute)}
+		return nil
+	})
+	fx, err := os.ReadFile("../../internal/status/testdata/claude-background.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx := filepath.Join(t.TempDir(), "session.jsonl")
+	os.WriteFile(tx, []byte(strings.SplitN(string(fx), "\n", 2)[0]+"\n"), 0o644)
+	payload := `{"transcript_path":` + fmt.Sprintf("%q", tx) + `}`
+	dir := status.StateDir(f.Home)
+
+	withStdin(t, payload, func() { cmdHook(f, []string{"Stop", "--agent", "c1"}) })
+	if out.String() != "" {
+		t.Errorf("stop with a background shell blocked: %q", out.String())
+	}
+	s, ok := status.ReadState(dir, "c1")
+	if !ok || s.Status != status.Idle || len(s.Background) != 1 || s.Transcript != tx || s.TranscriptOff == 0 {
+		t.Fatalf("state %+v %v", s, ok)
+	}
+	withStdin(t, `{"notification_type":"idle_prompt"}`, func() { cmdHook(f, []string{"Notification", "--agent", "c1"}) })
+	if s, _ := status.ReadState(dir, "c1"); len(s.Background) != 1 {
+		t.Errorf("idle_prompt dropped the background jobs: %+v", s)
+	}
+	cmdHook(f, []string{"pretooluse", "--agent", "c1"})
+	if s, _ := status.ReadState(dir, "c1"); len(s.Background) != 0 {
+		t.Errorf("the next turn kept the background jobs: %+v", s)
+	}
+}

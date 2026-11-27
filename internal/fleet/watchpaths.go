@@ -3,6 +3,7 @@ package fleet
 import (
 	"path/filepath"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/sturlabragason/fleet/internal/acphost"
@@ -120,6 +121,30 @@ func applyHook(a *board.Agent, s status.State) status.Status {
 	}
 	logx.For("status").Debug("hook state", "agent", a.Name, "event", s.Event, "status", s.Status)
 	return s.Status
+}
+
+// BackgroundMax is how long after its turn ended an agent may wait on
+// background jobs before it counts as stopped again: a forgotten server or a
+// lost end must not hide a missing report for good (ADR-217).
+const BackgroundMax = 30 * time.Minute
+
+// waitsOnBackground reports whether an agent whose hook says its turn ended
+// still waits on background jobs it started: shells or MCP calls from the
+// transcript, or running subagents. Claude wakes it when they end, so it is
+// working, not stopped without a report (ADR-217). The tile says so.
+func waitsOnBackground(a *board.Agent, hs status.State, now time.Time) bool {
+	if now.Sub(hs.At) >= BackgroundMax {
+		return false
+	}
+	n := len(status.StillBackground(hs)) + status.RunningCount(a.Subagents)
+	if n == 0 {
+		return false
+	}
+	a.LastLine = "waiting on " + strconv.Itoa(n) + " background job"
+	if n > 1 {
+		a.LastLine += "s"
+	}
+	return true
 }
 
 // forgetHook drops an agent's hook state, so a new agent of the same name

@@ -22,6 +22,11 @@ type State struct {
 	WaitingFor string    `json:"waiting_for,omitempty"`
 	Event      string    `json:"event,omitempty"`
 	At         time.Time `json:"at"`
+	// Background lists the background jobs still running when a Stop
+	// ended the turn, read from Transcript up to TranscriptOff (ADR-217).
+	Background    []string `json:"background,omitempty"`
+	Transcript    string   `json:"transcript,omitempty"`
+	TranscriptOff int64    `json:"transcript_off,omitempty"`
 }
 
 // hookEvents maps a tool hook name to the status it implies. Claude Code's
